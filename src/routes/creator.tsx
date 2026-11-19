@@ -6,6 +6,7 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import { listTitles } from "@/lib/bridge/titles";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
@@ -19,6 +20,7 @@ const SECTIONS = [
   ["Add New Title", "#add-title"],
   ["Metadata & Credits", "#metadata"],
   ["Rights & Ownership", "#rights"],
+  ["Document Vault", "#document-vault"],
   ["My Assets", "#assets"],
   ["Review & Corrections", "#review"],
   ["Delivery Status", "#delivery"],
@@ -200,6 +202,10 @@ function CreatorDashboard({
           action="Review title records"
           href="#my-titles"
         />
+      </section>
+
+      <section id="document-vault" className="scroll-mt-20">
+        <CreatorDocumentVault />
       </section>
 
       <section id="assets" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">

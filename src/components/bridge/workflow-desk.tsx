@@ -8,9 +8,15 @@ import {
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
 import { advanceTitle } from "@/lib/bridge/titles";
+import { listTitleDocumentEvidence } from "@/lib/bridge/creator-documents";
 import {
   authorizeLoopPublication,
+  certifyLoopDestinationPackage,
+  configureLoopConsumerPricing,
+  getLoopConsumerPricing,
+  getLoopDestinationPackage,
   getLoopPublication,
+  prepareLoopDestinationPackage,
   revokeLoopPublication,
   suspendLoopPublication,
 } from "@/lib/bridge/loop-publication";
@@ -25,7 +31,11 @@ function toLocalDateTimeInput(value: Date) {
   const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
 }
-export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
+export function WorkflowDesk({ title, actor, qcSubmissionReady = false }: {
+  title: BridgeTitle;
+  actor: BridgeActor;
+  qcSubmissionReady?: boolean;
+}) {
   const [stage, setStage] = useState<(typeof stages)[number]>("Prepare");
   const [settlementRef, setSettlementRef] = useState("");
   const [invoiceRef, setInvoiceRef] = useState("");
@@ -44,6 +54,21 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: title.id } }),
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
+  const destinationPackage = useQuery({
+    queryKey: ["loop-package", title.id],
+    queryFn: () => getLoopDestinationPackage({ data: { bridgeTitleId: title.id } }),
+    enabled: Boolean(actor.internalRole) && hasPermission(actor, "title.read_catalog"),
+  });
+  const loopConsumerPricing = useQuery({
+    queryKey: ["loop-consumer-pricing", title.id],
+    queryFn: () => getLoopConsumerPricing({ data: { bridgeTitleId: title.id } }),
+    enabled: Boolean(actor.internalRole) && hasPermission(actor, "title.read_catalog"),
+  });
+  const documentEvidence = useQuery({
+    queryKey: ["title-document-evidence", title.id],
+    queryFn: () => listTitleDocumentEvidence({ data: { titleId: title.id } }),
+    enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
+  });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
@@ -58,6 +83,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         qc.invalidateQueries({ queryKey: ["title-workflow", title.id] }),
         qc.invalidateQueries({ queryKey: ["bridge-title", title.id] }),
         qc.invalidateQueries({ queryKey: ["loop-pub", title.id] }),
+        qc.invalidateQueries({ queryKey: ["loop-package", title.id] }),
+        qc.invalidateQueries({ queryKey: ["loop-consumer-pricing", title.id] }),
         qc.invalidateQueries({ queryKey: ["bridge-titles"] }),
         qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] }),
         qc.invalidateQueries({ queryKey: ["bridge-audit"] }),
@@ -78,6 +105,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [ownerShare, setOwnerShare] = useState("50");
   const isSuperAdmin = actor.internalRole === "super_admin";
   const [selectedGrantByAgreement, setSelectedGrantByAgreement] = useState<Record<string, string>>({});
+  const [loopRentalPriceInr, setLoopRentalPriceInr] = useState("");
+  const [loopPurchasePriceInr, setLoopPurchasePriceInr] = useState("");
+  const [loopPricingNote, setLoopPricingNote] = useState("");
   function downloadStatement() {
     const safe = (v: string) =>
       '"' + (/^[=+@-]/.test(v) ? "'" : "") + v.replaceAll('"', '""') + '"';
@@ -191,8 +221,14 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 : "QC_REVIEW",
                         },
                       }),
+                    title.status === "PREPARING" && !qcSubmissionReady,
                   )
                 : null}
+              {title.status === "PREPARING" && !qcSubmissionReady ? (
+                <p role="status" className="rounded-lg border border-amber-500/40 p-3 text-sm text-muted">
+                  QC submission is blocked. Bridge needs a storage-verified main-film master and verified artwork linked to this exact title.
+                </p>
+              ) : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
                 <>
                   {input(
@@ -372,6 +408,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             const checks = [
                               ["Ownership evidence reference recorded", Boolean(evidence?.ownershipReference?.trim())],
                               ["Agreement reference recorded", Boolean(evidence?.agreementReference?.trim())],
+                              ["Verified ownership / chain-of-title document", (documentEvidence.data?.evidence ?? []).some((item) => item.evidence_type === "OWNERSHIP_CHAIN_OF_TITLE")],
+                              ["Verified finished-film / distribution agreement", (documentEvidence.data?.evidence ?? []).some((item) => ["FINISHED_FILM_AGREEMENT", "DISTRIBUTION_AGREEMENT"].includes(item.evidence_type))],
                               ["NON-EXCLUSIVE terms recorded", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
                               ["Revenue-share split recorded and totals 100%", validSplit],
                               ["Territory, language and validity window recorded", selectedGrant.territories.length > 0 && selectedGrant.languages.length > 0 && validWindow],
@@ -394,6 +432,17 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                   <p>Agreement ref: {evidence?.agreementReference || "Not recorded"}</p>
                                   <p>Rights owner share: {typeof ownerShare === "number" && Number.isInteger(ownerShare) ? `${ownerShare}%` : "Not recorded"}</p>
                                   <p>Distributor share: {typeof distributorShare === "number" && Number.isInteger(distributorShare) ? `${distributorShare}%` : "Not recorded"}</p>
+                                </div>
+                                <div className="space-y-1 border-t border-line pt-2 text-xs">
+                                  <p className="font-semibold">Verified uploaded documents</p>
+                                  {documentEvidence.isPending ? <p className="text-muted">Loading document evidence…</p> : null}
+                                  {documentEvidence.isError ? <p role="alert" className="text-amber-600">Document evidence could not be verified. Legal approval is blocked until it can be checked.</p> : null}
+                                  {(documentEvidence.data?.evidence ?? []).map((item) => (
+                                    <p key={item.id} className="text-muted">{item.file_name} · {item.evidence_type.replaceAll("_", " ")}</p>
+                                  ))}
+                                  {!documentEvidence.isPending && !documentEvidence.isError && !documentEvidence.data?.evidence.length
+                                    ? <p className="text-muted">No verified documents linked to this title.</p>
+                                    : null}
                                 </div>
                                 <p className="text-xs font-medium" role="status">
                                   {checks.every(([, passed]) => passed)
@@ -420,7 +469,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                     grantId: selectedGrant.id,
                                   },
                                 }),
-                              note.trim().length < 8,
+                              note.trim().length < 8 ||
+                                documentEvidence.isPending ||
+                                documentEvidence.isError ||
+                                !(documentEvidence.data?.evidence ?? []).some((item) => item.evidence_type === "OWNERSHIP_CHAIN_OF_TITLE") ||
+                                !(documentEvidence.data?.evidence ?? []).some((item) => ["FINISHED_FILM_AGREEMENT", "DISTRIBUTION_AGREEMENT"].includes(item.evidence_type)),
                             )}
                             {button(
                               "Reject",
@@ -461,11 +514,71 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     : "No active distribution window"}
                 </p>
               )}
+              {hasPermission(actor, "loop.publish") ? (
+                <div className="space-y-3 rounded-lg border border-line p-3">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold">Approved consumer pricing</h4>
+                    {loopConsumerPricing.data?.pricing?.status === "APPROVED" ? (
+                      <p className="text-xs text-muted">
+                        Approved TVOD rental: ₹{Number(loopConsumerPricing.data.pricing.rental_price_inr).toFixed(0)}
+                        {loopConsumerPricing.data.pricing.purchase_price_inr == null
+                          ? " · Purchase not enabled"
+                          : ` · Purchase: ₹${Number(loopConsumerPricing.data.pricing.purchase_price_inr).toFixed(0)}`}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted">No approved consumer price. Legacy default prices are ignored and cannot be used for checkout.</p>
+                    )}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {input("TVOD rental price (₹, whole rupees)", loopRentalPriceInr, setLoopRentalPriceInr, "number")}
+                      <label className="grid gap-1 text-sm">
+                        Optional purchase price (₹)
+                        <input type="number" value={loopPurchasePriceInr} onChange={(event) => setLoopPurchasePriceInr(event.target.value)}
+                          className="rounded-lg border border-line bg-elevated p-2" />
+                      </label>
+                    </div>
+                    {input("Commercial approval note", loopPricingNote, setLoopPricingNote)}
+                    {button("Approve TVOD pricing", () =>
+                      configureLoopConsumerPricing({
+                        data: {
+                          bridgeTitleId: title.id,
+                          rentalPriceInr: Number(loopRentalPriceInr),
+                          purchasePriceInr: loopPurchasePriceInr.trim() ? Number(loopPurchasePriceInr) : null,
+                          approvalNote: loopPricingNote,
+                        },
+                      }),
+                      !Number.isInteger(Number(loopRentalPriceInr)) || Number(loopRentalPriceInr) <= 0 ||
+                        (loopPurchasePriceInr.trim() !== "" && (!Number.isInteger(Number(loopPurchasePriceInr)) || Number(loopPurchasePriceInr) <= 0)) ||
+                        loopPricingNote.trim().length < 8 || loopConsumerPricing.isPending,
+                    )}
+                  </div>
+                  <div className="space-y-2 border-t border-line pt-3">
+                    <h4 className="text-sm font-semibold">Loop destination package</h4>
+                  {destinationPackage.isPending ? <p className="text-xs text-muted">Loading package…</p> : null}
+                  {destinationPackage.isError ? <p role="alert" className="text-xs text-amber-600">Package status unavailable: {destinationPackage.error.message}</p> : null}
+                  {destinationPackage.data?.package ? (
+                    <p className="text-xs text-muted">
+                      Version {destinationPackage.data.package.package_version} · {destinationPackage.data.package.readiness_state} · {destinationPackage.data.package.asset_version_ids.length} verified asset versions
+                    </p>
+                  ) : !destinationPackage.isPending && !destinationPackage.isError ? (
+                    <p className="text-xs text-muted">No Loop package prepared yet.</p>
+                  ) : null}
+                  {button("Prepare / refresh Loop package", () =>
+                    prepareLoopDestinationPackage({ data: { bridgeTitleId: title.id } }),
+                    destinationPackage.isPending || loopConsumerPricing.data?.pricing?.status !== "APPROVED",
+                  )}
+                  {destinationPackage.data?.package?.readiness_state === "HOLD" ? button("Certify package READY", () =>
+                    certifyLoopDestinationPackage({ data: { packageId: destinationPackage.data!.package!.id } }),
+                    destinationPackage.isPending,
+                  ) : null}
+                  <p className="text-xs text-muted">Package preparation uses the current PASSED master and artwork only. READY requires all four release certifications plus active QC, Legal and rights evidence.</p>
+                  </div>
+                </div>
+              ) : null}
               <p>
                 Publish copies the approved title metadata, artwork and media reference into the
                 shared Loop catalog. Catalog publication alone does not prove consumer playback.
               </p>
-              {valid && hasPermission(actor, "loop.publish")
+              {valid && loopConsumerPricing.data?.pricing?.status === "APPROVED" && hasPermission(actor, "loop.publish")
                 ? button("Publish approved license to Loop", () =>
                     authorizeLoopPublication({
                       data: {
@@ -483,6 +596,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   )
                 : null}
               {!valid ? <p>Blocked: approved, unexpired Loop license required.</p> : null}
+              {valid && loopConsumerPricing.data?.pricing?.status !== "APPROVED" ? <p>Blocked: Super Admin must approve the consumer TVOD price before package publication.</p> : null}
               {pub && hasPermission(actor, "loop.revoke") ? (
                 <div className="flex gap-2">
                   {button("Suspend", () =>

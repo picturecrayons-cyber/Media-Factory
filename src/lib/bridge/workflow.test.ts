@@ -19,9 +19,9 @@ type TestDb = {
   transaction<T>(fn: (tx: Pick<TestDb, "query">) => Promise<T>): Promise<T>;
   close(): Promise<void>;
 };
-async function testDatabase(): Promise<{ db: TestDb; schema: string }> {
+async function testDatabase(): Promise<{ db: TestDb; schema: string; external: boolean }> {
   const binding = process.env.BRIDGE_WORKFLOW_TEST_DATABASE_URL;
-  if (!binding) return { db: new PGlite(), schema: "public" };
+  if (!binding) return { db: new PGlite(), schema: "public", external: false };
   // Static credentials for the disposable CI service only. Never use production bindings.
   const expected = "postgres://workflow_test:workflow_test@127.0.0.1:5432/bridge_workflow_test";
   if (binding !== expected || process.env.CI !== "true")
@@ -68,12 +68,23 @@ async function testDatabase(): Promise<{ db: TestDb; schema: string }> {
       }
     },
   };
-  return { db, schema };
+  return { db, schema, external: true };
 }
 async function fixture() {
-  const { db, schema } = await testDatabase();
+  const { db, schema, external } = await testDatabase();
   try {
-    await db.exec(`create table bridge_titles(
+    if (external) {
+      await db.exec(`do $$ begin
+        if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
+        if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
+        if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
+      end $$;`);
+    } else {
+      await db.exec("create role anon; create role authenticated; create role service_role;");
+    }
+    await db.exec(`    create table bridge_profiles(user_id text primary key);
+    create table bridge_organizations(id uuid primary key);
+    create table bridge_titles(
       id text primary key,
       owner_user_id text,
       owner_account_type text not null default 'independent_creator',
@@ -98,12 +109,28 @@ async function fixture() {
         "utf8",
       ).replaceAll("public.", `${schema}.`),
     );
-    await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
+    await db.exec(
+      readFileSync(
+        new URL("../../../migrations/0026_bridge_creator_document_vault.sql", import.meta.url),
+        "utf8",
+      ).replaceAll("public.", `${schema}.`),
+    );
+    await db.exec(`insert into bridge_profiles(user_id) values ('owner'),('legal'),('qc');
+    insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
       values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
     insert into bridge_assets values
       ('master','title-123','master','sealed/master',100),
       ('legacy-poster','title-123','poster','older/unreferenced-poster',100),
-      ('poster-vertical','title-123','poster_vertical','sealed/poster',100);`);
+      ('poster-vertical','title-123','poster_vertical','sealed/poster',100);
+    insert into bridge_creator_documents
+      (id,owner_user_id,owner_account_type,document_type,file_name,content_type,byte_size,storage_key,status,created_by,verified_at)
+    values
+      ('ownership-doc','owner','independent_creator','OWNERSHIP_CHAIN_OF_TITLE','ownership.pdf','application/pdf',100,'sealed/ownership.pdf','VERIFIED','owner',now()),
+      ('distribution-doc','owner','independent_creator','DISTRIBUTION_AGREEMENT','distribution.pdf','application/pdf',100,'sealed/distribution.pdf','VERIFIED','owner',now());
+    insert into bridge_title_document_links(id,title_id,document_id,evidence_type,linked_by)
+    values
+      ('ownership-link','title-123','ownership-doc','OWNERSHIP_CHAIN_OF_TITLE','owner'),
+      ('distribution-link','title-123','distribution-doc','DISTRIBUTION_AGREEMENT','owner');`);
     function adapter(query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>) {
       const sql = (async (strings: TemplateStringsArray, ...params: unknown[]) => {
         let text = strings[0];
@@ -210,6 +237,72 @@ test("real SQL services persist QC, independently approved license, lifecycle an
     await f.db.close();
   }
 });
+test("Legal approval is blocked until verified ownership and distribution documents are linked", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    await f.sql.query("delete from bridge_title_document_links where title_id='title-123'");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123",
+        stage: "LEGAL",
+        decision: "APPROVE",
+        note: "Legal evidence must be independently checked",
+        grantId: saved.grantId,
+      })),
+      /Verified ownership \/ chain-of-title document is required/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+    assert.equal((await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status, "SUBMITTED");
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("Legal approval rejects each missing authority evidence class", async () => {
+  const requiredTypes = [
+    "OWNERSHIP_CHAIN_OF_TITLE",
+    "FINISHED_FILM_AGREEMENT",
+    "DISTRIBUTION_AGREEMENT",
+    "SIGNATORY_AUTHORITY",
+    "MASTER_DISTRIBUTOR_AUTHORITY",
+    "SUBLICENSING_AUTHORITY",
+  ];
+  for (const missingType of requiredTypes) {
+    const f = await fixture();
+    try {
+      const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+      await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+      await f.sql.query("delete from bridge_title_document_links where title_id='title-123' and evidence_type=$1", [missingType]);
+      await assert.rejects(
+        f.sql.transaction((tx) => f.review(tx, legal, {
+          titleId: "title-123",
+          stage: "LEGAL",
+          decision: "APPROVE",
+          note: "Review actual signed rights evidence",
+          grantId: saved.grantId,
+        })),
+        missingType === "OWNERSHIP_CHAIN_OF_TITLE"
+          ? /Verified ownership/
+          : missingType === "FINISHED_FILM_AGREEMENT"
+            ? /Executed finished-film/
+            : missingType === "DISTRIBUTION_AGREEMENT"
+              ? /Executed OTT/
+              : missingType === "SIGNATORY_AUTHORITY"
+                ? /signatory-authority/
+                : missingType === "MASTER_DISTRIBUTOR_AUTHORITY"
+                  ? /Master distributor/
+                  : /sublicensing authority/,
+      );
+      assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+      assert.equal((await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status, "SUBMITTED");
+    } finally {
+      await f.db.close();
+    }
+  }
+});
+
 test("unauthorized review and unverified current assets cannot clear QC", async () => {
   const f = await fixture();
   try {

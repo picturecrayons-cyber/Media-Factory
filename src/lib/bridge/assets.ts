@@ -9,7 +9,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
-import { persistVerifiedAsset } from "./asset-confirmation";
+import { isCanonicalTitleAssetKey, persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
@@ -181,6 +181,22 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
     }
+
+    const isSuperAdmin = actor.internalRole === "super_admin";
+    if (asset.created_by !== actor.userId && !(isSuperAdmin && asset.kind === "master")) {
+      throw new Error("Only the original uploader or a Super Admin can verify this pending asset");
+    }
+    if (
+      isSuperAdmin &&
+      !isCanonicalTitleAssetKey({
+        key: asset.s3_key,
+        ownerUserId: title.ownerUserId,
+        titleId: title.id,
+        kind: asset.kind,
+      })
+    ) {
+      throw new Error("This object is outside the canonical title owner's OCI path and cannot be linked");
+    }
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
@@ -203,7 +219,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const confirmed = await persistVerifiedAsset(sql, {
       assetId: asset.id,
       actorUserId: actor.userId,
-      internalActor: Boolean(actor.internalRole),
+      internalActor: isSuperAdmin,
       titleId: title.id,
       kind: asset.kind,
       byteSize: sealed.byteSize,
@@ -255,6 +271,66 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       throw new Error("Asset confirmation changed; retry after refreshing the title");
     }
     return { assetId: asset.id, byteSize: sealed.byteSize, verified: true };
+  });
+
+
+/**
+ * Lists pending master objects that are already stored under the canonical
+ * title-owner OCI prefix. Only Super Admin can reconcile uploads created by a
+ * different operator; the actual confirmation still performs OCI verification.
+ */
+export const listUnverifiedMasterAssets = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Forbidden");
+    assertPermission(actor, "title.ingest_internal");
+
+    const title = await loadTitle(data.titleId);
+    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!UPLOADABLE.has(title.status)) return { candidates: [] as Array<{
+      id: string;
+      fileName: string;
+      contentType: string | null;
+      createdAt: string;
+      uploadedByAnotherOperator: boolean;
+    }> };
+
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string;
+      s3_key: string;
+      content_type: string | null;
+      created_by: string;
+      created_at: string | Date;
+    }>`
+      select id, s3_key, content_type, created_by, created_at
+      from bridge_assets
+      where title_id = ${title.id}
+        and kind = 'master'
+        and byte_size is null
+      order by created_at desc
+      limit 50
+    `;
+
+    return {
+      candidates: rows
+        .filter((row) => isCanonicalTitleAssetKey({
+          key: row.s3_key,
+          ownerUserId: title.ownerUserId,
+          titleId: title.id,
+          kind: "master",
+        }))
+        .map((row) => ({
+          id: row.id,
+          fileName: row.s3_key.slice(row.s3_key.lastIndexOf("/") + 1),
+          contentType: row.content_type,
+          createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+          uploadedByAnotherOperator: row.created_by !== actor.userId,
+        })),
+    };
   });
 
 export const requestAssetDownload = createServerFn({ method: "POST" })

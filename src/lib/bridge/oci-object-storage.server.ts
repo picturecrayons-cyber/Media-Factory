@@ -7,6 +7,7 @@ import {
 import { bridgeEnv } from "./env.ts";
 import { toLatin1 } from "./latin1.ts";
 import { multipartTargetAllowed } from "./multipart-upload.ts";
+import { hasPdfMagicBytes } from "./creator-document-policy.ts";
 
 type OciConfig = {
   tenancy: string;
@@ -254,6 +255,35 @@ export async function signDownload(opts: { key: string; expiresIn?: number; buck
     bucket: opts.bucket,
   });
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
+}
+
+/** Read only the first five bytes from OCI and reject MIME-spoofed non-PDF uploads. */
+export async function verifyPdfSignature(key: string, bucket?: string) {
+  const cfg = config();
+  const targetBucket = bucket?.trim() || cfg.bucket;
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok || !res.body) throw new Error(`OCI PDF signature verification failed (${res.status})`);
+  const reader = res.body.getReader();
+  const prefix = new Uint8Array(5);
+  let offset = 0;
+  try {
+    while (offset < prefix.length) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const count = Math.min(value.byteLength, prefix.length - offset);
+      prefix.set(value.subarray(0, count), offset);
+      offset += count;
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+  if (!hasPdfMagicBytes(prefix.subarray(0, offset))) {
+    throw new Error("Uploaded file is not a valid PDF signature");
+  }
+  return { verified: true as const };
 }
 
 export async function verifyObject(key: string, expectedContentType?: string | null, bucket?: string) {

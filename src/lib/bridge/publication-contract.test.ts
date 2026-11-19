@@ -18,13 +18,16 @@ function harness(
     curation_status: "APPROVED",
     delivery_status: "READY",
   },
+  packageReady = true,
+  titleStatus = "LICENSED",
+  pricingApproved = true,
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
     slug: "film",
     name: "Film",
-    status: "LICENSED",
+    status: titleStatus,
     language: "Malayalam",
     master_key: "sealed/master",
     poster_key: "sealed/poster",
@@ -39,6 +42,19 @@ function harness(
     if (query.includes("from bridge_rights_grants")) return grants;
     if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
     if (query.includes("from bridge_title_gate_certifications")) return [gates];
+    if (query.includes("from bridge_loop_consumer_pricing")) {
+      return pricingApproved ? [{ access_tier: "TVOD", rental_price_inr: 79, purchase_price_inr: null, status: "APPROVED" }] : [];
+    }
+    if (query.includes("update bridge_titles")) {
+      writes.push({ query, values });
+      return [{ id: title.id }];
+    }
+    if (query.includes("from bridge_destination_packages")) return packageReady ? [{ id: "package-1", readiness_state: "READY" }] : [{ id: "package-1", readiness_state: "HOLD" }];
+    if (query.includes("update bridge_destination_packages")) {
+      if (!packageReady) return [];
+      writes.push({ query, values });
+      return [{ id: "package-1" }];
+    }
     if (query.includes("select id from bridge_titles")) return [title];
     if (query.includes("select id from loop_titles"))
       return existing ? [{ id: "loop-existing" }] : [];
@@ -138,6 +154,31 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
   }
 });
 
+
+test("certified Loop publication advances a licensing-ready Bridge title to buyer-visible", async () => {
+  const h = harness([grant], true, false, undefined, true, "LICENSING_READY");
+  const result = await h.authorize({ context, data });
+  assert.equal((result as { status: string }).status, "AUTHORIZED");
+  const advance = h.writes.find((write) => write.query.includes("update bridge_titles"));
+  assert.ok(advance);
+  assert.match(advance.query, /status=\x27LIVE_FOR_BUYERS\x27/);
+  const event = h.writes.find((write) => write.query.includes("insert into bridge_title_events"));
+  assert.ok(event);
+  assert.match(event.query, /values\s*\(\s*\?,'LICENSING_READY','LIVE_FOR_BUYERS',\?/);
+  assert.ok(event.values.includes("operator"));
+});
+
+test("publication fails closed without explicitly approved TVOD pricing", async () => {
+  const h = harness([grant], true, false, undefined, true, "LICENSED", false);
+  await assert.rejects(h.authorize({ context, data }), /Super Admin-approved TVOD rental pricing/);
+  assert.equal(h.writes.length, 0);
+});
+
+test("publication requires a certified Loop destination package", async () => {
+  const h = harness([grant], true, false, undefined, false);
+  await assert.rejects(h.authorize({ context, data }), /latest Crayons Loop destination package must be certified READY/);
+  assert.equal(h.writes.length, 0);
+});
 
 test("publication requires all four release certifications", async () => {
   const incompleteGateSets = [

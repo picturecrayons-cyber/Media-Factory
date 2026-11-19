@@ -36,9 +36,26 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
               {t.year ? ` · ${t.year}` : ""}
             </p>
           </Link>
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <StatusChip status={t.status} />
-            
+            <Link
+              to="/title/$id"
+              params={{ id: t.id }}
+              aria-label={t.status === "DRAFT" ? `Submit ${t.name} to Bridge workflow` : `Continue ${t.name} in Bridge`}
+              className="inline-flex min-h-9 items-center justify-center rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-bg hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              {t.status === "DRAFT" ? "Submit to Bridge" : "Continue in Bridge"}
+            </Link>
+            {t.status === "DRAFT" ? (
+              <button
+                type="button"
+                aria-label={`Review deletion of draft ${t.name}`}
+                onClick={() => window.alert("Draft deletion is currently blocked. Legal and contractual retention, linked database records, and OCI Primary/Recovery verification must be cleared before deletion can be enabled. No title or media has been deleted.")}
+                className="inline-flex min-h-9 items-center justify-center rounded-lg border border-amber-500/50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                Delete draft · Review
+              </button>
+            ) : null}
           </div>
         </li>
       ))}

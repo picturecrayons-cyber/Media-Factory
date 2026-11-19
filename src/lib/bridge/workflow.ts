@@ -120,6 +120,71 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
+    if (data.decision === "APPROVE") {
+      const evidence = await tx<{ document_type: string; document_id: string; evidence_type: string }>`
+        select distinct d.document_type, d.id as document_id, l.evidence_type
+        from bridge_title_document_links l
+        join bridge_creator_documents d on d.id=l.document_id
+        where l.title_id=${data.titleId}
+          and d.status='VERIFIED'
+          and d.owner_user_id = (select owner_user_id from bridge_titles where id=${data.titleId})
+          and d.content_type='application/pdf'
+          and d.byte_size > 0
+      `;
+      const types = new Set(evidence.map((item) => item.document_type));
+      const requiredEvidence = [
+        ["OWNERSHIP_CHAIN_OF_TITLE", "Verified ownership / chain-of-title evidence"],
+        ["FINISHED_FILM_AGREEMENT", "Executed finished-film agreement"],
+        ["DISTRIBUTION_AGREEMENT", "Executed OTT / digital distribution agreement"],
+      ] as const;
+      for (const [type, label] of requiredEvidence) {
+        if (!types.has(type)) throw new Error(label + " is required before Legal approval");
+      }
+      // The vault keeps document classes explicit. Never treat a declaration,
+      // censor certificate, or a generic attachment as proof of signatory,
+      // distributor, or onward-sublicensing authority.
+      const authorityTypes = new Set([
+        "SIGNATORY_AUTHORITY",
+        "MASTER_DISTRIBUTOR_AUTHORITY",
+        "SUBLICENSING_AUTHORITY",
+      ]);
+      const recordedAuthorityTypes = new Set(
+        evidence.filter((item) => authorityTypes.has(item.document_type)).map((item) => item.document_type),
+      );
+      if (!authorityTypes.has("SIGNATORY_AUTHORITY") || !recordedAuthorityTypes.has("SIGNATORY_AUTHORITY")) {
+        throw new Error("Independent signatory-authority evidence is required before Legal approval");
+      }
+      if (!recordedAuthorityTypes.has("MASTER_DISTRIBUTOR_AUTHORITY")) {
+        throw new Error("Master distributor appointment / authority evidence is required before Legal approval");
+      }
+      if (!recordedAuthorityTypes.has("SUBLICENSING_AUTHORITY")) {
+        throw new Error("Explicit TVOD / OTT sublicensing authority evidence is required before Legal approval");
+      }
+      const grantEvidence = Array.isArray(grant.evidence) ? grant.evidence : [];
+      const hasTermsReference = grantEvidence.some((entry) => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+        const item = entry as Record<string, unknown>;
+        return typeof item.agreementReference === "string" &&
+          item.agreementReference.trim().length >= 3 &&
+          typeof item.ownershipReference === "string" &&
+          item.ownershipReference.trim().length >= 3 &&
+          item.commercialTerms !== null && typeof item.commercialTerms === "object";
+      });
+      if (!hasTermsReference) {
+        throw new Error("Executed agreement, ownership reference and recorded commercial terms are required");
+      }
+      const linkedGrant = await tx<{ id: string }>`
+        select id from bridge_title_document_links l
+        join bridge_creator_documents d on d.id=l.document_id
+        where l.title_id=${data.titleId}
+          and d.status='VERIFIED'
+          and l.document_id in (
+            select id from bridge_creator_documents where document_type in ('FINISHED_FILM_AGREEMENT','DISTRIBUTION_AGREEMENT')
+          )
+        limit 1
+      `;
+      if (!linkedGrant[0]) throw new Error("An executed agreement must be linked to this exact title");
+    }
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
       ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
@@ -222,11 +287,18 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
       order_id: string | null;
     }>`
       select distinct on(e.razorpay_payment_id) e.razorpay_payment_id as payment_id,coalesce((e.payload->>'purchased_at')::timestamptz,t.purchased_at,e.processed_at,e.received_at) as purchased_at,
-        coalesce(e.payload->>'amount',e.payload#>>'{payment,amount}',e.payload#>>'{payload,payment,entity,amount}') as amount_text,
+        coalesce(e.payload->>'amount_paise',e.payload->>'amount',e.payload#>>'{payment,amount}',e.payload#>>'{payload,payment,entity,amount}') as amount_text,
         coalesce(e.payload->>'currency',e.payload#>>'{payment,currency}',e.payload#>>'{payload,payment,entity,currency}') as currency,
         coalesce(e.payload->>'order_id',e.payload->>'razorpay_order_id',e.payload#>>'{payload,payment,entity,order_id}') as order_id
-      from loop_payment_events e left join loop_user_tvod_entitlements t on t.payment_transaction_id=e.razorpay_payment_id
-      join loop_titles l on l.id::text=coalesce(e.payload->>'title_id',t.title_id::text)
+      from (
+        select event_id,event_name,razorpay_payment_id,status,payload,received_at,processed_at,null::text as loop_title_id
+        from loop_payment_events
+        union all
+        select event_id,event_name,razorpay_payment_id,status,payload,received_at,processed_at,loop_title_id
+        from loop_tvod_payment_events
+      ) e
+      left join loop_user_tvod_entitlements t on t.payment_transaction_id=e.razorpay_payment_id
+      join loop_titles l on l.id::text=coalesce(e.payload->>'title_id',e.loop_title_id,t.title_id::text)
       where l.bridge_title_id=${data.titleId} and e.status in ('captured','processed') and e.razorpay_payment_id is not null
       order by e.razorpay_payment_id,e.received_at desc limit 200`;
     const receipts = rows.map((r) => ({

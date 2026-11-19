@@ -1,0 +1,68 @@
+const SUPPORTED_MIME_TYPES = new Set(["application/pdf"]);
+
+export const CREATOR_DOCUMENT_TYPES = [
+  "FINISHED_FILM_AGREEMENT",
+  "STORY_CONCEPT_AGREEMENT",
+  "DISTRIBUTION_AGREEMENT",
+  "OWNERSHIP_CHAIN_OF_TITLE",
+  "SIGNATORY_AUTHORITY",
+  "MASTER_DISTRIBUTOR_AUTHORITY",
+  "SUBLICENSING_AUTHORITY",
+  "SIGNED_AMENDMENT",
+  "SIGNED_ADDENDUM",
+  "RIGHTS_SCHEDULE",
+  "AUTHOR_ASSIGNMENT",
+  "MUSIC_RIGHTS",
+  "OTHER",
+] as const;
+
+export function isSupportedCreatorDocumentMimeType(value: string) {
+  return SUPPORTED_MIME_TYPES.has(value);
+}
+
+export function sameOwner(
+  actor: { userId: string; accountType: string; organizationId?: string | null },
+  doc: { owner_user_id: string; owner_account_type: string; owner_organization_id: string | null },
+) {
+  if (doc.owner_account_type === "independent_creator") {
+    return actor.accountType === "independent_creator" && actor.userId === doc.owner_user_id;
+  }
+  return actor.accountType === "studio" &&
+    Boolean(actor.organizationId) &&
+    actor.organizationId === doc.owner_organization_id;
+}
+
+/** Check the PDF file signature; MIME metadata alone is not proof of file type. */
+export function hasPdfMagicBytes(bytes: Uint8Array) {
+  return bytes.length >= 5 &&
+    bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 &&
+    bytes[3] === 0x46 && bytes[4] === 0x2d;
+}
+
+/** Only an active Studio owner or admin may access reusable organization documents. */
+export function canManageStudioDocuments(input: {
+  accountType: string;
+  organizationId?: string | null;
+  organizationRole?: string | null;
+}) {
+  return input.accountType !== "studio" ||
+    (Boolean(input.organizationId) &&
+      (input.organizationRole === "owner" || input.organizationRole === "admin"));
+}
+
+/** Legal Reviewer access is granted only for an explicitly assigned title. */
+export function canReviewTitleDocuments(input: {
+  internalRole: string | null;
+  hasRightsReviewPermission: boolean;
+}) {
+  return input.internalRole === "legal_reviewer" && input.hasRightsReviewPermission;
+}
+
+/** Download is permitted only to an owner, an authorized linked-title reviewer, or Super Admin. */
+export function canDownloadCreatorDocument(input: {
+  ownerAccess: boolean;
+  linkedTitleAccess: boolean;
+  isSuperAdmin: boolean;
+}) {
+  return input.ownerAccess || input.linkedTitleAccess || input.isSuperAdmin;
+}

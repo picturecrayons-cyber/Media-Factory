@@ -121,6 +121,11 @@ Deno.serve(async (req: Request) => {
         .eq("provider_order_id", payment.order_id).maybeSingle();
       if (lookupError) return await failEvent(supabase, id, "Bridge payment lookup failed");
       if (localPayment) surface = "bridge";
+      if (!localPayment && surface === "unknown") {
+        const { data: loopOrder } = await supabase.from("loop_tvod_orders")
+          .select("id").eq("provider_order_id", payment.order_id).maybeSingle();
+        if (loopOrder) surface = "loop";
+      }
 
       if (surface === "bridge") {
         if (!localPayment) return await failEvent(supabase, id, "Bridge order not persisted yet");
@@ -140,10 +145,12 @@ Deno.serve(async (req: Request) => {
 
         // Other Bridge purposes may record a captured service payment, but cannot grant a title licence.
         if (localPayment.purpose !== "title_license") {
-          const { error } = await supabase.from("bridge_payments").update({
+          const { data: bound, error } = await supabase.from("bridge_payments").update({
             status: "captured", provider_payment_id: payment.id, verified_at: new Date().toISOString(),
-          }).eq("id", localPayment.id);
-          if (error) return await failEvent(supabase, id, "Bridge service payment capture record failed");
+          }).eq("id", localPayment.id)
+            .or(`provider_payment_id.is.null,provider_payment_id.eq.${payment.id}`)
+            .select("id").maybeSingle();
+          if (error || !bound) return await failEvent(supabase, id, "Bridge service payment binding conflict or update failure");
         } else {
           if (!localPayment.title_id) return await failEvent(supabase, id, "Bridge license order has no title");
           if (localPayment.currency !== "INR") return await failEvent(supabase, id, "Bridge license payment currency must be INR");
@@ -175,8 +182,10 @@ Deno.serve(async (req: Request) => {
           const now = new Date().toISOString();
           const { data: updated, error: updateError } = await supabase.from("bridge_payments")
             .update({ status: "captured", provider_payment_id: payment.id, verified_at: now })
-            .eq("id", localPayment.id).select("id").maybeSingle();
-          if (updateError || !updated) return await failEvent(supabase, id, "Bridge payment update failed");
+            .eq("id", localPayment.id)
+            .or(`provider_payment_id.is.null,provider_payment_id.eq.${payment.id}`)
+            .select("id").maybeSingle();
+          if (updateError || !updated) return await failEvent(supabase, id, "Bridge payment binding conflict or update failure");
 
           if (packageRecord) {
             const { error: entitlementError } = await supabase.from("bridge_package_entitlements").upsert({
@@ -238,6 +247,111 @@ Deno.serve(async (req: Request) => {
             }, { onConflict: "event_key", ignoreDuplicates: true });
             if (mailQueueError) return await failEvent(supabase, id, "Bridge licence email queue write failed");
           }
+        }
+      }
+    }
+
+    if (surface === "loop" && eventName === "payment.captured") {
+      if (!payment?.id || !payment.order_id || String(payment.status ?? "").toLowerCase() !== "captured") {
+        return await failEvent(supabase, id, "Loop capture is missing verified Razorpay payment identifiers");
+      }
+      const { data: rentalOrder, error: rentalLookupError } = await supabase.from("loop_tvod_orders")
+        .select("id,provider_order_id,provider_payment_id,user_id,loop_title_id,amount_paise,currency,status,captured_at")
+        .eq("provider_order_id", payment.order_id).maybeSingle();
+      if (rentalLookupError || !rentalOrder) {
+        return await failEvent(supabase, id, "Loop TVOD order was not persisted before capture");
+      }
+      if (rentalOrder.provider_payment_id && rentalOrder.provider_payment_id !== payment.id) {
+        return await failEvent(supabase, id, "Loop TVOD order is already linked to another payment");
+      }
+      const providerAmount = Number(payment.amount);
+      const providerCurrency = String(payment.currency ?? "").toUpperCase();
+      if (!Number.isSafeInteger(providerAmount) || providerAmount !== Number(rentalOrder.amount_paise)) {
+        return await failEvent(supabase, id, "Loop TVOD payment amount mismatch");
+      }
+      if (providerCurrency !== String(rentalOrder.currency ?? "").toUpperCase() || providerCurrency !== "INR") {
+        return await failEvent(supabase, id, "Loop TVOD payment currency mismatch");
+      }
+      const noteTitleId = payment.notes?.titleId;
+      const noteUserId = payment.notes?.userId;
+      if ((noteTitleId && noteTitleId !== rentalOrder.loop_title_id) ||
+          (noteUserId && noteUserId !== rentalOrder.user_id)) {
+        return await failEvent(supabase, id, "Loop TVOD order notes do not match the persisted buyer/title mapping");
+      }
+      if (rentalOrder.status === "refunded" || rentalOrder.status === "failed") {
+        return await failEvent(supabase, id, "Loop TVOD order is no longer fulfillable");
+      }
+      if (rentalOrder.status !== "fulfilled") {
+        const capturedAt = rentalOrder.captured_at ?? new Date().toISOString();
+        const { data: capturedOrder, error: captureError } = await supabase.from("loop_tvod_orders")
+          .update({
+            status: "captured",
+            provider_payment_id: payment.id,
+            captured_at: capturedAt,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", rentalOrder.id)
+          .or(`provider_payment_id.is.null,provider_payment_id.eq.${payment.id}`)
+          .neq("status", "refunded")
+          .select("id").maybeSingle();
+        if (captureError || !capturedOrder) {
+          return await failEvent(supabase, id, "Loop TVOD captured payment could not be persisted");
+        }
+      }
+      const { data: fulfillment, error: fulfillmentError } = await supabase.rpc("loop_fulfill_captured_rental", {
+        p_order_id: payment.order_id,
+        p_payment_id: payment.id,
+      });
+      if (fulfillmentError || !fulfillment) {
+        return await failEvent(supabase, id, "Loop TVOD entitlement fulfillment was rejected; manual reconciliation required");
+      }
+    }
+
+    if (eventName === "refund.processed") {
+      const refund = payload?.payload?.refund?.entity;
+      const paymentId = String(refund?.payment_id ?? "");
+      const refundId = String(refund?.id ?? "");
+      if (!paymentId || !refundId) {
+        return await failEvent(supabase, id, "Refund event is missing required payment_id or refund id; reconciliation required");
+      }
+      if (paymentId && refundId) {
+        let loopOrder: { provider_order_id: string } | null = null;
+        const { data: knownOrder } = await supabase.from("loop_tvod_orders")
+          .select("provider_order_id").eq("provider_payment_id", paymentId).maybeSingle();
+        loopOrder = knownOrder;
+        if (!loopOrder) {
+          const keyId = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
+          const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
+          if (keyId && keySecret) {
+            const auth = btoa(`${keyId}:${keySecret}`);
+            const paymentResponse = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+              headers: { Authorization: `Basic ${auth}` },
+            });
+            if (paymentResponse.ok) {
+              const providerPayment = await paymentResponse.json() as { order_id?: string; notes?: Record<string, string> };
+              if (providerPayment.order_id) {
+                const { data: orderByProviderId } = await supabase.from("loop_tvod_orders")
+                  .select("provider_order_id").eq("provider_order_id", providerPayment.order_id).maybeSingle();
+                loopOrder = orderByProviderId;
+              }
+            }
+          }
+        }
+        if (loopOrder) {
+          const refundAmountPaise = Number(refund?.amount);
+          const refundCurrency = String(refund?.currency ?? "INR").toUpperCase();
+          if (!Number.isSafeInteger(refundAmountPaise) || refundAmountPaise <= 0 || refundCurrency !== "INR") {
+            return await failEvent(supabase, id, "Loop TVOD refund amount or currency is invalid");
+          }
+          const { error: refundError } = await supabase.rpc("loop_refund_captured_rental", {
+            p_payment_id: paymentId,
+            p_refund_id: refundId,
+            p_order_id: loopOrder.provider_order_id,
+            p_refund_amount_paise: refundAmountPaise,
+          });
+          if (refundError) return await failEvent(supabase, id, "Loop TVOD refund could not revoke playback entitlement");
+        } else if (surface === "loop") {
+          return await failEvent(supabase, id, "Loop TVOD refund order could not be reconciled");
         }
       }
     }

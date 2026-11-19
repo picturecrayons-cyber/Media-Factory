@@ -21,8 +21,8 @@ type CatalogRow = {
   maturity_rating: string;
   genres: string;
   access_tier: string;
-  tvod_rental_price: number;
-  tvod_purchase_price: number;
+  tvod_rental_price: number | null;
+  tvod_purchase_price: number | null;
   featured: boolean;
   published: boolean;
   authorization_status: string;
@@ -44,12 +44,13 @@ function mapCatalogRow(r: CatalogRow): LoopTitle {
     durationMinutes: r.duration_minutes,
     posterPath: r.poster_path,
     backdropPath: r.backdrop_path || r.poster_path,
-    playbackPath: r.playback_path,
+    // Raw OCI object keys are never returned by public catalog/detail APIs.
+    playbackPath: null,
     maturityRating: r.maturity_rating || "U",
     genres: (r.genres || "Drama").split(",").map((g) => g.trim()).filter(Boolean),
     accessTier: (r.access_tier as "FREE" | "SVOD" | "TVOD") || "SVOD",
-    tvodRentalPrice: r.tvod_rental_price || 79,
-    tvodPurchasePrice: r.tvod_purchase_price || 249,
+    tvodRentalPrice: Number(r.tvod_rental_price ?? 0),
+    tvodPurchasePrice: Number(r.tvod_purchase_price ?? 0),
     featured: Boolean(r.featured),
     published: Boolean(r.published),
     authorizationStatus: r.authorization_status,
@@ -86,12 +87,12 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
         p.authorization_status, p.window_start, p.window_end
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
-      where p.authorization_status = 'authorized'
+      where p.authorization_status = 'authorized' and p.revoked_at is null
         and l.published = true
         and l.listed = true
-        and l.status = 'approved'
+        and l.status = 'approved' and l.listed = true
         and (p.window_start is null or p.window_start <= now())
-        and (p.window_end is null or p.window_end >= now())
+        and (p.window_end is null or p.window_end > now())
       order by l.featured desc, l.created_at desc
       limit 100
     `;
@@ -182,9 +183,11 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
       where (l.id = ${data.slugOrId} or l.slug = ${data.slugOrId})
-        and p.authorization_status = 'authorized'
+        and p.authorization_status = 'authorized' and p.revoked_at is null
         and l.published = true
         and l.status = 'approved'
+        and (p.window_start is null or p.window_start <= now())
+        and (p.window_end is null or p.window_end > now())
       limit 1
     `;
 
@@ -207,8 +210,10 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
       where l.id != ${title.id}
-        and p.authorization_status = 'authorized'
-        and l.published = true
+        and p.authorization_status = 'authorized' and p.revoked_at is null
+        and l.published = true and l.listed = true and l.status='approved'
+        and (p.window_start is null or p.window_start <= now())
+        and (p.window_end is null or p.window_end > now())
       limit 6
     `;
 
@@ -230,7 +235,14 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
 
     // Check title access tier
     const titles = await sql<{ id: string; access_tier: string }>`
-      select id, access_tier from loop_titles where id = ${data.loopTitleId} limit 1
+      select l.id,l.access_tier
+      from loop_titles l
+      join bridge_loop_publications p on p.loop_title_id=l.id and p.bridge_title_id=l.bridge_title_id
+      where l.id=${data.loopTitleId} and l.status='approved' and l.listed=true and l.published=true
+        and p.authorization_status='authorized' and p.revoked_at is null
+        and (p.window_start is null or p.window_start<=now())
+        and (p.window_end is null or p.window_end>now())
+      limit 1
     `;
     const title = titles[0];
     if (!title) {
@@ -242,12 +254,15 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
     }
 
     // Check SVOD Subscription
-    const subs = await sql<{ id: number; plan_key: string; expires_at: string | Date | null }>`
-      select id, plan_key, expires_at
-      from loop_subscriptions
-      where user_id = ${context.userId}
-        and status = 'active'
-        and (expires_at is null or expires_at > now())
+    const subs = await sql<{ id: string; plan_key: string | null; expires_at: string | Date | null }>`
+      select s.id::text as id,
+        coalesce(to_jsonb(s)->>'plan_key',(select p.plan_key from loop_plans p where p.id::text=to_jsonb(s)->>'plan_id')) as plan_key,
+        coalesce(nullif(to_jsonb(s)->>'expires_at','')::timestamptz,
+                 nullif(to_jsonb(s)->>'current_period_end','')::timestamptz) as expires_at
+      from loop_subscriptions s
+      where s.user_id::text=${context.userId} and s.status='active'
+        and coalesce(nullif(to_jsonb(s)->>'expires_at','')::timestamptz,
+                     nullif(to_jsonb(s)->>'current_period_end','')::timestamptz)>now()
       limit 1
     `;
 
@@ -260,21 +275,20 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
       };
     }
 
-    // Check TVOD Entitlement
-    const tvods = await sql<{ id: number; access_type: string; expires_at: string | Date | null }>`
-      select id, access_type, expires_at
-      from loop_entitlements
-      where user_id = ${context.userId}
-        and loop_title_id = ${data.loopTitleId}
-        and (expires_at is null or expires_at > now())
-      order by created_at desc
+    // Canonical TVOD entitlements are created only by the verified payment-capture fulfillment.
+    const tvods = await sql<{ id: string; access_type: string; expires_at: string | Date | null }>`
+      select id,access_type,expires_at
+      from loop_user_tvod_entitlements
+      where user_id=${context.userId}::uuid and title_id=${data.loopTitleId}::uuid
+        and status='ACTIVE' and (expires_at is null or expires_at>now())
+      order by purchased_at desc
       limit 1
     `;
 
     if (tvods.length > 0) {
       return {
         loopTitleId: data.loopTitleId,
-        accessType: (tvods[0].access_type as "TVOD_RENTAL" | "TVOD_PURCHASE") || "TVOD_RENTAL",
+        accessType: tvods[0].access_type === "PURCHASE" ? "TVOD_PURCHASE" : "TVOD_RENTAL",
         expiresAt: tvods[0].expires_at ? new Date(tvods[0].expires_at).toISOString() : null,
         canPlay: true,
       };
@@ -286,4 +300,58 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
       expiresAt: null,
       canPlay: false,
     };
+  });
+
+/**
+ * Return a short-lived playback URL only after checking the current Bridge
+ * distribution window and a real consumer entitlement.
+ */
+export const getAuthorizedLoopPlayback = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ loopTitleId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; playback_path: string | null; access_tier: string;
+    }>`
+      select l.id,l.playback_path,l.access_tier
+      from loop_titles l
+      join bridge_loop_publications p on p.loop_title_id=l.id and p.bridge_title_id=l.bridge_title_id
+      where l.id::text=${data.loopTitleId}
+        and l.status='approved' and l.listed=true and l.published=true
+        and p.authorization_status='authorized' and p.revoked_at is null
+        and p.approved_at is not null
+        and (p.window_start is null or p.window_start<=now())
+        and (p.window_end is null or p.window_end>now())
+      limit 1
+    `;
+    const title = rows[0];
+    if (!title || !title.playback_path) throw new Error("Title is not currently authorized for playback");
+
+    let accessType = "FREE";
+    if (title.access_tier === "SVOD") {
+      const subs = await sql<{ id: string }>`
+        select s.id::text as id from loop_subscriptions s
+        where s.user_id::text=${context.userId} and s.status='active'
+          and coalesce(nullif(to_jsonb(s)->>'expires_at','')::timestamptz,
+                       nullif(to_jsonb(s)->>'current_period_end','')::timestamptz)>now()
+        limit 1
+      `;
+      if (!subs[0]) throw new Error("An active Loop Pass subscription is required");
+      accessType = "SVOD_SUBSCRIPTION";
+    } else if (title.access_tier === "TVOD") {
+      const entitlements = await sql<{ access_type: string; expires_at: string | Date | null }>`
+        select access_type,expires_at from loop_user_tvod_entitlements
+        where user_id=${context.userId}::uuid and title_id=${title.id}::uuid
+          and status='ACTIVE' and (expires_at is null or expires_at>now())
+        order by purchased_at desc limit 1
+      `;
+      if (!entitlements[0]) throw new Error("A captured TVOD rental or purchase entitlement is required");
+      accessType = entitlements[0].access_type === "PURCHASE" ? "TVOD_PURCHASE" : "TVOD_RENTAL";
+    } else if (title.access_tier !== "FREE") {
+      throw new Error("Unsupported Loop access tier; playback is blocked");
+    }
+    const { signDownload } = await import("@/lib/bridge/oci-object-storage.server");
+    const signed = await signDownload({ key: title.playback_path, expiresIn: 180 });
+    return { url: signed.url, expiresIn: 180, accessType };
   });

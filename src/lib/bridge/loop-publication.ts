@@ -169,6 +169,31 @@ export async function verifyDistributionPreflight(
   if (!reviews[0]?.qc_ok) reasons.push("Recorded QC approval for the current assets is required.");
   if (!reviews[0]?.legal_ok) reasons.push("Recorded legal approval for this license is required.");
 
+  const pricingRows = await sql<{
+    access_tier: string; rental_price_inr: number; purchase_price_inr: number | null; status: string;
+  }>`
+    select access_tier,rental_price_inr,purchase_price_inr,status
+    from bridge_loop_consumer_pricing where bridge_title_id=${titleId} limit 1
+  `;
+  const consumerPricing = pricingRows[0] ?? null;
+  if (!consumerPricing || consumerPricing.status !== "APPROVED" || consumerPricing.access_tier !== "TVOD" ||
+      !Number.isInteger(Number(consumerPricing.rental_price_inr)) || Number(consumerPricing.rental_price_inr) <= 0) {
+    reasons.push("Super Admin-approved TVOD rental pricing is required; legacy default prices are not accepted.");
+  }
+
+  let destinationPackageId: string | null = null;
+  if (rightsGrantId) {
+    const packages = await sql<{ id: string; readiness_state: string }>`
+      select id,readiness_state from bridge_destination_packages
+      where title_id=${titleId} and destination='CRAYONS_LOOP' and rights_grant_id=${rightsGrantId}
+      order by package_version desc limit 1
+    `;
+    if (["READY","AUTHORIZED","DELIVERED"].includes(packages[0]?.readiness_state ?? "")) {
+      destinationPackageId = packages[0]?.id ?? null;
+    }
+  }
+  if (!destinationPackageId) reasons.push("The latest Crayons Loop destination package must be certified READY.");
+
   // Publication is blocked until every explicit consumer-release certification is recorded.
   const gateRows = await sql<{
     ott_preparation_status: string | null;
@@ -215,6 +240,8 @@ export async function verifyDistributionPreflight(
     reasons,
     title,
     rightsGrantId,
+    destinationPackageId,
+    consumerPricing,
     commercialTerms,
   };
 }
@@ -393,6 +420,342 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     };
   });
 
+const loopPackageInput = z.object({ bridgeTitleId: z.string().min(8) });
+
+export const configureLoopConsumerPricing = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    bridgeTitleId: z.string().min(8),
+    rentalPriceInr: z.number().int().min(1).max(100000),
+    purchasePriceInr: z.number().int().min(1).max(100000).nullable().optional(),
+    approvalNote: z.string().trim().min(8).max(500),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "loop.publish");
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const titles = await tx<{ id: string; status: string }>`
+        select id,status from bridge_titles where id=${data.bridgeTitleId} for update
+      `;
+      const title = titles[0];
+      if (!title) throw new Error("Bridge title not found");
+      if (!["LICENSING_READY","LIVE_FOR_BUYERS"].includes(title.status)) {
+        throw new Error("Consumer pricing can only be configured after rights clearance");
+      }
+      const live = await tx<{ id: string }>`
+        select id from bridge_loop_publications
+        where bridge_title_id=${title.id} and authorization_status in ('authorized','live')
+        limit 1
+      `;
+      if (live[0]) throw new Error("Published Loop pricing cannot be changed in place; a versioned commercial amendment and re-approval are required");
+
+      const prior = await tx<{ rental_price_inr: number; purchase_price_inr: number | null; status: string }>`
+        select rental_price_inr,purchase_price_inr,status
+        from bridge_loop_consumer_pricing where bridge_title_id=${title.id} for update
+      `;
+      const changed = !prior[0] || prior[0].status !== "APPROVED" ||
+        Number(prior[0].rental_price_inr) !== data.rentalPriceInr ||
+        (prior[0].purchase_price_inr == null ? null : Number(prior[0].purchase_price_inr)) !== (data.purchasePriceInr ?? null);
+      if (changed) {
+        await tx`
+          update bridge_destination_packages
+          set readiness_state='HOLD',authorized_by=null,authorized_at=null
+          where title_id=${title.id} and destination='CRAYONS_LOOP'
+            and readiness_state in ('READY','AUTHORIZED')
+        `;
+      }
+      await tx`
+        insert into bridge_loop_consumer_pricing
+          (bridge_title_id,access_tier,rental_price_inr,purchase_price_inr,status,approved_by,approved_at,approval_note,updated_at)
+        values
+          (${title.id},'TVOD',${data.rentalPriceInr},${data.purchasePriceInr ?? null},'APPROVED',${actor.userId},now(),${data.approvalNote},now())
+        on conflict (bridge_title_id) do update set
+          access_tier='TVOD',rental_price_inr=excluded.rental_price_inr,
+          purchase_price_inr=excluded.purchase_price_inr,status='APPROVED',
+          approved_by=excluded.approved_by,approved_at=now(),approval_note=excluded.approval_note,updated_at=now()
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "distribution.loop_consumer_pricing_approved",
+        entityType: "bridge_title",
+        entityId: title.id,
+        metadata: {
+          accessTier: "TVOD",
+          rentalPriceInr: data.rentalPriceInr,
+          purchasePriceInr: data.purchasePriceInr ?? null,
+          previousPricingChanged: changed,
+        },
+      }, tx);
+      return {
+        approved: true as const,
+        accessTier: "TVOD" as const,
+        rentalPriceInr: data.rentalPriceInr,
+        purchasePriceInr: data.purchasePriceInr ?? null,
+      };
+    });
+  });
+
+/** Build a private, versioned Loop destination package from the title's current verified assets. */
+export const getLoopConsumerPricing = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(loopPackageInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.read_catalog");
+    const sql = await getSql();
+    const rows = await sql<{
+      access_tier: string; rental_price_inr: number; purchase_price_inr: number | null;
+      status: string; approval_note: string; approved_at: string;
+    }>`
+      select access_tier,rental_price_inr,purchase_price_inr,status,approval_note,approved_at::text as approved_at
+      from bridge_loop_consumer_pricing where bridge_title_id=${data.bridgeTitleId} limit 1
+    `;
+    return { pricing: rows[0] ?? null };
+  });
+
+export const prepareLoopDestinationPackage = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(loopPackageInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "loop.publish");
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const titles = await tx<{
+        id: string; status: string; name: string; slug: string; synopsis: string;
+        language: string; year: number | null; runtime_minutes: number | null;
+        content_type: string; master_key: string | null; poster_key: string | null;
+      }>`
+        select id,status,name,slug,synopsis,language,year,runtime_minutes,content_type,master_key,poster_key
+        from bridge_titles where id=${data.bridgeTitleId} for update
+      `;
+      const title = titles[0];
+      if (!title) throw new Error("Title not found");
+      if (!["LICENSING_READY","LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status)) {
+        throw new Error("Loop package preparation requires a Legal-cleared LICENSING_READY title");
+      }
+      if (!title.master_key || !title.poster_key) throw new Error("Current verified master and poster are required");
+      const pricingRows = await tx<{
+        access_tier: string; rental_price_inr: number; purchase_price_inr: number | null; status: string;
+      }>`
+        select access_tier,rental_price_inr,purchase_price_inr,status
+        from bridge_loop_consumer_pricing where bridge_title_id=${title.id} limit 1
+      `;
+      const pricing = pricingRows[0];
+      if (!pricing || pricing.status !== "APPROVED" || pricing.access_tier !== "TVOD" ||
+          !Number.isInteger(Number(pricing.rental_price_inr)) || Number(pricing.rental_price_inr) <= 0) {
+        throw new Error("Explicit Super Admin-approved TVOD consumer pricing is required before package preparation");
+      }
+
+      const grants = await tx<BridgeRightsGrant & { evidence: Array<{ commercialTerms?: CommercialTermsSummary }> }>`
+        select id,status,territories,languages,media,window_start,window_end,exclusivity,evidence
+        from bridge_rights_grants
+        where title_id=${title.id} and status='VALID'
+        order by created_at desc
+      `;
+      const grant = grants.find((candidate) => findCoveringRightsGrant([candidate], {
+        destination: "CRAYONS_LOOP",
+        territories: ["WORLDWIDE"],
+        languages: [title.language],
+        exploitationModels: ["TVOD"],
+        windowStart: candidate.window_start ? iso(candidate.window_start) : null,
+        windowEnd: candidate.window_end ? iso(candidate.window_end) : null,
+      }));
+      if (!grant) throw new Error("No current VALID rights grant covers Crayons Loop WORLDWIDE TVOD");
+
+      const qcRows = await tx<{ id: string }>`
+        select id from bridge_qc_cases
+        where title_id=${title.id} and status='PASSED'
+          and reviewer_findings->0->>'masterKey'=${title.master_key}
+          and reviewer_findings->0->>'posterKey'=${title.poster_key}
+        order by reviewed_at desc limit 1
+      `;
+      if (!qcRows[0]) throw new Error("QC approval for the current master and poster is required");
+      const legalRows = await tx<{ id: string }>`
+        select id from bridge_legal_cases
+        where title_id=${title.id} and status='APPROVED'
+          and evidence->0->>'grantId'=${grant.id}
+        order by reviewed_at desc limit 1
+      `;
+      if (!legalRows[0]) throw new Error("Independent Legal approval for the selected rights grant is required");
+
+      const assets = await tx<{ id: string; asset_group: string; s3_key: string }>`
+        select id,asset_group,s3_key from bridge_asset_versions
+        where title_id=${title.id} and processing_state='PASSED'
+          and ((asset_group='VIDEO' and s3_key=${title.master_key})
+            or (asset_group='ARTWORK' and s3_key=${title.poster_key}))
+      `;
+      const video = assets.find((asset) => asset.asset_group === "VIDEO" && asset.s3_key === title.master_key);
+      const artwork = assets.find((asset) => asset.asset_group === "ARTWORK" && asset.s3_key === title.poster_key);
+      if (!video || !artwork) throw new Error("Current master and artwork must have PASSED asset-version records");
+      const assetVersionIds = [video.id, artwork.id];
+
+      const existing = await tx<{
+        id: string; readiness_state: string; asset_version_ids: string[]; rental_price_inr: string | null;
+        qc_case_id: string; legal_case_id: string;
+      }>`
+        select id,readiness_state,asset_version_ids,monetization->>'rentalPriceInr' as rental_price_inr,
+               qc_case_id,legal_case_id
+        from bridge_destination_packages
+        where title_id=${title.id} and destination='CRAYONS_LOOP' and rights_grant_id=${grant.id}
+        order by package_version desc limit 1
+      `;
+      if (existing[0] && JSON.stringify(existing[0].asset_version_ids) === JSON.stringify(assetVersionIds) &&
+          existing[0].qc_case_id === qcRows[0].id && existing[0].legal_case_id === legalRows[0].id &&
+          Number(existing[0].rental_price_inr) === Number(pricing.rental_price_inr)) {
+        return { packageId: existing[0].id, readinessState: existing[0].readiness_state, reused: true as const };
+      }
+
+      const versions = await tx<{ next_version: number }>`
+        select coalesce(max(package_version),0)+1 as next_version
+        from bridge_destination_packages where title_id=${title.id} and destination='CRAYONS_LOOP'
+      `;
+      const packageId = randomUUID();
+      const commercialTerms = grants.find((item) => item.id === grant.id)?.evidence?.[0]?.commercialTerms ?? null;
+      await tx`
+        insert into bridge_destination_packages
+          (id,title_id,destination,package_version,rights_grant_id,qc_case_id,legal_case_id,
+           asset_version_ids,consumer_metadata,monetization,readiness_state)
+        values
+          (${packageId},${title.id},'CRAYONS_LOOP',${Number(versions[0]?.next_version ?? 1)},
+           ${grant.id},${qcRows[0].id},${legalRows[0].id},
+           ${JSON.stringify(assetVersionIds)}::jsonb,
+           ${JSON.stringify({
+             bridgeTitleId: title.id, slug: title.slug, title: title.name, synopsis: title.synopsis,
+             contentType: loopStageType(title.content_type), language: title.language, year: title.year,
+             durationMinutes: title.runtime_minutes, posterAssetVersionId: artwork.id,
+             accessTier: pricing.access_tier, rentalPriceInr: Number(pricing.rental_price_inr),
+             purchasePriceInr: pricing.purchase_price_inr == null ? null : Number(pricing.purchase_price_inr),
+           })}::jsonb,
+           ${JSON.stringify({
+             model: "TVOD", accessTier: pricing.access_tier,
+             rentalPriceInr: Number(pricing.rental_price_inr),
+             purchasePriceInr: pricing.purchase_price_inr == null ? null : Number(pricing.purchase_price_inr),
+             commercialTerms,
+           })}::jsonb,
+           'HOLD')
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "distribution.loop_package_prepared",
+        entityType: "bridge_destination_package",
+        entityId: packageId,
+        metadata: { titleId: title.id, rightsGrantId: grant.id, qcCaseId: qcRows[0].id, legalCaseId: legalRows[0].id, assetVersionIds },
+      }, tx);
+      return { packageId, readinessState: "HOLD" as const, reused: false as const };
+    });
+  });
+
+export const getLoopDestinationPackage = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(loopPackageInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.read_catalog");
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; package_version: number; readiness_state: string; rights_grant_id: string;
+      qc_case_id: string; legal_case_id: string; asset_version_ids: string[];
+      consumer_metadata: string; created_at: string;
+    }>`
+      select id,package_version,readiness_state,rights_grant_id,qc_case_id,legal_case_id,
+             asset_version_ids,consumer_metadata::text as consumer_metadata,created_at::text as created_at
+      from bridge_destination_packages
+      where title_id=${data.bridgeTitleId} and destination='CRAYONS_LOOP'
+      order by package_version desc limit 1
+    `;
+    return { package: rows[0] ?? null };
+  });
+
+export const certifyLoopDestinationPackage = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ packageId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "loop.publish");
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const rows = await tx<{
+        id: string; title_id: string; readiness_state: string; rights_grant_id: string;
+        qc_case_id: string; legal_case_id: string; asset_version_ids: string[]; rental_price_inr: string | null;
+      }>`
+        select id,title_id,readiness_state,rights_grant_id,qc_case_id,legal_case_id,asset_version_ids,
+               monetization->>'rentalPriceInr' as rental_price_inr
+        from bridge_destination_packages where id=${data.packageId} and destination='CRAYONS_LOOP' for update
+      `;
+      const pkg = rows[0];
+      if (!pkg) throw new Error("Loop destination package not found");
+      if (pkg.readiness_state === "READY") return { packageId: pkg.id, readinessState: "READY" as const };
+      if (pkg.readiness_state !== "HOLD") throw new Error("Only a HOLD package can be certified READY");
+      const titleRows = await tx<{ status: string; master_key: string | null; poster_key: string | null }>`
+        select status,master_key,poster_key from bridge_titles where id=${pkg.title_id} limit 1
+      `;
+      const title = titleRows[0];
+      if (!title || !["LICENSING_READY","LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status)) {
+        throw new Error("Title must remain Legal-cleared and licensing-ready");
+      }
+      const pricingRows = await tx<{ status: string; access_tier: string; rental_price_inr: number }>`
+        select status,access_tier,rental_price_inr from bridge_loop_consumer_pricing
+        where bridge_title_id=${pkg.title_id} limit 1
+      `;
+      const pricing = pricingRows[0];
+      if (!pricing || pricing.status !== "APPROVED" || pricing.access_tier !== "TVOD" ||
+          Number(pkg.rental_price_inr) !== Number(pricing.rental_price_inr)) {
+        throw new Error("Package pricing is missing, revoked or changed; prepare a new package version");
+      }
+      const gates = await tx<{ ott: string; packaging: string; curation: string; delivery: string }>`
+        select ott_preparation_status as ott,packaging_status as packaging,
+               curation_status as curation,delivery_status as delivery
+        from bridge_title_gate_certifications where title_id=${pkg.title_id} limit 1
+      `;
+      const gate = gates[0];
+      if (!gate || gate.ott !== "READY" || gate.packaging !== "COMPLETE" || gate.curation !== "APPROVED" || gate.delivery !== "READY") {
+        throw new Error("OTT, packaging, curation and delivery certifications must all pass before package readiness");
+      }
+      const evidence = await tx<{ valid_grant: boolean; qc_ok: boolean; legal_ok: boolean }>`
+        select
+          exists(select 1 from bridge_rights_grants where id=${pkg.rights_grant_id} and title_id=${pkg.title_id} and status='VALID' and window_end>now()) as valid_grant,
+          exists(select 1 from bridge_qc_cases q where q.id=${pkg.qc_case_id} and q.title_id=${pkg.title_id} and q.status='PASSED'
+            and q.reviewer_findings->0->>'masterKey'=${title.master_key}
+            and q.reviewer_findings->0->>'posterKey'=${title.poster_key}) as qc_ok,
+          exists(select 1 from bridge_legal_cases where id=${pkg.legal_case_id} and title_id=${pkg.title_id} and status='APPROVED'
+            and evidence->0->>'grantId'=${pkg.rights_grant_id}) as legal_ok
+      `;
+      if (!evidence[0]?.valid_grant || !evidence[0]?.qc_ok || !evidence[0]?.legal_ok) {
+        throw new Error("The selected rights, QC or Legal approval is no longer valid");
+      }
+      const assetIds = Array.isArray(pkg.asset_version_ids) ? pkg.asset_version_ids : [];
+      if (assetIds.length < 2) throw new Error("Package must contain the current master and artwork asset versions");
+      const assets = await tx<{ id: string; asset_group: string; s3_key: string }>`
+        select id,asset_group,s3_key from bridge_asset_versions
+        where title_id=${pkg.title_id} and id=any(${assetIds}::uuid[]) and processing_state='PASSED'
+      `;
+      if (assets.length !== assetIds.length ||
+          !assets.some((asset) => asset.asset_group === "VIDEO" && asset.s3_key === title.master_key) ||
+          !assets.some((asset) => asset.asset_group === "ARTWORK" && asset.s3_key === title.poster_key)) {
+        throw new Error("Every package asset must remain PASSED and include the current video master plus current artwork");
+      }
+      await tx`
+        update bridge_destination_packages set readiness_state='READY'
+        where id=${pkg.id} and readiness_state='HOLD'
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "distribution.loop_package_ready",
+        entityType: "bridge_destination_package",
+        entityId: pkg.id,
+        metadata: { titleId: pkg.title_id, assetVersionIds: assetIds },
+      }, tx);
+      return { packageId: pkg.id, readinessState: "READY" as const };
+    });
+  });
+
 export const authorizeLoopPublication = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(publishInput)
@@ -427,17 +790,44 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       }
 
       const title = preflight.title;
+      if (!preflight.consumerPricing || data.accessTier !== preflight.consumerPricing.access_tier) {
+        throw new Error("Publication access tier must match explicitly approved consumer pricing");
+      }
       const existing = await sql<{
         id: string;
       }>`select id from loop_titles where bridge_title_id = ${title.id} limit 1`;
       const loopTitleId = existing[0]?.id ?? randomUUID();
+
+      // The destination package becomes authorized in the same transaction as publication.
+      const authorizedPackage = await sql<{ id: string }>`
+        update bridge_destination_packages
+        set readiness_state='AUTHORIZED',authorized_by=${actor.userId},authorized_at=now()
+        where id=${preflight.destinationPackageId} and readiness_state in ('READY','AUTHORIZED','DELIVERED')
+        returning id
+      `;
+      if (!authorizedPackage[0]) throw new Error("Certified Loop destination package changed; refresh before publishing");
+
+      // A fully certified Loop publication makes a licensing-ready Bridge title buyer-visible.
+      // The database trigger re-checks every buyer gate against the just-authorized package.
+      if (title.status === "LICENSING_READY") {
+        const advanced = await sql<{ id: string }>`
+          update bridge_titles set status='LIVE_FOR_BUYERS',updated_at=now()
+          where id=${title.id} and status='LICENSING_READY'
+          returning id
+        `;
+        if (!advanced[0]) throw new Error("Bridge title lifecycle changed; refresh before publishing");
+        await sql`
+          insert into bridge_title_events(title_id,from_status,to_status,actor_user_id,note)
+          values (${title.id},'LICENSING_READY','LIVE_FOR_BUYERS',${actor.userId},'Certified Crayons Loop destination package published')
+        `;
+      }
 
       // 1. Synchronize master publication record in Crayons Loop
       await sql`
       insert into loop_titles (
         id, bridge_title_id, slug, title, synopsis, content_type, language, year,
         duration_minutes, poster_path, playback_path, metadata, status, listed,
-        published, featured, access_tier, updated_at
+        published, featured, access_tier, tvod_rental_price, tvod_purchase_price, updated_at
       ) values (
         ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
         ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
@@ -445,11 +835,16 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
           source: "crayons-bridge-master-distribution",
           lane: loopStageType(title.content_type),
           rightsGrantId: preflight.rightsGrantId,
+          destinationPackageId: preflight.destinationPackageId,
           authorizedBy: actor.userId,
           commercialTerms: preflight.commercialTerms || null,
+          consumerPricing: preflight.consumerPricing,
         })}::jsonb,
         ${"approved"}, true, true, false,
-        ${data.accessTier}, now()
+        ${preflight.consumerPricing.access_tier},
+        ${Number(preflight.consumerPricing.rental_price_inr)},
+        ${preflight.consumerPricing.purchase_price_inr == null ? 0 : Number(preflight.consumerPricing.purchase_price_inr)},
+        now()
       )
       on conflict (bridge_title_id) do update set
         slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
@@ -457,6 +852,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         language = excluded.language, year = excluded.year, duration_minutes = excluded.duration_minutes,
         poster_path = excluded.poster_path, playback_path = excluded.playback_path,
         status = 'approved', listed = true, published = true, access_tier = excluded.access_tier,
+        tvod_rental_price = excluded.tvod_rental_price, tvod_purchase_price = excluded.tvod_purchase_price,
         metadata = excluded.metadata, updated_at = now()
     `;
 
@@ -472,8 +868,10 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         ${JSON.stringify({
           destination: "CRAYONS_LOOP",
           commercialTerms: preflight.commercialTerms || null,
+          consumerPricing: preflight.consumerPricing,
           authorizedOperator: actor.userId,
           rightsGrantId: preflight.rightsGrantId,
+          destinationPackageId: preflight.destinationPackageId,
         })}::jsonb,
         now()
       )
@@ -502,6 +900,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
             windowStart: data.windowStart,
             windowEnd: data.windowEnd,
             commercialTerms: preflight.commercialTerms,
+            consumerPricing: preflight.consumerPricing,
           },
         },
         sql,
