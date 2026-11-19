@@ -29,7 +29,7 @@ export function useCurrentUserState(): CurrentUserState {
     // This cached identity is only a loading hint. Protected data still waits
     // for getBridgeSession(), which verifies the bearer token server-side.
     user: normalize(getStoredSupabaseUser()),
-    isPending: false,
+    isPending: !getStoredSupabaseUser(),
   }));
 
   useEffect(() => {
