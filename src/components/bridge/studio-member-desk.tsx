@@ -15,7 +15,7 @@ export function StudioMemberDesk() {
   const [target, setTarget] = useState("");
   const [reason, setReason] = useState("");
   const membersQuery = useQuery({ queryKey: ["bridge-studio-members"], queryFn: () => listStudioMembers(), retry: 1 });
-  const transfersQuery = useQuery({ queryKey: ["bridge-studio-ownership-transfers"], queryFn: () => listStudioOwnershipTransfers(), retry: 1 });
+  const transfersQuery = useQuery({ queryKey: ["bridge-studio-ownership-transfers"], queryFn: () => listStudioOwnershipTransfers(), enabled: membersQuery.data?.managerRole === "owner" || membersQuery.data?.managerRole === "admin", retry: 1 });
   const refresh = async () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: ["bridge-studio-members"] }),
@@ -69,7 +69,7 @@ export function StudioMemberDesk() {
     <section className="space-y-2 rounded-sm border border-line p-4">
       <h4 className="text-sm font-semibold">Pending ownership transfers</h4>
       {transfersQuery.isError ? <p role="alert" className="text-sm text-muted">Ownership transfer status is unavailable.</p> : null}
-      {(transfersQuery.data?.transfers ?? []).length === 0 ? <p className="text-sm text-muted">No pending ownership transfer.</p> : null}
+      {canManage && !transfersQuery.isError && (transfersQuery.data?.transfers ?? []).length === 0 ? <p className="text-sm text-muted">No pending ownership transfer.</p> : null}
       {(transfersQuery.data?.transfers ?? []).map((t) => <div key={t.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-sm">
         <span>{t.currentOwnerName} → {t.proposedOwnerName} · {t.reason}</span>
         <span className="flex gap-3">{t.proposedOwnerUserId === currentUserId && managerRole === "admin" ? <button type="button" disabled={accept.isPending} onClick={() => accept.mutate(t.id)} className="font-semibold underline">Accept</button> : null}{t.currentOwnerUserId === currentUserId && managerRole === "owner" ? <button type="button" disabled={cancel.isPending} onClick={() => cancel.mutate(t.id)} className="underline">Cancel</button> : null}</span>
