@@ -61,28 +61,39 @@ async function serveLoopMedia(request: Request) {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedTitle);
   const { data: title, error: titleError } = await service
     .from("loop_titles")
-    .select("id,bridge_title_id,status,listed,published,access_tier")
+    .select("id,bridge_title_id,status,listed,published,access_tier,language")
     .eq(isUuid ? "id" : "slug", requestedTitle)
     .maybeSingle();
 
   if (titleError) return errorResponse(503, "BRIDGE_CATALOG_UNAVAILABLE", "Bridge could not verify this title");
-  if (!title || title.status !== "approved" || title.listed !== true || title.published !== true || !title.bridge_title_id) {
+  const titleStatus = String(title?.status || "").trim().toUpperCase();
+  if (!title || !["APPROVED", "PUBLISHED"].includes(titleStatus) ||
+      (title.listed ?? title.is_listed) !== true ||
+      (title.published ?? title.is_published) !== true ||
+      !title.bridge_title_id) {
     return errorResponse(403, "TITLE_NOT_AVAILABLE", "This title is not available for Loop playback");
   }
 
   const now = new Date();
-  const { data: grant, error: grantError } = await service
+  const { data: grantRows, error: grantError } = await service
     .from("bridge_loop_publications")
-    .select("territories,exploitation_models,window_start,window_end,approved_at,revoked_at,authorization_status")
+    .select("*")
     .eq("loop_title_id", title.id)
-    .eq("bridge_title_id", title.bridge_title_id)
-    .eq("authorization_status", "authorized")
-    .is("revoked_at", null)
-    .not("approved_at", "is", null)
-    .maybeSingle();
+    .eq("bridge_title_id", title.bridge_title_id);
 
-  if (grantError) return errorResponse(503, "BRIDGE_AUTHORIZATION_UNAVAILABLE", "Bridge publication authorization could not be verified");
-  if (!grant) return errorResponse(403, "BRIDGE_GRANT_REQUIRED", "Bridge has not authorized this title for Loop");
+  if (grantError || !Array.isArray(grantRows)) {
+    return errorResponse(503, "BRIDGE_AUTHORIZATION_UNAVAILABLE", "Bridge publication authorization could not be verified");
+  }
+  const validGrants = grantRows.filter((row: Record<string, any>) =>
+    row.authorization_status === "AUTHORIZED" &&
+    row.approved_at &&
+    row.revoked_at == null &&
+    (!row.destination || row.destination === "CRAYONS_LOOP"),
+  );
+  if (validGrants.length !== 1) {
+    return errorResponse(403, "BRIDGE_GRANT_REQUIRED", "Bridge has not authorized this title for Loop");
+  }
+  const grant = validGrants[0];
 
   // Publication preflight requires an explicit, valid distribution window.
   // Treat missing or malformed bounds as unauthorized rather than widening rights.
@@ -94,14 +105,23 @@ async function serveLoopMedia(request: Request) {
   const allowedTerritories: string[] = Array.isArray(grant.territories) ? grant.territories : [];
   const territoryAllowed = allowedTerritories.includes("WORLDWIDE") ||
     (requestCountry.length === 2 && allowedTerritories.includes(requestCountry));
-  const modelAllowed = Boolean(title.access_tier && grant.exploitation_models?.includes(title.access_tier));
-  if (!Number.isFinite(windowStart) ||
+  const modelAllowed = Boolean(title.access_tier &&
+    Array.isArray(grant.exploitation_models) &&
+    grant.exploitation_models.some((value: string) => String(value).trim().toUpperCase() === String(title.access_tier).trim().toUpperCase()));
+  const titleLanguage = String(title.language || "").trim().toUpperCase();
+  const languageAllowed = Boolean(titleLanguage &&
+    Array.isArray(grant.languages) &&
+    grant.languages.some((value: string) => String(value).trim().toUpperCase() === titleLanguage));
+  const approvedAt = grant.approved_at ? Date.parse(grant.approved_at) : Number.NaN;
+  if (!Number.isFinite(approvedAt) ||
+      !Number.isFinite(windowStart) ||
       !Number.isFinite(windowEnd) ||
       windowStart > now.getTime() ||
       windowEnd <= now.getTime() ||
       windowEnd <= windowStart ||
       !territoryAllowed ||
-      !modelAllowed) {
+      !modelAllowed ||
+      !languageAllowed) {
     return errorResponse(403, "BRIDGE_GRANT_OUT_OF_SCOPE", "The Bridge publication grant does not cover this request");
   }
 
