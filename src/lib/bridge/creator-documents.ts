@@ -8,7 +8,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { canReadTitle, canOperateOnTitle, hasPermission } from "./rbac";
 import { writeAudit } from "./audit";
-import { sameOwner, canDownloadCreatorDocument } from "./creator-document-policy";
+import { sameOwner, canDownloadCreatorDocument, canManageStudioDocuments } from "./creator-document-policy";
 
 const DOCUMENT_TYPES = [
   "FINISHED_FILM_AGREEMENT",
@@ -29,6 +29,12 @@ function assertCreatorOrStudio(actor: { accountType: string }) {
   }
 }
 
+function assertDocumentManagementRole(actor: { accountType: string; organizationId?: string | null; organizationRole?: string | null }) {
+  if (!canManageStudioDocuments(actor)) {
+    throw new Error("Only an active Studio owner may manage reusable organization documents");
+  }
+}
+
 export const requestCreatorDocumentUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({
@@ -41,6 +47,7 @@ export const requestCreatorDocumentUpload = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertCreatorOrStudio(actor);
+    assertDocumentManagementRole(actor);
     if (actor.accountType === "studio" && !actor.organizationId) {
       throw new Error("A verified Studio organization mapping is required before uploading reusable organization documents");
     }
@@ -75,6 +82,7 @@ export const confirmCreatorDocumentUpload = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertCreatorOrStudio(actor);
+    assertDocumentManagementRole(actor);
     const sql = await getSql();
     const rows = await sql<{
       id: string; owner_user_id: string; owner_account_type: string;
@@ -148,6 +156,7 @@ export const linkCreatorDocumentToTitle = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertCreatorOrStudio(actor);
+    assertDocumentManagementRole(actor);
     const title = await loadTitle(data.titleId);
     if (!title || !canOperateOnTitle(actor, title, "title.update_own", "title.license")) {
       throw new Error("Title not found");
