@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import { persistVerifiedAsset } from "./asset-confirmation.ts";
+import { isCanonicalTitleAssetKey, persistVerifiedAsset } from "./asset-confirmation.ts";
 
 test("only a verified upload sets the master reference, once, with an audit event", async () => {
   const db = new PGlite();
@@ -153,6 +153,75 @@ test("title owner can confirm an upload when organization tables are absent", as
       "select byte_size from bridge_assets where id='asset1234'",
     )).rows[0];
     assert.equal(row?.byte_size, 170);
+  } finally {
+    await db.close();
+  }
+});
+
+
+test("Super Admin can verify a prior operator's master only within the canonical title-owner path", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
+      values ('title-master','title-master','Master Title','studio-owner','studio','PREPARING');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values
+        ('asset-prior-master','title-master','master','bridge/studio-owner/title-master/master/full-film-4k.mp4','video/mp4','prior-superadmin'),
+        ('asset-prior-poster','title-master','poster','bridge/studio-owner/title-master/poster/poster.jpg','image/jpeg','prior-superadmin');
+    `);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const common = {
+      actorUserId: "current-superadmin",
+      internalActor: true,
+      titleId: "title-master",
+      byteSize: 8_000_000,
+      contentType: "video/mp4" as string | null,
+      checksum: "verified-etag",
+      sealedKey: "bridge/studio-owner/title-master/master/full-film-4k.mp4.verified/asset-prior-master",
+    };
+
+    assert.equal(isCanonicalTitleAssetKey({
+      key: "bridge/studio-owner/title-master/master/full-film-4k.mp4",
+      ownerUserId: "studio-owner",
+      titleId: "title-master",
+      kind: "master",
+    }), true);
+    assert.equal(isCanonicalTitleAssetKey({
+      key: "bridge/another-owner/title-master/master/full-film-4k.mp4",
+      ownerUserId: "studio-owner",
+      titleId: "title-master",
+      kind: "master",
+    }), false);
+
+    assert.equal(await persistVerifiedAsset(sql, {
+      ...common,
+      assetId: "asset-prior-master",
+      kind: "master",
+      sourceKey: "bridge/studio-owner/title-master/master/full-film-4k.mp4",
+    }), true);
+    const linked = (await db.query<{ master_key: string | null; byte_size: number | null }>(`
+      select t.master_key, a.byte_size
+      from bridge_titles t join bridge_assets a on a.title_id = t.id
+      where a.id='asset-prior-master'
+    `)).rows[0];
+    assert.deepEqual(linked, {
+      master_key: common.sealedKey,
+      byte_size: 8_000_000,
+    });
+
+    // Even Super Admin cannot use this exception to verify another operator's poster.
+    assert.equal(await persistVerifiedAsset(sql, {
+      ...common,
+      assetId: "asset-prior-poster",
+      kind: "poster",
+      contentType: "image/jpeg",
+      sourceKey: "bridge/studio-owner/title-master/poster/poster.jpg",
+      sealedKey: "bridge/studio-owner/title-master/poster/poster.jpg.verified/asset-prior-poster",
+    }), false);
   } finally {
     await db.close();
   }
