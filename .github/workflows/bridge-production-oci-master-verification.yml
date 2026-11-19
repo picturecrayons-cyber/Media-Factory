@@ -20,6 +20,8 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      - name: Test Production OCI verification guards
+        run: node --test scripts/oci-production-master-verification.test.mjs
       - name: Verify existing Production master objects (read-only)
         env:
           SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
