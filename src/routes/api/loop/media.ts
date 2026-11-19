@@ -110,7 +110,7 @@ async function serveLoopMedia(request: Request) {
     return errorResponse(503, "BRIDGE_AUTHORIZATION_UNAVAILABLE", "Bridge publication authorization could not be verified");
   }
   const validGrants = grantRows.filter((row: Row) =>
-    row.authorization_status === "AUTHORIZED" &&
+    String(row.authorization_status || "").trim().toUpperCase() === "AUTHORIZED" &&
     Boolean(row.approved_at) &&
     row.revoked_at == null &&
     (!Object.prototype.hasOwnProperty.call(row, "destination") || row.destination === "CRAYONS_LOOP"),
