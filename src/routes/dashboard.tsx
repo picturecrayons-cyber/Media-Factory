@@ -280,7 +280,12 @@ function DashboardBody() {
                 ) : (
                   <p className="mt-3 text-sm text-muted">No exact canonical Bridge title record found.</p>
                 )}
-                <Link to="/workspace" className="mt-4 inline-flex text-xs font-semibold text-accent hover:underline">
+                <Link
+                  to="/title/$id"
+                  params={{ id: item.record?.id ?? "" }}
+                  disabled={!item.record}
+                  className="mt-4 inline-flex text-xs font-semibold text-accent hover:underline"
+                >
                   Open title workspace →
                 </Link>
               </article>
