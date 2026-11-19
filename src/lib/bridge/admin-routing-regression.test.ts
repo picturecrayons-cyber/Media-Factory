@@ -216,7 +216,10 @@ test("Auth session restoration has a finite timeout and server-verified cached t
   assert.match(client, /SESSION_RESTORE_TIMEOUT_MS = 8_000/);
   assert.match(client, /Promise\.race/);
   assert.match(client, /getStoredSupabaseAccessToken/);
-  assert.match(client, /Every protected server function still verifies it with Supabase Auth/);
+  assert.match(client, /function still verifies it with Supabase Auth/);
+  const gate = read("../../components/bridge/gate.tsx");
+  assert.match(gate, /getBridgeSessionWithTimeout/);
+  assert.match(gate, /12_000/);
   assert.match(hook, /normalize\(getStoredSupabaseUser\(\)\)/);
   assert.match(hook, /isPending: !getStoredSupabaseUser\(\)/);
 });
