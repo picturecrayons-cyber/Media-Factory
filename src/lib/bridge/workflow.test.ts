@@ -83,6 +83,7 @@ async function fixture() {
       await db.exec("create role anon; create role authenticated; create role service_role;");
     }
     await db.exec(`    create table bridge_profiles(user_id text primary key);
+    create table bridge_organizations(id uuid primary key);
     create table bridge_titles(
       id text primary key,
       owner_user_id text,
