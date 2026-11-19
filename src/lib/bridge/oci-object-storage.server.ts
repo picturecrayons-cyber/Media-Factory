@@ -140,6 +140,8 @@ async function signedFetch(opts: {
   method: "GET" | "HEAD" | "POST" | "DELETE";
   path: string;
   body?: unknown;
+  range?: string;
+  timeoutMs?: number;
 }) {
   const url = new URL(opts.path, endpoint(opts.cfg.region));
   const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
@@ -154,7 +156,13 @@ async function signedFetch(opts: {
   const safeHeaders = Object.fromEntries(
     Object.entries(headers).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
   );
-  return fetch(url, { method: opts.method, headers: safeHeaders, body });
+  return fetch(url, {
+    method: opts.method,
+    headers: safeHeaders,
+    body,
+    redirect: "error",
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
+  });
 }
 
 async function resolveNamespace(cfg: OciConfig) {
@@ -281,4 +289,18 @@ export async function deleteObject(key: string) {
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
   return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;
+}
+
+
+/**
+ * Stream an OCI object through the server-side signer. The caller must perform
+ * authorization before invoking this function; no OCI URL or object key is
+ * returned to the browser.
+ */
+export async function fetchObjectResponse(key: string, bucket?: string, range?: string) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const targetBucket = bucket?.trim() || cfg.bucket;
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
+  return signedFetch({ cfg, method: "GET", path, range, timeoutMs: 120_000 });
 }
