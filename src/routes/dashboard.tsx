@@ -4,7 +4,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
-import { getFounderTrackedProductions } from "@/lib/bridge/founder-dashboard";
+import { getFounderOperationalSnapshot, getFounderTrackedProductions } from "@/lib/bridge/founder-dashboard";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 
 export const Route = createFileRoute("/dashboard")({
@@ -81,6 +81,13 @@ function DashboardBody() {
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
+  const operationalQ = useQuery({
+    queryKey: ["bridge-founder-operational-snapshot"],
+    queryFn: () => getFounderOperationalSnapshot(),
+    retry: 1,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
 
   const titles = titlesQ.data?.titles ?? [];
   const actionItems = titles.filter((title) => title.status in ACTION_GUIDANCE);
@@ -100,6 +107,13 @@ function DashboardBody() {
     0,
   );
   const reportingUnavailable = titlesQ.isError;
+  const operational = operationalQ.data;
+  const sumCount = (items: { count: number }[] | undefined) =>
+    (items ?? []).reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+  const formatStatuses = (items: { status: string; count: number }[] | undefined) =>
+    items?.length
+      ? items.map((item) => `${item.status.replaceAll("_", " ")}: ${item.count}`).join(" · ")
+      : "No records";
   const metricValue = (value: number) =>
     titlesQ.isPending || reportingUnavailable ? "—" : String(value);
   const moneyValue =
@@ -209,6 +223,80 @@ function DashboardBody() {
         <p className="text-xs text-muted">
           *Sum of recorded licensing fees for licensed or delivered titles; not cash received.
         </p>
+      </section>
+
+      <section aria-labelledby="operations-title" className="space-y-3">
+        <div>
+          <h3 id="operations-title" className="font-display text-xl font-semibold">Payments, licensing & operations</h3>
+          <p className="mt-1 text-sm text-muted">
+            Live counts from Bridge payment, entitlement, QC, legal, rights and distribution records. Other StreamVista products are not included.
+          </p>
+        </div>
+        {operationalQ.isPending ? (
+          <p className="rounded-sm border border-line px-4 py-5 text-sm text-muted">Loading operational records…</p>
+        ) : operationalQ.isError || !operational ? (
+          <p role="alert" className="rounded-sm border border-line px-4 py-5 text-sm text-accent">
+            Operational records could not be verified. No zero values are assumed.
+          </p>
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Stat label="Bridge payment records" value={String(sumCount(operational.payments))} />
+              <Stat label="Film entitlements" value={String(operational.entitlements)} />
+              <Stat label="License packages" value={String(sumCount(operational.licensePackages))} />
+              <Stat label="Package entitlements" value={String(operational.packageEntitlements)} />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <article className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">Payments</h4>
+                <p className="mt-2 text-xs text-muted">
+                  {operational.payments.length
+                    ? operational.payments.map((item) => `${item.purpose}: ${item.status} · ${item.count}`).join(" | ")
+                    : "No Bridge payment records"}
+                </p>
+              </article>
+              <article className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">QC / Legal / Rights</h4>
+                <p className="mt-2 text-xs text-muted">QC: {formatStatuses(operational.qc)}</p>
+                <p className="mt-1 text-xs text-muted">Legal: {formatStatuses(operational.legal)}</p>
+                <p className="mt-1 text-xs text-muted">Rights: {formatStatuses(operational.rights)}</p>
+              </article>
+              <article className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">Distribution</h4>
+                <p className="mt-2 text-xs text-muted">
+                  Packages: {operational.distributionPackages.length
+                    ? operational.distributionPackages.map((item) => `${item.readiness_state}: ${item.count}`).join(" · ")
+                    : "No destination packages"}
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  Loop: {operational.loopPublications.length
+                    ? operational.loopPublications.map((item) => `${item.authorization_status}: ${item.count}`).join(" · ")
+                    : "No Loop publication records"}
+                </p>
+              </article>
+              <article className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">Services</h4>
+                <p className="mt-2 text-xs text-muted">{formatStatuses(operational.serviceOrders)}</p>
+              </article>
+              <article className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">License package delivery</h4>
+                <p className="mt-2 text-xs text-muted">
+                  {operational.licensePackages.length
+                    ? operational.licensePackages.map((item) => `${item.status} / ${item.delivery_status}: ${item.count}`).join(" · ")
+                    : "No license package records"}
+                </p>
+              </article>
+              <article className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">Entitlement access types</h4>
+                <p className="mt-2 text-xs text-muted">
+                  {operational.entitlementsByAccessType.length
+                    ? operational.entitlementsByAccessType.map((item) => `${item.access_type}: ${item.count}`).join(" · ")
+                    : "No film entitlements"}
+                </p>
+              </article>
+            </div>
+          </>
+        )}
       </section>
 
       <section aria-labelledby="portfolio-title" className="space-y-3">
