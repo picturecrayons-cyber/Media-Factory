@@ -135,7 +135,7 @@ try {
         if (!contentTypeMatches || !sizeCheck.matches) report.totals.errors++;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const missing = /\\(404\\)/.test(message);
+                const missing = /\(404\)/.test(message);
         titleReport.objects.push({
           assetId: candidate.asset_id,
           objectKey: candidate.s3_key,
@@ -158,6 +158,6 @@ report.status = report.totals.missing === 0 && report.totals.errors === 0 &&
   report.titles.every((title) => title.canonicalMasterVerified)
   ? "PASS"
   : "REVIEW_REQUIRED";
-await writeFile("oci-production-master-verification-report.json", JSON.stringify(report, null, 2) + "\\n", { mode: 0o600 });
+await writeFile("oci-production-master-verification-report.json", JSON.stringify(report, null, 2) + "\n", { mode: 0o600 });
 console.log(JSON.stringify(report, null, 2));
 if (report.status !== "PASS") process.exitCode = 1;
