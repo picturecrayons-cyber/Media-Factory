@@ -6,6 +6,7 @@ import {
   assertProductionDatabaseTarget,
   compareObjectSizes,
   isCanonicalMasterVerified,
+  classifyObjectError,
 } from "./oci-production-master-verification-lib.mjs";
 
 const EXPECTED_PROJECT_REF = "mlmgugivsyoxzdgwkbpu";
@@ -135,14 +136,13 @@ try {
         if (!contentTypeMatches || !sizeCheck.matches) report.totals.errors++;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-                const missing = /\(404\)/.test(message);
         titleReport.objects.push({
           assetId: candidate.asset_id,
           objectKey: candidate.s3_key,
           result: missing ? "NOT_FOUND" : "ERROR",
           error: message,
         });
-        report.totals[missing ? "missing" : "errors"]++;
+        report.totals[classifyObjectError(message) === "NOT_FOUND" ? "missing" : "errors"]++;
       }
     }
     titleReport.canonicalMasterVerified = isCanonicalMasterVerified(titleRow.master_key, titleReport.objects);
