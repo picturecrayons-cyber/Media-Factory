@@ -6,7 +6,14 @@ import {
   listMyStoryConcepts,
   updateStoryConceptRightsDeclaration,
 } from "@/lib/bridge/story-concept-api";
-import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
+
+type RightsBasis = "ORIGINAL_AUTHOR" | "ASSIGNED" | "LICENSED" | "PUBLIC_DOMAIN" | "OTHER";
+type RightsDraft = {
+  holder: string;
+  basis: RightsBasis | "";
+  thirdParty: boolean | null;
+  accepted: boolean;
+};
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Pending review",
@@ -15,15 +22,6 @@ const STATUS_LABEL: Record<string, string> = {
   REJECTED: "Rejected",
   INTRODUCED_TO_BUYERS: "Introduced",
 };
-
-type RightsDraft = {
-  holder: string;
-  basis: string;
-  thirdParty: boolean | null;
-  accepted: boolean;
-};
-
-const emptyDraft: RightsDraft = { holder: "", basis: "", thirdParty: null, accepted: false };
 
 function listLogline(value: string | null | undefined) {
   const text = value?.trim() ?? "";
@@ -52,7 +50,6 @@ export function MyStoryConcepts() {
   const query = useQuery({
     queryKey: ["my-story-concepts"],
     queryFn: () => listMyStoryConcepts(),
-    enabled: STORY_CONCEPT_ENABLED,
     refetchInterval: 30_000,
   });
 
@@ -60,7 +57,7 @@ export function MyStoryConcepts() {
     mutationFn: (input: {
       id: string;
       rightsHolderName: string;
-      rightsBasis: "ORIGINAL_AUTHOR" | "ASSIGNED" | "LICENSED" | "PUBLIC_DOMAIN" | "OTHER";
+      rightsBasis: RightsBasis;
       thirdPartyMaterialsIncluded: boolean;
       rightsDeclarationAccepted: true;
     }) => updateStoryConceptRightsDeclaration({ data: input }),
@@ -72,7 +69,6 @@ export function MyStoryConcepts() {
     onError: (error) => toast(error instanceof Error ? error.message : "Could not save rights declaration"),
   });
 
-  if (!STORY_CONCEPT_ENABLED) return null;
   if (query.isLoading) return <p className="text-sm text-muted">Loading concepts…</p>;
   if (query.isError) return <p role="alert" className="text-sm text-accent">Story / Concept records could not be loaded.</p>;
 
@@ -83,7 +79,7 @@ export function MyStoryConcepts() {
     <section>
       <h2 className="mb-3 text-lg font-semibold">Story concepts</h2>
       <p className="mb-3 text-xs text-muted">
-        These are Original IP submissions, separate from finished-film workspaces and licensing.
+        Original IP submissions are separate from finished-film workspaces and licensing.
       </p>
       <ul className="divide-y divide-line rounded-sm border border-line">
         {concepts.map((c) => {
@@ -91,7 +87,7 @@ export function MyStoryConcepts() {
           const rightsComplete = hasCompleteRights(c);
           const draft = drafts[c.id] ?? {
             holder: c.rights_holder_name ?? "",
-            basis: c.rights_basis ?? "",
+            basis: (c.rights_basis ?? "") as RightsBasis | "",
             thirdParty: c.third_party_materials_included ?? null,
             accepted: rightsComplete,
           };
@@ -100,12 +96,14 @@ export function MyStoryConcepts() {
           return (
             <li key={c.id} className="space-y-3 px-4 py-4">
               <div>
-                <p className="font-medium">{(c as { titleName?: string }).titleName ?? "Concept"}</p>
+                <p className="font-medium">{c.titleName || "Concept"}</p>
                 <p className="text-sm text-muted">
                   {STATUS_LABEL[c.curation_status] ?? c.curation_status}
                   {logline ? ` · ${logline}` : ""}
                 </p>
-                <p className="mt-1 text-xs text-muted">Submission ID: <span className="font-mono">{c.id}</span></p>
+                <p className="mt-1 text-xs text-muted">
+                  Submission ID: <span className="font-mono">{c.id}</span>
+                </p>
               </div>
 
               {rightsComplete ? (
@@ -119,7 +117,7 @@ export function MyStoryConcepts() {
                     rightsUpdate.mutate({
                       id: c.id,
                       rightsHolderName: draft.holder,
-                      rightsBasis: draft.basis as RightsDraft["basis"] & ("ORIGINAL_AUTHOR" | "ASSIGNED" | "LICENSED" | "PUBLIC_DOMAIN" | "OTHER"),
+                      rightsBasis: draft.basis,
                       thirdPartyMaterialsIncluded: draft.thirdParty,
                       rightsDeclarationAccepted: true,
                     });
@@ -146,7 +144,7 @@ export function MyStoryConcepts() {
                       value={draft.basis}
                       onChange={(event) => setDrafts((current) => ({
                         ...current,
-                        [c.id]: { ...draft, basis: event.target.value },
+                        [c.id]: { ...draft, basis: event.target.value as RightsBasis | "" },
                       }))}
                       className="mt-1 h-10 w-full rounded-lg border border-line bg-background px-3 text-sm"
                     >
