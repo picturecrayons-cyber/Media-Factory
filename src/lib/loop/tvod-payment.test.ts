@@ -26,6 +26,13 @@ test("TVOD webhook validates capture identity, amount and currency before fulfil
   assert.match(webhook, /loop_fulfill_captured_rental/);
 });
 
+test("TVOD payment identities match canonical Production UUID types and foreign keys", () => {
+  assert.match(migration, /user_id uuid not null references auth\.users\(id\)/);
+  assert.match(migration, /loop_title_id uuid not null references public\.loop_titles\(id\)/);
+  assert.match(migration, /user_id uuid references auth\.users\(id\)/);
+  assert.match(migration, /loop_title_id uuid references public\.loop_titles\(id\)/);
+});
+
 test("TVOD fulfillment fails closed on revoked publication, price mismatch and duplicate capture", () => {
   assert.match(migration, /p\.authorization_status='authorized'/);
   assert.match(migration, /t\.access_tier='TVOD'/);
