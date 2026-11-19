@@ -30,7 +30,8 @@ export function canManageStudioDocuments(input: {
   organizationRole?: string | null;
 }) {
   return input.accountType !== "studio" ||
-    (Boolean(input.organizationId) && input.organizationRole === "owner");
+    (Boolean(input.organizationId) &&
+      (input.organizationRole === "owner" || input.organizationRole === "admin"));
 }
 
 /** Legal Reviewer access is granted only for an explicitly assigned title. */
