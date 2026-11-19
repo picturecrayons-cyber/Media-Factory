@@ -50,3 +50,13 @@ test("webhook event processing uses a claim token and stale-processing guard", (
   assert.match(source, /processing_started_at/);
   assert.match(source, /processing_token[\s\S]*processing_started_at/);
 });
+
+test("captured payment IDs are atomically bound and cannot be overwritten by a racing event", () => {
+  assert.match(source, /provider_payment_id\\.is\\.null,provider_payment_id\\.eq\.\\$\\{payment\.id\\}/);
+  assert.match(source, /Bridge service payment binding conflict or update failure/);
+  assert.match(source, /Bridge payment binding conflict or update failure/);
+});
+test("refund events missing either provider identity are failed for reconciliation", () => {
+  assert.match(source, /if \\(!paymentId \\|\\| !refundId\\)/);
+  assert.match(source, /Refund event is missing required payment_id or refund id; reconciliation required/);
+});
