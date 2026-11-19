@@ -1,12 +1,6 @@
 name: Bridge Production OCI Master Verification
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/bridge-production-oci-master-verification.yml"
-      - "scripts/oci-production-master-verification*.mjs"
-      - "src/lib/bridge/oci-object-storage.server.ts"
-      - "src/lib/bridge/env.ts"
   workflow_dispatch:
 
 permissions:
