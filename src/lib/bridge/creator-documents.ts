@@ -219,7 +219,7 @@ export const assignLegalReviewerToTitle = createServerFn({ method: "POST" })
         (id,title_id,reviewer_user_id,assigned_by,status,assigned_at,revoked_at)
       values
         (${randomBytes(16).toString("hex")},${title.id},${data.reviewerUserId},${actor.userId},'ACTIVE',now(),null)
-      on conflict (title_id,reviewer_user_id) do update
+      on conflict (title_id,reviewer_user_id) where status='ACTIVE' do update
         set assigned_by=excluded.assigned_by,status='ACTIVE',assigned_at=now(),revoked_at=null
     `;
     await writeAudit({
