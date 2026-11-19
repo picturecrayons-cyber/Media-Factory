@@ -69,3 +69,12 @@ test("document downloads require ownership, linked-title review scope, or Super 
   assert.equal(canDownloadCreatorDocument({ ownerAccess: false, linkedTitleAccess: false, isSuperAdmin: true }), true);
   assert.equal(canDownloadCreatorDocument({ ownerAccess: false, linkedTitleAccess: false, isSuperAdmin: false }), false);
 });
+
+test("revoked Legal Reviewer assignments remain historical and reassignments create a new active row", () => {
+  const migration = readFileSync(new URL("../../../supabase/migrations/20261118143000_bridge_creator_document_vault.sql", import.meta.url), "utf8");
+  const source = readFileSync(new URL("./creator-documents.ts", import.meta.url), "utf8");
+  assert.match(migration, /drop constraint if exists bridge_title_document_review_assignments_title_id_reviewer_user_id_key/);
+  assert.match(migration, /create unique index if not exists bridge_title_document_review_assignments_active_unique[\\s\\S]*where status='ACTIVE'/);
+  assert.match(source, /on conflict \\(title_id,reviewer_user_id\\) where status='ACTIVE' do update/);
+  assert.match(source, /status='ACTIVE'/);
+});
