@@ -38,8 +38,6 @@ export function StoryConceptForm() {
   const [genre, setGenre] = useState<string[]>([]);
   const [targetPlatforms, setTargetPlatforms] = useState<string[]>([]);
   const [estimatedBudgetRange, setEstimatedBudgetRange] = useState("");
-  const [treatmentUrl, setTreatmentUrl] = useState("");
-  const [screenplayUrl, setScreenplayUrl] = useState("");
   const [rightsHolderName, setRightsHolderName] = useState("");
   const [rightsBasis, setRightsBasis] = useState("");
   const [thirdPartyMaterialsIncluded, setThirdPartyMaterialsIncluded] = useState<boolean | null>(null);
@@ -56,15 +54,13 @@ export function StoryConceptForm() {
           genre,
           targetPlatforms,
           estimatedBudgetRange: estimatedBudgetRange || undefined,
-          treatmentUrl: treatmentUrl || undefined,
-          screenplayUrl: screenplayUrl || undefined,
           rightsHolderName,
           rightsBasis: rightsBasis as "ORIGINAL_AUTHOR" | "ASSIGNED" | "LICENSED" | "PUBLIC_DOMAIN" | "OTHER",
           thirdPartyMaterialsIncluded: thirdPartyMaterialsIncluded === true,
           rightsDeclarationAccepted: true,
         },
       }),
-    onSuccess: (res) => {
+    onSuccess: () => {
       toast("Story / Concept submitted for review");
       void navigate({ to: "/workspace" });
     },
@@ -189,27 +185,9 @@ export function StoryConceptForm() {
         </div>
       </div>
 
-      <label className="text-sm sm:col-span-2">
-        Treatment URL (optional)
-        <input
-          type="url"
-          value={treatmentUrl}
-          onChange={(e) => setTreatmentUrl(e.target.value)}
-          className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
-          placeholder="https://…"
-        />
-      </label>
-
-      <label className="text-sm sm:col-span-2">
-        Screenplay URL (optional)
-        <input
-          type="url"
-          value={screenplayUrl}
-          onChange={(e) => setScreenplayUrl(e.target.value)}
-          className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
-          placeholder="https://…"
-        />
-      </label>
+      <p className="text-xs text-muted sm:col-span-2">
+        Private treatment and screenplay uploads will be enabled only through Bridge-controlled storage. Do not paste public document links here.
+      </p>
 
       <div className="sm:col-span-2 rounded-xl border border-line p-4">
         <h3 className="text-sm font-semibold">Author & rights declaration</h3>
