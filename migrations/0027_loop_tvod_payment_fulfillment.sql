@@ -21,8 +21,8 @@ create table if not exists public.loop_tvod_orders (
   id uuid primary key default gen_random_uuid(),
   provider_order_id text not null unique,
   provider_payment_id text unique,
-  user_id text not null,
-  loop_title_id text not null,
+  user_id uuid not null references auth.users(id) on delete restrict,
+  loop_title_id uuid not null references public.loop_titles(id) on delete restrict,
   amount_paise bigint not null check (amount_paise > 0),
   currency text not null default 'INR' check (currency = 'INR'),
   access_type text not null default 'RENTAL' check (access_type = 'RENTAL'),
@@ -65,8 +65,8 @@ create table if not exists public.loop_tvod_payment_events (
   event_id text not null unique,
   event_name text not null,
   razorpay_payment_id text,
-  user_id text,
-  loop_title_id text,
+  user_id uuid references auth.users(id) on delete set null,
+  loop_title_id uuid references public.loop_titles(id) on delete set null,
   status text not null default 'received',
   payload jsonb not null default '{}'::jsonb,
   received_at timestamptz not null default now(),
@@ -156,14 +156,14 @@ begin
       and 'WORLDWIDE'=any(p.territories) and 'TVOD'=any(p.exploitation_models)
   ) then raise exception 'TVOD publication, price or rights window is no longer valid'; end if;
   select * into prior_entitlement from public.loop_user_tvod_entitlements
-    where user_id=rental.user_id::uuid and title_id=rental.loop_title_id::uuid and access_type='RENTAL' for update;
+    where user_id=rental.user_id and title_id=rental.loop_title_id and access_type='RENTAL' for update;
   if found and prior_entitlement.purchased_at >= rental.captured_at
      and prior_entitlement.payment_transaction_id <> p_payment_id then raise exception 'A newer TVOD entitlement exists; reconcile before fulfillment'; end if;
   if found and prior_entitlement.payment_transaction_id=p_payment_id and prior_entitlement.status <> 'ACTIVE'
      then raise exception 'Revoked TVOD entitlement cannot be reactivated'; end if;
   expiry := rental.captured_at + interval '48 hours';
   insert into public.loop_user_tvod_entitlements(user_id,title_id,access_type,purchased_at,expires_at,payment_transaction_id,status)
-  values(rental.user_id::uuid,rental.loop_title_id::uuid,'RENTAL',rental.captured_at,expiry,p_payment_id,'ACTIVE')
+  values(rental.user_id,rental.loop_title_id,'RENTAL',rental.captured_at,expiry,p_payment_id,'ACTIVE')
   on conflict(user_id,title_id,access_type) do update
     set purchased_at=excluded.purchased_at,expires_at=excluded.expires_at,
         payment_transaction_id=excluded.payment_transaction_id,status='ACTIVE';
@@ -246,7 +246,7 @@ begin
   if fully_refunded then
     update public.loop_user_tvod_entitlements set status='REFUNDED'
       where payment_transaction_id=p_payment_id
-        and user_id=prior_event.user_id::uuid and title_id=prior_event.loop_title_id::uuid;
+        and user_id=prior_event.user_id and title_id=prior_event.loop_title_id;
   end if;
 
   update public.loop_tvod_payment_events
