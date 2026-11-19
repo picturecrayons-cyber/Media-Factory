@@ -1,59 +1,115 @@
-import { redirect } from "@tanstack/react-router";
-import { getBridgeSession } from "@/lib/bridge/session";
+export type ProtectedBridgeProfile = {
+  userId: string;
+  email: string;
+  displayName: string;
+  organizationName: string | null;
+  accountType: "independent_creator" | "studio" | "buyer" | "investor";
+  internalRole: "viewer" | "qc_reviewer" | "legal_reviewer" | "finance" | "admin" | "super_admin" | null;
+  emailVerified: boolean;
+  organizationId?: string | null;
+};
 
-export type ProtectedBridgeSession = Awaited<ReturnType<typeof getBridgeSession>>;
+export type ProtectedBridgeSession = {
+  userId: string;
+  profile: ProtectedBridgeProfile | null;
+  home: string;
+};
 export type AuthenticatedBridgeSession = ProtectedBridgeSession & {
   profile: NonNullable<ProtectedBridgeSession["profile"]>;
 };
 
+export type BridgeRouteAccess = "buyer" | "internal" | "super_admin" | "creator" | "studio" | "investor" | "workspace";
+
+type SessionResult = ProtectedBridgeSession;
+
+type GuardDependencies = {
+  isBrowser: boolean;
+  getSession: () => Promise<SessionResult>;
+  goToLogin: () => never;
+  goToOnboarding: () => never;
+  goToWorkspace: () => never;
+};
+
 /**
- * Route-level guard for the browser router.
- *
- * Supabase Bridge sessions are persisted in browser storage, while the actual
- * security boundary remains the authenticated server-function middleware.
- * During SSR there is no browser token to forward, so the existing component
- * gate and protected server functions remain authoritative until hydration.
+ * Share route authorization behavior between route loaders and focused tests.
+ * Server-function auth middleware still verifies every protected data request;
+ * this guard is an early navigation gate, not a replacement security boundary.
  */
-async function getProtectedSession(): Promise<ProtectedBridgeSession | null> {
-  if (typeof window === "undefined") return null;
+export async function resolveProtectedBridgeRoute(
+  deps: GuardDependencies,
+  access?: BridgeRouteAccess,
+): Promise<AuthenticatedBridgeSession | undefined> {
+  if (!deps.isBrowser) return undefined;
 
+  let session: SessionResult;
   try {
-    return await getBridgeSession();
+    session = await deps.getSession();
   } catch {
-    throw redirect({ to: "/login", replace: true });
+    deps.goToLogin();
   }
+
+  if (!session!.profile) deps.goToOnboarding();
+  const profile = session!.profile!;
+
+  const allowed =
+    access === undefined || access === "workspace"
+      ? access === "workspace"
+        ? profile.emailVerified &&
+          (profile.internalRole !== null || profile.accountType === "independent_creator" || profile.accountType === "studio")
+        : true
+      : access === "buyer"
+        ? (!profile.internalRole && profile.accountType === "buyer") ||
+          (profile.internalRole === "super_admin" && profile.emailVerified)
+        : access === "internal"
+          ? profile.internalRole !== null
+          : access === "super_admin"
+            ? profile.internalRole === "super_admin" && profile.emailVerified
+            : !profile.internalRole &&
+              profile.accountType === (access === "creator" ? "independent_creator" : access);
+
+  if (!allowed) deps.goToWorkspace();
+  if (!profile.emailVerified && access !== "buyer") deps.goToWorkspace();
+
+  return session! as AuthenticatedBridgeSession;
 }
 
-export async function requireBridgeRoute(): Promise<AuthenticatedBridgeSession | undefined> {
-  const session = await getProtectedSession();
+const browserDependencies: GuardDependencies = {
+  isBrowser: typeof window !== "undefined",
+  getSession: async () => {
+    const { getBridgeSession } = await import("@/lib/bridge/session");
+    return getBridgeSession();
+  },
+  goToLogin: () => {
+    if (typeof window !== "undefined") window.location.replace("/login");
+    throw new Error("Redirecting to sign in");
+  },
+  goToOnboarding: () => {
+    if (typeof window !== "undefined") window.location.replace("/onboarding");
+    throw new Error("Redirecting to onboarding");
+  },
+  goToWorkspace: () => {
+    if (typeof window !== "undefined") window.location.replace("/workspace");
+    throw new Error("Redirecting to workspace");
+  },
+};
 
-  if (!session) return undefined;
-
-  if (!session.profile) {
-    throw redirect({ to: "/onboarding", replace: true });
-  }
-
-  return session as AuthenticatedBridgeSession;
+/** Route-level guard for the browser router. */
+export function requireBridgeRoute(): Promise<AuthenticatedBridgeSession | undefined> {
+  return resolveProtectedBridgeRoute(browserDependencies);
 }
 
-export async function requireBuyerRoute(): Promise<AuthenticatedBridgeSession | undefined> {
-  const session = await requireBridgeRoute();
-  if (!session) return undefined;
-
-  if (session.profile.internalRole || session.profile.accountType !== "buyer") {
-    throw redirect({ to: "/workspace", replace: true });
-  }
-
-  return session;
+export function requireBuyerRoute(): Promise<AuthenticatedBridgeSession | undefined> {
+  return resolveProtectedBridgeRoute(browserDependencies, "buyer");
 }
 
-export async function requireInternalRoute(): Promise<AuthenticatedBridgeSession | undefined> {
-  const session = await requireBridgeRoute();
-  if (!session) return undefined;
+export function requireInternalRoute(): Promise<AuthenticatedBridgeSession | undefined> {
+  return resolveProtectedBridgeRoute(browserDependencies, "internal");
+}
 
-  if (!session.profile.internalRole) {
-    throw redirect({ to: "/workspace", replace: true });
-  }
+export function requireSuperAdminRoute(): Promise<AuthenticatedBridgeSession | undefined> {
+  return resolveProtectedBridgeRoute(browserDependencies, "super_admin");
+}
 
-  return session;
+export function requireWorkspaceRoute(): Promise<AuthenticatedBridgeSession | undefined> {
+  return resolveProtectedBridgeRoute(browserDependencies, "workspace");
 }
