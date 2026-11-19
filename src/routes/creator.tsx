@@ -196,9 +196,9 @@ function CreatorDashboard({
           id="rights"
           eyebrow="Ownership evidence"
           title="Rights & Ownership"
-          description="Provide ownership and authorization information where requested. Attestations do not replace signed chain-of-title documents or Legal verification."
-          action="Review title records"
-          href="#my-titles"
+          description="Submit a producer ownership claim and secure film/business evidence for separate Super Admin intake and Legal review. A claim never changes the recorded owner."
+          action="Start ownership claim"
+          href="/creator-ownership-claims"
         />
       </section>
 
@@ -215,8 +215,8 @@ function CreatorDashboard({
           secure workspace. This dashboard does not invent file sizes, resolutions, upload percentages or
           completion states when no verified asset feed is available.
         </p>
-        <a href="#my-titles" className="mt-4 inline-flex text-sm font-semibold text-accent hover:underline">
-          Open a title's asset workspace →
+        <a href="/creator-assets" className="mt-4 inline-flex text-sm font-semibold text-accent hover:underline">
+          Open My Assets & Uploads →
         </a>
       </section>
 

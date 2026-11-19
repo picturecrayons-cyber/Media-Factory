@@ -5,6 +5,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
 import { assertPermission, canOperateOnTitle, canReadTitle, hasStaffPermission } from "./rbac";
+import { canListCreatorAssetsForTitle } from "./ownership-claims-policy";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
@@ -403,5 +404,69 @@ export const listProductionAssets = createServerFn({ method: "GET" })
         sourceKind: row.source_kind,
         verifiedSource: row.verified_source,
       })),
+    };
+  });
+
+
+/**
+ * Real Creator asset register. This query is deliberately narrower than the
+ * general internal asset view: a Creator sees assets only for titles whose
+ * canonical owner_user_id equals the authenticated profile. A claim record is
+ * never treated as an alternate owner relationship. Object keys are omitted.
+ */
+export const listCreatorAssetRegister = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType !== "independent_creator" || actor.internalRole !== null) {
+      throw new Error("Creator asset register access required.");
+    }
+    assertPermission(actor, "asset.sign_download");
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string;
+      title_id: string;
+      title_name: string;
+      kind: string;
+      content_type: string | null;
+      byte_size: number | string | null;
+      created_by: string | null;
+      owner_user_id: string;
+      created_at: string | Date;
+    }>`
+      select
+        a.id,
+        a.title_id,
+        t.name as title_name,
+        t.owner_user_id,
+        a.kind,
+        a.content_type,
+        a.byte_size,
+        a.created_by,
+        a.created_at
+      from bridge_assets a
+      join bridge_titles t on t.id = a.title_id
+      where t.owner_user_id = ${actor.userId}
+      order by a.created_at desc
+      limit 300
+    `;
+    return {
+      assets: rows
+        .filter((row) => canListCreatorAssetsForTitle(actor, {
+          ownerUserId: row.owner_user_id,
+          status: "RIGHTS_REVIEW",
+        }))
+        .map((row) => ({
+          id: row.id,
+          titleId: row.title_id,
+          titleName: row.title_name,
+          kind: row.kind,
+          contentType: row.content_type,
+          byteSize: row.byte_size == null ? null : Number(row.byte_size),
+          hasStoredByteSize: Number(row.byte_size ?? 0) > 0,
+          uploadedByCurrentUser: row.created_by === actor.userId,
+          createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+        })),
     };
   });
