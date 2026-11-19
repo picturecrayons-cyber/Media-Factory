@@ -205,7 +205,7 @@ async function serveLoopMedia(request: Request) {
     // This is metadata/readiness verification; the approved fixture E2E must still
     // establish actual byte read-back and checksum evidence.
     try {
-      const verified = await verifyObject(objectKey);
+      const verified = await verifyObject(objectKey, undefined, typeof asset.storage_bucket === "string" ? asset.storage_bucket : undefined);
       const verifiedType = String(verified.contentType || "").split(";")[0].trim().toLowerCase();
       const expectedEtag = typeof asset.storage_etag === "string" ? asset.storage_etag.replaceAll('"', "") :
         typeof asset.etag === "string" ? asset.etag.replaceAll('"', "") : null;
