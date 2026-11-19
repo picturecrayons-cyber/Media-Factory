@@ -73,7 +73,13 @@ export function StoryConceptDesk() {
             const noteValue = internalNotes[c.id] ?? c.admin_notes ?? "";
             const noteChanged = noteValue !== (c.admin_notes ?? "");
             const canReview = ["PENDING", "UNDER_REVIEW"].includes(c.curation_status);
-            const rightsVerified = Boolean(c.rights_declaration_accepted_at);
+            const rightsVerified = Boolean(
+              c.rights_declaration_accepted_at &&
+              c.rights_holder_name?.trim() &&
+              c.rights_basis &&
+              c.third_party_materials_included !== null &&
+              c.third_party_materials_included !== undefined
+            );
             return (
               <article key={c.id} className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -116,7 +122,7 @@ export function StoryConceptDesk() {
                   <p>Rights holder: {c.rights_holder_name || "Not recorded"}</p>
                   <p>Rights basis: {c.rights_basis || "Not declared"}</p>
                   <p>Third-party materials: {c.third_party_materials_included === true ? "Declared" : c.third_party_materials_included === false ? "None declared" : "Not recorded"}</p>
-                  <p>Rights declaration: {c.rights_declaration_accepted_at ? "Accepted" : "Not verified"}</p>
+                  <p>Rights declaration: {rightsVerified ? "Verified" : c.rights_declaration_accepted_at ? "Incomplete" : "Not verified"}</p>
                 </div>
 
                 {c.editorial_review_notes ? (
