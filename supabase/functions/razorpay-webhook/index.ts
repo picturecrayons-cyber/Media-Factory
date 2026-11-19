@@ -145,10 +145,12 @@ Deno.serve(async (req: Request) => {
 
         // Other Bridge purposes may record a captured service payment, but cannot grant a title licence.
         if (localPayment.purpose !== "title_license") {
-          const { error } = await supabase.from("bridge_payments").update({
+          const { data: bound, error } = await supabase.from("bridge_payments").update({
             status: "captured", provider_payment_id: payment.id, verified_at: new Date().toISOString(),
-          }).eq("id", localPayment.id);
-          if (error) return await failEvent(supabase, id, "Bridge service payment capture record failed");
+          }).eq("id", localPayment.id)
+            .or(`provider_payment_id.is.null,provider_payment_id.eq.${payment.id}`)
+            .select("id").maybeSingle();
+          if (error || !bound) return await failEvent(supabase, id, "Bridge service payment binding conflict or update failure");
         } else {
           if (!localPayment.title_id) return await failEvent(supabase, id, "Bridge license order has no title");
           if (localPayment.currency !== "INR") return await failEvent(supabase, id, "Bridge license payment currency must be INR");
@@ -180,8 +182,10 @@ Deno.serve(async (req: Request) => {
           const now = new Date().toISOString();
           const { data: updated, error: updateError } = await supabase.from("bridge_payments")
             .update({ status: "captured", provider_payment_id: payment.id, verified_at: now })
-            .eq("id", localPayment.id).select("id").maybeSingle();
-          if (updateError || !updated) return await failEvent(supabase, id, "Bridge payment update failed");
+            .eq("id", localPayment.id)
+            .or(`provider_payment_id.is.null,provider_payment_id.eq.${payment.id}`)
+            .select("id").maybeSingle();
+          if (updateError || !updated) return await failEvent(supabase, id, "Bridge payment binding conflict or update failure");
 
           if (packageRecord) {
             const { error: entitlementError } = await supabase.from("bridge_package_entitlements").upsert({
@@ -287,6 +291,7 @@ Deno.serve(async (req: Request) => {
             updated_at: new Date().toISOString(),
           })
           .eq("id", rentalOrder.id)
+          .or(`provider_payment_id.is.null,provider_payment_id.eq.${payment.id}`)
           .neq("status", "refunded")
           .select("id").maybeSingle();
         if (captureError || !capturedOrder) {
@@ -306,6 +311,9 @@ Deno.serve(async (req: Request) => {
       const refund = payload?.payload?.refund?.entity;
       const paymentId = String(refund?.payment_id ?? "");
       const refundId = String(refund?.id ?? "");
+      if (!paymentId || !refundId) {
+        return await failEvent(supabase, id, "Refund event is missing required payment_id or refund id; reconciliation required");
+      }
       if (paymentId && refundId) {
         let loopOrder: { provider_order_id: string } | null = null;
         const { data: knownOrder } = await supabase.from("loop_tvod_orders")
