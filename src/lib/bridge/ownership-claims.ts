@@ -541,3 +541,54 @@ export const recordOwnershipLegalReview = createServerFn({ method: "POST" })
       assetAttributionChanged: false as const,
     };
   });
+
+
+/**
+ * A narrow discovery helper for creators whose claim target is not in their
+ * owner-scoped title list. Producer credit is used only to locate a candidate;
+ * it is expressly not treated as legal ownership or permission to read assets.
+ */
+export const searchOwnershipClaimTargets = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleNameQuery: z.string().trim().min(3).max(160),
+    producerEntityName: z.string().trim().min(3).max(200),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertCreatorClaimant(actor);
+    const sql = await getSql();
+    const titlePattern = `%${data.titleNameQuery}%`;
+    const producerPattern = `%${data.producerEntityName}%`;
+    const rows = await sql<{
+      id: string;
+      name: string;
+      status: string;
+      producer_credit: string;
+    }>`
+      select
+        t.id,
+        t.name,
+        t.status,
+        producer_credit->>'name' as producer_credit
+      from bridge_titles t
+      cross join lateral jsonb_array_elements(
+        case when jsonb_typeof(t.credits) = 'array' then t.credits else '[]'::jsonb end
+      ) as producer_credit
+      where t.name ilike ${titlePattern}
+        and t.status in ('RIGHTS_REVIEW','LICENSING_READY','LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+        and lower(coalesce(producer_credit->>'role','')) = 'producer'
+        and producer_credit->>'name' ilike ${producerPattern}
+      order by t.updated_at desc
+      limit 20
+    `;
+    return {
+      titles: rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        status: row.status,
+        producerCredit: row.producer_credit,
+      })),
+    };
+  });
