@@ -94,6 +94,7 @@ function signHeaders(opts: {
   url: URL;
   body?: string;
   contentType?: string;
+  range?: string;
 }) {
   const method = opts.method.toLowerCase();
   const date = new Date().toUTCString();
@@ -102,6 +103,12 @@ function signHeaders(opts: {
   const lines = [`(request-target): ${requestTarget}`, `host: ${host}`, `date: ${date}`];
   const signedHeaders = ["(request-target)", "host", "date"];
   const headers: Record<string, string> = { host, date };
+
+  if (opts.range) {
+    headers.range = opts.range;
+    lines.push(`range: ${opts.range}`);
+    signedHeaders.push("range");
+  }
 
   if (opts.body !== undefined) {
     const contentType = opts.contentType || "application/json";
@@ -142,6 +149,7 @@ async function signedFetch(opts: {
     url,
     body,
     contentType: body === undefined ? undefined : "application/json",
+    range: opts.range,
   });
   const safeHeaders = Object.fromEntries(
     Object.entries(headers).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
