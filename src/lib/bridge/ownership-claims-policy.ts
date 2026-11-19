@@ -30,7 +30,9 @@ export function canLegallyReviewOwnershipClaim(actor: Actor): boolean {
 export function canReadOwnershipClaim(actor: Actor, claim: ClaimVisibility): boolean {
   if (!actor.emailVerified) return false;
   if (actor.internalRole === "super_admin" || actor.internalRole === "legal_reviewer") return true;
-  return actor.internalRole === null && actor.userId === claim.claimantUserId;
+  return actor.internalRole === null &&
+    actor.accountType === "independent_creator" &&
+    actor.userId === claim.claimantUserId;
 }
 
 /**
