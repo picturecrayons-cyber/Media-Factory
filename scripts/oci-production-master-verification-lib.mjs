@@ -46,3 +46,7 @@ export function isCanonicalMasterVerified(masterKey, objects) {
   if (typeof masterKey !== "string" || !masterKey) return false;
   return objects.some((object) => object.objectKey === masterKey && object.result === "EXISTS" && object.sizeStatus === "MATCH");
 }
+
+export function classifyObjectError(message) {
+  return /\\(404\\)/.test(String(message)) ? "NOT_FOUND" : "ERROR";
+}
