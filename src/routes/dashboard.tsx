@@ -56,6 +56,16 @@ const ADMIN_MODULES = [
   },
 ] as const;
 
+const FOUNDER_TRACKED_PRODUCTIONS = [
+  { key: "malayalakkara-residency", label: "Malayalakkara Residency" },
+  { key: "jananam-1947-pranayam-thudarunnu", label: "Jananam 1947 Pranayam Thudarunnu" },
+  { key: "pranayam-1947", label: "Pranayam 1947" },
+] as const;
+
+function titleKey(value: string | null | undefined): string {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 const ACTION_GUIDANCE: Record<string, string> = {
   QC_REVIEW: "QC review is pending",
   RIGHTS_REVIEW: "Rights review is pending",
@@ -80,6 +90,13 @@ function DashboardBody() {
 
   const titles = titlesQ.data?.titles ?? [];
   const actionItems = titles.filter((title) => title.status in ACTION_GUIDANCE);
+  const founderProductions = FOUNDER_TRACKED_PRODUCTIONS.map((tracked) => ({
+    ...tracked,
+    record: titles.find((title) =>
+      titleKey(title.name) === titleKey(tracked.label) ||
+      titleKey(title.slug).startsWith(titleKey(tracked.key).replaceAll(" ", "-")),
+    ) ?? null,
+  }));
   const liveOrCommercial = titles.filter((title) =>
     ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status),
   );
@@ -226,6 +243,49 @@ function DashboardBody() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section aria-labelledby="founder-productions-title" className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 id="founder-productions-title" className="font-display text-xl font-semibold">Crayons Loop · Featured productions</h3>
+            <p className="mt-1 text-sm text-muted">
+              Live workflow status from the canonical Bridge title records. This overview does not approve rights or publish films.
+            </p>
+          </div>
+          <Link to="/workspace" className="text-sm font-semibold text-accent hover:underline">
+            Open title workspace →
+          </Link>
+        </div>
+        {titlesQ.isPending ? (
+          <p className="rounded-sm border border-line px-4 py-5 text-sm text-muted">Loading production workflow…</p>
+        ) : reportingUnavailable ? (
+          <p role="alert" className="rounded-sm border border-line px-4 py-5 text-sm text-accent">
+            Workflow records could not be verified. Refresh to retry; no completion status is assumed.
+          </p>
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-3">
+            {founderProductions.map((item) => (
+              <article key={item.key} className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">{item.label}</h4>
+                {item.record ? (
+                  <>
+                    <p className="mt-3 text-xs uppercase tracking-widest text-muted">Current workflow stage</p>
+                    <p className="mt-1 text-sm font-semibold text-accent">
+                      {item.record.status.replaceAll("_", " ")}
+                    </p>
+                    <p className="mt-2 break-all font-mono text-[10px] text-muted">Record: {item.record.id}</p>
+                  </>
+                ) : (
+                  <p className="mt-3 text-sm text-muted">No matching canonical Bridge title record found.</p>
+                )}
+                <Link to="/workspace" className="mt-4 inline-flex text-xs font-semibold text-accent hover:underline">
+                  Open workflow record →
+                </Link>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section aria-labelledby="workspaces-title" className="space-y-3">
