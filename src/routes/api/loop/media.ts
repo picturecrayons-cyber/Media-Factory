@@ -113,7 +113,7 @@ async function serveLoopMedia(request: Request) {
     row.authorization_status === "AUTHORIZED" &&
     Boolean(row.approved_at) &&
     row.revoked_at == null &&
-    (!row.destination || row.destination === "CRAYONS_LOOP"),
+    (!Object.prototype.hasOwnProperty.call(row, "destination") || row.destination === "CRAYONS_LOOP"),
   );
   if (validGrants.length !== 1) {
     return errorResponse(403, "BRIDGE_GRANT_REQUIRED", "Bridge has not authorized this title for Loop");
@@ -125,8 +125,9 @@ async function serveLoopMedia(request: Request) {
   const approvedAt = grant.approved_at ? Date.parse(String(grant.approved_at)) : Number.NaN;
   const requestCountry = (request.headers.get("x-vercel-ip-country") || "").trim().toUpperCase();
   const allowedTerritories = Array.isArray(grant.territories) ? grant.territories : [];
-  const territoryAllowed = allowedTerritories.includes("WORLDWIDE") ||
-    (requestCountry.length === 2 && allowedTerritories.includes(requestCountry));
+  const normalizedTerritories = allowedTerritories.map((value: unknown) => String(value).trim().toUpperCase());
+  const territoryAllowed = normalizedTerritories.includes("WORLDWIDE") ||
+    (requestCountry.length === 2 && normalizedTerritories.includes(requestCountry));
   const titleLanguage = String(title.language || "").trim().toUpperCase();
   const languageAllowed = Boolean(titleLanguage && Array.isArray(grant.languages) &&
     grant.languages.some((value: unknown) => String(value).trim().toUpperCase() === titleLanguage));
@@ -135,6 +136,7 @@ async function serveLoopMedia(request: Request) {
       String(value).trim().toUpperCase() === String(title.access_tier).trim().toUpperCase(),
     ));
   if (!Number.isFinite(approvedAt) || !Number.isFinite(windowStart) || !Number.isFinite(windowEnd) ||
+      approvedAt > now.getTime() ||
       windowStart > now.getTime() || windowEnd <= now.getTime() || windowEnd <= windowStart ||
       !territoryAllowed || !languageAllowed || !modelAllowed) {
     return errorResponse(403, "BRIDGE_GRANT_OUT_OF_SCOPE", "The Bridge publication grant does not cover this request");
