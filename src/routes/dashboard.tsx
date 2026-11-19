@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
-import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { getFounderOperationalSnapshot, getFounderTrackedProductions } from "@/lib/bridge/founder-dashboard";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 
@@ -380,17 +379,17 @@ function DashboardBody() {
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {BRIDGE_LOOP_LANES.map((lane) => (
-            <article key={lane.id} className="rounded-sm border border-line px-4 py-3">
-              <p className="text-xs uppercase tracking-widest text-muted">{lane.label}</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {titlesQ.isPending || reportingUnavailable
-                  ? "—"
-                  : titles.filter((title) => loopStageType(title.contentType) === lane.loopType).length}
-              </p>
-              <p className="mt-1 text-xs text-muted">Titles in this content lane</p>
-            </article>
-          ))}
+          {operationalReady ? (
+            operational.titleLanes.map((lane) => (
+              <article key={lane.content_type} className="rounded-sm border border-line px-4 py-3">
+                <p className="text-xs uppercase tracking-widest text-muted">{lane.content_type.replaceAll("_", " ")}</p>
+                <p className="mt-1 text-2xl font-semibold">{lane.count}</p>
+                <p className="mt-1 text-xs text-muted">Finished-film records</p>
+              </article>
+            ))
+          ) : (
+            <p className="text-sm text-muted">Title-lane totals unavailable until the canonical data source responds.</p>
+          )}
         </div>
       </section>
 
