@@ -8,7 +8,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { canReadTitle, canOperateOnTitle, hasPermission } from "./rbac";
 import { writeAudit } from "./audit";
-import { sameOwner, canDownloadCreatorDocument, canManageStudioDocuments } from "./creator-document-policy";
+import { sameOwner, canDownloadCreatorDocument, canManageStudioDocuments, canReviewAssignedTitle } from "./creator-document-policy";
 
 const DOCUMENT_TYPES = [
   "FINISHED_FILM_AGREEMENT",
@@ -192,6 +192,45 @@ export const linkCreatorDocumentToTitle = createServerFn({ method: "POST" })
     return { linked: true as const, documentId: doc.id };
   });
 
+export const assignLegalReviewerToTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8),
+    reviewerUserId: z.string().min(1),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
+    const title = await loadTitle(data.titleId);
+    if (!title) throw new Error("Title not found");
+    const sql = await getSql();
+    const reviewers = await sql<{ user_id: string }>`
+      select user_id from bridge_profiles
+      where user_id=${data.reviewerUserId}
+        and internal_role='legal_reviewer'
+        and email_verified=true
+      limit 1
+    `;
+    if (!reviewers[0]) throw new Error("An active, verified Legal Reviewer account is required");
+    await sql`
+      insert into bridge_title_document_review_assignments
+        (id,title_id,reviewer_user_id,assigned_by,status,assigned_at,revoked_at)
+      values
+        (${randomBytes(16).toString("hex")},${title.id},${data.reviewerUserId},${actor.userId},'ACTIVE',now(),null)
+      on conflict (title_id,reviewer_user_id) do update
+        set assigned_by=excluded.assigned_by,status='ACTIVE',assigned_at=now(),revoked_at=null
+    `;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "creator_document.legal_reviewer_assigned",
+      entityType: "bridge_title",
+      entityId: title.id,
+      metadata: { reviewerUserId: data.reviewerUserId },
+    });
+    return { assigned: true as const, titleId: title.id, reviewerUserId: data.reviewerUserId };
+  });
+
 export const listTitleDocumentEvidence = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
@@ -231,8 +270,11 @@ export const requestCreatorDocumentDownload = createServerFn({ method: "POST" })
     const doc = rows[0];
     if (!doc || doc.status !== "VERIFIED") throw new Error("Document not found");
     const ownerAccess = sameOwner(actor, doc);
-    const reviewerCanReadLinkedEvidence =
-      actor.internalRole === "legal_reviewer" && hasPermission(actor, "title.rights_review");
+    const reviewerCanReadLinkedEvidence = canReviewAssignedTitle({
+      internalRole: actor.internalRole,
+      hasRightsReviewPermission: hasPermission(actor, "title.rights_review"),
+      hasActiveAssignment: true,
+    });
     const titleAccess = await sql<{ allowed: boolean }>`
       select exists (
         select 1 from bridge_title_document_links l
@@ -242,7 +284,15 @@ export const requestCreatorDocumentDownload = createServerFn({ method: "POST" })
             t.owner_user_id=${actor.userId}
             or (t.owner_account_type='studio' and t.owner_organization_id=${actor.organizationId ?? null}
                 and ${actor.accountType}='studio' and ${actor.organizationId ?? null} is not null)
-            or ${reviewerCanReadLinkedEvidence}
+            or (
+              ${reviewerCanReadLinkedEvidence}
+              and exists (
+                select 1 from bridge_title_document_review_assignments a
+                where a.title_id=t.id
+                  and a.reviewer_user_id=${actor.userId}
+                  and a.status='ACTIVE'
+              )
+            )
           )
       ) as allowed
     `;
