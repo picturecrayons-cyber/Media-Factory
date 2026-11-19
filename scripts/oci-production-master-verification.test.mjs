@@ -48,3 +48,7 @@ test("classifies an OCI 404 as a missing object", () => {
 test("classifies non-404 OCI failures as errors", () => {
   assert.equal(classifyObjectError("OCI object verification failed (401)"), "ERROR");
 });
+
+test("rejects a matching pooler username on an unrelated host", () => {
+  assert.throws(() => assertProductionDatabaseTarget(api, `postgresql://postgres.${ref}:secret@attacker.example:6543/postgres`, ref), /does not prove/);
+});
