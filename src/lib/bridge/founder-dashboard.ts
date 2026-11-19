@@ -105,6 +105,7 @@ export type FounderOperationalSnapshot = {
   loopPublications: { authorization_status: string; count: number }[];
   serviceOrders: StatusCount[];
   titleStatuses: StatusCount[];
+  titleLanes: { content_type: string; count: number }[];
   assets: { kind: string; count: number }[];
   assetProcessing: StatusCount[];
   profiles: { account_type: string; internal_role: string; count: number }[];
@@ -267,6 +268,15 @@ export const getFounderOperationalSnapshot = createServerFn({ method: "GET" })
             group by status
           ) s
         ), '[]'::jsonb),
+        'titleLanes', coalesce((
+          select jsonb_agg(jsonb_build_object('content_type', s.content_type, 'count', s.record_count))
+          from (
+            select coalesce(content_type, 'UNSPECIFIED') as content_type, count(*)::int as record_count
+            from bridge_titles
+            where coalesce(submission_type, 'finished_film') = 'finished_film'
+            group by coalesce(content_type, 'UNSPECIFIED')
+          ) s
+        ), '[]'::jsonb),
         'assets', coalesce((
           select jsonb_agg(jsonb_build_object('kind', s.kind, 'count', s.record_count))
           from (
@@ -384,6 +394,7 @@ export const getFounderOperationalSnapshot = createServerFn({ method: "GET" })
       loopPublications: [],
       serviceOrders: [],
       titleStatuses: [],
+      titleLanes: [],
       assets: [],
       assetProcessing: [],
       profiles: [],
