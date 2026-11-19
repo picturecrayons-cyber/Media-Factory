@@ -131,6 +131,11 @@ function OwnershipReviewBody({ actor }: { actor: BridgeActor }) {
               </div>
             </div>
 
+            <section className="mt-4 rounded-lg border border-line p-3">
+              <h3 className="text-sm font-semibold">Claimant declaration</h3>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted">{claim.declarationText}</p>
+            </section>
+
             <section className="mt-4">
               <h3 className="text-sm font-semibold">Evidence files</h3>
               {claim.evidence.length ? (
