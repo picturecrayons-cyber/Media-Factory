@@ -477,6 +477,8 @@ try {
         ) as one_time_constraint,
         has_table_privilege('anon', 'public.bridge_conditional_submissions', 'SELECT') as anon_select,
         has_table_privilege('anon', 'public.bridge_conditional_submissions', 'INSERT') as anon_insert,
+        has_table_privilege('anon', 'public.bridge_conditional_submissions', 'UPDATE') as anon_update,
+        has_table_privilege('anon', 'public.bridge_conditional_submissions', 'DELETE') as anon_delete,
         has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'SELECT') as authenticated_select,
         has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'INSERT') as authenticated_insert,
         has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'UPDATE') as authenticated_update,
@@ -493,6 +495,8 @@ try {
       !verified.one_time_constraint ||
       verified.anon_select ||
       verified.anon_insert ||
+      verified.anon_update ||
+      verified.anon_delete ||
       verified.authenticated_select ||
       verified.authenticated_insert ||
       verified.authenticated_update ||
