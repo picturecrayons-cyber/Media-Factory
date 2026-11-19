@@ -49,9 +49,11 @@ export const submitMalayalakkaraConditionalRequest = createServerFn({ method: "P
         throw new Error("A one-time conditional submission has already been recorded");
       }
 
-      // The title row lock serializes same-title submissions. The unique
-      // constraint remains the final guard if another writer bypasses this path.
-      const [record] = await tx<{ id: string; status: string }>`
+      // The row lock serializes normal requests. A database-level unique
+      // violation is still translated to the same duplicate rejection below.
+      let record: { id: string; status: string };
+      try {
+        const [inserted] = await tx<{ id: string; status: string }>`
         insert into bridge_conditional_submissions
           (title_id, submission_kind, status, submitted_by, metadata)
         values (
@@ -69,6 +71,18 @@ export const submitMalayalakkaraConditionalRequest = createServerFn({ method: "P
         )
         returning id::text, status
       `;
+        if (!inserted) throw new Error("Conditional submission insert returned no record");
+        record = inserted;
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          ("constraint" in error && error.constraint === "bridge_conditional_submissions_one_time_per_title" ||
+            "code" in error && error.code === "23505")
+        ) {
+          throw new Error("A one-time conditional submission has already been recorded");
+        }
+        throw error;
+      }
 
       await tx`
         insert into bridge_title_events
