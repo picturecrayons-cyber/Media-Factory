@@ -149,3 +149,33 @@ test("Story Concepts stay out of finished-film lists, admin review and buyer pub
   assert.match(admin, /Story \/ Concept records cannot enter the finished-film QC or rights lifecycle/);
   assert.match(admin, /Story \/ Concept records cannot receive film publication gates/);
 });
+
+
+test("Founder operations panel uses live Bridge payment, licensing and workflow aggregates", () => {
+  const dashboard = read("../../routes/dashboard.tsx");
+  const snapshot = read("./founder-dashboard.ts");
+  assert.match(dashboard, /getFounderOperationalSnapshot\(\)/);
+  assert.match(dashboard, /Payments, licensing & operations/);
+  assert.match(snapshot, /bridge_payments/);
+  assert.match(snapshot, /bridge_entitlements/);
+  assert.match(snapshot, /bridge_license_packages/);
+  assert.match(snapshot, /bridge_loop_publications/);
+  assert.match(snapshot, /bridge_qc_cases/);
+  assert.doesNotMatch(snapshot, /provider_payment_id|user_id|s3_key|signed_url/i);
+});
+
+test("Story Concept submissions require author rights declarations and avoid public document URLs", () => {
+  const api = read("./story-concept-api.ts");
+  const form = read("../../components/bridge/story-concept-form.tsx");
+  const ownerDesk = read("../../components/bridge/my-story-concepts.tsx");
+  const founderDesk = read("../../components/bridge/story-concept-desk.tsx");
+  assert.match(api, /rightsDeclarationAccepted: z\.literal\(true\)/);
+  assert.match(api, /rights_declaration_accepted_at = now\(\)/);
+  assert.match(api, /The author must submit their own rights declaration/);
+  assert.match(api, /story_concept\.rights_declaration/);
+  assert.match(form, /Author & rights declaration/);
+  assert.doesNotMatch(form, /Treatment URL|Screenplay URL/);
+  assert.match(ownerDesk, /Submit rights declaration/);
+  assert.doesNotMatch(ownerDesk, /to="\/title\/\$id"/);
+  assert.match(founderDesk, /Approval locked: rights declaration is not verified/);
+});
