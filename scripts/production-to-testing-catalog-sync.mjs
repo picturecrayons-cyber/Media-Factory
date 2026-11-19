@@ -12,7 +12,7 @@ import { basename, extname } from "node:path";
 
 const PRODUCTION_REF = "mlmgugivsyoxzdgwkbpu";
 const TESTING_REF = "jbymleftneggcgutlcqu";
-const MIRROR_OWNER_ID = "testing-production-catalog-mirror";
+const MIRROR_OWNER_ID = required("BRIDGE_SYNC_TESTING_OWNER_USER_ID");
 
 function required(name) {
   const value = String(process.env[name] ?? "").trim();
