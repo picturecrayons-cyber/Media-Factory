@@ -67,7 +67,7 @@ function Studio() {
             <section id="studio-members" className="space-y-3">
               <div>
                 <h3 className="font-display text-xl font-semibold">Members & Roles</h3>
-                <p className="mt-1 text-sm text-muted">Invite verified Studio accounts, manage existing roles and status, and complete owner handover with separate owner/admin approval.</p>
+                <p className="mt-1 text-sm text-muted">Manage existing Studio member roles and status, and complete owner handover with separate owner/admin approval. Invitations remain disabled pending verified acceptance.</p>
               </div>
               <StudioMemberDesk />
             </section>
