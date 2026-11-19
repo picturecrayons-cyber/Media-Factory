@@ -7,7 +7,7 @@ export function assertProductionDatabaseTarget(supabaseUrlValue, databaseUrlValu
   } catch {
     throw new Error("Production Supabase and PostgreSQL URLs must both be valid URLs.");
   }
-  const projectMatch = supabaseUrl.hostname.toLowerCase().match(/^([a-z0-9]{20})\\.supabase\\.co$/);
+    const projectMatch = supabaseUrl.hostname.toLowerCase().match(/^([a-z0-9]{20})\.supabase\.co$/);
   if (!projectMatch || projectMatch[1] !== expectedRef) {
     throw new Error("Supabase API URL does not identify the expected Production project.");
   }
