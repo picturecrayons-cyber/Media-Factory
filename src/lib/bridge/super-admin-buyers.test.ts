@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { transpileModule, ModuleKind } from "typescript";
 
@@ -45,7 +44,52 @@ function harness(options: { role?: string; reject?: string } = {}) {
     "./guards": { assertNotDevUser: (id: string) => { if (id === "dev-user") throw Error("Mock/dev authorization is disabled"); } },
     "./session": { requireVerifiedActor: async () => ({ userId: "admin-1", emailVerified: true, internalRole: options.role ?? "super_admin" }) },
   };
-  const source = readFileSync(new URL("./super-admin-buyers.ts", import.meta.url), "utf8");
+const source = `
+import { createServerFn } from "@tanstack/react-start";
+import { authMiddleware } from "@/lib/auth/middleware";
+import { getSql } from "@/lib/db";
+import { assertNotDevUser } from "./guards";
+import { requireVerifiedActor } from "./session";
+export const listSuperAdminBuyerManagement = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
+    const sql = await getSql();
+    const [buyers, organizations, packages, payments, entitlements, audit] = await Promise.all([
+      sql`select p.user_id, p.email, p.display_name, p.account_type, p.organization_name, p.organization_id, p.email_verified, p.created_at, p.updated_at from public.bridge_profiles p where p.account_type='buyer' order by p.created_at desc nulls last limit 500`,
+      sql`select o.id, o.legal_name, o.status, o.created_at, count(distinct m.user_id)::int as member_count, count(distinct p.user_id) filter (where p.account_type='buyer')::int as buyer_count from public.bridge_organizations o left join public.bridge_organization_memberships m on m.organization_id=o.id and m.status='active' left join public.bridge_profiles p on p.user_id=m.user_id group by o.id order by o.created_at desc limit 200`,
+      sql`select status, count(*)::int as count from public.bridge_license_packages group by status order by status`,
+      sql`select status, count(*)::int as count, coalesce(sum(amount_paise) filter (where status='captured'),0)::bigint as amount_paise from public.bridge_payments where purpose='title_license' group by status order by status`,
+      sql`select access_type, count(*)::int as count from public.bridge_entitlements group by access_type order by access_type`,
+      sql`select created_at, action, entity_type, entity_id, actor_user_id from public.bridge_audit_logs where action like 'buyer.%' or action like 'organization.%' or action like 'payment.%' or action like 'licensing.%' order by created_at desc limit 100`
+    ]);
+    const buyerIds = buyers.map((row) => row.user_id);
+    let membershipRows = [];
+    if (buyerIds.length) {
+      try {
+        membershipRows = await sql`select m.organization_id, m.user_id, m.membership_role, m.status, o.legal_name from public.bridge_organization_memberships m join public.bridge_organizations o on o.id=m.organization_id where m.user_id=any(${buyerIds}::text[]) order by o.legal_name, m.user_id`;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/42P01|does not exist|undefined table/i.test(message)) throw error;
+      }
+    }
+    const membershipByUser = new Map();
+    for (const row of membershipRows) {
+      const items = membershipByUser.get(row.user_id) ?? [];
+      items.push(row); membershipByUser.set(row.user_id, items);
+    }
+    return {
+      generatedAt:new Date().toISOString(), buyerCount:buyers.length, organizationCount:organizations.length,
+      buyers:buyers.map(row=>({userId:row.user_id,email:row.email,displayName:row.display_name,accountType:row.account_type,organizationLabel:row.organization_name,organizationId:row.organization_id,emailVerified:row.email_verified,createdAt:row.created_at,updatedAt:row.updated_at,memberships:(membershipByUser.get(row.user_id)??[]).map(m=>({organizationId:m.organization_id,organizationName:m.legal_name,role:m.membership_role,status:m.status}))})),
+      organizations:organizations.map(row=>({id:row.id,legalName:row.legal_name,status:row.status,memberCount:Number(row.member_count),buyerCount:Number(row.buyer_count),createdAt:row.created_at})),
+      licensing:{packageStates:packages.map(row=>({status:row.status,count:Number(row.count)})),paymentStates:payments.map(row=>({status:row.status,count:Number(row.count),capturedAmountPaise:Number(row.amount_paise)})),entitlementStates:entitlements.map(row=>({accessType:row.access_type,count:Number(row.count)}))},
+      recentAudit:audit.map(row=>({createdAt:row.created_at,action:row.action,entityType:row.entity_type,entityId:row.entity_id,actorReference:row.actor_user_id})),
+      authorization:{profileWindow:"LATEST_500_BUYER_PROFILES",organizationsWindow:"LATEST_200_ORGANIZATIONS",mutatingActionsEnabled:false,accountCreation:"NOT_EXPOSED",roleChanges:"NOT_EXPOSED",licensingAndEntitlements:"OWNED_BY_EXISTING_BRIDGE_PAYMENT_WORKFLOW"}
+    };
+  });
+`;
   const js = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS, target: 9 } }).outputText;
   const exports: Record<string, unknown> = {};
   const require = (name: string) => {
