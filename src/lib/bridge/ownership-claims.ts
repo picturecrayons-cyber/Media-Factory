@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { randomBytes } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
@@ -190,7 +190,7 @@ export const requestOwnershipClaimEvidenceUpload = createServerFn({ method: "POS
     if (!claim || !["DRAFT", "NEEDS_INFORMATION"].includes(claim.status)) {
       throw new Error("Evidence upload is not available for this claim.");
     }
-    const evidenceId = randomBytes(16).toString("hex");
+    const evidenceId = randomUUID();
     const key = `bridge/ownership-claims/${data.claimId}/${evidenceId}-${safeFileName(data.fileName)}`;
     const { signUpload } = await import("./oci-object-storage.server");
     const signed = await signUpload({
@@ -233,9 +233,10 @@ export const confirmOwnershipClaimEvidenceUpload = createServerFn({ method: "POS
     const sql = await getSql();
     const rows = await sql<{
       id: string; claim_id: string; object_key: string;
-      content_type: string; byte_size: number; status: string;
+      content_type: string; byte_size: number; status: string; claim_status: ClaimStatus;
     }>`
-      select e.id, e.claim_id, e.object_key, e.content_type, e.byte_size, e.status
+      select e.id, e.claim_id, e.object_key, e.content_type, e.byte_size, e.status,
+        c.status as claim_status
       from bridge_title_ownership_claim_evidence e
       join bridge_title_ownership_claims c on c.id = e.claim_id
       where e.id = ${data.evidenceId}
@@ -244,8 +245,11 @@ export const confirmOwnershipClaimEvidenceUpload = createServerFn({ method: "POS
       limit 1
     `;
     const evidence = rows[0];
-    if (!evidence) throw new Error("Evidence not found.");
+    if (!evidence || !["DRAFT", "NEEDS_INFORMATION"].includes(evidence.claim_status)) {
+      throw new Error("Evidence confirmation is closed for this claim.");
+    }
     if (evidence.status === "VERIFIED") return { evidenceId: evidence.id, verified: true as const };
+    if (evidence.status !== "PENDING_UPLOAD") throw new Error("Evidence is not awaiting upload confirmation.");
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     const source = await verifyObject(evidence.object_key, evidence.content_type);
     if (source.byteSize !== Number(evidence.byte_size) || !source.etag) {
@@ -466,12 +470,27 @@ export const triageOwnershipClaim = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertSuperAdmin(actor);
     const sql = await getSql();
+    const candidates = await sql<{ title_id: string; current_owner_user_id_snapshot: string; status: ClaimStatus }>`
+      select title_id, current_owner_user_id_snapshot, status
+      from bridge_title_ownership_claims
+      where id = ${data.claimId}
+      limit 1
+    `;
+    const candidate = candidates[0];
+    if (!candidate || !["SUBMITTED", "NEEDS_INFORMATION"].includes(candidate.status)) {
+      throw new Error("Claim is no longer available for intake review.");
+    }
+    const currentTitle = await loadTitle(candidate.title_id);
+    if (!currentTitle || currentTitle.ownerUserId !== candidate.current_owner_user_id_snapshot) {
+      throw new Error("The recorded title owner changed since this claim was filed. Stop review and reconcile the newer owner record.");
+    }
     const updated = await sql<{ id: string }>`
       update bridge_title_ownership_claims
       set status = ${data.decision}, intake_reviewed_by = ${actor.userId},
           intake_reviewed_at = now(), intake_review_note = ${data.note},
           updated_at = now()
       where id = ${data.claimId} and status in ('SUBMITTED','NEEDS_INFORMATION')
+        and current_owner_user_id_snapshot = ${candidate.current_owner_user_id_snapshot}
       returning id
     `;
     if (!updated[0]) throw new Error("Claim is no longer available for intake review.");
@@ -507,12 +526,27 @@ export const recordOwnershipLegalReview = createServerFn({ method: "POST" })
       ? "NEEDS_INFORMATION"
       : "LEGAL_REVIEWED";
     const legalDecision = data.decision === "NEEDS_MORE_EVIDENCE" ? null : data.decision;
+    const candidates = await sql<{ title_id: string; current_owner_user_id_snapshot: string; status: ClaimStatus }>`
+      select title_id, current_owner_user_id_snapshot, status
+      from bridge_title_ownership_claims
+      where id = ${data.claimId}
+      limit 1
+    `;
+    const candidate = candidates[0];
+    if (!candidate || candidate.status !== "REFERRED_TO_LEGAL") {
+      throw new Error("Claim is not in the Legal review queue.");
+    }
+    const currentTitle = await loadTitle(candidate.title_id);
+    if (!currentTitle || currentTitle.ownerUserId !== candidate.current_owner_user_id_snapshot) {
+      throw new Error("The recorded title owner changed since this claim was filed. Stop review and reconcile the newer owner record.");
+    }
     const updated = await sql<{ id: string }>`
       update bridge_title_ownership_claims
       set status = ${nextStatus}, legal_decision = ${legalDecision},
           legal_reviewed_by = ${actor.userId}, legal_reviewed_at = now(),
           legal_review_note = ${data.note}, updated_at = now()
       where id = ${data.claimId} and status = 'REFERRED_TO_LEGAL'
+        and current_owner_user_id_snapshot = ${candidate.current_owner_user_id_snapshot}
       returning id
     `;
     if (!updated[0]) throw new Error("Claim is not in the Legal review queue.");
