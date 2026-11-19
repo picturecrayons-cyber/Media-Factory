@@ -490,7 +490,9 @@ try {
         has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'UPDATE') as authenticated_update,
         has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'DELETE') as authenticated_delete,
         has_table_privilege('service_role', 'public.bridge_conditional_submissions', 'SELECT') as service_select,
-        has_table_privilege('service_role', 'public.bridge_conditional_submissions', 'INSERT') as service_insert
+        has_table_privilege('service_role', 'public.bridge_conditional_submissions', 'INSERT') as service_insert,
+        has_table_privilege('service_role', 'public.bridge_conditional_submissions', 'UPDATE') as service_update,
+        has_table_privilege('service_role', 'public.bridge_conditional_submissions', 'DELETE') as service_delete
       from pg_class c
       where c.oid = 'public.bridge_conditional_submissions'::regclass
     `);
@@ -508,7 +510,9 @@ try {
       verified.authenticated_update ||
       verified.authenticated_delete ||
       !verified.service_select ||
-      !verified.service_insert
+      !verified.service_insert ||
+      !verified.service_update ||
+      !verified.service_delete
     ) {
       throw new Error("Conditional submission candidate schema/security verification failed: " +
         JSON.stringify(verified));
