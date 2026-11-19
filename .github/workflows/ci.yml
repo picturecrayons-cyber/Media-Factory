@@ -5,6 +5,13 @@ on:
     branches: ["main", "feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024"]
   pull_request:
     branches: ["main", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024"]
+    paths:
+      - "src/lib/bridge/conditional-submission.ts"
+      - "src/components/bridge/workflow-desk.tsx"
+      - "supabase/migrations/20261120120000_malayalakkara_conditional_submission.sql"
+      - "scripts/supabase-migration-replay.mjs"
+      - "scripts/supabase-migration-replay.test.mjs"
+      - ".github/workflows/ci.yml"
   workflow_dispatch:
 
 jobs:
