@@ -121,19 +121,69 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
     if (data.decision === "APPROVE") {
-      const evidence = await tx<{ document_type: string }>`
-        select distinct d.document_type
+      const evidence = await tx<{ document_type: string; document_id: string; evidence_type: string }>`
+        select distinct d.document_type, d.id as document_id, l.evidence_type
         from bridge_title_document_links l
         join bridge_creator_documents d on d.id=l.document_id
-        where l.title_id=${data.titleId} and d.status='VERIFIED'
+        where l.title_id=${data.titleId}
+          and d.status='VERIFIED'
+          and d.owner_user_id = (select owner_user_id from bridge_titles where id=${data.titleId})
+          and d.content_type='application/pdf'
+          and d.byte_size > 0
       `;
       const types = new Set(evidence.map((item) => item.document_type));
-      if (!types.has("OWNERSHIP_CHAIN_OF_TITLE")) {
-        throw new Error("Verified ownership / chain-of-title document is required before Legal approval");
+      const requiredEvidence = [
+        ["OWNERSHIP_CHAIN_OF_TITLE", "Verified ownership / chain-of-title evidence"],
+        ["FINISHED_FILM_AGREEMENT", "Executed finished-film agreement"],
+        ["DISTRIBUTION_AGREEMENT", "Executed OTT / digital distribution agreement"],
+      ] as const;
+      for (const [type, label] of requiredEvidence) {
+        if (!types.has(type)) throw new Error(label + " is required before Legal approval");
       }
-      if (!types.has("FINISHED_FILM_AGREEMENT") && !types.has("DISTRIBUTION_AGREEMENT")) {
-        throw new Error("Verified finished-film or distribution agreement is required before Legal approval");
+      // The vault keeps document classes explicit. Never treat a declaration,
+      // censor certificate, or a generic attachment as proof of signatory,
+      // distributor, or onward-sublicensing authority.
+      const authorityTypes = new Set([
+        "SIGNATORY_AUTHORITY",
+        "MASTER_DISTRIBUTOR_AUTHORITY",
+        "SUBLICENSING_AUTHORITY",
+      ]);
+      const recordedAuthorityTypes = new Set(
+        evidence.filter((item) => authorityTypes.has(item.document_type)).map((item) => item.document_type),
+      );
+      if (!authorityTypes.has("SIGNATORY_AUTHORITY") || !recordedAuthorityTypes.has("SIGNATORY_AUTHORITY")) {
+        throw new Error("Independent signatory-authority evidence is required before Legal approval");
       }
+      if (!recordedAuthorityTypes.has("MASTER_DISTRIBUTOR_AUTHORITY")) {
+        throw new Error("Master distributor appointment / authority evidence is required before Legal approval");
+      }
+      if (!recordedAuthorityTypes.has("SUBLICENSING_AUTHORITY")) {
+        throw new Error("Explicit TVOD / OTT sublicensing authority evidence is required before Legal approval");
+      }
+      const grantEvidence = Array.isArray(grant.evidence) ? grant.evidence : [];
+      const hasTermsReference = grantEvidence.some((entry) => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+        const item = entry as Record<string, unknown>;
+        return typeof item.agreementReference === "string" &&
+          item.agreementReference.trim().length >= 3 &&
+          typeof item.ownershipReference === "string" &&
+          item.ownershipReference.trim().length >= 3 &&
+          item.commercialTerms !== null && typeof item.commercialTerms === "object";
+      });
+      if (!hasTermsReference) {
+        throw new Error("Executed agreement, ownership reference and recorded commercial terms are required");
+      }
+      const linkedGrant = await tx<{ id: string }>`
+        select id from bridge_title_document_links l
+        join bridge_creator_documents d on d.id=l.document_id
+        where l.title_id=${data.titleId}
+          and d.status='VERIFIED'
+          and l.document_id in (
+            select id from bridge_creator_documents where document_type in ('FINISHED_FILM_AGREEMENT','DISTRIBUTION_AGREEMENT')
+          )
+        limit 1
+      `;
+      if (!linkedGrant[0]) throw new Error("An executed agreement must be linked to this exact title");
     }
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
