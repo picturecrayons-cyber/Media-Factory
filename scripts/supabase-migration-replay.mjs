@@ -481,6 +481,12 @@ try {
           where conrelid = 'public.bridge_conditional_submissions'::regclass
             and conname = 'bridge_conditional_submissions_one_time_per_title'
         ) as one_time_constraint,
+        exists (
+          select 1 from pg_indexes
+          where schemaname = 'public'
+            and tablename = 'bridge_conditional_submissions'
+            and indexname = 'bridge_conditional_submissions_one_time_per_title'
+        ) as one_time_index,
         has_table_privilege('anon', 'public.bridge_conditional_submissions', 'SELECT') as anon_select,
         has_table_privilege('anon', 'public.bridge_conditional_submissions', 'INSERT') as anon_insert,
         has_table_privilege('anon', 'public.bridge_conditional_submissions', 'UPDATE') as anon_update,
@@ -501,6 +507,7 @@ try {
       !verified?.rls_enabled ||
       !verified.title_scope_constraint ||
       !verified.one_time_constraint ||
+      !verified.one_time_index ||
       verified.anon_select ||
       verified.anon_insert ||
       verified.anon_update ||
