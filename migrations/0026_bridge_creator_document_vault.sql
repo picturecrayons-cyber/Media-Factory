@@ -7,7 +7,9 @@ create table if not exists public.bridge_creator_documents (
   owner_organization_id uuid references public.bridge_organizations(id) on delete restrict,
   document_type text not null check (document_type in (
     'FINISHED_FILM_AGREEMENT','STORY_CONCEPT_AGREEMENT','DISTRIBUTION_AGREEMENT',
-    'OWNERSHIP_CHAIN_OF_TITLE','AUTHOR_ASSIGNMENT','MUSIC_RIGHTS','OTHER'
+    'OWNERSHIP_CHAIN_OF_TITLE','SIGNATORY_AUTHORITY','MASTER_DISTRIBUTOR_AUTHORITY',
+    'SUBLICENSING_AUTHORITY','SIGNED_AMENDMENT','SIGNED_ADDENDUM','RIGHTS_SCHEDULE',
+    'AUTHOR_ASSIGNMENT','MUSIC_RIGHTS','OTHER'
   )),
   file_name text not null,
   content_type text not null,
