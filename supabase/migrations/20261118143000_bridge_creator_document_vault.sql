@@ -60,10 +60,28 @@ create table if not exists public.bridge_title_document_links (
 create index if not exists bridge_title_document_links_title_idx
   on public.bridge_title_document_links(title_id, created_at desc);
 
+-- Title-specific Legal Reviewer assignments; an internal role alone grants no document access.
+create table if not exists public.bridge_title_document_review_assignments (
+  id text primary key,
+  title_id text not null references public.bridge_titles(id) on delete cascade,
+  reviewer_user_id text not null references public.bridge_profiles(user_id) on delete restrict,
+  assigned_by text not null references public.bridge_profiles(user_id) on delete restrict,
+  status text not null default 'ACTIVE' check (status in ('ACTIVE','REVOKED')),
+  assigned_at timestamptz not null default now(),
+  revoked_at timestamptz,
+  unique(title_id,reviewer_user_id)
+);
+create index if not exists bridge_title_document_review_assignments_reviewer_idx
+  on public.bridge_title_document_review_assignments(reviewer_user_id,title_id)
+  where status='ACTIVE';
+
 alter table public.bridge_creator_documents enable row level security;
 alter table public.bridge_title_document_links enable row level security;
+alter table public.bridge_title_document_review_assignments enable row level security;
 
 revoke all on table public.bridge_creator_documents from public, anon, authenticated;
 revoke all on table public.bridge_title_document_links from public, anon, authenticated;
+revoke all on table public.bridge_title_document_review_assignments from public, anon, authenticated;
 grant select, insert, update on table public.bridge_creator_documents to service_role;
 grant select, insert, update on table public.bridge_title_document_links to service_role;
+grant select, insert, update on table public.bridge_title_document_review_assignments to service_role;
