@@ -32,7 +32,7 @@ export function assertProductionDatabaseTarget(supabaseUrlValue, databaseUrlValu
   let username;
   let databaseName;
   try {
-    username = decodeURIComponent(databaseUrl.username).toLowerCase();
+    username = decodeURIComponent(databaseUrl.username);
     databaseName = decodeURIComponent(databaseUrl.pathname.replace(/^\//, ""));
   } catch {
     throw new Error("Production database binding has invalid encoded credentials or database name.");
