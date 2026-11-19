@@ -31,7 +31,7 @@ function assertCreatorOrStudio(actor: { accountType: string }) {
 
 function assertDocumentManagementRole(actor: { accountType: string; organizationId?: string | null; organizationRole?: string | null }) {
   if (!canManageStudioDocuments(actor)) {
-    throw new Error("Only an active Studio owner may manage reusable organization documents");
+    throw new Error("Only an active Studio owner or admin may access reusable organization documents");
   }
 }
 
