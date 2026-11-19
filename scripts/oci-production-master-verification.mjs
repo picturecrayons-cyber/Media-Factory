@@ -85,6 +85,7 @@ try {
   report.totals.candidates = candidates.length;
   for (const title of TITLES) {
     const titleCandidates = candidates.filter((row) => row.title_id === title.id);
+    if (titleCandidates.length === 0) report.totals.errors++;
     const titleReport = {
       titleId: title.id,
       titleName: title.name,
