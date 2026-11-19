@@ -60,7 +60,6 @@ export const listSuperAdminBuyerManagement = createServerFn({ method: "GET" })
         select status, count(*)::int as count,
           coalesce(sum(amount_paise) filter (where status='captured'),0)::bigint as amount_paise
         from public.bridge_payments
-        where purpose='title_license'
         group by status order by status
       `,
       sql<{ access_type: string; count: number | string }>`
@@ -76,7 +75,6 @@ export const listSuperAdminBuyerManagement = createServerFn({ method: "GET" })
         order by created_at desc limit 100
       `,
     ]);
-
     const buyerIds = buyers.map((row) => row.user_id);
     const membershipRows = buyerIds.length
       ? await sql<{
