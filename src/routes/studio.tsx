@@ -40,12 +40,13 @@ function Studio() {
               </div>
             </section>
 
-            <nav className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5" aria-label="Studio workspace navigation">
-              <a href="#studio-titles" className="rounded-lg border border-line bg-surface p-3 hover:border-accent"><strong className="text-sm">Titles</strong><p className="mt-1 text-xs text-muted">Films and story concepts</p></a>
+            <nav className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" aria-label="Studio workspace navigation">
+              <a href="#studio-titles" className="rounded-lg border border-line bg-surface p-3 hover:border-accent"><strong className="text-sm">Titles</strong><p className="mt-1 text-xs text-muted">Films and submissions</p></a>
               <a href="#studio-production" className="rounded-lg border border-line bg-surface p-3 hover:border-accent"><strong className="text-sm">Production</strong><p className="mt-1 text-xs text-muted">Production & DIT operations</p></a>
-              <a href="#studio-documents" className="rounded-lg border border-line bg-surface p-3 hover:border-accent"><strong className="text-sm">Document Vault</strong><p className="mt-1 text-xs text-muted">Private reusable legal evidence</p></a>
-              <a href="#studio-members" className="rounded-lg border border-line bg-surface p-3 hover:border-accent"><strong className="text-sm">Members & Roles</strong><p className="mt-1 text-xs text-muted">Verified organization access</p></a>
+              <a href="#studio-legal" className="rounded-lg border border-line bg-surface p-3 hover:border-accent"><strong className="text-sm">Legal</strong><p className="mt-1 text-xs text-muted">Agreements and title evidence</p></a>
+              <a href="#studio-members" className="rounded-lg border border-line bg-surface p-3 hover:border-accent"><strong className="text-sm">RBAC</strong><p className="mt-1 text-xs text-muted">Verified members and roles</p></a>
               <a href="#studio-operations" className="rounded-lg border border-line bg-surface p-3 hover:border-accent"><strong className="text-sm">Operations</strong><p className="mt-1 text-xs text-muted">QC, delivery and reporting</p></a>
+              <Link to="/account" className="rounded-lg border border-line bg-surface p-3 hover:border-accent"><strong className="text-sm">Account</strong><p className="mt-1 text-xs text-muted">Studio identity and settings</p></Link>
             </nav>
 
             <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
@@ -69,7 +70,17 @@ function Studio() {
                   </div>
                 </section>
 
-                <section id="studio-documents" className="scroll-mt-20">
+                <section id="studio-legal" className="scroll-mt-20 space-y-4 rounded-xl border border-line bg-surface p-5">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-accent">Legal workspace</p>
+                    <h3 className="mt-1 font-display text-xl font-semibold">Legal & Agreements</h3>
+                    <p className="mt-1 text-sm text-muted">Upload and verify signed agreements, then link evidence to the correct Studio title. Uploading evidence does not approve rights or publish a title.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-3 border-b border-line pb-4 text-sm">
+                    <Link to="/terms" className="font-semibold text-accent underline">Terms & Conditions</Link>
+                    <Link to="/privacy" className="font-semibold text-accent underline">Privacy Policy</Link>
+                    <Link to="/contact" className="font-semibold text-accent underline">Legal / support contact</Link>
+                  </div>
                   <CreatorDocumentVault />
                 </section>
               </div>
@@ -78,8 +89,13 @@ function Studio() {
                 <section id="studio-members" className="scroll-mt-20 rounded-xl border border-line bg-surface p-5">
                   <p className="text-xs font-semibold uppercase tracking-wider text-accent">Organization access</p>
                   <h3 className="mt-1 font-display text-xl font-semibold">Members & Roles</h3>
-                  <p className="mt-1 mb-4 text-sm text-muted">Verified Studio owner and administrator roster. Invitations and role changes remain disabled until the dedicated approval flow is enabled.</p>
+                  <p className="mt-1 mb-4 text-sm text-muted">Organization access is resolved from verified Studio membership. The table below shows the current role assignment and status; membership changes remain disabled until the audited administration workflow is enabled.</p>
                   <StudioMemberDesk />
+                  <div className="mt-4 rounded-lg border border-line bg-elevated/40 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Current RBAC boundary</p>
+                    <p className="mt-1 text-sm">Studio members can access titles allowed by their active organization membership. Title ownership, upload, legal approval, QC and delivery permissions remain separate.</p>
+                    <p className="mt-2 text-xs text-muted">Owner/admin, producer and DIT roles are displayed from the server record. This dashboard does not grant, elevate or edit roles.</p>
+                  </div>
                 </section>
 
                 <section id="studio-production" className="scroll-mt-20 rounded-xl border border-line bg-surface p-5">
