@@ -397,16 +397,9 @@ export const getTitle = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
-    if (!title) throw new Error("Not found");
+    if (!title || title.submissionType === "story_concept") throw new Error("Not found");
     const sql = await getSql();
     const buyerView = actor.accountType === "buyer" && !actor.internalRole;
-    if (
-      title.submissionType === "story_concept" &&
-      (actor.accountType === "buyer" || actor.accountType === "investor") &&
-      !actor.internalRole
-    ) {
-      throw new Error("Not found");
-    }
     if (buyerView) {
       // A published status alone is not enough: re-check every publication gate
       // on direct listing access, not only when the catalogue is queried.
@@ -464,7 +457,9 @@ export const updateTitle = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
-    if (!title) throw new Error("Not found");
+    if (!title || title.submissionType === "story_concept") {
+      throw new Error("Story / Concept records use the separate submission and curation workflow.");
+    }
     const owns = !actor.internalRole && canMutateTitle(actor, title, "title.update_own", "title.license");
     if (!canMutateTitle(actor, title, "title.update_own", "title.license"))
       throw new Error("Forbidden");
