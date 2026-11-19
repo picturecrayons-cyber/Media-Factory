@@ -102,7 +102,7 @@ const createPayloadSchema = z.object({
   rightsHolderName: z.string().min(2).max(160),
   rightsBasis: z.enum(["ORIGINAL_AUTHOR", "ASSIGNED", "LICENSED", "PUBLIC_DOMAIN", "OTHER"]),
   thirdPartyMaterialsIncluded: z.boolean(),
-  rightsDeclarationAccepted: z.literal(true),
+  rightsDeclarationAccepted: z.boolean().refine((accepted) => accepted, { message: "Rights declaration acceptance is required" }),
 });
 
 export const createStoryConceptSubmission = createServerFn({ method: "POST" })
