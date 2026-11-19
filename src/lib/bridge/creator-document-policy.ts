@@ -1,5 +1,21 @@
 const SUPPORTED_MIME_TYPES = new Set(["application/pdf"]);
 
+export const CREATOR_DOCUMENT_TYPES = [
+  "FINISHED_FILM_AGREEMENT",
+  "STORY_CONCEPT_AGREEMENT",
+  "DISTRIBUTION_AGREEMENT",
+  "OWNERSHIP_CHAIN_OF_TITLE",
+  "SIGNATORY_AUTHORITY",
+  "MASTER_DISTRIBUTOR_AUTHORITY",
+  "SUBLICENSING_AUTHORITY",
+  "SIGNED_AMENDMENT",
+  "SIGNED_ADDENDUM",
+  "RIGHTS_SCHEDULE",
+  "AUTHOR_ASSIGNMENT",
+  "MUSIC_RIGHTS",
+  "OTHER",
+] as const;
+
 export function isSupportedCreatorDocumentMimeType(value: string) {
   return SUPPORTED_MIME_TYPES.has(value);
 }
