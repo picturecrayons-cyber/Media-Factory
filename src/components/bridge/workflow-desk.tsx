@@ -23,11 +23,13 @@ import type { BridgeTitle } from "@/lib/bridge/types";
 const stages = ["Prepare", "Business", "Distribution", "Revenue"] as const;
 export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
   const [stage, setStage] = useState<(typeof stages)[number]>("Prepare");
-  const [conditionalSubmissionStatus, setConditionalSubmissionStatus] = useState("");
+  const conditionalSubmissionEnabled =
+    title.id === MALAYALAKKARA_RESIDENCY_ID &&
+    canOperateOnTitle(actor, title, "title.update_own");
   const conditionalSubmission = useQuery({
     queryKey: ["conditional-submission", title.id],
     queryFn: () => getMalayalakkaraConditionalSubmission({ data: { titleId: MALAYALAKKARA_RESIDENCY_ID } }),
-    enabled: title.id === MALAYALAKKARA_RESIDENCY_ID && canOperateOnTitle(actor, title, "title.update_own"),
+    enabled: conditionalSubmissionEnabled,
   });
   const [settlementRef, setSettlementRef] = useState("");
   const [invoiceRef, setInvoiceRef] = useState("");
@@ -152,10 +154,10 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         <div className="rounded-xl border border-line p-3 space-y-2">
           <h3 className="text-sm font-semibold">One-time conditional submission</h3>
           <p className="text-xs text-muted">Submission only. Rights remain unapproved; sublicensing and publication remain disabled pending independent Legal verification.</p>
-          {conditionalSubmission.data || conditionalSubmissionStatus ? (
+          {conditionalSubmission.data ? (
             <div role="status" className="space-y-1 text-sm">
-              <p>Submission status: {conditionalSubmission.data?.status ?? conditionalSubmissionStatus}</p>
-              {conditionalSubmission.data?.submittedAt ? (
+              <p>Submission status: {conditionalSubmission.data.status}</p>
+              {conditionalSubmission.data.submittedAt ? (
                 <p className="text-xs text-muted">Submitted: {new Date(conditionalSubmission.data.submittedAt).toLocaleString()}</p>
               ) : null}
               <p className="text-xs text-muted">One-time request recorded. Legal verification is pending. Rights grant, sublicensing, and publication remain disabled.</p>
@@ -165,12 +167,10 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           ) : conditionalSubmission.isError ? (
             <p role="alert" className="text-sm">Submission status unavailable: {conditionalSubmission.error.message}</p>
           ) : button("Submit for Legal Verification", async () => {
-              const result = await submitMalayalakkaraConditionalRequest({
+              await submitMalayalakkaraConditionalRequest({
                 data: { titleId: MALAYALAKKARA_RESIDENCY_ID, confirmation: "CONDITIONAL_SUBMISSION_ONLY" },
               });
-              setConditionalSubmissionStatus(result.status);
               await qc.invalidateQueries({ queryKey: ["conditional-submission", title.id] });
-              return result;
             })}
         </div>
       ) : null}
