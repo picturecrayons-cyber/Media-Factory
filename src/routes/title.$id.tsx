@@ -1,4 +1,5 @@
 import { canOperateOnTitle } from "@/lib/bridge/rbac";
+import { MasterAssetReconciliation } from "@/components/bridge/master-asset-reconciliation";
 import { getTitleWorkflow } from "@/lib/bridge/workflow";
 import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
@@ -158,6 +159,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   return (
     <div className="space-y-5">
       <WorkflowDesk title={title} actor={actor} />
+      {actor.internalRole === "super_admin" ? <MasterAssetReconciliation titleId={title.id} /> : null}
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
