@@ -78,6 +78,21 @@ alter table public.loop_tvod_payment_events enable row level security;
 revoke all on table public.loop_tvod_payment_events from public, anon, authenticated;
 grant select,insert,update on table public.loop_tvod_payment_events to service_role;
 
+-- One durable row per provider refund; supports retries and multiple partial refunds.
+create table if not exists public.loop_tvod_refunds (
+  refund_id text primary key,
+  payment_id text not null,
+  provider_order_id text not null,
+  amount_paise bigint not null check (amount_paise > 0),
+  currency text not null default 'INR' check (currency='INR'),
+  created_at timestamptz not null default now()
+);
+create index if not exists loop_tvod_refunds_payment_idx
+  on public.loop_tvod_refunds(payment_id);
+alter table public.loop_tvod_refunds enable row level security;
+revoke all on table public.loop_tvod_refunds from public,anon,authenticated;
+grant select,insert,update on table public.loop_tvod_refunds to service_role;
+
 -- Canonical entitlement table is present in the current Loop schema; create it on legacy installs too.
 create table if not exists public.loop_user_tvod_entitlements (
   id uuid primary key default gen_random_uuid(),
@@ -160,48 +175,119 @@ end $$;
 revoke all on function public.loop_fulfill_captured_rental(text,text) from public, anon, authenticated;
 grant execute on function public.loop_fulfill_captured_rental(text,text) to service_role;
 
-drop function if exists public.loop_refund_captured_rental(text,text);
+-- Preserve the legacy two-argument rental refund function. The TVOD overload below
+-- records every provider refund separately and revokes playback only after a full refund.
 create or replace function public.loop_refund_captured_rental(
-  p_payment_id text,p_refund_id text,p_order_id text default null
+  p_payment_id text,p_refund_id text,p_order_id text,p_refund_amount_paise bigint
 ) returns jsonb
 language plpgsql security invoker set search_path = '' as $$
 declare
   prior_event public.loop_tvod_payment_events%rowtype;
   rental public.loop_tvod_orders%rowtype;
+  prior_refund public.loop_tvod_refunds%rowtype;
+  refund_total bigint;
+  inserted_rows integer;
+  fully_refunded boolean;
 begin
-  if nullif(p_payment_id,'') is null or nullif(p_refund_id,'') is null then raise exception 'Refund identity is required'; end if;
+  if nullif(p_payment_id,'') is null or nullif(p_refund_id,'') is null then
+    raise exception 'Refund identity is required';
+  end if;
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('loop-payment:' || p_payment_id,0));
+
   if p_order_id is not null then
     select * into rental from public.loop_tvod_orders where provider_order_id=p_order_id for update;
-    if not found then raise exception 'Loop TVOD refund order not found'; end if;
-    if rental.provider_payment_id is not null and rental.provider_payment_id<>p_payment_id then
-      raise exception 'Refund payment does not match Loop TVOD order';
-    end if;
   else
     select * into rental from public.loop_tvod_orders where provider_payment_id=p_payment_id for update;
   end if;
-
-  select * into prior_event from public.loop_tvod_payment_events where event_id='tvod:' || p_payment_id for update;
-  if not found then
-    insert into public.loop_tvod_payment_events
-      (event_id,event_name,razorpay_payment_id,user_id,loop_title_id,status,payload,processed_at)
-    values('tvod:' || p_payment_id,'tvod_refunded',p_payment_id,rental.user_id,rental.loop_title_id,'refunded',
-      pg_catalog.jsonb_build_object('refund_id',p_refund_id,'order_id',coalesce(p_order_id,rental.provider_order_id)),now());
-    if rental.id is not null then
-      update public.loop_tvod_orders set status='refunded',provider_payment_id=coalesce(provider_payment_id,p_payment_id),updated_at=now()
-        where id=rental.id;
-    end if;
-    return pg_catalog.jsonb_build_object('processed',true,'refund_before_capture',true);
+  if not found then raise exception 'Loop TVOD refund order not found'; end if;
+  if rental.provider_payment_id is not null and rental.provider_payment_id<>p_payment_id then
+    raise exception 'Refund payment does not match Loop TVOD order';
   end if;
-  if prior_event.status='refunded' then return pg_catalog.jsonb_build_object('processed',true,'duplicate',true); end if;
-  update public.loop_user_tvod_entitlements set status='REFUNDED'
-    where payment_transaction_id=p_payment_id
-      and user_id=prior_event.user_id::uuid and title_id=prior_event.loop_title_id::uuid;
-  update public.loop_tvod_payment_events set status='refunded',event_name='tvod_refunded',
-    payload=payload || pg_catalog.jsonb_build_object('refund_id',p_refund_id),processed_at=now() where id=prior_event.id;
-  update public.loop_tvod_orders set status='refunded',updated_at=now()
-    where provider_payment_id=p_payment_id or (p_order_id is not null and provider_order_id=p_order_id);
-  return pg_catalog.jsonb_build_object('processed',true,'payment_id',p_payment_id,'refund_id',p_refund_id);
+  if p_refund_amount_paise is null or p_refund_amount_paise <= 0 then
+    raise exception 'Refund amount must be a positive integer in paise';
+  end if;
+  if rental.currency <> 'INR' then raise exception 'Only INR TVOD refunds are supported'; end if;
+
+  insert into public.loop_tvod_refunds(refund_id,payment_id,provider_order_id,amount_paise,currency)
+  values(p_refund_id,p_payment_id,rental.provider_order_id,p_refund_amount_paise,'INR')
+  on conflict(refund_id) do nothing;
+  get diagnostics inserted_rows = row_count;
+
+  select * into prior_refund from public.loop_tvod_refunds where refund_id=p_refund_id;
+  if prior_refund.payment_id is distinct from p_payment_id
+     or prior_refund.provider_order_id is distinct from rental.provider_order_id
+     or prior_refund.amount_paise is distinct from p_refund_amount_paise then
+    raise exception 'Refund identity collision';
+  end if;
+
+  select coalesce(sum(amount_paise),0)::bigint into refund_total
+    from public.loop_tvod_refunds where payment_id=p_payment_id;
+  if refund_total > rental.amount_paise then
+    raise exception 'Cumulative refunds exceed the captured payment amount';
+  end if;
+  fully_refunded := refund_total >= rental.amount_paise;
+
+  select * into prior_event from public.loop_tvod_payment_events
+    where event_id='tvod:' || p_payment_id for update;
+
+  if not found then
+    update public.loop_tvod_orders
+      set provider_payment_id=coalesce(provider_payment_id,p_payment_id),
+          status=case when fully_refunded then 'refunded' else status end,
+          updated_at=now()
+      where id=rental.id;
+    return pg_catalog.jsonb_build_object(
+      'processed',true,'refund_before_fulfillment',true,
+      'duplicate',inserted_rows=0,'refund_total_paise',refund_total,
+      'fully_refunded',fully_refunded
+    );
+  end if;
+
+  if fully_refunded then
+    update public.loop_user_tvod_entitlements set status='REFUNDED'
+      where payment_transaction_id=p_payment_id
+        and user_id=prior_event.user_id::uuid and title_id=prior_event.loop_title_id::uuid;
+  end if;
+
+  update public.loop_tvod_payment_events
+    set status=case when fully_refunded then 'refunded' else 'processed' end,
+        event_name=case when fully_refunded then 'tvod_refunded' else 'tvod_partially_refunded' end,
+        payload=payload || pg_catalog.jsonb_build_object(
+          'last_refund_id',p_refund_id,'refund_total_paise',refund_total,
+          'fully_refunded',fully_refunded
+        ),
+        processed_at=now()
+    where id=prior_event.id;
+
+  update public.loop_tvod_orders
+    set provider_payment_id=coalesce(provider_payment_id,p_payment_id),
+        status=case when fully_refunded then 'refunded' else status end,
+        updated_at=now()
+    where id=rental.id;
+
+  return pg_catalog.jsonb_build_object(
+    'processed',true,'duplicate',inserted_rows=0,
+    'payment_id',p_payment_id,'refund_id',p_refund_id,
+    'refund_total_paise',refund_total,'fully_refunded',fully_refunded,
+    'status',case when fully_refunded then 'refunded' else 'partially_refunded' end
+  );
+end $$;
+revoke all on function public.loop_refund_captured_rental(text,text,text,bigint) from public, anon, authenticated;
+grant execute on function public.loop_refund_captured_rental(text,text,text,bigint) to service_role;
+
+-- Compatibility overload for existing three-argument TVOD callers: omission of an
+-- amount means a full refund, while the webhook always supplies Razorpay's amount.
+create or replace function public.loop_refund_captured_rental(
+  p_payment_id text,p_refund_id text,p_order_id text
+) returns jsonb
+language plpgsql security invoker set search_path = '' as $$
+declare
+  order_amount bigint;
+begin
+  select amount_paise into order_amount from public.loop_tvod_orders
+    where provider_order_id=p_order_id;
+  if order_amount is null then raise exception 'Loop TVOD refund order not found'; end if;
+  return public.loop_refund_captured_rental(p_payment_id,p_refund_id,p_order_id,order_amount);
 end $$;
 revoke all on function public.loop_refund_captured_rental(text,text,text) from public, anon, authenticated;
 grant execute on function public.loop_refund_captured_rental(text,text,text) to service_role;
