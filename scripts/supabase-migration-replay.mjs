@@ -22,6 +22,11 @@ const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
 const FIXTURE_EMAIL = "bridge-migration-replay@example.invalid";
+const EXPECTED_PROPOSED_MIGRATIONS = [
+  "20261118100000_bridge_super_admin_support_cases.sql",
+  "20261118100500_bridge_organization_invites.sql",
+  "20261118101000_loop_merchandising_documents.sql",
+];
 
 if (!DATABASE_URL) {
   throw new Error("SUPABASE_REPLAY_DATABASE_URL is required");
@@ -54,11 +59,6 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
-  throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
-  );
-}
 if (new Set(names).size !== names.length) {
   throw new Error("Duplicate migration filenames detected");
 }
@@ -88,22 +88,37 @@ for (const line of manifest.split(String.fromCharCode(10))) {
 }
 if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
+    "Expected " + EXPECTED_MIGRATIONS + " historical manifest rows; found " + manifestRows.size,
   );
 }
 
-for (const name of names) {
+const historicalNames = names.filter((name) => manifestRows.has(name));
+const proposedNames = names.filter((name) => !manifestRows.has(name));
+const missingHistoricalNames = [...manifestRows.keys()].filter((name) => !names.includes(name));
+if (historicalNames.length !== EXPECTED_MIGRATIONS || missingHistoricalNames.length > 0) {
+  throw new Error("Historical migration inventory does not match manifest: " +
+    JSON.stringify({ expected: EXPECTED_MIGRATIONS, found: historicalNames.length, missing: missingHistoricalNames }));
+}
+if (
+  proposedNames.length !== EXPECTED_PROPOSED_MIGRATIONS.length ||
+  EXPECTED_PROPOSED_MIGRATIONS.some((name) => !proposedNames.includes(name)) ||
+  proposedNames.some((name) => !EXPECTED_PROPOSED_MIGRATIONS.includes(name))
+) {
+  throw new Error("Unreconciled proposed migration inventory: " + JSON.stringify(proposedNames));
+}
+
+for (const name of historicalNames) {
   const contents = await readFile(join(MIGRATIONS_DIR, name));
   const expected = manifestRows.get(name);
-  if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
   const actualBytes = contents.byteLength;
   const actualSha256 = createHash("sha256").update(contents).digest("hex");
   if (actualBytes !== expected.bytes || actualSha256 !== expected.sha256) {
     throw new Error(
-      `Source integrity mismatch for ${name}: ${actualBytes} bytes / ${actualSha256}`,
+      "Source integrity mismatch for " + name + ": " + actualBytes + " bytes / " + actualSha256,
     );
   }
 }
+const replayNames = [...historicalNames, ...proposedNames].sort((a, b) => a.localeCompare(b));
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -148,7 +163,7 @@ try {
     throw new Error("Local Supabase base schemas/roles are not ready");
   }
 
-  for (const name of names) {
+  for (const name of replayNames) {
     const sql = await readFile(join(MIGRATIONS_DIR, name), "utf8");
     await client.query("BEGIN");
     try {
@@ -715,6 +730,59 @@ try {
     );
   }
 
+  const proposedMigrationChecks = await client.query(`
+    select
+      to_regclass('private.bridge_support_cases') is not null as support_cases_exists,
+      to_regclass('private.bridge_support_case_events') is not null as support_case_events_exists,
+      to_regclass('private.bridge_organization_invites') is not null as organization_invites_exists,
+      to_regclass('public.loop_merchandising_documents') is not null as merchandising_table_exists,
+      to_regclass('public.loop_public_merchandising') is not null as merchandising_view_exists,
+      (select relrowsecurity from pg_class where oid = 'private.bridge_support_cases'::regclass) as support_cases_rls,
+      (select relrowsecurity from pg_class where oid = 'private.bridge_support_case_events'::regclass) as support_case_events_rls,
+      (select relrowsecurity from pg_class where oid = 'private.bridge_organization_invites'::regclass) as organization_invites_rls,
+      (select relrowsecurity from pg_class where oid = 'public.loop_merchandising_documents'::regclass) as merchandising_rls,
+      has_table_privilege('anon', 'private.bridge_support_cases', 'SELECT') as anon_support_read,
+      has_table_privilege('authenticated', 'private.bridge_support_cases', 'SELECT') as auth_support_read,
+      has_table_privilege('anon', 'private.bridge_organization_invites', 'SELECT') as anon_invite_read,
+      has_table_privilege('authenticated', 'private.bridge_organization_invites', 'SELECT') as auth_invite_read,
+      has_table_privilege('anon', 'public.loop_public_merchandising', 'SELECT') as anon_merch_view_read,
+      has_table_privilege('authenticated', 'public.loop_public_merchandising', 'SELECT') as auth_merch_view_read,
+      has_column_privilege('anon', 'public.loop_merchandising_documents', 'payload', 'SELECT') as anon_merch_payload_read,
+      has_column_privilege('authenticated', 'public.loop_merchandising_documents', 'payload', 'SELECT') as auth_merch_payload_read,
+      has_column_privilege('anon', 'public.loop_merchandising_documents', 'status', 'SELECT') as anon_merch_status_read,
+      has_column_privilege('authenticated', 'public.loop_merchandising_documents', 'status', 'SELECT') as auth_merch_status_read,
+      exists (
+        select 1 from pg_policy
+        where polrelid = 'public.loop_merchandising_documents'::regclass
+          and polname = 'loop_merchandising_public_active_read'
+          and polcmd = 'r'
+      ) as merchandising_public_policy,
+      coalesce(
+        (select reloptions @> ARRAY['security_invoker=true']
+         from pg_class where oid = 'public.loop_public_merchandising'::regclass),
+        false
+      ) as merchandising_view_security_invoker
+  `);
+  const proposedState = proposedMigrationChecks.rows[0];
+  const mustBeTrue = [
+    "support_cases_exists", "support_case_events_exists", "organization_invites_exists",
+    "merchandising_table_exists", "merchandising_view_exists", "support_cases_rls",
+    "support_case_events_rls", "organization_invites_rls", "merchandising_rls",
+    "anon_merch_view_read", "auth_merch_view_read", "anon_merch_payload_read",
+    "auth_merch_payload_read", "merchandising_public_policy", "merchandising_view_security_invoker",
+  ];
+  const mustBeFalse = [
+    "anon_support_read", "auth_support_read", "anon_invite_read",
+    "auth_invite_read", "anon_merch_status_read", "auth_merch_status_read",
+  ];
+  if (
+    mustBeTrue.some((key) => proposedState[key] !== true) ||
+    mustBeFalse.some((key) => proposedState[key] !== false)
+  ) {
+    throw new Error("Proposed migration schema/RLS verification failed: " + JSON.stringify(proposedState));
+  }
+  console.log("[migration-replay] verified private support/invite boundaries and public merchandising projection/RLS");
+
   const fixtureCheck = await client.query(
     `select
        (select count(*)::int from public.bridge_profiles
@@ -732,7 +800,7 @@ try {
   }
 
   console.log(
-    `[migration-replay] PASS: all ${names.length} Production-ledger migrations replayed in a fresh local Supabase stack.`,
+    `[migration-replay] PASS: ${historicalNames.length} manifest-backed historical migrations and ${proposedNames.length} explicitly allowlisted proposed migrations replayed in a fresh local Supabase stack.`,
   );
 } finally {
   client.release();
