@@ -34,14 +34,14 @@ function CreatorOwnershipClaims() {
     <RequireBridge allow="creator">
       {(actor) => (
         <BridgeShell actor={actor} title="Ownership claim & evidence">
-          <OwnershipClaimsBody actorUserId={actor.userId} />
+          <OwnershipClaimsBody />
         </BridgeShell>
       )}
     </RequireBridge>
   );
 }
 
-function OwnershipClaimsBody({ actorUserId }: { actorUserId: string }) {
+function OwnershipClaimsBody() {
   const qc = useQueryClient();
   const claimsQ = useQuery({ queryKey: ["my-ownership-claims"], queryFn: () => listMyOwnershipClaims(), retry: 1 });
   const [titleId, setTitleId] = useState("");
