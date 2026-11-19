@@ -94,7 +94,7 @@ function DashboardBody() {
     ...tracked,
     record: titles.find((title) =>
       titleKey(title.name) === titleKey(tracked.label) ||
-      titleKey(title.slug).startsWith(titleKey(tracked.key).replaceAll(" ", "-")),
+      titleKey(title.slug).includes(titleKey(tracked.key)),
     ) ?? null,
   }));
   const liveOrCommercial = titles.filter((title) =>
