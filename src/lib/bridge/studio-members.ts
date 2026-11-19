@@ -18,7 +18,7 @@ export type StudioMember = {
 const memberRole = z.enum(["admin", "producer", "dit", "member"]);
 const memberStatus = z.enum(["active", "suspended", "removed"]);
 
-async function requireStudioManager(userId: string) {
+async function requireStudioMember(userId: string) {
   assertNotDevUser(userId);
   const actor = await requireVerifiedActor(userId);
   if (actor.internalRole || actor.accountType !== "studio" || !actor.organizationId) {
@@ -34,18 +34,26 @@ async function requireStudioManager(userId: string) {
       and m.status = 'active'
     limit 1
   `;
-  const managerRole = rows[0]?.membership_role;
-  if (managerRole !== "owner" && managerRole !== "admin") {
+  const membershipRole = rows[0]?.membership_role;
+  if (!membershipRole || !["owner", "admin", "producer", "dit", "member"].includes(membershipRole)) {
+    throw new Error("An active Studio organization membership is required");
+  }
+  return { actor, sql, membershipRole };
+}
+
+async function requireStudioManager(userId: string) {
+  const result = await requireStudioMember(userId);
+  if (result.membershipRole !== "owner" && result.membershipRole !== "admin") {
     throw new Error("An active Studio owner or admin membership is required");
   }
-  return { actor, sql, managerRole };
+  return { actor: result.actor, sql: result.sql, managerRole: result.membershipRole };
 }
 
 /** Read the roster for the caller's verified Studio organization only. */
 export const listStudioMembers = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<{ members: StudioMember[]; currentUserId: string; managerRole: string }> => {
-    const { actor, sql, managerRole } = await requireStudioManager(context.userId);
+    const { actor, sql, membershipRole } = await requireStudioMember(context.userId);
     const rows = await sql<{
       user_id: string;
       display_name: string;
@@ -69,7 +77,7 @@ export const listStudioMembers = createServerFn({ method: "GET" })
     `;
     return {
       currentUserId: actor.userId,
-      managerRole,
+      managerRole: membershipRole,
       members: rows.map((row) => ({
         userId: row.user_id,
         displayName: row.display_name,
