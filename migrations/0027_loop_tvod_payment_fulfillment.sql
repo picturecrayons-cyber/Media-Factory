@@ -138,8 +138,15 @@ begin
     'amount_paise',rental.amount_paise,'currency',rental.currency,'purchased_at',rental.captured_at,
     'expires_at',rental.captured_at + interval '48 hours');
   if found then
-    if prior_event.user_id is distinct from rental.user_id or prior_event.razorpay_payment_id is distinct from p_payment_id
-       or prior_event.payload is distinct from payload then raise exception 'TVOD payment event identity mismatch'; end if;
+    if prior_event.user_id is distinct from rental.user_id
+       or prior_event.razorpay_payment_id is distinct from p_payment_id
+       or prior_event.payload->>'order_id' is distinct from payload->>'order_id'
+       or prior_event.payload->>'title_id' is distinct from payload->>'title_id'
+       or prior_event.payload->>'amount_paise' is distinct from payload->>'amount_paise'
+       or prior_event.payload->>'currency' is distinct from payload->>'currency'
+       or prior_event.payload->>'purchased_at' is distinct from payload->>'purchased_at'
+       or prior_event.payload->>'expires_at' is distinct from payload->>'expires_at'
+    then raise exception 'TVOD payment event identity mismatch'; end if;
     if prior_event.status='processed' then return pg_catalog.jsonb_build_object('deduplicated',true,'status','fulfilled'); end if;
     if prior_event.status='refunded' then raise exception 'Refunded TVOD payment cannot grant playback'; end if;
     raise exception 'TVOD payment event requires reconciliation';
