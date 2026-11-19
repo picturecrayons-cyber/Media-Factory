@@ -459,6 +459,12 @@ try {
   // Apply the allowlisted PR candidate after the exact Production ledger.
   // It is replayed separately and is never counted as an already-applied migration.
   const candidateSql = await readFile(join(MIGRATIONS_DIR, CANDIDATE_MIGRATION), "utf8");
+  const candidateBaseline = await client.query(
+    "select to_regclass('public.bridge_conditional_submissions') is not null as already_exists",
+  );
+  if (candidateBaseline.rows[0].already_exists) {
+    throw new Error("Candidate table already exists before isolated candidate replay");
+  }
   await client.query("BEGIN");
   try {
     await client.query(candidateSql);
