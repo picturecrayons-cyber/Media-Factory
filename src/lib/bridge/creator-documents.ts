@@ -8,7 +8,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { canReadTitle, canOperateOnTitle, hasPermission } from "./rbac";
 import { writeAudit } from "./audit";
-import { sameOwner, canDownloadCreatorDocument, canManageStudioDocuments, canReviewAssignedTitle } from "./creator-document-policy";
+import { sameOwner, canDownloadCreatorDocument, canManageStudioDocuments, canReviewTitleDocuments } from "./creator-document-policy";
 
 const DOCUMENT_TYPES = [
   "FINISHED_FILM_AGREEMENT",
@@ -270,10 +270,9 @@ export const requestCreatorDocumentDownload = createServerFn({ method: "POST" })
     const doc = rows[0];
     if (!doc || doc.status !== "VERIFIED") throw new Error("Document not found");
     const ownerAccess = sameOwner(actor, doc);
-    const reviewerCanReadLinkedEvidence = canReviewAssignedTitle({
+    const reviewerCanReadLinkedEvidence = canReviewTitleDocuments({
       internalRole: actor.internalRole,
       hasRightsReviewPermission: hasPermission(actor, "title.rights_review"),
-      hasActiveAssignment: true,
     });
     const titleAccess = await sql<{ allowed: boolean }>`
       select exists (
