@@ -40,9 +40,10 @@ export function assertProductionDatabaseTarget(supabaseUrlValue, databaseUrlValu
   if (databaseName !== "postgres") {
     throw new Error("Production database binding must target the postgres database.");
   }
-  const directHostMatches = host === `db.${expectedRef}.supabase.co` && username === "postgres";
+  const port = Number(databaseUrl.port || 5432);
+  const directHostMatches = host === `db.${expectedRef}.supabase.co` && username === "postgres" && port === 5432;
   const poolerHostMatches = /^aws-\d+-[a-z0-9-]+\.pooler\.supabase\.com$/.test(host);
-  const poolerIdentityMatches = poolerHostMatches && username === `postgres.${expectedRef}`;
+  const poolerIdentityMatches = poolerHostMatches && username === `postgres.${expectedRef}` && (port === 5432 || port === 6543);
   if (!directHostMatches && !poolerIdentityMatches) {
     throw new Error("PostgreSQL connection does not prove the expected Supabase Production host and username; refusing to connect.");
   }
