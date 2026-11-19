@@ -34,14 +34,11 @@ export function canManageStudioDocuments(input: {
 }
 
 /** Legal Reviewer access is granted only for an explicitly assigned title. */
-export function canReviewAssignedTitle(input: {
+export function canReviewTitleDocuments(input: {
   internalRole: string | null;
   hasRightsReviewPermission: boolean;
-  hasActiveAssignment: boolean;
 }) {
-  return input.internalRole === "legal_reviewer" &&
-    input.hasRightsReviewPermission &&
-    input.hasActiveAssignment;
+  return input.internalRole === "legal_reviewer" && input.hasRightsReviewPermission;
 }
 
 /** Download is permitted only to an owner, an authorized linked-title reviewer, or Super Admin. */
