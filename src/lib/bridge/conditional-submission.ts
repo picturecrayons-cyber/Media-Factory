@@ -49,8 +49,8 @@ export const submitMalayalakkaraConditionalRequest = createServerFn({ method: "P
         throw new Error("A one-time conditional submission has already been recorded");
       }
 
-      // The title row lock serializes normal requests; the unique constraint
-      // protects the one-time invariant against concurrent or alternate writers.
+      // A conditional request is intake only. The row lock serializes this
+      // title's normal requests; the unique constraint is the final one-time guard.
       const [record] = await tx<{ id: string; status: string }>`
         insert into bridge_conditional_submissions
           (title_id, submission_kind, status, submitted_by, metadata)
@@ -67,12 +67,8 @@ export const submitMalayalakkaraConditionalRequest = createServerFn({ method: "P
             scope: "ONE_TIME_SUBMISSION_ONLY",
           })}::jsonb
         )
-        on conflict (title_id, submission_kind) do nothing
         returning id::text, status
       `;
-      if (!record) {
-        throw new Error("A one-time conditional submission has already been recorded");
-      }
 
       await tx`
         insert into bridge_title_events
