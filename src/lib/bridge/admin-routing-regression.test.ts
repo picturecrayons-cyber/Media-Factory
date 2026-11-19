@@ -118,3 +118,34 @@ test("tracked Founder productions use exact canonical matches and reject ambiguo
   assert.match(readModel, /matchStatus: matches\.length === 0 \? "not_found" : matches\.length === 1 \? "found" : "ambiguous"/);
   assert.doesNotMatch(readModel, /limit 200|\.includes\(/);
 });
+
+
+test("Founder Centre shows Original IP records separately with real author, rights and review states", () => {
+  const dashboard = read("../../routes/dashboard.tsx");
+  const desk = read("../../components/bridge/story-concept-desk.tsx");
+  const api = read("./story-concept-api.ts");
+  assert.match(dashboard, /<StoryConceptDesk\s*\/>/);
+  assert.match(desk, /authorName/);
+  assert.match(desk, /editorial_status/);
+  assert.match(desk, /legal_status/);
+  assert.match(desk, /rights_declaration_accepted_at/);
+  assert.match(desk, /Save internal note/);
+  assert.match(api, /t\.submission_type = 'story_concept'/);
+  assert.match(api, /left join bridge_profiles p on p\.user_id = t\.owner_user_id/);
+  assert.match(api, /fee_certified_at/);
+  assert.match(api, /for update/);
+  assert.match(api, /treatment_url: null/);
+  assert.match(api, /adminNotes !== undefined/);
+});
+
+test("Story Concepts stay out of finished-film lists, admin review and buyer publication actions", () => {
+  const titles = read("./titles.ts");
+  const admin = read("./admin-workstations.ts");
+  assert.match(titles, /coalesce\(submission_type, 'finished_film'\) = 'finished_film'/);
+  assert.match(titles, /coalesce\(t\.submission_type, 'finished_film'\) = 'finished_film'/);
+  assert.match(titles, /title\.submissionType === "story_concept"/);
+  assert.match(titles, /Story \/ Concept records use the separate curation workflow/);
+  assert.match(admin, /coalesce\(submission_type, 'finished_film'\) = 'finished_film'/);
+  assert.match(admin, /Story \/ Concept records cannot enter the finished-film QC or rights lifecycle/);
+  assert.match(admin, /Story \/ Concept records cannot receive film publication gates/);
+});
