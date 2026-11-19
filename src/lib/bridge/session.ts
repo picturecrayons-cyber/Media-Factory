@@ -22,6 +22,7 @@ type BridgeProfileRow = {
   account_type: string;
   organization_name: string | null;
   organization_id: string | null;
+  organization_role: string | null;
   internal_role: string | null;
   email_verified: boolean;
 };
@@ -34,6 +35,7 @@ function mapRow(r: BridgeProfileRow): BridgeActor {
     accountType: r.account_type as AccountType,
     organizationName: r.organization_name,
     organizationId: r.organization_id,
+    organizationRole: r.organization_role,
     internalRole: (r.internal_role as InternalRole | null) ?? null,
     emailVerified: !!r.email_verified,
   };
@@ -46,7 +48,7 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   // In particular, the production super-admin profile is an independent_creator.
   const rows = await sql<BridgeProfileRow>`
     select bp.user_id, bp.email, bp.display_name, bp.account_type, bp.organization_name,
-      null::text as organization_id, bp.internal_role, bp.email_verified
+      null::text as organization_id, null::text as organization_role, bp.internal_role, bp.email_verified
     from bridge_profiles bp where bp.user_id = ${userId} limit 1
   `;
   if (!rows[0]) return null;
@@ -58,8 +60,8 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   // schema is absent, keep the profile available but do not grant organization
   // scope. Never infer an ID from organization_name or use another environment's ID.
   try {
-    const memberships = await sql<{ organization_id: string }>`
-      select bp.organization_id
+    const memberships = await sql<{ organization_id: string; membership_role: string }>`
+      select bp.organization_id, m.membership_role
       from bridge_profiles bp
       join bridge_organization_memberships m
         on m.organization_id = bp.organization_id
@@ -73,9 +75,11 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
       limit 1
     `;
     actor.organizationId = memberships[0]?.organization_id ?? null;
+    actor.organizationRole = memberships[0]?.membership_role ?? null;
   } catch (error) {
     if (!isMissingOrganizationSchemaError(error)) throw error;
     actor.organizationId = null;
+    actor.organizationRole = null;
     console.warn("[bridge-session] optional organization schema unavailable; profile loaded without organization scope", {
       code: workspaceFailureCode(error),
     });
