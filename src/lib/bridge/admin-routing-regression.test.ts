@@ -97,3 +97,129 @@ test("Open Titles permits authorised internal catalog readers without weakening 
   assert.match(rbac, /if \(actor\.internalRole\) return hasPermission\(actor, "title\.read_catalog"\)/);
   assert.match(rbac, /actor\.internalRole === "super_admin"/);
 });
+
+
+test("Founder dashboard reuses the verified Super Admin gate and refreshes live data", () => {
+  const dashboard = read("../../routes/dashboard.tsx");
+  assert.match(dashboard, /<RequireBridge allow="super_admin">/);
+  assert.doesNotMatch(dashboard, /getDashboardSession/);
+  assert.match(dashboard, /getFounderTrackedProductions\(\)/);
+  assert.match(dashboard, /refetchInterval: 30_000/);
+  assert.match(dashboard, /refetchOnWindowFocus: true/);
+  assert.match(dashboard, /to="\/title\/\$id"/);
+});
+
+test("tracked Founder productions use exact canonical matches and reject ambiguous records", () => {
+  const readModel = read("./founder-dashboard.ts");
+  assert.match(readModel, /requireVerifiedActor\(context\.userId\)/);
+  assert.match(readModel, /canAccessDashboard\(actor\)/);
+  assert.match(readModel, /lower\(trim\(t\.slug\)\) = any/);
+  assert.match(readModel, /regexp_replace\(lower\(trim\(t\.name\)\)/);
+  assert.match(readModel, /matchStatus: matches\.length === 0 \? "not_found" : matches\.length === 1 \? "found" : "ambiguous"/);
+  assert.doesNotMatch(readModel, /limit 200|\.includes\(/);
+});
+
+
+test("Founder Centre shows Original IP records separately with real author, rights and review states", () => {
+  const dashboard = read("../../routes/dashboard.tsx");
+  const desk = read("../../components/bridge/story-concept-desk.tsx");
+  const api = read("./story-concept-api.ts");
+  assert.match(dashboard, /<StoryConceptDesk\s*\/>/);
+  assert.match(desk, /authorName/);
+  assert.match(desk, /editorial_status/);
+  assert.match(desk, /legal_status/);
+  assert.match(desk, /rights_declaration_accepted_at/);
+  assert.match(desk, /Save internal note/);
+  assert.match(api, /t\.submission_type = 'story_concept'/);
+  assert.match(api, /left join bridge_profiles p on p\.user_id = t\.owner_user_id/);
+  assert.match(api, /fee_certified_at/);
+  assert.match(api, /for update/);
+  assert.match(api, /treatment_url: null/);
+  assert.match(api, /adminNotes !== undefined/);
+});
+
+test("Story Concepts stay out of finished-film lists, admin review and buyer publication actions", () => {
+  const titles = read("./titles.ts");
+  const admin = read("./admin-workstations.ts");
+  assert.match(titles, /coalesce\(submission_type, 'finished_film'\) = 'finished_film'/);
+  assert.match(titles, /coalesce\(t\.submission_type, 'finished_film'\) = 'finished_film'/);
+  assert.match(titles, /title\.submissionType === "story_concept"/);
+  assert.match(titles, /Story \/ Concept records use the separate curation workflow/);
+  assert.match(admin, /coalesce\(submission_type, 'finished_film'\) = 'finished_film'/);
+  assert.match(admin, /Story \/ Concept records cannot enter the finished-film QC or rights lifecycle/);
+  assert.match(admin, /Story \/ Concept records cannot receive film publication gates/);
+});
+
+
+test("Founder operations panel uses live Bridge payment, licensing and workflow aggregates", () => {
+  const dashboard = read("../../routes/dashboard.tsx");
+  const snapshot = read("./founder-dashboard.ts");
+  assert.match(dashboard, /getFounderOperationalSnapshot\(\)/);
+  assert.match(dashboard, /Payments, licensing & operations/);
+  assert.match(snapshot, /bridge_payments/);
+  assert.match(snapshot, /bridge_entitlements/);
+  assert.match(snapshot, /bridge_license_packages/);
+  assert.match(snapshot, /bridge_loop_publications/);
+  assert.match(snapshot, /bridge_qc_cases/);
+  assert.doesNotMatch(snapshot, /'provider_payment_id'|'user_id'|'s3_key'|'signed_url'/i);
+});
+
+test("Story Concept submissions require author rights declarations and avoid public document URLs", () => {
+  const api = read("./story-concept-api.ts");
+  const form = read("../../components/bridge/story-concept-form.tsx");
+  const ownerDesk = read("../../components/bridge/my-story-concepts.tsx");
+  const founderDesk = read("../../components/bridge/story-concept-desk.tsx");
+  assert.match(api, /rightsDeclarationAccepted: z\.literal\(true\)/);
+  assert.match(api, /rights_declaration_accepted_at = now\(\)/);
+  assert.match(api, /The author must submit their own rights declaration/);
+  assert.match(api, /story_concept\.rights_declaration/);
+  assert.match(form, /Author & rights declaration/);
+  assert.doesNotMatch(form, /Treatment URL|Screenplay URL/);
+  assert.match(ownerDesk, /Submit rights declaration/);
+  assert.doesNotMatch(ownerDesk, /to="\/title\/\$id"/);
+  assert.match(founderDesk, /Approval locked: rights declaration is not verified/);
+});
+
+
+test("Founder dashboard live modules use authoritative Bridge data sources", () => {
+  const dashboard = read("../../routes/dashboard.tsx");
+  const snapshot = read("./founder-dashboard.ts");
+  assert.match(dashboard, /Live module status/);
+  assert.match(dashboard, /formatProfiles\(operational\.profiles\)/);
+  assert.match(dashboard, /operational\.buyerInterest/);
+  assert.match(dashboard, /operational\.cmsRecords/);
+  assert.match(dashboard, /operational\.auditActivity/);
+  assert.match(dashboard, /operational\.ingestSessions/);
+  for (const table of [
+    "bridge_titles",
+    "bridge_assets",
+    "bridge_asset_versions",
+    "bridge_profiles",
+    "bridge_organizations",
+    "bridge_buyer_interest",
+    "bridge_buyer_title_access",
+    "bridge_invites",
+    "bridge_site_content",
+    "bridge_audit_logs",
+    "bridge_webhook_events",
+    "bridge_dit_ingest_sessions",
+    "bridge_financial_ledger",
+  ]) {
+    assert.match(snapshot, new RegExp(table));
+  }
+  assert.match(snapshot, /titleLanes/);
+});
+
+test("Auth session restoration has a finite timeout and server-verified cached token fallback", () => {
+  const client = read("../auth/client.ts");
+  const hook = read("../auth/use-current-user.ts");
+  assert.match(client, /SESSION_RESTORE_TIMEOUT_MS = 8_000/);
+  assert.match(client, /Promise\.race/);
+  assert.match(client, /getStoredSupabaseAccessToken/);
+  assert.match(client, /function still verifies it with Supabase Auth/);
+  const gate = read("../../components/bridge/gate.tsx");
+  assert.match(gate, /getBridgeSessionWithTimeout/);
+  assert.match(gate, /12_000/);
+  assert.match(hook, /normalize\(getStoredSupabaseUser\(\)\)/);
+  assert.match(hook, /isPending: !getStoredSupabaseUser\(\)/);
+});

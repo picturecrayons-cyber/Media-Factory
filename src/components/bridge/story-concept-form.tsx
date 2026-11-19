@@ -38,8 +38,10 @@ export function StoryConceptForm() {
   const [genre, setGenre] = useState<string[]>([]);
   const [targetPlatforms, setTargetPlatforms] = useState<string[]>([]);
   const [estimatedBudgetRange, setEstimatedBudgetRange] = useState("");
-  const [treatmentUrl, setTreatmentUrl] = useState("");
-  const [screenplayUrl, setScreenplayUrl] = useState("");
+  const [rightsHolderName, setRightsHolderName] = useState("");
+  const [rightsBasis, setRightsBasis] = useState("");
+  const [thirdPartyMaterialsIncluded, setThirdPartyMaterialsIncluded] = useState<boolean | null>(null);
+  const [rightsDeclarationAccepted, setRightsDeclarationAccepted] = useState(false);
 
   const mut = useMutation({
     mutationFn: () =>
@@ -52,13 +54,15 @@ export function StoryConceptForm() {
           genre,
           targetPlatforms,
           estimatedBudgetRange: estimatedBudgetRange || undefined,
-          treatmentUrl: treatmentUrl || undefined,
-          screenplayUrl: screenplayUrl || undefined,
+          rightsHolderName,
+          rightsBasis: rightsBasis as "ORIGINAL_AUTHOR" | "ASSIGNED" | "LICENSED" | "PUBLIC_DOMAIN" | "OTHER",
+          thirdPartyMaterialsIncluded: thirdPartyMaterialsIncluded === true,
+          rightsDeclarationAccepted: true,
         },
       }),
-    onSuccess: (res) => {
+    onSuccess: () => {
       toast("Story / Concept submitted for review");
-      void navigate({ to: "/title/$id", params: { id: res.titleId } });
+      void navigate({ to: "/workspace" });
     },
     onError: (err) =>
       toast(err instanceof Error ? err.message : "Could not submit concept"),
@@ -76,6 +80,10 @@ export function StoryConceptForm() {
     }
     if (synopsis.trim().length < 40) {
       toast("Synopsis must be at least 40 characters");
+      return;
+    }
+    if (!rightsHolderName.trim() || !rightsBasis || thirdPartyMaterialsIncluded === null || !rightsDeclarationAccepted) {
+      toast("Complete and accept the rights declaration before submitting");
       return;
     }
     mut.mutate();
@@ -177,27 +185,69 @@ export function StoryConceptForm() {
         </div>
       </div>
 
-      <label className="text-sm sm:col-span-2">
-        Treatment URL (optional)
-        <input
-          type="url"
-          value={treatmentUrl}
-          onChange={(e) => setTreatmentUrl(e.target.value)}
-          className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
-          placeholder="https://…"
-        />
-      </label>
+      <p className="text-xs text-muted sm:col-span-2">
+        Private treatment and screenplay uploads will be enabled only through Bridge-controlled storage. Do not paste public document links here.
+      </p>
 
-      <label className="text-sm sm:col-span-2">
-        Screenplay URL (optional)
-        <input
-          type="url"
-          value={screenplayUrl}
-          onChange={(e) => setScreenplayUrl(e.target.value)}
-          className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
-          placeholder="https://…"
-        />
-      </label>
+      <div className="sm:col-span-2 rounded-xl border border-line p-4">
+        <h3 className="text-sm font-semibold">Author & rights declaration</h3>
+        <p className="mt-1 text-xs leading-relaxed text-muted">
+          The author identity is linked to the signed-in Bridge Creator / Studio profile. Provide the rights holder and declaration for this story submission.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="text-sm">
+            Rights holder name
+            <input
+              required
+              value={rightsHolderName}
+              onChange={(e) => setRightsHolderName(e.target.value)}
+              maxLength={200}
+              className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
+              placeholder="Name of author / rights holder"
+            />
+          </label>
+          <label className="text-sm">
+            Rights basis
+            <select
+              required
+              value={rightsBasis}
+              onChange={(e) => setRightsBasis(e.target.value)}
+              className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
+            >
+              <option value="">Select rights basis</option>
+              <option value="ORIGINAL_AUTHOR">Original author</option>
+              <option value="ASSIGNED">Rights assigned</option>
+              <option value="LICENSED">Licensed rights</option>
+              <option value="PUBLIC_DOMAIN">Public domain</option>
+              <option value="OTHER">Other (requires legal review)</option>
+            </select>
+          </label>
+          <label className="text-sm sm:col-span-2">
+            Does this submission include third-party material?
+            <select
+              required
+              value={thirdPartyMaterialsIncluded === null ? "" : thirdPartyMaterialsIncluded ? "yes" : "no"}
+              onChange={(e) => setThirdPartyMaterialsIncluded(e.target.value === "" ? null : e.target.value === "yes")}
+              className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
+            >
+              <option value="">Select yes or no</option>
+              <option value="no">No third-party material</option>
+              <option value="yes">Yes, third-party material is included</option>
+            </select>
+          </label>
+          <label className="flex items-start gap-2 text-xs leading-relaxed text-muted sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={rightsDeclarationAccepted}
+              onChange={(e) => setRightsDeclarationAccepted(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              I confirm that the rights-holder and rights-basis information is accurate, and that I am the author / rights holder or have authority to submit this material for review. I understand this submission is not a film licence or a Loop publication.
+            </span>
+          </label>
+        </div>
+      </div>
 
       <div className="rounded-xl border border-line bg-elevated p-4 text-xs leading-relaxed text-muted sm:col-span-2">
         Submitting places this concept in the admin curation queue. It does not publish to
@@ -206,7 +256,11 @@ export function StoryConceptForm() {
       </div>
 
       <div className="sm:col-span-2">
-        <Button type="submit" disabled={mut.isPending} className="w-full rounded-full sm:w-auto sm:px-8">
+        <Button
+          type="submit"
+          disabled={mut.isPending || !rightsHolderName.trim() || !rightsBasis || thirdPartyMaterialsIncluded === null || !rightsDeclarationAccepted}
+          className="w-full rounded-full sm:w-auto sm:px-8"
+        >
           {mut.isPending ? "Submitting…" : "Submit to Network"}
         </Button>
       </div>
