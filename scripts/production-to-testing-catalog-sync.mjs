@@ -22,7 +22,8 @@ function required(name) {
 function assertDatabaseRef(name, expectedRef) {
   const raw = required(name);
   const parsed = new URL(raw);
-  if (!parsed.hostname.includes(expectedRef)) {
+  const identity = `${parsed.hostname} ${decodeURIComponent(parsed.username)}`;
+  if (!identity.includes(expectedRef)) {
     throw new Error(`${name} must point to approved project ${expectedRef}`);
   }
   return raw;
