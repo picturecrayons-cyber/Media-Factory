@@ -126,9 +126,9 @@ export const createOwnershipClaim = createServerFn({ method: "POST" })
     if (title.ownerUserId === actor.userId) {
       throw new Error("This title is already recorded under your account. Use its existing title workspace.");
     }
-    const producerCreditMatches = title.credits.some((credit) =>
-      credit.role.trim().toLowerCase() === "producer" &&
-      credit.name.toLowerCase().includes(data.producerEntityName.toLowerCase()),
+    const producerCreditMatches = (Array.isArray(title.credits) ? title.credits : []).some((credit) =>
+      String(credit.role || "").trim().toLowerCase() === "producer" &&
+      String(credit.name || "").toLowerCase().includes(data.producerEntityName.toLowerCase()),
     );
     if (!producerCreditMatches) {
       throw new Error("The named producer or business entity is not present in this title's Producer credits. A claim cannot be created from a title-name guess alone.");
@@ -302,14 +302,22 @@ export const submitOwnershipClaim = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertCreatorClaimant(actor);
     const sql = await getSql();
-    const claims = await sql<{ id: string; status: ClaimStatus }>`
-      select id, status from bridge_title_ownership_claims
+    const claims = await sql<{
+      id: string; status: ClaimStatus; title_id: string;
+      current_owner_user_id_snapshot: string;
+    }>`
+      select id, status, title_id, current_owner_user_id_snapshot
+      from bridge_title_ownership_claims
       where id = ${data.claimId} and claimant_user_id = ${actor.userId}
       limit 1
     `;
     const claim = claims[0];
     if (!claim || !["DRAFT", "NEEDS_INFORMATION"].includes(claim.status)) {
       throw new Error("This claim cannot be submitted in its current state.");
+    }
+    const currentTitle = await loadTitle(claim.title_id);
+    if (!currentTitle || currentTitle.ownerUserId !== claim.current_owner_user_id_snapshot) {
+      throw new Error("The recorded title owner changed while this claim was being prepared. Stop submission and reconcile the title record.");
     }
     const evidence = await sql<{ category: string; count: number }>`
       select category, count(*)::int as count
@@ -399,7 +407,7 @@ export const listOwnershipClaimsForReview = createServerFn({ method: "GET" })
     const sql = await getSql();
     const claims = await sql<ClaimRow>`
       select c.id, c.title_id, c.claimant_user_id, c.current_owner_user_id_snapshot,
-        c.producer_entity_name, c.claimant_capacity, c.claim_basis, c.status,
+        c.producer_entity_name, c.claimant_capacity, c.claim_basis, c.declaration_text, c.status,
         c.legal_decision, c.created_at, c.updated_at,
         t.name as title_name, t.status as title_status,
         p.display_name as claimant_display_name
@@ -428,6 +436,7 @@ export const listOwnershipClaimsForReview = createServerFn({ method: "GET" })
         titleName: claim.title_name,
         titleStatus: claim.title_status,
         claimantDisplayName: claim.claimant_display_name,
+        declarationText: claim.declaration_text,
         ownerMismatch: claim.current_owner_user_id_snapshot !== claim.claimant_user_id,
         producerEntityName: claim.producer_entity_name,
         claimantCapacity: claim.claimant_capacity,
@@ -464,7 +473,9 @@ export const requestOwnershipClaimEvidenceDownload = createServerFn({ method: "P
     `;
     const evidence = rows[0];
     if (!evidence || evidence.status !== "VERIFIED") throw new Error("Evidence not found.");
-    const claimant = evidence.claimant_user_id === actor.userId && actor.internalRole === null;
+    const claimant = evidence.claimant_user_id === actor.userId &&
+      actor.accountType === "independent_creator" &&
+      actor.internalRole === null;
     const reviewer = actor.internalRole === "super_admin" || actor.internalRole === "legal_reviewer";
     if (!claimant && !reviewer) throw new Error("Not found.");
     const { signDownload } = await import("./oci-object-storage.server");
@@ -626,15 +637,15 @@ export const searchOwnershipClaimTargets = createServerFn({ method: "GET" })
         t.id,
         t.name,
         t.status,
-        producer_credit->>'name' as producer_credit
+        credit.item->>'name' as producer_credit
       from bridge_titles t
       cross join lateral jsonb_array_elements(
         case when jsonb_typeof(t.credits) = 'array' then t.credits else '[]'::jsonb end
-      ) as producer_credit
+      ) as credit(item)
       where t.name ilike ${titlePattern}
         and t.status in ('RIGHTS_REVIEW','LICENSING_READY','LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-        and lower(coalesce(producer_credit->>'role','')) = 'producer'
-        and producer_credit->>'name' ilike ${producerPattern}
+        and lower(coalesce(credit.item->>'role','')) = 'producer'
+        and credit.item->>'name' ilike ${producerPattern}
       order by t.updated_at desc
       limit 20
     `;
