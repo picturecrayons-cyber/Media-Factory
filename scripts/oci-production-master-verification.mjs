@@ -81,13 +81,14 @@ try {
   }
 
   assert.ok(candidates.length > 0, "No existing master candidates found; refusing an empty verification");
+  report.totals.candidates = candidates.length;
   for (const title of TITLES) {
     const titleCandidates = candidates.filter((row) => row.title_id === title.id);
     const titleReport = {
       titleId: title.id,
       titleName: title.name,
       candidateCount: titleCandidates.length,
-      canonicalMasterLinked: false,
+      canonicalMasterLinked: Boolean(titleRows.rows.find((row) => row.id === title.id)?.master_key),
       objects: [],
     };
     for (const candidate of titleCandidates) {
@@ -129,7 +130,6 @@ try {
         });
         report.totals[missing ? "missing" : "errors"]++;
       }
-      report.totals.candidates++;
     }
     report.titles.push(titleReport);
   }
