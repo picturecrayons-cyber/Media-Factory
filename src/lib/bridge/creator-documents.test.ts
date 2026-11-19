@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sameOwner, isSupportedCreatorDocumentMimeType, hasPdfMagicBytes, canDownloadCreatorDocument } from "./creator-document-policy.ts";
+import { sameOwner, isSupportedCreatorDocumentMimeType, hasPdfMagicBytes, canDownloadCreatorDocument, canManageStudioDocuments } from "./creator-document-policy.ts";
 
 test("Creator document vault is isolated to the owning Creator account", () => {
   const document = {
@@ -23,6 +23,14 @@ test("Studio document access requires the exact active organization scope", () =
   assert.equal(sameOwner({ userId: "studio-member-a", accountType: "studio", organizationId: "org-b" }, document), false);
   assert.equal(sameOwner({ userId: "studio-member-a", accountType: "studio" }, document), false);
   assert.equal(sameOwner({ userId: "studio-member-a", accountType: "independent_creator", organizationId: "org-a" }, document), false);
+});
+
+test("only an active Studio owner can manage reusable organization documents", () => {
+  assert.equal(canManageStudioDocuments({ accountType: "studio", organizationId: "org-a", organizationRole: "owner" }), true);
+  assert.equal(canManageStudioDocuments({ accountType: "studio", organizationId: "org-a", organizationRole: "member" }), false);
+  assert.equal(canManageStudioDocuments({ accountType: "studio", organizationId: "org-a", organizationRole: null }), false);
+  assert.equal(canManageStudioDocuments({ accountType: "studio", organizationId: null, organizationRole: "owner" }), false);
+  assert.equal(canManageStudioDocuments({ accountType: "independent_creator" }), true);
 });
 
 test("legal evidence upload accepts PDF only", () => {
