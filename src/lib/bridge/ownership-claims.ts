@@ -126,6 +126,13 @@ export const createOwnershipClaim = createServerFn({ method: "POST" })
     if (title.ownerUserId === actor.userId) {
       throw new Error("This title is already recorded under your account. Use its existing title workspace.");
     }
+    const producerCreditMatches = title.credits.some((credit) =>
+      credit.role.trim().toLowerCase() === "producer" &&
+      credit.name.toLowerCase().includes(data.producerEntityName.toLowerCase()),
+    );
+    if (!producerCreditMatches) {
+      throw new Error("The named producer or business entity is not present in this title's Producer credits. A claim cannot be created from a title-name guess alone.");
+    }
     const sql = await getSql();
     const existing = await sql<{ id: string }>`
       select id from bridge_title_ownership_claims
@@ -260,12 +267,19 @@ export const confirmOwnershipClaimEvidenceUpload = createServerFn({ method: "POS
     if (sealed.byteSize !== source.byteSize || !sealed.etag || sealed.contentType !== evidence.content_type) {
       throw new Error("Sealed evidence object does not match the uploaded document.");
     }
-    await sql`
-      update bridge_title_ownership_claim_evidence
+    const persisted = await sql<{ id: string }>`
+      update bridge_title_ownership_claim_evidence e
       set object_key = ${sealedKey}, object_etag = ${sealed.etag},
           status = 'VERIFIED', verified_at = now()
-      where id = ${evidence.id} and status = 'PENDING_UPLOAD'
+      where e.id = ${evidence.id}
+        and e.status = 'PENDING_UPLOAD'
+        and exists (
+          select 1 from bridge_title_ownership_claims c
+          where c.id = e.claim_id and c.status in ('DRAFT','NEEDS_INFORMATION')
+        )
+      returning e.id
     `;
+    if (!persisted[0]) throw new Error("The claim was closed while this upload was being verified.");
     await insertClaimEvent(sql, data.claimId, actor.userId, "EVIDENCE_VERIFIED", undefined, {
       evidenceId: evidence.id,
       byteSize: sealed.byteSize,
@@ -455,6 +469,13 @@ export const requestOwnershipClaimEvidenceDownload = createServerFn({ method: "P
     if (!claimant && !reviewer) throw new Error("Not found.");
     const { signDownload } = await import("./oci-object-storage.server");
     const signed = await signDownload({ key: evidence.object_key, expiresIn: 300 });
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "title.ownership_claim_evidence_download_signed",
+      entityType: "bridge_title_ownership_claim_evidence",
+      entityId: evidence.id,
+      metadata: { claimId: data.claimId, expiresInSeconds: 300 },
+    });
     return { url: signed.url, expiresInSeconds: 300 };
   });
 
