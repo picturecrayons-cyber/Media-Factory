@@ -85,6 +85,8 @@ export type Actor = {
   internalRole: InternalRole | null;
   /** Server-resolved organization scope for Studio account collaboration. */
   organizationId?: string | null;
+  /** Active membership role; never inferred from the profile account type. */
+  organizationRole?: string | null;
 };
 
 const TRANSITION_PERMISSION: Record<string, Permission> = {
