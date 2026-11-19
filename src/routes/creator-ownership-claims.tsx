@@ -3,13 +3,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listTitles } from "@/lib/bridge/titles";
 import {
   createOwnershipClaim,
   listMyOwnershipClaims,
   requestOwnershipClaimEvidenceUpload,
   confirmOwnershipClaimEvidenceUpload,
   submitOwnershipClaim,
+  searchOwnershipClaimTargets,
 } from "@/lib/bridge/ownership-claims";
 
 export const Route = createFileRoute("/creator-ownership-claims")({
@@ -43,9 +43,9 @@ function CreatorOwnershipClaims() {
 
 function OwnershipClaimsBody({ actorUserId }: { actorUserId: string }) {
   const qc = useQueryClient();
-  const titlesQ = useQuery({ queryKey: ["bridge-titles", actorUserId], queryFn: () => listTitles(), retry: 1 });
   const claimsQ = useQuery({ queryKey: ["my-ownership-claims"], queryFn: () => listMyOwnershipClaims(), retry: 1 });
   const [titleId, setTitleId] = useState("");
+  const [titleSearchQuery, setTitleSearchQuery] = useState("");
   const [producerEntityName, setProducerEntityName] = useState("");
   const [claimantCapacity, setClaimantCapacity] = useState("PRODUCER");
   const [claimBasis, setClaimBasis] = useState("SOLE_NEGATIVE_RIGHTS");
@@ -63,6 +63,18 @@ function OwnershipClaimsBody({ actorUserId }: { actorUserId: string }) {
       claims.find((claim) => claim.status === "DRAFT" || claim.status === "NEEDS_INFORMATION"),
     [claims, activeClaimId],
   );
+
+  const searchMutation = useMutation({
+    mutationFn: () => searchOwnershipClaimTargets({ data: {
+      titleNameQuery: titleSearchQuery,
+      producerEntityName,
+    } }),
+    onSuccess: () => {
+      setTitleId("");
+      setError(null);
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "No matching Producer-credit title was found."),
+  });
 
   const createMutation = useMutation({
     mutationFn: () => createOwnershipClaim({ data: {
@@ -142,17 +154,37 @@ function OwnershipClaimsBody({ actorUserId }: { actorUserId: string }) {
         <p className="mt-1 text-sm text-muted">The title owner shown by Bridge remains unchanged while this claim is reviewed.</p>
         <form className="mt-5 grid gap-4" onSubmit={(event) => { event.preventDefault(); createMutation.mutate(); }}>
           <label className="grid gap-1.5 text-sm">
-            <span className="font-medium">Title record</span>
-            <select className="rounded-md border border-line bg-bg px-3 py-2" value={titleId} onChange={(event) => setTitleId(event.target.value)} required>
-              <option value="">Select the title</option>
-              {(titlesQ.data?.titles ?? []).map((title) => <option key={title.id} value={title.id}>{title.name} · {title.status}</option>)}
-            </select>
-            {titlesQ.isError ? <span className="text-xs text-accent">Your title list could not be loaded. Refresh and retry.</span> : null}
-          </label>
-          <label className="grid gap-1.5 text-sm">
             <span className="font-medium">Producer / business entity named in the documents</span>
-            <input className="rounded-md border border-line bg-bg px-3 py-2" value={producerEntityName} onChange={(event) => setProducerEntityName(event.target.value)} maxLength={200} required />
+            <input className="rounded-md border border-line bg-bg px-3 py-2" value={producerEntityName} onChange={(event) => { setProducerEntityName(event.target.value); setTitleId(""); }} maxLength={200} required />
           </label>
+          <div className="grid gap-2 text-sm">
+            <label className="grid gap-1.5">
+              <span className="font-medium">Search for the title</span>
+              <input className="rounded-md border border-line bg-bg px-3 py-2" value={titleSearchQuery} onChange={(event) => { setTitleSearchQuery(event.target.value); setTitleId(""); }} maxLength={160} placeholder="Enter the film title" />
+            </label>
+            <p className="text-xs text-muted">This search uses the Producer credit only to locate a candidate title. It does not verify ownership or reveal original assets.</p>
+            <button type="button" disabled={searchMutation.isPending || titleSearchQuery.trim().length < 3 || producerEntityName.trim().length < 3} onClick={() => searchMutation.mutate()} className="w-fit rounded-full border border-line px-4 py-2 text-sm font-semibold disabled:opacity-40">
+              {searchMutation.isPending ? "Searching…" : "Find title"}
+            </button>
+            {searchMutation.data?.titles?.length ? (
+              <ul className="divide-y divide-line rounded-lg border border-line">
+                {searchMutation.data.titles.map((candidate) => (
+                  <li key={candidate.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
+                    <div>
+                      <p className="font-medium">{candidate.name}</p>
+                      <p className="text-xs text-muted">Producer credit: {candidate.producerCredit} · {candidate.status}</p>
+                    </div>
+                    <button type="button" onClick={() => setTitleId(candidate.id)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${titleId === candidate.id ? "bg-accent text-bg" : "border border-line"}`}>
+                      {titleId === candidate.id ? "Selected" : "Use this title"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : searchMutation.isSuccess ? (
+              <p className="text-xs text-muted">No title matched both the title search and Producer credit. No title or asset access was granted.</p>
+            ) : null}
+            {titleId ? <p className="text-xs text-accent">Title candidate selected for a claim. The existing title owner remains unchanged.</p> : null}
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">Your relationship to the title</span>
@@ -183,7 +215,7 @@ function OwnershipClaimsBody({ actorUserId }: { actorUserId: string }) {
             <input type="checkbox" checked={attested} onChange={(event) => setAttested(event.target.checked)} required className="mt-1" />
             <span>I confirm this statement is accurate to the best of my knowledge and that I have disclosed known assignments, excluded rights and disputes.</span>
           </label>
-          <button type="submit" disabled={createMutation.isPending || !attested || !titleId || declarationText.trim().length < 80} className="w-fit rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50">
+          <button type="submit" disabled={createMutation.isPending || !attested || !titleId || !producerEntityName.trim() || declarationText.trim().length < 80} className="w-fit rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50">
             {createMutation.isPending ? "Saving…" : "Save draft claim"}
           </button>
         </form>
