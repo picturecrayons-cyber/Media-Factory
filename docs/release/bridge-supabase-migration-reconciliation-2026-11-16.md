@@ -2,15 +2,15 @@
 
 - Source: Supabase Production `supabase_migrations.schema_migrations`.
 - Project ref: `mlmgugivsyoxzdgwkbpu`.
-- Snapshot date: 2026-11-18.
-- Recorded remote migrations restored to active `supabase/migrations/`: **70**.
-- SQL bytes: **144632**.
+- Snapshot date: 2026-11-20.
+- Recorded remote migrations restored to active `supabase/migrations/`: **71**.
+- SQL bytes: **147743**.
 - Every active SQL file now preserves the exact stored statement text joined with LF, including all trailing spaces and newline characters. No trailing-whitespace normalization is performed. SHA-256 values are calculated from the same exact stored statement text.
 - The additive `bridge_master_language` migration (version `20261118123335`) was applied to canonical Production project `mlmgugivsyoxzdgwkbpu`. Read-back confirmed the column exists; all 42 existing title rows retain `master_language = NULL`. No `language` values, title rows, asset rows, or OCI objects were changed.
 - The local replay temporarily removes the active migrations directory while `supabase start` bootstraps managed services, then restores it for the script's controlled one-by-one replay. The script asserts that the local Supabase migration ledger is still empty before applying the 70 files itself.
 - Production catalog read-back confirms RLS is enabled on every `public.bridge_%` table. Four core client-readable tables also have explicit `authenticated` SELECT-only identity/owner policies: `bridge_profiles_self_select`, `bridge_titles_owner_or_buyer_select`, `bridge_identity_links_self_select`, and `bridge_buyer_title_access_self_select`. Because the 70 SQL statements do not fully capture this current baseline, the local replay reconstructs the verified RLS/GRANT/policy state after the 69 migrations. It enables RLS on all local `public.bridge_%` tables and asserts that none remain unprotected, and verifies that each core policy is restricted to `authenticated`, binds to `auth.uid()`, and enforces the correct self/owner/buyer relation. These statements execute only against the disposable local CI database; they do not change Production.
 - CI pins the disposable local Supabase API/database/shadow ports to `55431`/`55432`/`55430` in `supabase/config.toml` to avoid runner port collisions. The replay script accepts only local Postgres at `127.0.0.1:55432/postgres` and rejects every other host/port.
-- Production contains a pre-ledger parental-controls baseline absent from the 70 recorded SQL statements: `public.loop_parental_controls`, its RLS deny policy, lock index, and `public.loop_parental_controls_set_updated_at()` function/BEFORE UPDATE trigger. The live table has one row; replay recreates only its schema/security baseline locally, never the row.
+- Production contains a pre-ledger parental-controls baseline absent from the 71 recorded SQL statements: `public.loop_parental_controls`, its RLS deny policy, lock index, and `public.loop_parental_controls_set_updated_at()` function/BEFORE UPDATE trigger. The live table has one row; replay recreates only its schema/security baseline locally, never the row.
 - Production also contains a pre-ledger Delivery Desk table `public.bridge_delivery_jobs`, absent from the 70 recorded SQL statements. Read-only catalog checks confirmed its UUID primary key, cascading title FK, job type/status checks, indexes, RLS enabled, and authenticated-only `private.bridge_is_internal()` policy. It currently has zero rows. The replay script recreates only this empty table/security baseline before migration `20261114135437_bridge_delivery_job_ownership_20261114` adds requester fields and its index; no Production rows are copied.
 - Production also contains a pre-ledger Story/Concept baseline absent from the 70 recorded SQL statements: `bridge_titles.submission_type`, `public.bridge_story_concept_submissions`, and `public.bridge_buyer_interest`. Production read-back confirmed the Story/Concept table's two RLS policies (anonymous deny and authenticated owner-only), its schema/indexes/constraints, and a row count of three. The 13 November recorded migration `20261113090257_bridge_story_concept_nonrow_privileges_20261113` later removes TRUNCATE/REFERENCES/TRIGGER client privileges from that table. Replay recreates the schema, policy, and role-grant baseline locally before that recorded migration; no Production Story/Concept rows or buyer-interest rows are copied.
 
@@ -88,6 +88,7 @@
 | 20261115165233 | bridge_production_owner_helper_revoke_anon | 155 | `d4a980b33b895324231304f17fbaf912043d5659c6cf43e78421a00ed568a71e` |
 | 20261116090923 | bridge_title_owner_helper_search_path_hardening_20261116 | 824 | `486eba102805b78a28a4509466eecab3f2557cb4093dac20d619f51c6a946fba` |
 | 20261118123335 | bridge_master_language | 459 | `3a22cd57e41d7b0cbf0a40489c9b448981a9540bec672b0be34768213fc6b53c` |
+| 20261119203855 | bridge_story_concept_author_rights_declaration_20261120 | 3111 | `b58f7dfc507353841ae1a51fc8d4a1b785f6db8c3b65350103aa2860a1cb0ad0` |
 
 ## Previously committed files
 
