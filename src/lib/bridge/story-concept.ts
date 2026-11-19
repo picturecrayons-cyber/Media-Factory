@@ -10,7 +10,10 @@ export type CurationStatus =
   | "UNDER_REVIEW"
   | "APPROVED"
   | "REJECTED"
-  | "INTRODUCED_TO_BUYERS";
+  | "INTRODUCED_TO_BUYERS"
+  | "PENDING_REVIEW"
+  | "CHANGES_REQUESTED"
+  | "BUYER_EVALUATION_APPROVED";
 
 export type BuyerInterestLevel =
   | "VIEWED"
@@ -53,6 +56,22 @@ export interface StoryConceptSubmission {
   introduced_to_buyers_at: string | null;
   created_at: string;
   updated_at: string;
+  rights_holder_name?: string | null;
+  rights_basis?: string | null;
+  third_party_materials_included?: boolean | null;
+  rights_declaration_accepted_at?: string | null;
+  rights_declaration_version?: string | null;
+  editorial_status?: string;
+  editorial_reviewed_by?: string | null;
+  editorial_reviewed_at?: string | null;
+  editorial_review_notes?: string | null;
+  legal_status?: string;
+  legal_reviewed_by?: string | null;
+  legal_reviewed_at?: string | null;
+  legal_review_notes?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  fee_certified_at?: string | null;
 }
 
 export interface BuyerInterest {
@@ -78,7 +97,10 @@ export interface CreateStoryConceptPayload {
 export const CURATION_TRANSITIONS: Record<CurationStatus, CurationStatus[]> = {
   PENDING: ["UNDER_REVIEW", "APPROVED", "REJECTED"],
   UNDER_REVIEW: ["APPROVED", "REJECTED", "PENDING"],
-  APPROVED: ["INTRODUCED_TO_BUYERS", "UNDER_REVIEW"],
-  REJECTED: ["UNDER_REVIEW", "PENDING"],
+  APPROVED: ["UNDER_REVIEW", "INTRODUCED_TO_BUYERS", "BUYER_EVALUATION_APPROVED", "CHANGES_REQUESTED", "REJECTED"],
+  REJECTED: ["UNDER_REVIEW", "PENDING", "PENDING_REVIEW"],
   INTRODUCED_TO_BUYERS: [],
+  PENDING_REVIEW: ["UNDER_REVIEW", "APPROVED", "CHANGES_REQUESTED", "REJECTED"],
+  CHANGES_REQUESTED: ["PENDING_REVIEW", "REJECTED"],
+  BUYER_EVALUATION_APPROVED: ["APPROVED", "REJECTED"],
 };
