@@ -34,6 +34,22 @@ type ConceptRow = {
   introduced_to_buyers_at: string | Date | null;
   created_at: string | Date;
   updated_at: string | Date;
+  rights_holder_name?: string | null;
+  rights_basis?: string | null;
+  third_party_materials_included?: boolean | null;
+  rights_declaration_accepted_at?: string | Date | null;
+  rights_declaration_version?: string | null;
+  editorial_status?: string;
+  editorial_reviewed_by?: string | null;
+  editorial_reviewed_at?: string | Date | null;
+  editorial_review_notes?: string | null;
+  legal_status?: string;
+  legal_reviewed_by?: string | null;
+  legal_reviewed_at?: string | Date | null;
+  legal_review_notes?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | Date | null;
+  fee_certified_at?: string | Date | null;
 };
 
 function asIso(v: string | Date | null | undefined): string | null {
@@ -47,8 +63,9 @@ function mapConcept(r: ConceptRow): StoryConceptSubmission {
     title_id: r.title_id,
     logline: r.logline,
     synopsis: r.synopsis,
-    treatment_url: r.treatment_url,
-    screenplay_url: r.screenplay_url,
+    // External treatment/screenplay URLs are not exposed by the Founder desk.
+    treatment_url: null,
+    screenplay_url: null,
     genre: r.genre ?? [],
     estimated_budget_range: r.estimated_budget_range,
     target_platforms: r.target_platforms ?? [],
@@ -57,6 +74,22 @@ function mapConcept(r: ConceptRow): StoryConceptSubmission {
     introduced_to_buyers_at: asIso(r.introduced_to_buyers_at),
     created_at: asIso(r.created_at) ?? "",
     updated_at: asIso(r.updated_at) ?? "",
+    rights_holder_name: r.rights_holder_name ?? null,
+    rights_basis: r.rights_basis ?? null,
+    third_party_materials_included: r.third_party_materials_included ?? null,
+    rights_declaration_accepted_at: asIso(r.rights_declaration_accepted_at),
+    rights_declaration_version: r.rights_declaration_version ?? null,
+    editorial_status: r.editorial_status ?? "NOT_AVAILABLE",
+    editorial_reviewed_by: r.editorial_reviewed_by ?? null,
+    editorial_reviewed_at: asIso(r.editorial_reviewed_at),
+    editorial_review_notes: r.editorial_review_notes ?? null,
+    legal_status: r.legal_status ?? "NOT_AVAILABLE",
+    legal_reviewed_by: r.legal_reviewed_by ?? null,
+    legal_reviewed_at: asIso(r.legal_reviewed_at),
+    legal_review_notes: r.legal_review_notes ?? null,
+    reviewed_by: r.reviewed_by ?? null,
+    reviewed_at: asIso(r.reviewed_at),
+    fee_certified_at: asIso(r.fee_certified_at),
   };
 }
 
@@ -192,12 +225,15 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
-           or (
-             t.owner_account_type = 'studio'
-             and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
-           )
+        where t.submission_type = 'story_concept'
+          and (
+            t.owner_user_id = ${actor.userId}
+            or (
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id is not null
+              and t.owner_organization_id = ${actor.organizationId ?? null}
+            )
+          )
         order by c.created_at desc
         limit 100
       `;
@@ -217,7 +253,7 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     }
   });
 
-export const listPendingStoryConcepts = createServerFn({ method: "GET" })
+export const listPendingStoryConcepts = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
@@ -226,12 +262,28 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
 
     const sql = await getSql();
     try {
-      const rows = await sql<ConceptRow & { title_name: string; owner_user_id: string }>`
-        select c.*, t.name as title_name, t.owner_user_id
+      const rows = await sql<
+        ConceptRow & {
+          title_name: string;
+          owner_user_id: string;
+          owner_account_type: string;
+          author_name: string | null;
+          author_organization_name: string | null;
+        }
+      >`
+        select
+          c.*,
+          t.name as title_name,
+          t.owner_user_id,
+          t.owner_account_type,
+          p.display_name as author_name,
+          p.organization_name as author_organization_name
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
-        order by c.created_at asc
+        left join bridge_profiles p on p.user_id = t.owner_user_id
+        where t.submission_type = 'story_concept'
+          and c.curation_status <> 'REJECTED'
+        order by c.created_at desc
         limit 200
       `;
 
@@ -240,6 +292,9 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
           ...mapConcept(r),
           titleName: r.title_name,
           ownerUserId: r.owner_user_id,
+          ownerAccountType: r.owner_account_type,
+          authorName: r.author_name,
+          authorOrganizationName: r.author_organization_name,
         })),
       };
     } catch (err) {
@@ -252,8 +307,19 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
   .validator(
     z.object({
       id: z.string().uuid(),
-      status: z.enum(["PENDING", "UNDER_REVIEW", "APPROVED", "REJECTED", "INTRODUCED_TO_BUYERS"]),
+      status: z.enum([
+        "PENDING",
+        "UNDER_REVIEW",
+        "APPROVED",
+        "REJECTED",
+        "INTRODUCED_TO_BUYERS",
+        "PENDING_REVIEW",
+        "CHANGES_REQUESTED",
+        "BUYER_EVALUATION_APPROVED",
+      ]).optional(),
       adminNotes: z.string().max(2000).optional(),
+    }).refine((value) => value.status !== undefined || value.adminNotes !== undefined, {
+      message: "A status decision or internal note is required",
     }),
   )
   .handler(async ({ context, data }) => {
@@ -262,46 +328,71 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
     requireCurationStaff(actor);
 
     const sql = await getSql();
-    try {
-      const existing = await sql<ConceptRow>`
-        select * from bridge_story_concept_submissions where id = ${data.id} limit 1
+    return sql.transaction(async (tx) => {
+      const existing = await tx<ConceptRow>`
+        select * from bridge_story_concept_submissions
+        where id = ${data.id}
+        for update
       `;
       const current = existing[0];
       if (!current) throw new Error("Not found");
 
       const from = current.curation_status as CurationStatus;
-      const allowed = CURATION_TRANSITIONS[from] ?? [];
-      if (!allowed.includes(data.status)) {
-        throw new Error(`Invalid curation transition: ${from} → ${data.status}`);
+      const nextStatus = data.status ?? from;
+      if (data.status && data.status !== from) {
+        const allowed = CURATION_TRANSITIONS[from] ?? [];
+        if (!allowed.includes(data.status)) {
+          throw new Error(`Invalid curation transition: ${from} → ${data.status}`);
+        }
       }
 
-      const rows = await sql<ConceptRow>`
+      if (
+        (nextStatus === "INTRODUCED_TO_BUYERS" || nextStatus === "BUYER_EVALUATION_APPROVED") &&
+        !current.fee_certified_at
+      ) {
+        throw new Error("Fee certification is required before buyer / investor evaluation can be unlocked");
+      }
+
+      const rows = await tx<ConceptRow>`
         update bridge_story_concept_submissions
         set
-          curation_status = ${data.status},
-          admin_notes = ${data.adminNotes ?? null},
+          curation_status = ${nextStatus},
+          admin_notes = case
+            when ${data.adminNotes !== undefined} then ${data.adminNotes ?? null}
+            else admin_notes
+          end,
+          reviewed_by = case
+            when ${data.status !== undefined} then ${actor.userId}
+            else reviewed_by
+          end,
+          reviewed_at = case
+            when ${data.status !== undefined} then now()
+            else reviewed_at
+          end,
           updated_at = now(),
           introduced_to_buyers_at = case
-            when ${data.status} = 'INTRODUCED_TO_BUYERS' then coalesce(introduced_to_buyers_at, now())
+            when ${nextStatus} in ('INTRODUCED_TO_BUYERS', 'BUYER_EVALUATION_APPROVED')
+              then coalesce(introduced_to_buyers_at, now())
             else introduced_to_buyers_at
           end
         where id = ${data.id}
         returning *
       `;
-
       const concept = rows[0];
       if (!concept) throw new Error("Not found");
 
       await writeAudit({
         actorUserId: actor.userId,
-        action: "story_concept.curation_update",
+        action: data.status === undefined ? "story_concept.internal_note" : "story_concept.curation_update",
         entityType: "bridge_story_concept_submission",
         entityId: concept.id,
-        metadata: { from, status: data.status },
-      });
+        metadata: {
+          from,
+          status: nextStatus,
+          noteUpdated: data.adminNotes !== undefined,
+        },
+      }, tx);
 
       return { concept: mapConcept(concept) };
-    } catch (err) {
-      migrationHint(err);
-    }
+    });
   });
