@@ -5,6 +5,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { getFounderTrackedProductions } from "@/lib/bridge/founder-dashboard";
+import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -296,6 +297,8 @@ function DashboardBody() {
           </div>
         )}
       </section>
+
+      <StoryConceptDesk />
 
       <section aria-labelledby="workspaces-title" className="space-y-3">
         <div>
