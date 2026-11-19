@@ -43,7 +43,7 @@ function harness(options: { role?: string } = {}) {
     "./guards": { assertNotDevUser: (id: string) => {
       if (id === "dev-user") throw Error("Mock/dev authorization is disabled");
     } },
-    "./session": { requireVerifiedActor: async () => ({
+    "./session": { resolveBridgeUserId: async (id: string) => id === "auth-user-1" ? "admin-1" : id, requireVerifiedActor: async () => ({
       userId: "admin-1", emailVerified: true, internalRole: options.role ?? "super_admin",
     }) },
   };
@@ -52,12 +52,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
-import { requireVerifiedActor } from "./session";
+import { requireVerifiedActor, resolveBridgeUserId } from "./session";
 export const listSuperAdminBuyerManagement = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const bridgeUserId = await resolveBridgeUserId(context.userId);
+    const actor = await requireVerifiedActor(bridgeUserId);
     if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
     const sql = await getSql();
     const [buyers, organizations, packages, payments, entitlements, audit] = await Promise.all([
