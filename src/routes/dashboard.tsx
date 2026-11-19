@@ -327,6 +327,11 @@ function DashboardBody() {
               <p className="mt-2 text-xs text-muted">QC: {formatStatuses(operational.qc)}</p>
               <p className="mt-1 text-xs text-muted">Legal: {formatStatuses(operational.legal)}</p>
               <p className="mt-1 text-xs text-muted">Rights: {formatStatuses(operational.rights)}</p>
+              <p className="mt-2 text-xs font-semibold text-accent">
+                Awaiting QC: {countByStatus(operational.qc, (status) => /pending|review|submitted|open/.test(status))}
+                {" · "}Legal: {countByStatus(operational.legal, (status) => /pending|review|submitted|open/.test(status))}
+                {" · "}Rights: {countByStatus(operational.rights, (status) => /pending|review|submitted|open/.test(status))}
+              </p>
               <Link to="/admin/workstations" className="mt-3 inline-flex text-xs font-semibold text-accent hover:underline">Open review workstations →</Link>
             </article>
             <article className="rounded-sm border border-line p-4">
@@ -365,6 +370,8 @@ function DashboardBody() {
               <p className="mt-2 text-xs text-muted">Recent audit activity: {operational.auditActivity.map((item) => `${item.action}: ${item.count}`).join(" · ") || "No recent audit events"}</p>
               <p className="mt-1 text-xs text-muted">Webhook processing: {formatStatuses(operational.webhooks)}</p>
               <p className="mt-1 text-xs text-muted">Failed webhooks: {countByStatus(operational.webhooks, (status) => /fail|error|dead/.test(status))}</p>
+              <p className="mt-1 text-xs text-muted">Failed ingest: {countByStatus(operational.ingestSessions, (status) => /fail|error|rejected/.test(status))}</p>
+              <p className="mt-1 text-xs text-muted">Failed service orders: {countByStatus(operational.serviceOrders, (status) => /fail|error|cancelled/.test(status))}</p>
               <Link to="/admin/workstations" className="mt-3 inline-flex text-xs font-semibold text-accent hover:underline">Open operational review →</Link>
             </article>
           </div>
