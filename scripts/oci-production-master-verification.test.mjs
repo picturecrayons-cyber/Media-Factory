@@ -34,15 +34,28 @@ for (const [label, url] of [
     let poolConstructed = false;
     class SpyPool { constructor() { poolConstructed = true; } }
     assert.throws(() => createGuardedProductionPool(SpyPool, api, url, ref), /forbidden target override/);
-    assert.equal(poolConstructed, false, "Pool constructor must never run for an overridden target");
+    assert.equal(poolConstructed, false, "Pool must not be constructed, so connect() cannot be attempted");
   });
 }
 
-test("rejects a direct-host username that is not the trusted Production role", () => {
+test("rejects a direct-host username override before any connection attempt", () => {
+  let poolConstructed = false;
+  class SpyPool {
+    constructor() { poolConstructed = true; }
+    connect() { throw new Error("connection must never be attempted"); }
+  }
+  const wrongUser = `postgresql://attacker:secret@db.${ref}.supabase.co:5432/postgres`;
+  assert.throws(() => createGuardedProductionPool(SpyPool, api, wrongUser, ref), /Effective PostgreSQL connection/);
+  assert.equal(poolConstructed, false, "Pool must not be constructed for a wrong effective username");
+});
+
+test("rejects conflicting pool options before constructing the pool", () => {
   let poolConstructed = false;
   class SpyPool { constructor() { poolConstructed = true; } }
-  const wrongUser = `postgresql://attacker:secret@db.${ref}.supabase.co:5432/postgres`;
-  assert.throws(() => createGuardedProductionPool(SpyPool, api, wrongUser, ref), /host and username/);
+  assert.throws(
+    () => createGuardedProductionPool(SpyPool, api, direct, ref, { user: "attacker" }),
+    /pool options cannot override/,
+  );
   assert.equal(poolConstructed, false);
 });
 
