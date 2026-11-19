@@ -187,14 +187,17 @@ export const listStudioFinancialActivity = createServerFn({ method: "GET" })
 
     const ownership = sql`
       (
-        t.owner_organization_id=${actor.organizationId}::uuid
-        or (
+        t.owner_account_type='studio'
+        and (
+          t.owner_organization_id=${actor.organizationId}::uuid
+          or (
           t.owner_organization_id is null
           and exists (
             select 1 from bridge_profiles bp
             where bp.user_id=t.owner_user_id
               and bp.account_type='studio'
               and bp.organization_id=${actor.organizationId}::uuid
+          )
           )
         )
       )
