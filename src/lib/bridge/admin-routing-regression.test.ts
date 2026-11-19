@@ -97,3 +97,24 @@ test("Open Titles permits authorised internal catalog readers without weakening 
   assert.match(rbac, /if \(actor\.internalRole\) return hasPermission\(actor, "title\.read_catalog"\)/);
   assert.match(rbac, /actor\.internalRole === "super_admin"/);
 });
+
+
+test("Founder dashboard reuses the verified Super Admin gate and refreshes live data", () => {
+  const dashboard = read("../../routes/dashboard.tsx");
+  assert.match(dashboard, /<RequireBridge allow="super_admin">/);
+  assert.doesNotMatch(dashboard, /getDashboardSession|Checking access/);
+  assert.match(dashboard, /getFounderTrackedProductions\(\)/);
+  assert.match(dashboard, /refetchInterval: 30_000/);
+  assert.match(dashboard, /refetchOnWindowFocus: true/);
+  assert.match(dashboard, /to="\/title\/\$id"/);
+});
+
+test("tracked Founder productions use exact canonical matches and reject ambiguous records", () => {
+  const readModel = read("./founder-dashboard.ts");
+  assert.match(readModel, /requireVerifiedActor\(context\.userId\)/);
+  assert.match(readModel, /canAccessDashboard\(actor\)/);
+  assert.match(readModel, /lower\(trim\(t\.slug\)\) = any/);
+  assert.match(readModel, /regexp_replace\(lower\(trim\(t\.name\)\)/);
+  assert.match(readModel, /matchStatus: matches\.length === 0 \? "not_found" : matches\.length === 1 \? "found" : "ambiguous"/);
+  assert.doesNotMatch(readModel, /limit 200|\.includes\(/);
+});
