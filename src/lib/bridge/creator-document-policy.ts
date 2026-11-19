@@ -23,6 +23,16 @@ export function hasPdfMagicBytes(bytes: Uint8Array) {
     bytes[3] === 0x46 && bytes[4] === 0x2d;
 }
 
+/** Only an active Studio owner may create or link reusable organization documents. */
+export function canManageStudioDocuments(input: {
+  accountType: string;
+  organizationId?: string | null;
+  organizationRole?: string | null;
+}) {
+  return input.accountType !== "studio" ||
+    (Boolean(input.organizationId) && input.organizationRole === "owner");
+}
+
 /** Download is permitted only to an owner, an authorized linked-title reviewer, or Super Admin. */
 export function canDownloadCreatorDocument(input: {
   ownerAccess: boolean;
