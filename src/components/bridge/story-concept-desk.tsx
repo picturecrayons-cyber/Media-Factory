@@ -105,9 +105,9 @@ export function StoryConceptDesk() {
                   </div>
                   <div className="rounded-lg bg-bg p-3">
                     <p className="text-xs uppercase tracking-wider text-muted">Review status</p>
-                    <p className="mt-1 text-sm">Editorial: **{statusLabel(c.editorial_status)}**</p>
-                    <p className="mt-1 text-sm">Legal: **{statusLabel(c.legal_status)}**</p>
-                    <p className="mt-1 text-sm">Curation: **{statusLabel(c.curation_status)}**</p>
+                    <p className="mt-1 text-sm">Editorial: <strong>{statusLabel(c.editorial_status)}</strong></p>
+                    <p className="mt-1 text-sm">Legal: <strong>{statusLabel(c.legal_status)}</strong></p>
+                    <p className="mt-1 text-sm">Curation: <strong>{statusLabel(c.curation_status)}</strong></p>
                   </div>
                 </div>
 
@@ -162,7 +162,25 @@ export function StoryConceptDesk() {
                       Start review
                     </Button>
                   ) : null}
-                  {canReview ? (
+                  {c.curation_status === "CHANGES_REQUESTED" ? (
+                    <>
+                      <Button
+                        size="sm"
+                        disabled={update.isPending}
+                        onClick={() => update.mutate({ id: c.id, status: "PENDING_REVIEW", adminNotes: noteValue.trim() || undefined })}
+                      >
+                        Reopen review
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={update.isPending}
+                        onClick={() => update.mutate({ id: c.id, status: "REJECTED", adminNotes: noteValue.trim() || undefined })}
+                      >
+                        Reject
+                      </Button>
+                    </>
+                  ) : canReview ? (
                     <>
                       <Button
                         size="sm"
