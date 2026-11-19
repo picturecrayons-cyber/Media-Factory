@@ -9,7 +9,8 @@ import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
-import { assertPermission } from "./rbac";
+import { assertPermission, canMutateTitle } from "./rbac";
+import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import {
@@ -262,6 +263,74 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
       }
       throw err;
     }
+  });
+
+const rightsDeclarationInput = z.object({
+  id: z.string().uuid(),
+  rightsHolderName: z.string().trim().min(2).max(200),
+  rightsBasis: z.enum(["ORIGINAL_AUTHOR", "ASSIGNED", "LICENSED", "PUBLIC_DOMAIN", "OTHER"]),
+  thirdPartyMaterialsIncluded: z.boolean(),
+  rightsDeclarationAccepted: z.literal(true),
+});
+
+export const updateStoryConceptRightsDeclaration = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(rightsDeclarationInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole) throw new Error("The author must submit their own rights declaration");
+
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const rows = await tx<ConceptRow & { title_id: string; curation_status: string }>`
+        select c.id, c.title_id, c.curation_status
+        from bridge_story_concept_submissions c
+        join bridge_titles t on t.id = c.title_id
+        where c.id = ${data.id}
+          and t.submission_type = 'story_concept'
+        for update of c
+      `;
+      const current = rows[0];
+      if (!current) throw new Error("Story / Concept submission not found");
+
+      const title = await loadTitle(current.title_id);
+      if (!title || !canMutateTitle(actor, title, "title.update_own", "title.license")) {
+        throw new Error("You can only update the rights declaration for your own submission");
+      }
+      if (!["PENDING", "UNDER_REVIEW"].includes(current.curation_status)) {
+        throw new Error("Rights declarations can only be updated while the submission is pending review");
+      }
+
+      const updated = await tx<ConceptRow>`
+        update bridge_story_concept_submissions
+        set
+          rights_holder_name = ${data.rightsHolderName},
+          rights_basis = ${data.rightsBasis},
+          third_party_materials_included = ${data.thirdPartyMaterialsIncluded},
+          rights_declaration_accepted_at = now(),
+          rights_declaration_version = 'story-concept-rights-v1',
+          updated_at = now()
+        where id = ${data.id}
+          and curation_status in ('PENDING', 'UNDER_REVIEW')
+        returning *
+      `;
+      if (!updated[0]) throw new Error("Rights declaration could not be saved");
+
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "story_concept.rights_declaration",
+        entityType: "bridge_story_concept_submission",
+        entityId: data.id,
+        metadata: {
+          rightsBasis: data.rightsBasis,
+          thirdPartyMaterialsIncluded: data.thirdPartyMaterialsIncluded,
+          declarationVersion: "story-concept-rights-v1",
+        },
+      }, tx);
+
+      return { concept: mapConcept(updated[0]) };
+    });
   });
 
 export const listPendingStoryConcepts = createServerFn({ method: "POST" })
