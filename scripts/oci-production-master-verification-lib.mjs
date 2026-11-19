@@ -32,7 +32,7 @@ export function assertProductionDatabaseTarget(supabaseUrlValue, databaseUrlValu
 
 export function compareObjectSizes(databaseByteSize, actualByteSize) {
   if (databaseByteSize === null || databaseByteSize === undefined) {
-  return { status: "UNRECORDED", matches: false };
+    return { status: "UNRECORDED", matches: false };
   }
   const expected = Number(databaseByteSize);
   if (!Number.isSafeInteger(expected) || !Number.isSafeInteger(actualByteSize) || expected < 0 || actualByteSize < 0) {
@@ -49,5 +49,5 @@ export function isCanonicalMasterVerified(masterKey, objects) {
 }
 
 export function classifyObjectError(message) {
-    return /\(404\)/.test(String(message)) ? "NOT_FOUND" : "ERROR";
+  return /\(404\)/.test(String(message)) ? "NOT_FOUND" : "ERROR";
 }
