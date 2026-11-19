@@ -132,6 +132,10 @@ const createPayloadSchema = z.object({
   treatmentUrl: z.string().url().max(500).optional().or(z.literal("")),
   screenplayUrl: z.string().url().max(500).optional().or(z.literal("")),
   language: z.string().min(2).max(40).default("Malayalam"),
+  rightsHolderName: z.string().trim().min(2).max(200),
+  rightsBasis: z.enum(["ORIGINAL_AUTHOR", "ASSIGNED", "LICENSED", "PUBLIC_DOMAIN", "OTHER"]),
+  thirdPartyMaterialsIncluded: z.boolean(),
+  rightsDeclarationAccepted: z.literal(true),
 });
 
 export const createStoryConceptSubmission = createServerFn({ method: "POST" })
@@ -178,7 +182,9 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
       const conceptRows = await sql<ConceptRow>`
         insert into bridge_story_concept_submissions (
           title_id, logline, synopsis, treatment_url, screenplay_url,
-          genre, estimated_budget_range, target_platforms, curation_status
+          genre, estimated_budget_range, target_platforms, curation_status,
+          rights_holder_name, rights_basis, third_party_materials_included,
+          rights_declaration_accepted_at, rights_declaration_version
         ) values (
           ${titleId},
           ${data.logline},
@@ -188,7 +194,12 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
           ${data.genre},
           ${data.estimatedBudgetRange ?? null},
           ${data.targetPlatforms},
-          ${"PENDING"}
+          ${"PENDING"},
+          ${data.rightsHolderName},
+          ${data.rightsBasis},
+          ${data.thirdPartyMaterialsIncluded},
+          now(),
+          ${"story-concept-rights-v1"}
         )
         returning *
       `;
