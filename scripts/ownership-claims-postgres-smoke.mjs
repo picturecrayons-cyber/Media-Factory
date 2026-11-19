@@ -75,9 +75,9 @@ try {
   const claim = await pool.query(`
     insert into public.bridge_title_ownership_claims (
       title_id, claimant_user_id, claimant_account_type,
-      current_owner_user_id_snapshot, producer_entity_name,
+      claimant_email_verified_snapshot, current_owner_user_id_snapshot, producer_entity_name,
       claimant_capacity, claim_basis, declaration_text, attested_at
-    ) values ($1,$2,'independent_creator',$3,$4,'PRODUCER','SOLE_NEGATIVE_RIGHTS',$5,now())
+    ) values ($1,$2,'independent_creator',true,$3,$4,'PRODUCER','SOLE_NEGATIVE_RIGHTS',$5,now())
     returning id
   `, [titleId, claimant, "historical-owner", "New Darsan Creations", "A complete test declaration longer than eighty characters for disposable database verification only."]);
   const claimId = claim.rows[0].id;
