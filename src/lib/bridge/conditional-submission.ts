@@ -49,6 +49,8 @@ export const submitMalayalakkaraConditionalRequest = createServerFn({ method: "P
         throw new Error("A one-time conditional submission has already been recorded");
       }
 
+      // The title row lock serializes same-title submissions. The unique
+      // constraint remains the final guard if another writer bypasses this path.
       const [record] = await tx<{ id: string; status: string }>`
         insert into bridge_conditional_submissions
           (title_id, submission_kind, status, submitted_by, metadata)
