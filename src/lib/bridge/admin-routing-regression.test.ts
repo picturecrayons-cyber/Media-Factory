@@ -179,3 +179,44 @@ test("Story Concept submissions require author rights declarations and avoid pub
   assert.doesNotMatch(ownerDesk, /to="\/title\/\$id"/);
   assert.match(founderDesk, /Approval locked: rights declaration is not verified/);
 });
+
+
+test("Founder dashboard live modules use authoritative Bridge data sources", () => {
+  const dashboard = read("../../routes/dashboard.tsx");
+  const snapshot = read("./founder-dashboard.ts");
+  assert.match(dashboard, /Live module status/);
+  assert.match(dashboard, /formatProfiles\(operational\.profiles\)/);
+  assert.match(dashboard, /operational\.buyerInterest/);
+  assert.match(dashboard, /operational\.cmsRecords/);
+  assert.match(dashboard, /operational\.auditActivity/);
+  assert.match(dashboard, /operational\.ingestSessions/);
+  for (const table of [
+    "bridge_titles",
+    "bridge_assets",
+    "bridge_asset_versions",
+    "bridge_profiles",
+    "bridge_organizations",
+    "bridge_buyer_interest",
+    "bridge_buyer_title_access",
+    "bridge_invites",
+    "bridge_site_content",
+    "bridge_audit_logs",
+    "bridge_webhook_events",
+    "bridge_dit_ingest_sessions",
+    "bridge_financial_ledger",
+  ]) {
+    assert.match(snapshot, new RegExp(table));
+  }
+  assert.match(snapshot, /titleLanes/);
+});
+
+test("Auth session restoration has a finite timeout and server-verified cached token fallback", () => {
+  const client = read("../auth/client.ts");
+  const hook = read("../auth/use-current-user.ts");
+  assert.match(client, /SESSION_RESTORE_TIMEOUT_MS = 8_000/);
+  assert.match(client, /Promise\.race/);
+  assert.match(client, /getStoredSupabaseAccessToken/);
+  assert.match(client, /Every protected server function still verifies it with Supabase Auth/);
+  assert.match(hook, /normalize\(getStoredSupabaseUser\(\)\)/);
+  assert.match(hook, /isPending: !getStoredSupabaseUser\(\)/);
+});
