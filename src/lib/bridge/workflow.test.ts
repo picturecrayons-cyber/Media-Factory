@@ -260,6 +260,49 @@ test("Legal approval is blocked until verified ownership and distribution docume
   }
 });
 
+test("Legal approval rejects each missing authority evidence class", async () => {
+  const requiredTypes = [
+    "OWNERSHIP_CHAIN_OF_TITLE",
+    "FINISHED_FILM_AGREEMENT",
+    "DISTRIBUTION_AGREEMENT",
+    "SIGNATORY_AUTHORITY",
+    "MASTER_DISTRIBUTOR_AUTHORITY",
+    "SUBLICENSING_AUTHORITY",
+  ];
+  for (const missingType of requiredTypes) {
+    const f = await fixture();
+    try {
+      const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+      await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+      await f.sql.query("delete from bridge_title_document_links where title_id='title-123' and evidence_type=$1", [missingType]);
+      await assert.rejects(
+        f.sql.transaction((tx) => f.review(tx, legal, {
+          titleId: "title-123",
+          stage: "LEGAL",
+          decision: "APPROVE",
+          note: "Review actual signed rights evidence",
+          grantId: saved.grantId,
+        })),
+        missingType === "OWNERSHIP_CHAIN_OF_TITLE"
+          ? /Verified ownership/
+          : missingType === "FINISHED_FILM_AGREEMENT"
+            ? /Executed finished-film/
+            : missingType === "DISTRIBUTION_AGREEMENT"
+              ? /Executed OTT/
+              : missingType === "SIGNATORY_AUTHORITY"
+                ? /signatory-authority/
+                : missingType === "MASTER_DISTRIBUTOR_AUTHORITY"
+                  ? /Master distributor/
+                  : /sublicensing authority/,
+      );
+      assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+      assert.equal((await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status, "SUBMITTED");
+    } finally {
+      await f.db.close();
+    }
+  }
+});
+
 test("unauthorized review and unverified current assets cannot clear QC", async () => {
   const f = await fixture();
   try {
