@@ -5,7 +5,7 @@ import { assertProductionDatabaseTarget, createGuardedProductionPool, compareObj
 const ref = "mlmgugivsyoxzdgwkbpu";
 const api = `https://${ref}.supabase.co`;
 const direct = `postgresql://postgres:secret@db.${ref}.supabase.co:5432/postgres`;
-const pooler = `postgresql://postgres.${ref}:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres`;
+const pooler = `postgresql://postgres.${ref}:secret@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`;
 
 test("accepts the exact Supabase direct database host and trusted username", () => {
   assert.equal(assertProductionDatabaseTarget(api, direct, ref), true);
@@ -28,7 +28,7 @@ for (const [label, url] of [
   ["username", `postgresql://postgres:secret@db.${ref}.supabase.co:5432/postgres?user=attacker`],
   ["port", `postgresql://postgres:secret@db.${ref}.supabase.co:5432/postgres?port=6543`],
   ["database", `postgresql://postgres:secret@db.${ref}.supabase.co:5432/postgres?dbname=attacker`],
-  ["pooler host", `postgresql://postgres.${ref}:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?host=attacker.example`],
+  ["pooler host", `postgresql://postgres.${ref}:secret@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?host=attacker.example`],
 ]) {
   test(`rejects ${label} query override before constructing a pool`, () => {
     let poolConstructed = false;
@@ -67,8 +67,17 @@ test("rejects an unexpected direct database port", () => {
   assert.throws(() => assertProductionDatabaseTarget(api, `postgresql://postgres:secret@db.${ref}.supabase.co:6543/postgres`, ref), /Effective PostgreSQL connection/);
 });
 
+
+test("rejects a pooler endpoint in a different region before constructing a pool", () => {
+  let poolConstructed = false;
+  class SpyPool { constructor() { poolConstructed = true; } }
+  const wrongRegion = `postgresql://postgres.${ref}:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres`;
+  assert.throws(() => createGuardedProductionPool(SpyPool, api, wrongRegion, ref), /Effective PostgreSQL connection/);
+  assert.equal(poolConstructed, false);
+});
+
 test("rejects a pooler username that does not pin the Production project", () => {
-  assert.throws(() => assertProductionDatabaseTarget(api, "postgresql://postgres.otherproject:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres", ref), /Effective PostgreSQL connection/);
+  assert.throws(() => assertProductionDatabaseTarget(api, "postgresql://postgres.otherproject:secret@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres", ref), /Effective PostgreSQL connection/);
 });
 
 test("detects exact database and OCI byte-size match", () => {
