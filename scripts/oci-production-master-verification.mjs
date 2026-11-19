@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import pg from "pg";
 import { verifyObject } from "../src/lib/bridge/oci-object-storage.server.ts";
+import {
+  assertProductionDatabaseTarget,
+  compareObjectSizes,
+  isCanonicalMasterVerified,
+} from "./oci-production-master-verification-lib.mjs";
 
 const EXPECTED_PROJECT_REF = "mlmgugivsyoxzdgwkbpu";
 const EXPECTED_BUCKET = "bucket-20260526-1544";
@@ -17,15 +22,15 @@ function required(name) {
   return value;
 }
 
-const supabaseUrl = new URL(required("SUPABASE_URL"));
-assert.equal(supabaseUrl.hostname.split(".")[0], EXPECTED_PROJECT_REF,
-  "Refusing to query a Supabase project other than canonical Crayons Bridge Production");
+const supabaseUrl = required("SUPABASE_URL");
+const databaseUrl = required("DATABASE_URL");
+assertProductionDatabaseTarget(supabaseUrl, databaseUrl, EXPECTED_PROJECT_REF);
 assert.equal(process.env.OCI_BUCKET_NAME, EXPECTED_BUCKET, "Unexpected OCI bucket; refusing to continue");
 assert.equal(process.env.OCI_REGION, EXPECTED_REGION, "Unexpected OCI region; refusing to continue");
 
 const { Pool } = pg;
 const pool = new Pool({
-  connectionString: required("DATABASE_URL"),
+  connectionString: databaseUrl,
   max: 1,
   connectionTimeoutMillis: 15000,
   idleTimeoutMillis: 5000,
@@ -40,7 +45,7 @@ const report = {
   bucket: EXPECTED_BUCKET,
   titles: [],
   totals: { candidates: 0, exists: 0, missing: 0, errors: 0 },
-  note: "OCI ETag is recorded as returned by Object Storage; it is not represented as a SHA-256 checksum.",
+  note: "OCI ETag is recorded as returned by Object Storage; it is not represented as a SHA-256 checksum. A PASS requires a canonical master_key linked to an existing object and a recorded database byte size matching OCI Content-Length.",
 };
 
 try {
@@ -84,13 +89,16 @@ try {
   assert.ok(candidates.length > 0, "No existing master candidates found; refusing an empty verification");
   report.totals.candidates = candidates.length;
   for (const title of TITLES) {
+    const titleRow = titleRows.rows.find((row) => row.id === title.id);
     const titleCandidates = candidates.filter((row) => row.title_id === title.id);
     if (titleCandidates.length === 0) report.totals.errors++;
     const titleReport = {
       titleId: title.id,
       titleName: title.name,
+      titleStatus: titleRow.status,
       candidateCount: titleCandidates.length,
-      canonicalMasterLinked: Boolean(titleRows.rows.find((row) => row.id === title.id)?.master_key),
+      canonicalMasterKeyPresent: Boolean(titleRow.master_key),
+      canonicalMasterVerified: false,
       objects: [],
     };
     for (const candidate of titleCandidates) {
@@ -107,23 +115,27 @@ try {
       try {
         const actual = await verifyObject(candidate.s3_key);
         const contentTypeMatches = !candidate.content_type || candidate.content_type === actual.contentType;
-        titleReport.objects.push({
+        const sizeCheck = compareObjectSizes(candidate.byte_size, actual.byteSize);
+        const result = {
           assetId: candidate.asset_id,
           objectKey: candidate.s3_key,
           result: "EXISTS",
           databaseByteSize: candidate.byte_size === null ? null : Number(candidate.byte_size),
           actualByteSize: actual.byteSize,
+          sizeStatus: sizeCheck.status,
+          sizeMatches: sizeCheck.matches,
           contentType: actual.contentType,
           expectedContentType: candidate.content_type,
           contentTypeMatches,
           etag: actual.etag,
           createdAt: candidate.created_at,
-        });
+        };
+        titleReport.objects.push(result);
         report.totals.exists++;
-        if (!contentTypeMatches) report.totals.errors++;
+        if (!contentTypeMatches || !sizeCheck.matches) report.totals.errors++;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const missing = /\(404\)/.test(message);
+        const missing = /\\(404\\)/.test(message);
         titleReport.objects.push({
           assetId: candidate.asset_id,
           objectKey: candidate.s3_key,
@@ -133,6 +145,8 @@ try {
         report.totals[missing ? "missing" : "errors"]++;
       }
     }
+    titleReport.canonicalMasterVerified = isCanonicalMasterVerified(titleRow.master_key, titleReport.objects);
+    if (!titleReport.canonicalMasterVerified) report.totals.errors++;
     report.titles.push(titleReport);
   }
 } finally {
@@ -140,7 +154,10 @@ try {
 }
 
 report.status = report.totals.missing === 0 && report.totals.errors === 0 &&
-  report.totals.exists === report.totals.candidates ? "PASS" : "REVIEW_REQUIRED";
-await writeFile("oci-production-master-verification-report.json", JSON.stringify(report, null, 2) + "\n", { mode: 0o600 });
+  report.totals.exists === report.totals.candidates &&
+  report.titles.every((title) => title.canonicalMasterVerified)
+  ? "PASS"
+  : "REVIEW_REQUIRED";
+await writeFile("oci-production-master-verification-report.json", JSON.stringify(report, null, 2) + "\\n", { mode: 0o600 });
 console.log(JSON.stringify(report, null, 2));
 if (report.status !== "PASS") process.exitCode = 1;
