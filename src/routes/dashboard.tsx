@@ -379,7 +379,7 @@ function DashboardBody() {
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {operationalReady ? (
+          {operational && !operationalQ.isError ? (
             operational.titleLanes.map((lane) => (
               <article key={lane.content_type} className="rounded-sm border border-line px-4 py-3">
                 <p className="text-xs uppercase tracking-widest text-muted">{lane.content_type.replaceAll("_", " ")}</p>
