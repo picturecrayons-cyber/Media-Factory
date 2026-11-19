@@ -50,6 +50,11 @@ const ADMIN_MODULES = [
     to: "/internal",
   },
   {
+    title: "Producer ownership claims",
+    description: "Review evidence intake and route claims to independent Legal review; no automatic title transfers.",
+    to: "/ownership-review",
+  },
+  {
     title: "CMS & site content",
     description: "Bridge-managed website content.",
     to: "/cms",
