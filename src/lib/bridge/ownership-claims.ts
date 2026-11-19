@@ -425,6 +425,23 @@ export const listOwnershipClaimsForReview = createServerFn({ method: "GET" })
     `;
     const result = [];
     for (const claim of claims) {
+      const attributionRows = await sql<{
+        total_assets: number;
+        recorded_owner_uploads: number;
+        claimant_uploads: number;
+        distinct_uploaders: number;
+      }>`
+        select
+          count(*)::int as total_assets,
+          count(*) filter (where created_by = ${claim.current_owner_user_id_snapshot})::int as recorded_owner_uploads,
+          count(*) filter (where created_by = ${claim.claimant_user_id})::int as claimant_uploads,
+          count(distinct created_by)::int as distinct_uploaders
+        from bridge_assets
+        where title_id = ${claim.title_id}
+      `;
+      const attribution = attributionRows[0] ?? {
+        total_assets: 0, recorded_owner_uploads: 0, claimant_uploads: 0, distinct_uploaders: 0,
+      };
       const evidence = await sql<{ id: string; category: string; file_name: string; content_type: string; status: string; byte_size: number }>`
         select id, category, file_name, content_type, status, byte_size
         from bridge_title_ownership_claim_evidence
@@ -439,6 +456,12 @@ export const listOwnershipClaimsForReview = createServerFn({ method: "GET" })
         claimantDisplayName: claim.claimant_display_name,
         declarationText: claim.declaration_text,
         ownerMismatch: claim.current_owner_user_id_snapshot !== claim.claimant_user_id,
+        assetAttribution: {
+          totalAssets: Number(attribution.total_assets),
+          recordedOwnerUploads: Number(attribution.recorded_owner_uploads),
+          claimantUploads: Number(attribution.claimant_uploads),
+          distinctUploaders: Number(attribution.distinct_uploaders),
+        },
         producerEntityName: claim.producer_entity_name,
         claimantCapacity: claim.claimant_capacity,
         claimBasis: claim.claim_basis,
