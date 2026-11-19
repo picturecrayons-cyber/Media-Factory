@@ -1,9 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
-import { requireVerifiedActor } from "./session";
+import { requireVerifiedActor, resolveBridgeUserId } from "./session";
 
 /**
  * Super Admin Buyer Operations read model.
@@ -17,7 +16,8 @@ export const listSuperAdminBuyerManagement = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const bridgeUserId = await resolveBridgeUserId(context.userId);
+    const actor = await requireVerifiedActor(bridgeUserId);
     if (actor.internalRole !== "super_admin") {
       throw new Error("Super Admin access required");
     }
@@ -50,11 +50,7 @@ export const listSuperAdminBuyerManagement = createServerFn({ method: "GET" })
         group by o.id
         order by o.created_at desc
         limit 200
-      `.catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        if (!/42P01|does not exist|undefined table/i.test(message)) throw error;
-        return [] as Array<{id:string;legal_name:string;status:string;member_count:number|string;buyer_count:number|string;created_at:string|Date}>;
-      }),
+      `,
       sql<{ status: string; count: number | string }>`
         select status, count(*)::int as count
         from public.bridge_license_packages
@@ -163,22 +159,3 @@ export const listSuperAdminBuyerManagement = createServerFn({ method: "GET" })
     };
   });
 
-const buyerProfileInput = z.object({
-  userId: z.string().min(1).max(160),
-  reason: z.string().trim().min(8).max(500),
-});
-
-/**
- * Explicit future boundary: account lifecycle changes are intentionally not
- * exposed until identity-provider suspension, recovery, audit and customer
- * communication contracts are implemented together.
- */
-export const assertBuyerLifecycleChangeNotAvailable = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(buyerProfileInput)
-  .handler(async ({ context }) => {
-    assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
-    if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
-    throw new Error("Buyer lifecycle changes are not enabled. Use the verified identity-provider workflow after its separate release gate.");
-  });
