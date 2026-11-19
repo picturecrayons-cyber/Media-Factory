@@ -54,9 +54,16 @@ create table if not exists public.bridge_title_document_review_assignments (
   assigned_by text not null references public.bridge_profiles(user_id) on delete restrict,
   status text not null default 'ACTIVE' check (status in ('ACTIVE','REVOKED')),
   assigned_at timestamptz not null default now(),
-  revoked_at timestamptz,
-  unique(title_id,reviewer_user_id)
+  revoked_at timestamptz
 );
+
+-- Preserve revoked assignment rows and permit a later fresh assignment.
+alter table public.bridge_title_document_review_assignments
+  drop constraint if exists bridge_title_document_review_assignments_title_id_reviewer_user_id_key;
+
+create unique index if not exists bridge_title_document_review_assignments_active_unique
+  on public.bridge_title_document_review_assignments(title_id,reviewer_user_id)
+  where status='ACTIVE';
 create index if not exists bridge_title_document_review_assignments_reviewer_idx
   on public.bridge_title_document_review_assignments(reviewer_user_id,title_id)
   where status='ACTIVE';
