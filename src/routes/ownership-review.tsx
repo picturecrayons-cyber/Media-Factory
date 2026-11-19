@@ -136,6 +136,18 @@ function OwnershipReviewBody({ actor }: { actor: BridgeActor }) {
               <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted">{claim.declarationText}</p>
             </section>
 
+            <section className="mt-3 rounded-lg border border-line p-3">
+              <h3 className="text-sm font-semibold">Historical asset attribution (read-only)</h3>
+              <p className="mt-2 text-sm text-muted">
+                {claim.assetAttribution.totalAssets} asset record(s) · {claim.assetAttribution.distinctUploaders} original uploader account(s)
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                {claim.assetAttribution.recordedOwnerUploads} record(s) attributed to the currently recorded owner ·
+                {" "}{claim.assetAttribution.claimantUploads} record(s) attributed to the claimant
+              </p>
+              <p className="mt-1 text-xs text-muted">This is an attribution audit only. Original created_by values remain unchanged.</p>
+            </section>
+
             <section className="mt-4">
               <h3 className="text-sm font-semibold">Evidence files</h3>
               {claim.evidence.length ? (
