@@ -476,7 +476,12 @@ try {
             and conname = 'bridge_conditional_submissions_one_time_per_title'
         ) as one_time_constraint,
         has_table_privilege('anon', 'public.bridge_conditional_submissions', 'SELECT') as anon_select,
+        has_table_privilege('anon', 'public.bridge_conditional_submissions', 'INSERT') as anon_insert,
+        has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'SELECT') as authenticated_select,
         has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'INSERT') as authenticated_insert,
+        has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'UPDATE') as authenticated_update,
+        has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'DELETE') as authenticated_delete,
+        has_table_privilege('service_role', 'public.bridge_conditional_submissions', 'SELECT') as service_select,
         has_table_privilege('service_role', 'public.bridge_conditional_submissions', 'INSERT') as service_insert
       from pg_class c
       where c.oid = 'public.bridge_conditional_submissions'::regclass
@@ -487,7 +492,12 @@ try {
       !verified.title_scope_constraint ||
       !verified.one_time_constraint ||
       verified.anon_select ||
+      verified.anon_insert ||
+      verified.authenticated_select ||
       verified.authenticated_insert ||
+      verified.authenticated_update ||
+      verified.authenticated_delete ||
+      !verified.service_select ||
       !verified.service_insert
     ) {
       throw new Error("Conditional submission candidate schema/security verification failed: " +
