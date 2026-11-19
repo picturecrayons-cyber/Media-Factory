@@ -69,5 +69,11 @@ test("conditional submission migration is replayed as an isolated candidate, not
   assert.match(replaySource, /candidateSql/);
   assert.match(replaySource, /bridge_conditional_submissions_one_time_per_title/);
   assert.match(replaySource, /bridge_conditional_submissions_malayalakkara_only/);
+  assert.match(replaySource, /anon_update/);
+  assert.match(replaySource, /anon_delete/);
+  assert.match(replaySource, /authenticated_select/);
   assert.match(replaySource, /authenticated_insert/);
+  assert.match(replaySource, /authenticated_update/);
+  assert.match(replaySource, /authenticated_delete/);
+  assert.match(replaySource, /service_select/);
 });
