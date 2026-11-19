@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertNotDevUser } from "@/lib/bridge/guards";
-import { canAccessDashboard, requireVerifiedActor } from "@/lib/bridge/session";
+import { requireVerifiedActor } from "@/lib/bridge/session";
+import { canAccessDashboard } from "@/lib/bridge/rbac";
 
 const TRACKED_PRODUCTIONS = [
   { key: "malayalakkara-residency", label: "Malayalakkara Residency" },
