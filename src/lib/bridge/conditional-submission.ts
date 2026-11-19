@@ -4,7 +4,6 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { assertPermission } from "./rbac";
-import { writeAudit } from "./audit";
 
 export const MALAYALAKKARA_RESIDENCY_ID = "858f0ec5a11bc9acd2e9c20266541a3a";
 
@@ -80,19 +79,22 @@ export const submitMalayalakkaraConditionalRequest = createServerFn({ method: "P
           'One-time conditional submission recorded; independent Legal verification pending'
         )
       `;
-      await writeAudit({
-        actorUserId: actor.userId,
-        action: "title.conditional_submission.create",
-        entityType: "bridge_title",
-        entityId: data.titleId,
-        metadata: {
-          submissionId: record.id,
-          status: record.status,
-          rightsGrantApproved: false,
-          sublicensingAllowed: false,
-          publicationAllowed: false,
-        },
-      });
+      await tx`
+        insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+        values (
+          ${actor.userId},
+          'title.conditional_submission.create',
+          'bridge_title',
+          ${data.titleId},
+          ${JSON.stringify({
+            submissionId: record.id,
+            status: record.status,
+            rightsGrantApproved: false,
+            sublicensingAllowed: false,
+            publicationAllowed: false,
+          })}::jsonb
+        )
+      `;
       return { submissionId: record.id, status: record.status, alreadySubmitted: false as const };
     });
   });
