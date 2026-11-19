@@ -306,12 +306,7 @@ Deno.serve(async (req: Request) => {
       const refund = payload?.payload?.refund?.entity;
       const paymentId = String(refund?.payment_id ?? "");
       const refundId = String(refund?.id ?? "");
-      const refundAmountPaise = Number(refund?.amount);
-      const refundCurrency = String(refund?.currency ?? "INR").toUpperCase();
       if (paymentId && refundId) {
-        if (!Number.isSafeInteger(refundAmountPaise) || refundAmountPaise <= 0 || refundCurrency !== "INR") {
-          return await failEvent(supabase, id, "Loop TVOD refund amount or currency is invalid");
-        }
         let loopOrder: { provider_order_id: string } | null = null;
         const { data: knownOrder } = await supabase.from("loop_tvod_orders")
           .select("provider_order_id").eq("provider_payment_id", paymentId).maybeSingle();
@@ -335,6 +330,11 @@ Deno.serve(async (req: Request) => {
           }
         }
         if (loopOrder) {
+          const refundAmountPaise = Number(refund?.amount);
+          const refundCurrency = String(refund?.currency ?? "INR").toUpperCase();
+          if (!Number.isSafeInteger(refundAmountPaise) || refundAmountPaise <= 0 || refundCurrency !== "INR") {
+            return await failEvent(supabase, id, "Loop TVOD refund amount or currency is invalid");
+          }
           const { error: refundError } = await supabase.rpc("loop_refund_captured_rental", {
             p_payment_id: paymentId,
             p_refund_id: refundId,
