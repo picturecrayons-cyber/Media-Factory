@@ -69,6 +69,7 @@ type ClaimRow = {
   title_status?: string;
   declaration_text?: string;
   claimant_display_name?: string | null;
+  claimant_email_verified_snapshot?: boolean;
 };
 
 function safeFileName(value: string): string {
@@ -154,10 +155,10 @@ export const createOwnershipClaim = createServerFn({ method: "POST" })
     const rows = await sql<{ id: string }>`
       insert into bridge_title_ownership_claims (
         title_id, claimant_user_id, claimant_account_type,
-        current_owner_user_id_snapshot, producer_entity_name,
+        claimant_email_verified_snapshot, current_owner_user_id_snapshot, producer_entity_name,
         claimant_capacity, claim_basis, declaration_text, attested_at, status
       ) values (
-        ${title.id}, ${actor.userId}, 'independent_creator',
+        ${title.id}, ${actor.userId}, 'independent_creator', true,
         ${title.ownerUserId}, ${data.producerEntityName},
         ${data.claimantCapacity}, ${data.claimBasis},
         ${data.declarationText}, now(), 'DRAFT'
@@ -415,7 +416,7 @@ export const listOwnershipClaimsForReview = createServerFn({ method: "GET" })
     const claims = await sql<ClaimRow>`
       select c.id, c.title_id, c.claimant_user_id, c.current_owner_user_id_snapshot,
         c.producer_entity_name, c.claimant_capacity, c.claim_basis, c.declaration_text, c.status,
-        c.legal_decision, c.created_at, c.updated_at,
+        c.legal_decision, c.claimant_email_verified_snapshot, c.created_at, c.updated_at,
         t.name as title_name, t.status as title_status,
         p.display_name as claimant_display_name
       from bridge_title_ownership_claims c
@@ -460,6 +461,8 @@ export const listOwnershipClaimsForReview = createServerFn({ method: "GET" })
         titleName: claim.title_name,
         titleStatus: claim.title_status,
         claimantDisplayName: claim.claimant_display_name,
+        claimantAccountType: "independent_creator" as const,
+        claimantEmailVerifiedAtSubmission: claim.claimant_email_verified_snapshot === true,
         declarationText: claim.declaration_text,
         ownerMismatch: claim.current_owner_user_id_snapshot !== claim.claimant_user_id,
         assetAttribution: {
