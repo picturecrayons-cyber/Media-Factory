@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sameOwner, isSupportedCreatorDocumentMimeType, hasPdfMagicBytes, canDownloadCreatorDocument, canManageStudioDocuments } from "./creator-document-policy.ts";
+import { sameOwner, isSupportedCreatorDocumentMimeType, hasPdfMagicBytes, canDownloadCreatorDocument, canManageStudioDocuments, canReviewTitleDocuments } from "./creator-document-policy.ts";
 
 test("Creator document vault is isolated to the owning Creator account", () => {
   const document = {
@@ -31,6 +31,13 @@ test("only an active Studio owner can manage reusable organization documents", (
   assert.equal(canManageStudioDocuments({ accountType: "studio", organizationId: "org-a", organizationRole: null }), false);
   assert.equal(canManageStudioDocuments({ accountType: "studio", organizationId: null, organizationRole: "owner" }), false);
   assert.equal(canManageStudioDocuments({ accountType: "independent_creator" }), true);
+});
+
+test("Legal Reviewer document access requires the Legal Reviewer role and rights-review permission", () => {
+  assert.equal(canReviewTitleDocuments({ internalRole: "legal_reviewer", hasRightsReviewPermission: true }), true);
+  assert.equal(canReviewTitleDocuments({ internalRole: "legal_reviewer", hasRightsReviewPermission: false }), false);
+  assert.equal(canReviewTitleDocuments({ internalRole: "viewer", hasRightsReviewPermission: true }), false);
+  assert.equal(canReviewTitleDocuments({ internalRole: null, hasRightsReviewPermission: true }), false);
 });
 
 test("legal evidence upload accepts PDF only", () => {
