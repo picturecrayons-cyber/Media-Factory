@@ -33,6 +33,17 @@ export function canManageStudioDocuments(input: {
     (Boolean(input.organizationId) && input.organizationRole === "owner");
 }
 
+/** Legal Reviewer access is granted only for an explicitly assigned title. */
+export function canReviewAssignedTitle(input: {
+  internalRole: string | null;
+  hasRightsReviewPermission: boolean;
+  hasActiveAssignment: boolean;
+}) {
+  return input.internalRole === "legal_reviewer" &&
+    input.hasRightsReviewPermission &&
+    input.hasActiveAssignment;
+}
+
 /** Download is permitted only to an owner, an authorized linked-title reviewer, or Super Admin. */
 export function canDownloadCreatorDocument(input: {
   ownerAccess: boolean;
