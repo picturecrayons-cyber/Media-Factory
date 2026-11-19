@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import { bridgeEnv } from "@/lib/bridge/env";
 import { fetchObjectResponse, signDownload, verifyObject } from "@/lib/bridge/oci-object-storage.server";
+import { parseSingleByteRange, validateMediaResponse } from "@/lib/bridge/media-range";
 
 type MediaType = "master" | "poster";
 type Row = Record<string, unknown>;
@@ -188,10 +189,38 @@ async function serveLoopMedia(request: Request) {
     }
 
     const asset = eligibleAssets[0];
-    const range = request.headers.get("range") || undefined;
+    const size = Number(asset.byte_size);
+    const expectedType = String(asset.content_type).split(";")[0].trim().toLowerCase();
+    let requestedRange: { start: number; end: number } | null;
+    try {
+      requestedRange = parseSingleByteRange(request.headers.get("range"), size);
+    } catch {
+      return new Response(null, {
+        status: 416,
+        headers: { "Content-Range": `bytes */${size}`, "Cache-Control": "private, no-store" },
+      });
+    }
+
+    // Verify the live OCI object independently before serving any master bytes.
+    // This is metadata/readiness verification; the approved fixture E2E must still
+    // establish actual byte read-back and checksum evidence.
+    try {
+      const verified = await verifyObject(objectKey);
+      const verifiedType = String(verified.contentType || "").split(";")[0].trim().toLowerCase();
+      const expectedEtag = typeof asset.storage_etag === "string" ? asset.storage_etag.replaceAll('"', "") :
+        typeof asset.etag === "string" ? asset.etag.replaceAll('"', "") : null;
+      if (verified.byteSize !== size || verifiedType !== expectedType ||
+          (expectedEtag && verified.etag !== expectedEtag)) {
+        return errorResponse(502, "BRIDGE_STORAGE_INTEGRITY_MISMATCH", "The OCI object metadata did not match the approved Bridge asset record");
+      }
+    } catch {
+      return errorResponse(503, "BRIDGE_ASSET_VERIFICATION_FAILED", "Bridge could not verify the master object in OCI storage");
+    }
+
     let upstream: Response;
     try {
-      upstream = await fetchObjectResponse(objectKey, typeof asset.storage_bucket === "string" ? asset.storage_bucket : undefined, range);
+      const rangeHeader = requestedRange ? `bytes=${requestedRange.start}-${requestedRange.end}` : undefined;
+      upstream = await fetchObjectResponse(objectKey, typeof asset.storage_bucket === "string" ? asset.storage_bucket : undefined, rangeHeader);
     } catch {
       return errorResponse(503, "BRIDGE_STORAGE_UNAVAILABLE", "Bridge storage is temporarily unavailable");
     }
@@ -201,25 +230,25 @@ async function serveLoopMedia(request: Request) {
     }
 
     const upstreamType = (upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-    const expectedType = String(asset.content_type).split(";")[0].trim().toLowerCase();
-    const size = Number(asset.byte_size);
     const contentRange = upstream.headers.get("content-range");
-    const validRange = upstream.status === 206 &&
-      /^bytes \d+-\d+\/\d+$/.test(contentRange || "") &&
-      String(contentRange).endsWith("/" + size);
-    const validLength = upstream.status === 206
-      ? validRange
-      : Number(upstream.headers.get("content-length") || 0) === size;
-    if (upstreamType !== expectedType || !upstreamType.startsWith("video/") || !validLength) {
+    if (!validateMediaResponse({
+      status: upstream.status,
+      contentRange,
+      contentLength: upstream.headers.get("content-length"),
+      requestedRange,
+      totalBytes: size,
+      expectedContentType: expectedType,
+      actualContentType: upstreamType,
+    })) {
       await upstream.body.cancel();
-      return errorResponse(502, "BRIDGE_STORAGE_INTEGRITY_MISMATCH", "The streamed object did not match its verified Bridge asset record");
+      return errorResponse(502, "BRIDGE_STORAGE_INTEGRITY_MISMATCH", "The streamed object did not match the exact approved byte range and Bridge asset record");
     }
 
     return new Response(upstream.body, {
       status: upstream.status,
       headers: {
         "Content-Type": expectedType,
-        ...(upstream.headers.get("content-length") ? { "Content-Length": upstream.headers.get("content-length")! } : {}),
+        "Content-Length": upstream.headers.get("content-length")!,
         ...(contentRange ? { "Content-Range": contentRange } : {}),
         "Accept-Ranges": "bytes",
         "Cache-Control": "private, no-store",
