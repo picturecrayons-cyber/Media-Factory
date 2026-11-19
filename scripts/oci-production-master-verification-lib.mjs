@@ -22,7 +22,8 @@ export function assertProductionDatabaseTarget(supabaseUrlValue, databaseUrlValu
     throw new Error("Production database binding has an invalid encoded username.");
   }
   const directHostMatches = host === `db.${expectedRef}.supabase.co`;
-  const poolerUsernameMatches = username.split(".").includes(expectedRef);
+  const poolerHostMatches = /^aws-\\d+-[a-z0-9-]+\\.pooler\\.supabase\\.com$/.test(host);
+  const poolerUsernameMatches = poolerHostMatches && username.split(".").includes(expectedRef);
   if (!directHostMatches && !poolerUsernameMatches) {
     throw new Error("PostgreSQL connection does not prove the expected Supabase Production project; refusing to connect.");
   }
