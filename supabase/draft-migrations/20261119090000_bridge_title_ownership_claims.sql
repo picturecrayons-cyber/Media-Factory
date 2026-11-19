@@ -7,6 +7,7 @@ create table if not exists public.bridge_title_ownership_claims (
   title_id text not null references public.bridge_titles(id) on update restrict on delete restrict,
   claimant_user_id text not null,
   claimant_account_type text not null check (claimant_account_type = 'independent_creator'),
+  claimant_email_verified_snapshot boolean not null default false,
   current_owner_user_id_snapshot text not null,
   producer_entity_name text not null,
   claimant_capacity text not null check (
