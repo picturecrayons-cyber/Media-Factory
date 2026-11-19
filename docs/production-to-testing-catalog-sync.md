@@ -10,7 +10,7 @@ This is a **manual, one-way** catalog mirror for the isolated Testing project.
 - Default execution is a dry run. Writes require `--apply`, `BRIDGE_SYNC_TARGET=testing`, and `BRIDGE_SYNC_ALLOW_PRODUCTION_READ=true`.
 - Only Bridge title catalog metadata, current poster assets referenced by `bridge_titles.poster_key`, and Loop catalog metadata are mirrored.
 - Every mirrored title is reset to `DRAFT`; Loop entries are `DRAFT`, unlisted, unpublished, and free in Testing.
-- Owner identity is replaced with a synthetic Testing-only owner. Production owner IDs and organizations are not copied.
+- Owner identity is replaced with the dedicated Testing-only owner ID supplied at runtime. Production owner IDs and organizations are not copied.
 - Master keys, playback paths, screeners, subtitles, rights/legal/QC records, pricing, payments, entitlements, accounts, and publication approvals are excluded.
 - No reverse sync exists. No Production write path exists.
 
@@ -22,6 +22,7 @@ Set these in a protected operator shell or protected CI environment; never add v
 - `BRIDGE_SYNC_TESTING_DATABASE_URL` — Testing DB connection.
 - `BRIDGE_SYNC_TARGET=testing`
 - `BRIDGE_SYNC_ALLOW_PRODUCTION_READ=true`
+- `BRIDGE_SYNC_TESTING_OWNER_USER_ID` — a verified, dedicated Testing-only Studio owner identity; never use a Production user ID.
 - Existing OCI signer variables: `OCI_TENANCY_OCID`, `OCI_USER_OCID`, `OCI_FINGERPRINT`, `OCI_PRIVATE_KEY`, `OCI_REGION`, `OCI_NAMESPACE`, `OCI_BUCKET_NAME`.
 - `OCI_TESTING_BUCKET_NAME` — separately provisioned Testing bucket in the same OCI tenancy/region.
 
