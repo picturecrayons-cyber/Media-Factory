@@ -158,7 +158,14 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <WorkflowDesk title={title} actor={actor} />
+      <WorkflowDesk
+        title={title}
+        actor={actor}
+        qcSubmissionReady={
+          assets.some((asset) => asset.kind === "master" && asset.verified) &&
+          assets.some((asset) => ["poster", "poster_vertical"].includes(asset.kind) && asset.verified)
+        }
+      />
       {actor.internalRole === "super_admin" ? <MasterAssetReconciliation titleId={title.id} /> : null}
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
