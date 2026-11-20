@@ -63,7 +63,7 @@ function mapCatalogRow(r: CatalogRow): LoopTitle {
  * Strictly reads only titles authorized for consumer distribution by Bridge.
  * Enforces active window, published status, and approval.
  */
-export const getLoopCatalog = createServerFn({ method: "POST" })
+export const getLoopCatalog = createServerFn({ method: "GET" })
   .validator(
     z.object({
       genre: z.string().optional(),
