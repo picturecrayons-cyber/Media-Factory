@@ -37,4 +37,4 @@ The first command is read-only dry-run. Run the second only after verifying the 
 
 ## Current known source coverage
 
-The verified database inspection found 42 Bridge title rows, 181 Bridge asset rows, and 2 Loop title rows. Only current poster assets with an exact `bridge_titles.poster_key = bridge_assets.s3_key` match are eligible for poster copy; other assets are intentionally excluded.
+The verified database inspection found 42 Bridge title rows, 181 Bridge asset rows, and 2 Loop title rows. Only current poster assets with an exact `bridge_titles.poster_key = bridge_assets.s3_key` match are eligible for poster copy; other assets are intentionally excluded. Current read-only inspection found four such verified references. The existing Loop `Pranayam 1947` row points at a Bridge title ID whose title is `Koodal`; the sync deliberately drops that mismatched relationship rather than linking the wrong film. Its legacy Loop poster path is not copied until the object can be independently verified.
