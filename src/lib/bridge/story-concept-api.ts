@@ -39,7 +39,9 @@ type ConceptRow = {
   updated_at: string | Date;
   rights_holder_name: string | null;
   rights_basis: string | null;
+  rights_basis_details: string | null;
   third_party_materials_included: boolean | null;
+  third_party_materials_details: string | null;
   rights_declaration_accepted_at: string | Date | null;
   rights_declaration_version: string | null;
   editorial_status: string | null;
@@ -76,7 +78,9 @@ function mapConcept(row: ConceptRow): StoryConceptSubmission {
     updated_at: asIso(row.updated_at) ?? "",
     rights_holder_name: row.rights_holder_name,
     rights_basis: row.rights_basis,
+    rights_basis_details: row.rights_basis_details,
     third_party_materials_included: row.third_party_materials_included,
+    third_party_materials_details: row.third_party_materials_details,
     rights_declaration_accepted_at: asIso(row.rights_declaration_accepted_at),
     rights_declaration_version: row.rights_declaration_version,
     editorial_status: (row.editorial_status ?? "PENDING") as ReviewStatus,
@@ -136,8 +140,17 @@ const createPayloadSchema = z.object({
   language: z.string().min(2).max(40).default("Malayalam"),
   rightsHolderName: z.string().trim().min(2).max(160),
   rightsBasis: z.enum(["ORIGINAL_AUTHOR", "ASSIGNED", "LICENSED", "PUBLIC_DOMAIN", "OTHER"]),
+  rightsBasisDetails: z.string().trim().max(2000).optional(),
   thirdPartyMaterialsIncluded: z.boolean(),
+  thirdPartyMaterialsDetails: z.string().trim().max(4000).optional(),
   rightsDeclarationAccepted: z.literal(true),
+}).superRefine((value, ctx) => {
+  if (value.rightsBasis === "OTHER" && !value.rightsBasisDetails?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["rightsBasisDetails"], message: "Explain the selected rights basis" });
+  }
+  if (value.thirdPartyMaterialsIncluded && !value.thirdPartyMaterialsDetails?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["thirdPartyMaterialsDetails"], message: "Describe the third-party material" });
+  }
 });
 
 export const createStoryConceptSubmission = createServerFn({ method: "POST" })
@@ -150,12 +163,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     if (actor.internalRole) throw new Error("Only the submitting Creator or Studio may create an Original IP submission");
     assertPermission(actor, "title.create");
-    if (data.rightsBasis === "OTHER") throw new Error("Add an explanation for the selected rights basis before submission");
-    if (data.thirdPartyMaterialsIncluded) {
-      throw new Error("Third-party material details are required before this submission can be accepted");
-    }
-
-    const titleId = randomBytes(16).toString("hex");
+     const titleId = randomBytes(16).toString("hex");
     const slug = slugify(data.titleName, titleId);
     const sql = await getSql();
 
@@ -182,14 +190,16 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
           insert into bridge_story_concept_submissions (
             title_id, logline, synopsis, treatment_url, screenplay_url,
             genre, estimated_budget_range, target_platforms, curation_status,
-            rights_holder_name, rights_basis, third_party_materials_included,
+            rights_holder_name, rights_basis, rights_basis_details,
+            third_party_materials_included, third_party_materials_details,
             rights_declaration_accepted_at, rights_declaration_version
           ) values (
             ${titleId}, ${data.logline}, ${data.synopsis}, ${data.treatmentUrl || null},
             ${data.screenplayUrl || null}, ${data.genre}, ${data.estimatedBudgetRange ?? null},
             ${data.targetPlatforms}, ${"PENDING"}, ${data.rightsHolderName},
-            ${data.rightsBasis}, ${data.thirdPartyMaterialsIncluded}, now(),
-            ${"story-concept-rights-v1"}
+            ${data.rightsBasis}, ${data.rightsBasisDetails?.trim() || null},
+            ${data.thirdPartyMaterialsIncluded}, ${data.thirdPartyMaterialsDetails?.trim() || null},
+            now(), ${"story-concept-rights-v1"}
           )
           returning *
         `;
