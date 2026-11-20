@@ -315,7 +315,7 @@ test("OCI copy work-request fails closed on persistent 404 after propagation gra
   }
 });
 
-test("OCI copy fails when destination object is missing after copy completion", async () => {
+test("OCI copy fails when destination remains missing after the propagation window", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const values = {
     OCI_TENANCY_OCID: "test-tenancy",
@@ -343,7 +343,7 @@ test("OCI copy fails when destination object is missing after copy completion", 
       if (method === "GET") {
         return Response.json({ status: "SUCCEEDED" });
       }
-      // Destination HEAD returns 404 before and after copy
+      // Destination HEAD remains absent for the entire propagation window.
       return new Response(null, { status: 404 });
     };
 
@@ -354,6 +354,53 @@ test("OCI copy fails when destination object is missing after copy completion", 
       }),
       /verification failed \(404\)/,
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+
+
+test("OCI copy retries destination HEAD 404 after completed work request", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    let destinationHeads = 0;
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const method = init?.method || "GET";
+      if (method === "HEAD" && url.pathname.endsWith("/src")) {
+        return new Response(null, { headers: { "content-length": "42", "content-type": "video/mp4", etag: '"etag"', "opc-multipart-md5": "md5-src" } });
+      }
+      if (method === "HEAD") {
+        destinationHeads += 1;
+        return destinationHeads < 3
+          ? new Response(null, { status: 404 })
+          : new Response(null, { headers: { "content-length": "42", "content-type": "video/mp4", etag: '"sealed-etag"', "opc-multipart-md5": "md5-src" } });
+      }
+      if (method === "POST") return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-visible-after-copy" } });
+      if (method === "GET") return Response.json({ status: "SUCCEEDED" });
+      throw new Error("Unexpected OCI request method");
+    };
+    const sealed = await sealVerifiedObject("src", "dst", "etag", {
+      propagationGracePeriodMs: 100,
+      pollIntervalMs: 5,
+    });
+    assert.equal(sealed.byteSize, 42);
+    assert.equal(sealed.multipartMd5, "md5-src");
+    assert.equal(destinationHeads, 3);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
