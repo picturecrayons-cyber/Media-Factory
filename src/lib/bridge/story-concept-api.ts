@@ -143,7 +143,7 @@ const createPayloadSchema = z.object({
   rightsBasisDetails: z.string().trim().max(2000).optional(),
   thirdPartyMaterialsIncluded: z.boolean(),
   thirdPartyMaterialsDetails: z.string().trim().max(4000).optional(),
-  rightsDeclarationAccepted: z.literal(true),
+  rightsDeclarationAccepted: z.boolean().refine((accepted) => accepted, { message: "Rights declaration acceptance is required" }),
 }).superRefine((value, ctx) => {
   if (value.rightsBasis === "OTHER" && !value.rightsBasisDetails?.trim()) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["rightsBasisDetails"], message: "Explain the selected rights basis" });
