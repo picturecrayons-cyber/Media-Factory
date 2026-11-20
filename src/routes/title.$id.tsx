@@ -844,7 +844,7 @@ function FilesPanel({
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Upload</p>
           <h2 className="mt-1 font-display text-xl font-semibold">Package in three steps</h2>
-          <p className="mt-1 text-sm text-muted">{readyCount} of 7 files ready. A file is Ready only after storage verification.</p>
+          <p className="mt-1 text-sm text-muted">{readyCount} of 7 package categories contain a verified file. This is not QC clearance: QC separately validates the selected master and poster.</p>
         </div>
       </div>
 
