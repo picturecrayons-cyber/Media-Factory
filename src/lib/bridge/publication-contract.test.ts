@@ -31,6 +31,7 @@ function harness(
   };
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
+    if (query.includes("from bridge_titles b")) return [];
     if (query.includes("from bridge_titles")) return [title];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
@@ -83,7 +84,11 @@ function harness(
       return modules[name];
     },
   });
-  return { authorize: exports.authorizeLoopPublication, writes };
+  return {
+    authorize: exports.authorizeLoopPublication,
+    readiness: exports.listLoopPublicationReadiness,
+    writes,
+  };
 }
 
 const grant = {
@@ -151,4 +156,12 @@ test("publication requires all four release certifications", async () => {
     await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
     assert.equal(h.writes.length, 0);
   }
+});
+
+
+test("publication readiness GET is read-only and never reconciles expired rows", async () => {
+  const h = harness([grant]);
+  const result = await h.readiness({ context });
+  assert.equal((result as { titles: unknown[] }).titles.length, 0);
+  assert.equal(h.writes.length, 0);
 });
