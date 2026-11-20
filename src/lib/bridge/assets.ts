@@ -10,6 +10,7 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
+import { syncVerifiedProductionAsset } from "./production-assets";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
@@ -181,8 +182,10 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
     }
-    if (asset.byte_size != null)
+    if (asset.byte_size != null) {
+      await syncVerifiedProductionAsset(sql, { assetId: asset.id, titleId: title.id });
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
+    }
 
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
@@ -213,6 +216,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       sealedKey,
     });
     if (confirmed) {
+      // Keep the Production metadata register in sync with the verified source.
+      // This is idempotent and does not copy the OCI object or alter QC/rights state.
+      await syncVerifiedProductionAsset(sql, { assetId: asset.id, titleId: title.id });
       // UPLOADED is only recorded after persistVerifiedAsset succeeds.
       await sql`
         update loop_media_migration_queue
@@ -234,8 +240,10 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
         byte_size: number | null;
       }>`select byte_size from bridge_assets where id = ${asset.id}`;
       if (current[0]?.byte_size != null) {
-        // A concurrent confirmation persisted the asset successfully. Bring the
-        // queue into line with that durable state before returning idempotently.
+        // A concurrent confirmation persisted the asset successfully. Ensure its
+        // Production register reference exists before returning idempotently.
+        await syncVerifiedProductionAsset(sql, { assetId: asset.id, titleId: title.id });
+        // Bring the queue into line with that durable state before returning.
         await sql`
           update loop_media_migration_queue
           set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
