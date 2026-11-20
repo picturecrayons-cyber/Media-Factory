@@ -452,12 +452,18 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         ${data.accessTier}, now()
       )
       on conflict (bridge_title_id) do update set
-        slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
-        content_type = excluded.content_type,
-        language = excluded.language, year = excluded.year, duration_minutes = excluded.duration_minutes,
-        poster_path = excluded.poster_path, playback_path = excluded.playback_path,
+        slug = coalesce(nullif(loop_titles.slug, ''), excluded.slug),
+        title = coalesce(nullif(loop_titles.title, ''), excluded.title),
+        synopsis = coalesce(excluded.synopsis, loop_titles.synopsis),
+        content_type = coalesce(excluded.content_type, loop_titles.content_type),
+        language = coalesce(excluded.language, loop_titles.language),
+        year = coalesce(excluded.year, loop_titles.year),
+        duration_minutes = coalesce(excluded.duration_minutes, loop_titles.duration_minutes),
+        poster_path = coalesce(excluded.poster_path, loop_titles.poster_path),
+        playback_path = coalesce(excluded.playback_path, loop_titles.playback_path),
         status = 'approved', listed = true, published = true, access_tier = excluded.access_tier,
-        metadata = excluded.metadata, updated_at = now()
+        metadata = coalesce(loop_titles.metadata, '{}'::jsonb) || excluded.metadata,
+        updated_at = now()
     `;
 
       // 2. Authorize distribution record in Bridge control plane
