@@ -1,0 +1,27 @@
+{
+  "environment": "STAGING",
+  "projectId": "jbymleftneggcgutlcqu",
+  "syntheticOnly": true,
+  "users": [
+    {
+      "role": "A",
+      "authUserId": "00000000-0000-4000-8000-000000000001",
+      "bridgeUserId": "TEST-BRIDGE-A"
+    },
+    {
+      "role": "B",
+      "authUserId": "00000000-0000-4000-8000-000000000002",
+      "bridgeUserId": "TEST-BRIDGE-B"
+    },
+    {
+      "role": "C",
+      "authUserId": "00000000-0000-4000-8000-000000000003",
+      "bridgeUserId": null
+    },
+    {
+      "role": "ADMIN",
+      "authUserId": "00000000-0000-4000-8000-000000000004",
+      "bridgeUserId": "TEST-BRIDGE-ADMIN"
+    }
+  ]
+}
