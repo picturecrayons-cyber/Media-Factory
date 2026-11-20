@@ -220,6 +220,26 @@ function CreatorDashboard({
         </a>
       </section>
 
+      <section id="rights-status" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-widest text-accent">Independent clearance</p>
+        <h2 className="mt-1 font-display text-2xl font-semibold">Legal approval & Loop release</h2>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <article className="rounded-xl border border-line p-4">
+            <p className="text-sm font-semibold">Legal approval</p>
+            <p className="mt-2 text-sm text-muted">Decision owner: independent Bridge Legal Reviewer. Creator submissions and digital consent do not constitute legal approval.</p>
+            <p className="mt-3 text-xs font-semibold text-muted">REVIEW REQUIRED · Creator cannot approve</p>
+          </article>
+          <article className="rounded-xl border border-line p-4">
+            <p className="text-sm font-semibold">Loop publication</p>
+            <p className="mt-2 text-sm text-muted">Publication is created only after the exact rights grant, Legal approval, current-master QC, OTT preparation, packaging, curation and delivery certifications pass server-side preflight.</p>
+            <p className="mt-3 text-xs font-semibold text-muted">NOT CREATED UNTIL ALL GATES PASS</p>
+          </article>
+        </div>
+        <p className="mt-4 text-xs text-muted">
+          Uploading an agreement or accepting a consent statement records a submission event; it does not prove copyright ownership or transfer title authority.
+        </p>
+      </section>
+
       <section id="review" className="scroll-mt-20 grid gap-4 md:grid-cols-2">
         <InfoPanel
           eyebrow="QC & feedback"

@@ -60,7 +60,31 @@ const ACTION_GUIDANCE: Record<string, string> = {
   QC_REVIEW: "QC review is pending",
   RIGHTS_REVIEW: "Rights review is pending",
   LICENSING_READY: "Licensing decision is pending",
+  DRAFT: "Submission preparation is pending",
+  UPLOADING: "Media ingest is in progress",
+  PREPARING: "Technical preparation is in progress",
 };
+
+const RELEASE_GATES = [
+  {
+    title: "Producer authority & agreement evidence",
+    description: "Review the submitted owner identity, authority documents and executed agreement evidence.",
+    to: "/admin/workstations",
+    owner: "Producer submission → Super Admin verification",
+  },
+  {
+    title: "Independent Legal approval",
+    description: "A Legal Reviewer must approve the exact canonical rights grant. Super Admin verification is not Legal approval.",
+    to: "/admin/workstations",
+    owner: "Independent Legal Reviewer",
+  },
+  {
+    title: "Loop publication",
+    description: "Publication remains uncreated until the current rights grant, legal approval, QC, OTT, packaging, curation and delivery checks all pass.",
+    to: "/workspace",
+    owner: "Authorized publication operator after preflight",
+  },
+] as const;
 
 function DashboardBody() {
   const dashboardQ = useQuery({
@@ -186,6 +210,27 @@ function DashboardBody() {
             </p>
           </div>
         )}
+      </section>
+
+      <section aria-labelledby="release-gates-title" className="space-y-3">
+        <div>
+          <h3 id="release-gates-title" className="font-display text-xl font-semibold">Release gate control</h3>
+          <p className="mt-1 text-sm text-muted">
+            These are separate approvals. A dashboard action or account identity match cannot substitute for documentary or Legal evidence.
+          </p>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-3">
+          {RELEASE_GATES.map((gate) => (
+            <article key={gate.title} className="rounded-sm border border-line p-4">
+              <p className="text-sm font-semibold">{gate.title}</p>
+              <p className="mt-2 text-sm leading-relaxed text-muted">{gate.description}</p>
+              <p className="mt-3 text-xs text-muted">Responsible: {gate.owner}</p>
+              <Link to={gate.to} className="mt-4 inline-flex text-sm font-semibold text-accent hover:underline">
+                Open authorized workspace →
+              </Link>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section aria-labelledby="business-title" className="space-y-3">
