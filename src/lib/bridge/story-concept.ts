@@ -81,7 +81,9 @@ export const CURATION_TRANSITIONS: Record<CurationStatus, CurationStatus[]> = {
 export type StoryConceptApprovalState = {
   rights_holder_name: string | null;
   rights_basis: string | null;
+  rights_basis_details: string | null;
   third_party_materials_included: boolean | null;
+  third_party_materials_details: string | null;
   rights_declaration_accepted_at: string | Date | null;
   editorial_status: string | null;
   editorial_reviewed_by: string | null;
@@ -95,8 +97,10 @@ export function hasCompleteRightsDeclaration(state: StoryConceptApprovalState): 
     state.rights_declaration_accepted_at &&
     state.rights_holder_name?.trim() &&
     state.rights_basis &&
+    (state.rights_basis !== "OTHER" || Boolean(state.rights_basis_details?.trim())) &&
     state.third_party_materials_included !== null &&
-    state.third_party_materials_included !== undefined
+    state.third_party_materials_included !== undefined &&
+    (state.third_party_materials_included !== true || Boolean(state.third_party_materials_details?.trim()))
   );
 }
 
