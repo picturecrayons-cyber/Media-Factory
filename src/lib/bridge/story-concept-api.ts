@@ -257,6 +257,98 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     }
   });
 
+const rightsDeclarationInput = z.object({
+  id: z.string().uuid(),
+  rightsHolderName: z.string().trim().min(2).max(160),
+  rightsBasis: z.enum(["ORIGINAL_AUTHOR", "ASSIGNED", "LICENSED", "PUBLIC_DOMAIN", "OTHER"]),
+  rightsBasisDetails: z.string().trim().max(2000).optional(),
+  thirdPartyMaterialsIncluded: z.boolean(),
+  thirdPartyMaterialsDetails: z.string().trim().max(4000).optional(),
+  rightsDeclarationAccepted: z.boolean().refine((accepted) => accepted, { message: "Rights declaration acceptance is required" }),
+}).superRefine((value, ctx) => {
+  if (value.rightsBasis === "OTHER" && !value.rightsBasisDetails?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["rightsBasisDetails"], message: "Explain the selected rights basis" });
+  }
+  if (value.thirdPartyMaterialsIncluded && !value.thirdPartyMaterialsDetails?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["thirdPartyMaterialsDetails"], message: "Describe the third-party material" });
+  }
+});
+
+export const updateStoryConceptRightsDeclaration = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(rightsDeclarationInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole) throw new Error("Only the author may submit their own rights declaration");
+    const sql = await getSql();
+
+    return sql.transaction(async (tx) => {
+      const locked = await tx<ConceptRow & {
+        owner_user_id: string;
+        owner_account_type: string;
+        owner_organization_id: string | null;
+      }>`
+        select c.*, t.owner_user_id, t.owner_account_type, t.owner_organization_id
+        from bridge_story_concept_submissions c
+        join bridge_titles t on t.id = c.title_id
+        where c.id = ${data.id}
+          and t.submission_type = 'story_concept'
+        for update of c
+      `;
+      const current = locked[0];
+      if (!current) throw new Error("Story / Concept submission not found");
+
+      const isDirectOwner = current.owner_user_id === actor.userId;
+      const isActiveStudioMember = actor.accountType === "studio" &&
+        current.owner_account_type === "studio" &&
+        Boolean(actor.organizationId) &&
+        actor.organizationId === current.owner_organization_id &&
+        Boolean((await tx<{ exists: boolean }>`
+          select exists (
+            select 1 from bridge_organization_memberships m
+            where m.organization_id = ${current.owner_organization_id}
+              and m.user_id = ${actor.userId}
+              and m.status = 'active'
+          ) as exists
+        `)[0]?.exists);
+      if (!isDirectOwner && !isActiveStudioMember) {
+        throw new Error("You can only update the rights declaration for your own submission");
+      }
+      if (!["PENDING", "UNDER_REVIEW"].includes(current.curation_status)) {
+        throw new Error("Rights declarations can only be updated while the submission is pending review");
+      }
+
+      const rows = await tx<ConceptRow>`
+        update bridge_story_concept_submissions
+        set rights_holder_name = ${data.rightsHolderName},
+            rights_basis = ${data.rightsBasis},
+            rights_basis_details = ${data.rightsBasisDetails?.trim() || null},
+            third_party_materials_included = ${data.thirdPartyMaterialsIncluded},
+            third_party_materials_details = ${data.thirdPartyMaterialsDetails?.trim() || null},
+            rights_declaration_accepted_at = now(),
+            rights_declaration_version = 'story-concept-rights-v1',
+            updated_at = now()
+        where id = ${data.id}
+        returning *
+      `;
+      const concept = rows[0];
+      if (!concept) throw new Error("Rights declaration could not be saved");
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "story_concept.rights_declaration",
+        entityType: "bridge_story_concept_submission",
+        entityId: data.id,
+        metadata: {
+          rightsBasis: data.rightsBasis,
+          thirdPartyMaterialsIncluded: data.thirdPartyMaterialsIncluded,
+          declarationVersion: "story-concept-rights-v1",
+        },
+      }, tx);
+      return { concept: mapConcept(concept) };
+    });
+  });
+
 const reviewInput = z.object({
   id: z.string().uuid(),
   decision: z.enum(["APPROVED", "REJECTED", "NEEDS_INFO", "UNDER_REVIEW"]),
