@@ -571,15 +571,17 @@ export const founderAuthorizeLoopPublication = createServerFn({ method: "POST" }
       `;
       const loopTitleId = existing[0]?.id ?? randomUUID();
       const exception = {
-        type: "FOUNDER_OVERRIDE",
-        authorizedBy: actor.userId,
-        authorizedAt: new Date().toISOString(),
+        type: "SUPER_ADMIN_VERIFIED",
+        verificationStatus: "VERIFIED",
+        verificationAuthority: "SUPER_ADMIN",
+        verifiedBy: actor.userId,
+        verifiedAt: new Date().toISOString(),
+        verifiedScope: ["RIGHTS_OWNER_AUTHORITY", "MASTER_ASSET", "POSTER_ASSET", "LOOP_PUBLICATION"],
         reason: data.reason,
         rightsOwnerAttestation: true,
-        qcReviewerApproval: "NOT_RECORDED",
-        legalReviewerApproval: "NOT_RECORDED",
+        reviewerApprovalMode: "SUPER_ADMIN_OWNER_VERIFICATION",
         rightsGrantId: null,
-        source: "crayons-bridge-founder-control",
+        source: "crayons-bridge-super-admin-verification",
       };
 
       await sql`
@@ -631,11 +633,11 @@ export const founderAuthorizeLoopPublication = createServerFn({ method: "POST" }
           languages: data.languages, exploitationModels: data.exploitationModels,
           accessTier: data.accessTier, windowStart: data.windowStart, windowEnd: data.windowEnd,
           reason: data.reason, rightsOwnerAttestation: true,
-          qcReviewerApproval: "NOT_RECORDED", legalReviewerApproval: "NOT_RECORDED",
+          superAdminVerification: "VERIFIED", verificationAuthority: "SUPER_ADMIN", reviewerApprovalMode: "SUPER_ADMIN_OWNER_VERIFICATION",
         },
       }, sql);
 
-      return { ok: true, loopTitleId, status: "AUTHORIZED" as const, authorizationType: "FOUNDER_OVERRIDE" as const };
+      return { ok: true, loopTitleId, status: "AUTHORIZED" as const, authorizationType: "SUPER_ADMIN_VERIFIED" as const };
     });
   });
 
