@@ -21,7 +21,7 @@ const files = [
 test("authenticated server functions never transport bearer context through GET query strings", async () => {
   for (const file of files) {
     const source = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
-    const authenticatedGet = /createServerFn\\(\\{\\s*method:\\s*["']GET["']\\s*\\}\\)([\\s\\S]*?)\\.middleware\\(\\[authMiddleware\\]\\)/g;
+    const authenticatedGet = /createServerFn\(\{\s*method:\s*["']GET["']\s*\}\)([\s\S]*?)\.middleware\(\[authMiddleware\]\)/g;
     assert.equal([...source.matchAll(authenticatedGet)].length, 0, `${file} still declares an authenticated GET server function`);
   }
 });
