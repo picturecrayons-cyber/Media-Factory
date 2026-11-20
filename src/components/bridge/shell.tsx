@@ -39,7 +39,7 @@ function navigationFor(actor: BridgeActor): NavItem[] {
       { to: "/workspace", label: "Titles" },
       { to: "/deliveries", label: "Deliveries" },
     ],
-    buyer: [{ to: "/buyer", label: "Buyer Desk" }],
+    buyer: [\n      { to: "/buyer", label: "Discover" },\n      { to: "/buyer-workspace", label: "My Operations" },\n    ],
     investor: [{ to: "/investor", label: "Portfolio" }],
   };
 
