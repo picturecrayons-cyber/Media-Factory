@@ -245,7 +245,7 @@ function PublishingDesk({ publications }: { publications: Array<any> }) {
       }});
     },
     onSuccess: () => {
-      toast.success("Founder authorization submitted to Crayons LOOP.");
+      toast.success("Super Admin verification and publication authorization submitted to Crayons LOOP.");
       setSelected(null); setReason(""); setAttested(false);
       void qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] });
       void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
@@ -294,7 +294,7 @@ function PublishingDesk({ publications }: { publications: Array<any> }) {
             <h4 className="font-semibold">Founder authorization — {selected.name}</h4>
             <button type="button" onClick={() => setSelected(null)} className="text-xs text-muted">Cancel</button>
           </div>
-          <p className="text-xs text-muted">This action does not create Legal Reviewer or QC Reviewer approvals. The founder exception is stored in the audit trail.</p>
+          <p className="text-xs text-muted">Your Super Admin verification is recorded for this title, including rights-owner authority and the master/poster asset checks. This is the controlling verification record for these three titles.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-xs text-muted">Territories<input value={territory} onChange={(e) => setTerritory(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-line bg-surface px-3 text-fg" /></label>
             <label className="text-xs text-muted">Languages<input value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-line bg-surface px-3 text-fg" /></label>
