@@ -221,6 +221,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         </div>
       </section>
 
+      <AssetPreviewGallery assets={assets} />
+
       <nav
         aria-label="Title Workspace Sections"
         className="flex gap-1 overflow-x-auto border-b border-line pb-3"
