@@ -352,7 +352,7 @@ test("OCI copy fails when destination remains missing after the propagation wind
         propagationGracePeriodMs: 50,
         pollIntervalMs: 5,
       }),
-      /verification failed \(404\)/,
+      /sealed object was not visible after copy/,
     );
   } finally {
     globalThis.fetch = originalFetch;
