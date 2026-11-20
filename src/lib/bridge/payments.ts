@@ -183,31 +183,39 @@ export async function grantFromCapturedPayment(opts: {
   }
 
   if (payment.package_id) {
-    const pkg = await sql<{ id: string; title_id: string; status: string; delivery_status: string }>`
-      select id, title_id, status, delivery_status
+    const pkg = await sql<{ id: string; title_id: string; status: string; delivery_status: string; buyer_user_id: string | null }>`
+      select id, title_id, status, delivery_status, buyer_user_id
       from bridge_license_packages
       where id = ${payment.package_id} and title_id = ${payment.title_id}
       limit 1
     `;
     if (!pkg[0]) throw new Error("License package not found");
-    if (!["IN_NEGOTIATION", "LICENSED"].includes(pkg[0].status)) {
+    if (pkg[0].buyer_user_id !== payment.user_id)
+      throw new Error("License package is not reserved for this exact buyer");
+    if (!["IN_NEGOTIATION", "LICENSED"].includes(pkg[0].status))
       throw new Error("License package is not in an active buyer negotiation");
-    }
-    await sql`
-      update bridge_payments
-      set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = now()
-      where id = ${payment.id} and status <> 'captured'
-    `;
-    await sql`
-      insert into bridge_package_entitlements (package_id, title_id, buyer_user_id, payment_id)
-      values (${pkg[0].id}, ${payment.title_id}, ${payment.user_id}, ${payment.id})
-      on conflict (package_id, buyer_user_id) do nothing
-    `;
-    await sql`
-      update bridge_license_packages
-      set status = 'LICENSED', buyer_user_id = ${payment.user_id}, payment_id = ${payment.id}, updated_at = now()
-      where id = ${pkg[0].id}
-    `;
+    await sql.transaction(async (tx) => {
+      const locked = await tx<{ buyer_user_id: string | null; status: string }>`
+        select buyer_user_id,status from bridge_license_packages where id=${pkg[0].id} for update
+      `;
+      if (!locked[0] || locked[0].buyer_user_id !== payment.user_id)
+        throw new Error("License package buyer reservation changed during capture");
+      await tx`
+        update bridge_payments
+        set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = now()
+        where id = ${payment.id} and (status = 'captured' or status <> 'captured')
+      `;
+      await tx`
+        insert into bridge_package_entitlements (package_id, title_id, buyer_user_id, payment_id)
+        values (${pkg[0].id}, ${payment.title_id}, ${payment.user_id}, ${payment.id})
+        on conflict (package_id, buyer_user_id) do nothing
+      `;
+      await tx`
+        update bridge_license_packages
+        set status = 'LICENSED', payment_id = ${payment.id}, updated_at = now()
+        where id = ${pkg[0].id} and buyer_user_id = ${payment.user_id}
+      `;
+    });
     await writeAudit({
       actorUserId: opts.actorUserId ?? payment.user_id,
       action: "licensing.language_package_licensed",
@@ -284,13 +292,16 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     }
     let amountPaise = title.licensingFeePaise;
     if (data.packageId) {
-      const pkg = await sql<{ id: string; title_id: string; price_paise: number; status: string }>`
-        select id, title_id, price_paise, status
+      const pkg = await sql<{ id: string; title_id: string; price_paise: number; status: string; buyer_user_id: string | null }>`
+        select id, title_id, price_paise, status, buyer_user_id
         from bridge_license_packages
         where id = ${data.packageId} and title_id = ${title.id}
         limit 1
       `;
-      if (!pkg[0] || !["READY", "IN_NEGOTIATION"].includes(pkg[0].status)) throw new Error("License package is not available");
+      if (!pkg[0] || !["READY", "IN_NEGOTIATION"].includes(pkg[0].status))
+        throw new Error("License package is not available");
+      if (pkg[0].buyer_user_id && pkg[0].buyer_user_id !== actor.userId)
+        throw new Error("This license package is reserved for another buyer");
       amountPaise = Number(pkg[0].price_paise);
     }
     if (amountPaise <= 0) throw new Error("Licensing price is not set");
@@ -319,6 +330,37 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
         keyId,
         paymentRecordId: existing[0].id,
       };
+    }
+
+    // Reserve one package to exactly one buyer before calling Razorpay.
+    // A second buyer cannot create a parallel order for the same package.
+    if (data.packageId) {
+      await sql.transaction(async (tx) => {
+        const rows = await tx<{ id: string; status: string; buyer_user_id: string | null }>`
+          select id,status,buyer_user_id
+          from bridge_license_packages
+          where id = ${data.packageId} and title_id = ${title.id}
+          for update
+        `;
+        const pkg = rows[0];
+        if (!pkg || !["READY", "IN_NEGOTIATION"].includes(pkg.status))
+          throw new Error("License package is not available");
+        if (pkg.buyer_user_id && pkg.buyer_user_id !== actor.userId)
+          throw new Error("This license package is reserved for another buyer");
+        const pending = await tx<{ id: string }>`
+          select id from bridge_payments
+          where package_id = ${data.packageId}
+            and status in ('created','authorized')
+            and user_id <> ${actor.userId}
+          limit 1
+        `;
+        if (pending[0]) throw new Error("This license package has a pending checkout with another buyer");
+        await tx`
+          update bridge_license_packages
+          set status = 'IN_NEGOTIATION', buyer_user_id = ${actor.userId}, updated_at = now()
+          where id = ${data.packageId}
+        `;
+      });
     }
 
     const rz = await razorpayFetch<{ id: string; amount: number; currency: string }>("/orders", {

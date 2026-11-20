@@ -6,6 +6,7 @@ export type UploadSession = {
   titleId: string;
   kind: string;
   assetId: string;
+  storageScope?: string;
   uploadId: string;
   partBaseUrl: string;
   fileName: string;

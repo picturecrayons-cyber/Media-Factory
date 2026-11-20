@@ -9,7 +9,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
-import { persistVerifiedAsset } from "./asset-confirmation";
+import { persistVerifiedAsset, persistVerifiedAssetReplacement } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
@@ -78,6 +78,101 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       metadata: { titleId: title.id, kind: data.kind },
     });
     return { assetId: id, ...signed };
+
+  });
+
+/** Super Admin-only replacement upload. Existing verified asset remains active until final verification. */
+export const requestAssetReplacement = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8),
+    targetAssetId: z.string().min(8),
+    kind: z.enum(ASSET_KINDS),
+    filename: z.string().min(1).max(120),
+    contentType: z.string().min(3).max(120),
+    byteSize: z.number().int().positive().max(200 * 1024 * 1024 * 1024).optional(),
+    reason: z.string().trim().min(8).max(1000),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Forbidden: Super Admin replacement only");
+    assertPermission(actor, "asset.sign_upload");
+    const title = await loadTitle(data.titleId);
+    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload"))
+      throw new Error("Not found");
+    if (!["master","poster","poster_vertical","poster_horizontal","thumbnail","subtitle","screener","technical","censor_certificate"].includes(data.kind))
+      throw new Error("This asset kind cannot be replaced here");
+    const ingestValidation = validateOttIngestFile({
+      kind: data.kind as OttIngestKind,
+      filename: data.filename,
+      contentType: data.contentType,
+    });
+    if (!ingestValidation.ok) throw new Error(ingestValidation.message);
+
+    const sql = await getSql();
+    const id = randomBytes(16).toString("hex");
+    const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
+    // Append the new immutable asset ID before signing so identical filenames
+    // cannot ever overwrite the currently referenced OCI object.
+    const baseKey = titleAssetKey({
+      ownerUserId: title.ownerUserId,
+      titleId: title.id,
+      kind: data.kind,
+      filename: data.filename,
+    });
+    const key = `${baseKey}.replacement/${id}`;
+    const signed = await signUpload({
+      key,
+      contentType: data.contentType,
+      expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
+    });
+    const previous = await sql.transaction(async (tx) => {
+      const locked = await tx.query<{
+        id: string; title_id: string; kind: string; s3_key: string; byte_size: number | null; superseded_at: string | null;
+      }>(
+        `select id, title_id, kind, s3_key, byte_size, superseded_at
+         from bridge_assets where id=$1 and title_id=$2 for update`,
+        [data.targetAssetId, title.id],
+      );
+      const old = locked[0];
+      if (!old || old.kind !== data.kind || Number(old.byte_size ?? 0) <= 0 || old.superseded_at)
+        throw new Error("The selected verified asset is no longer the current replaceable version");
+      if (old.kind === "master" && title.masterKey && title.masterKey !== old.s3_key)
+        throw new Error("The selected master is not the current title master");
+      if (["poster","poster_vertical"].includes(old.kind) && title.posterKey && title.posterKey !== old.s3_key)
+        throw new Error("The selected poster is not the current title artwork");
+      const alreadyPending = await tx.query<{ id: string }>(
+        `select id from bridge_assets
+         where supersedes_asset_id=$1 and byte_size is null
+         limit 1`,
+        [old.id],
+      );
+      if (alreadyPending[0]) throw new Error("A replacement upload is already in progress for this asset");
+      await tx`
+        insert into bridge_assets (
+          id, title_id, kind, s3_key, content_type, created_by,
+          supersedes_asset_id, replacement_reason, replacement_initiated_by
+        ) values (
+          ${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId},
+          ${old.id}, ${data.reason.trim()}, ${actor.userId}
+        )
+      `;
+      return old;
+    });
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "asset.replacement_upload_signed",
+      entityType: "bridge_asset",
+      entityId: id,
+      metadata: {
+        titleId: title.id,
+        kind: data.kind,
+        previousAssetId: previous.id,
+        reason: data.reason.trim(),
+      },
+    });
+    return { assetId: id, ...signed };
   });
 
 async function openUploadAsset(userId: string, assetId: string) {
@@ -91,15 +186,33 @@ async function openUploadAsset(userId: string, assetId: string) {
     s3_key: string;
     content_type: string | null;
     byte_size: number | null;
+    supersedes_asset_id: string | null;
   }>`
-    select id, title_id, s3_key, content_type, byte_size
+    select id, title_id, s3_key, content_type, byte_size, supersedes_asset_id
     from bridge_assets where id = ${assetId} limit 1
   `;
   const asset = rows[0];
   if (!asset) throw new Error("Asset not found");
   const title = await loadTitle(asset.title_id);
-  if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
+  const replacementUpload = Boolean(asset.supersedes_asset_id);
+  if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) {
     throw new Error("Upload confirmation is closed for this title");
+  }
+  if (replacementUpload) {
+    if (actor.internalRole !== "super_admin")
+      throw new Error("Forbidden: Super Admin replacement only");
+    const target = await sql<{ id: string }>`
+      select id from bridge_assets
+      where id = ${asset.supersedes_asset_id}
+        and title_id = ${asset.title_id}
+        and kind = (select kind from bridge_assets where id = ${asset.id})
+        and byte_size > 0
+        and superseded_at is null
+      limit 1
+    `;
+    if (!target[0]) throw new Error("The asset selected for replacement is no longer current");
+  } else if (!UPLOADABLE.has(title.status)) {
+    throw new Error("Uploads are closed for this status");
   }
   return asset;
 }
@@ -171,14 +284,24 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       created_by: string;
       content_type: string | null;
       byte_size: number | null;
+      supersedes_asset_id: string | null;
+      replacement_reason: string | null;
     }>`
-      select id, title_id, kind, s3_key, created_by, content_type, byte_size
+      select id, title_id, kind, s3_key, created_by, content_type, byte_size,
+             supersedes_asset_id, replacement_reason
       from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
     if (!asset) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
+    const replacementUpload = Boolean(asset.supersedes_asset_id);
+    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) {
+      throw new Error("Upload confirmation is closed for this title");
+    }
+    if (replacementUpload) {
+      if (actor.internalRole !== "super_admin")
+        throw new Error("Forbidden: Super Admin replacement only");
+    } else if (!UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
     }
     if (asset.byte_size != null)
@@ -200,19 +323,33 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }
     // Persist asset/title/audit state first. Do not advance the migration queue
     // if persistence fails: its prior state remains the truthful state.
-    const confirmed = await persistVerifiedAsset(sql, {
-      assetId: asset.id,
-      actorUserId: actor.userId,
-      internalActor: Boolean(actor.internalRole),
-      titleId: title.id,
-      kind: asset.kind,
-      byteSize: sealed.byteSize,
-      contentType: sealed.contentType,
-      checksum: sealed.etag,
-      sourceKey: asset.s3_key,
-      sealedKey,
-    });
-    if (confirmed) {
+    const confirmed = replacementUpload
+      ? await persistVerifiedAssetReplacement(sql, {
+          assetId: asset.id,
+          previousAssetId: asset.supersedes_asset_id!,
+          actorUserId: actor.userId,
+          titleId: title.id,
+          kind: asset.kind,
+          byteSize: sealed.byteSize,
+          contentType: sealed.contentType,
+          etag: sealed.etag,
+          sourceKey: asset.s3_key,
+          sealedKey,
+          reason: asset.replacement_reason || "",
+        })
+      : await persistVerifiedAsset(sql, {
+          assetId: asset.id,
+          actorUserId: actor.userId,
+          internalActor: Boolean(actor.internalRole),
+          titleId: title.id,
+          kind: asset.kind,
+          byteSize: sealed.byteSize,
+          contentType: sealed.contentType,
+          checksum: sealed.etag,
+          sourceKey: asset.s3_key,
+          sealedKey,
+        });
+    if (confirmed && !replacementUpload) {
       // UPLOADED is only recorded after persistVerifiedAsset succeeds.
       await sql`
         update loop_media_migration_queue
@@ -325,7 +462,9 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets
+      where title_id = ${title.id} and byte_size > 0 and superseded_at is null
+      order by created_at desc
     `;
     return {
       assets: rows

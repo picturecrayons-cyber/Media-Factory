@@ -18,6 +18,7 @@ import {
   listProductionAssets,
   requestAssetDownload,
   requestAssetUpload,
+  requestAssetReplacement,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -238,6 +239,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       </nav>
 
       {activeTab === "Overview" ? (
+        <>
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -270,12 +272,15 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             </>
           ) : null}
         </section>
+        {!buyerView ? <AssetPreviewGallery assets={assets} /> : null}
+        </>
       ) : activeTab === "Files" && !buyerView ? (
         <FilesPanel
           canUpload={
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
             ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
           }
+          canReplace={actor.emailVerified && actor.internalRole === "super_admin"}
           titleId={id}
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
@@ -463,8 +468,10 @@ function FilesPanel({
   assets,
   onAssetsChanged,
   canUpload,
+  canReplace,
 }: {
   canUpload: boolean;
+  canReplace: boolean;
   titleId: string;
   assets: Array<{
     id: string;
@@ -476,6 +483,8 @@ function FilesPanel({
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
+  const [replacement, setReplacement] = useState<{ kind: SimpleAssetKind; file: File; targetAssetId: string } | null>(null);
+  const [replacementReason, setReplacementReason] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [messageKind, setMessageKind] = useState<"status" | "success" | "error">("status");
   const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied" | "unsupported">(() =>
@@ -614,15 +623,22 @@ function FilesPanel({
     });
   }
 
-  async function runMultipart(kind: SimpleAssetKind, file: File, contentType: string, assertAttemptActive: () => void) {
-    const existing = readUploadSession(titleId, kind);
+  async function runMultipart(kind: SimpleAssetKind, file: File, contentType: string, assertAttemptActive: () => void, replacementTarget?: { assetId: string; reason: string }) {
+    const sessionScope = replacementTarget?.assetId;
+    const existing = readUploadSession(titleId, kind, sessionScope);
     if (existing && !sameUploadFile(existing, file)) {
       throw new Error(`A paused ${kindLabel(kind)} upload is waiting for ${existing.fileName}. Choose that file to continue, or cancel it first.`);
     }
     let session = existing;
     if (!session) {
       const signed = await withTimeout(
-        requestAssetUpload({ data: { titleId, kind, filename: asciiUploadName(file.name), contentType, byteSize: file.size } }),
+        replacementTarget
+          ? requestAssetReplacement({ data: {
+              titleId, kind, targetAssetId: replacementTarget.assetId,
+              filename: asciiUploadName(file.name), contentType, byteSize: file.size,
+              reason: replacementTarget.reason,
+            } })
+          : requestAssetUpload({ data: { titleId, kind, filename: asciiUploadName(file.name), contentType, byteSize: file.size } }),
         20_000,
         "Upload URL preparation",
       );
@@ -639,6 +655,7 @@ function FilesPanel({
         titleId,
         kind,
         assetId: signed.assetId,
+        storageScope: sessionScope,
         uploadId: started.uploadId,
         partBaseUrl: started.partBaseUrl,
         fileName: file.name,
@@ -649,7 +666,7 @@ function FilesPanel({
         committed: false,
         expiresAt: started.expiresAt,
       };
-      writeUploadSession(session);
+      writeUploadSession(session, sessionScope);
     }
     activeMultipart.current = session;
     if (!session.committed) {
@@ -693,7 +710,7 @@ function FilesPanel({
           }
         }
         session = { ...session, completedParts: [...session.completedParts, part] };
-        writeUploadSession(session);
+        writeUploadSession(session, sessionScope);
         activeMultipart.current = session;
       }
       assertAttemptActive();
@@ -703,13 +720,13 @@ function FilesPanel({
         "Multipart commit",
       );
       session = { ...session, committed: true };
-      writeUploadSession(session);
+      writeUploadSession(session, sessionScope);
       activeMultipart.current = session;
     }
     return session.assetId;
   }
 
-  async function uploadFile(kind: SimpleAssetKind, file: File) {
+  async function uploadFile(kind: SimpleAssetKind, file: File, replacementTarget?: { assetId: string; reason: string }) {
     if (uploading) return;
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -732,10 +749,16 @@ function FilesPanel({
     try {
       let assetId: string;
       if (file.size > MULTIPART_MIN_FILE) {
-        assetId = await runMultipart(kind, file, contentType, assertAttemptActive);
+        assetId = await runMultipart(kind, file, contentType, assertAttemptActive, replacementTarget);
       } else {
       const signed = await withTimeout(
-        requestAssetUpload({ data: { titleId, kind, filename, contentType, byteSize: file.size } }),
+        replacementTarget
+          ? requestAssetReplacement({ data: {
+              titleId, kind, targetAssetId: replacementTarget.assetId,
+              filename, contentType, byteSize: file.size,
+              reason: replacementTarget.reason,
+            } })
+          : requestAssetUpload({ data: { titleId, kind, filename, contentType, byteSize: file.size } }),
         20_000,
         "Upload URL preparation",
       );
@@ -764,7 +787,7 @@ function FilesPanel({
       announce("Storage verified. Refreshing the asset list…");
       await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
       assertAttemptActive();
-      clearUploadSession(titleId, kind);
+      clearUploadSession(titleId, kind, replacementTarget?.assetId);
       activeMultipart.current = null;
       setProgress(null);
       announce(`${kindLabel(kind)} is ready.`, "success", true);
@@ -870,7 +893,7 @@ function FilesPanel({
                 const session = activeMultipart.current;
                 activeMultipart.current = null;
                 if (session) {
-                  clearUploadSession(session.titleId, session.kind);
+                  clearUploadSession(session.titleId, session.kind, session.storageScope);
                   void abortAssetMultipart({ data: { assetId: session.assetId, partBaseUrl: session.partBaseUrl } }).catch(() => undefined);
                 }
                 setProgress(null);
@@ -927,7 +950,16 @@ function FilesPanel({
                     busy={uploading === kind}
                     locked={uploading !== null && uploading !== kind}
                     canUpload={canUpload}
-                    onFile={(file) => void uploadFile(kind, file)}
+                    canReplace={canReplace}
+                    onFile={(file) => {
+                      if (verified && canReplace) {
+                        if (kind === "master" && !window.confirm("Replace the main film master? The previous master will be retained, QC will reopen, and all downstream approvals must be rechecked.")) return;
+                        setReplacement({ kind, file, targetAssetId: verified.id });
+                        setReplacementReason("");
+                      } else {
+                        void uploadFile(kind, file);
+                      }
+                    }}
                     onDownload={verified ? () => void download(verified.id) : undefined}
                   />
                 );
@@ -936,6 +968,49 @@ function FilesPanel({
           </div>
         ))}
       </div>
+      {replacement ? (
+        <div className="mt-5 rounded-xl border border-line bg-elevated/40 p-4">
+          <h3 className="text-sm font-semibold">Confirm {kindLabel(replacement.kind)} replacement</h3>
+          <p className="mt-1 text-xs text-muted">
+            The previous verified file stays preserved. The new file becomes current only after storage verification; this replacement reopens QC.
+          </p>
+          <label className="mt-3 block text-sm">
+            Replacement reason
+            <textarea
+              className="mt-1 min-h-24 w-full rounded-lg border border-line-strong bg-surface p-3"
+              value={replacementReason}
+              onChange={(event) => setReplacementReason(event.target.value)}
+              maxLength={1000}
+              placeholder="Explain why this verified asset needs replacement (minimum 8 characters)"
+            />
+          </label>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={uploading !== null || replacementReason.trim().length < 8}
+              onClick={() => {
+                const pending = replacement;
+                setReplacement(null);
+                void uploadFile(pending.kind, pending.file, {
+                  assetId: pending.targetAssetId,
+                  reason: replacementReason.trim(),
+                });
+              }}
+              className="rounded-full bg-fg px-4 py-2 text-xs font-semibold text-bg disabled:opacity-40"
+            >
+              Verify and replace
+            </button>
+            <button
+              type="button"
+              disabled={uploading !== null}
+              onClick={() => setReplacement(null)}
+              className="rounded-full border border-line bg-surface px-4 py-2 text-xs font-semibold"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
       {message ? (
         <p
           className={`mt-4 rounded-lg border px-3 py-2 text-sm ${messageKind === "error" ? "border-red-300 bg-red-50 text-red-700" : messageKind === "success" ? "border-green-300 bg-green-50 text-green-800" : "border-line bg-elevated text-fg"}`}
@@ -975,9 +1050,9 @@ function FilesPanel({
   );
 }
 
-function readUploadSession(titleId: string, kind: string): UploadSession | null {
+function readUploadSession(titleId: string, kind: string, storageScope?: string): UploadSession | null {
   try {
-    const raw = localStorage.getItem(sessionStorageKey(titleId, kind));
+    const raw = localStorage.getItem(sessionStorageKey(titleId, storageScope ? `${kind}:replacement:${storageScope}` : kind));
     if (!raw) return null;
     const session = JSON.parse(raw) as UploadSession;
     if (session.version !== 1 || session.titleId !== titleId || session.kind !== kind || !Array.isArray(session.completedParts)) return null;
@@ -991,12 +1066,15 @@ function readUploadSession(titleId: string, kind: string): UploadSession | null 
   }
 }
 
-function writeUploadSession(session: UploadSession) {
-  localStorage.setItem(sessionStorageKey(session.titleId, session.kind), JSON.stringify(session));
+function writeUploadSession(session: UploadSession, storageScope?: string) {
+  localStorage.setItem(
+    sessionStorageKey(session.titleId, storageScope ? `${session.kind}:replacement:${storageScope}` : session.kind),
+    JSON.stringify(session),
+  );
 }
 
-function clearUploadSession(titleId: string, kind: string) {
-  localStorage.removeItem(sessionStorageKey(titleId, kind));
+function clearUploadSession(titleId: string, kind: string, storageScope?: string) {
+  localStorage.removeItem(sessionStorageKey(titleId, storageScope ? `${kind}:replacement:${storageScope}` : kind));
 }
 
 function displayKind(kind: string) {
@@ -1033,8 +1111,10 @@ function FileTypeCard({
   onFile,
   onDownload,
   canUpload,
+  canReplace,
 }: {
   canUpload: boolean;
+  canReplace: boolean;
   kind: SimpleAssetKind;
   label: string;
   status: string;
@@ -1056,20 +1136,24 @@ function FileTypeCard({
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <label className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${ready ? "border border-line bg-surface" : "bg-fg text-bg"} ${busy || locked || !canUpload ? "pointer-events-none opacity-50" : ""}`}>
-            {busy ? "Uploading…" : ready ? "Replace" : "Upload"}
-            <input
-              className="sr-only"
-              type="file"
-              accept={getOttIngestAccept(kind)}
-              disabled={busy || locked || !canUpload}
-              onChange={(e) => {
-                const file = e.currentTarget.files?.[0];
-                if (file) onFile(file);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
+          {ready && !canReplace ? (
+            <span className="text-[11px] text-muted">Replacement restricted to Super Admin</span>
+          ) : (
+            <label className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${ready ? "border border-line bg-surface" : "bg-fg text-bg"} ${busy || locked || (ready ? !canReplace : !canUpload) ? "pointer-events-none opacity-50" : ""}`}>
+              {busy ? "Uploading…" : ready ? "Replace" : "Upload"}
+              <input
+                className="sr-only"
+                type="file"
+                accept={getOttIngestAccept(kind)}
+                disabled={busy || locked || (ready ? !canReplace : !canUpload)}
+                onChange={(e) => {
+                  const file = e.currentTarget.files?.[0];
+                  if (file) onFile(file);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </label>
+          )}
           {onDownload ? (
             <button type="button" onClick={onDownload} className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold">
               Download

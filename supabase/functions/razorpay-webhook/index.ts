@@ -166,8 +166,8 @@ Deno.serve(async (req: Request) => {
             if (!["IN_NEGOTIATION", "LICENSED"].includes(data.status)) {
               return await failEvent(supabase, id, "Language licence package is not in active negotiation");
             }
-            if (data.buyer_user_id && data.buyer_user_id !== localPayment.user_id) {
-              return await failEvent(supabase, id, "Language licence package belongs to another buyer");
+            if (!data.buyer_user_id || data.buyer_user_id !== localPayment.user_id) {
+              return await failEvent(supabase, id, "Language licence package is not reserved for this exact buyer");
             }
             packageRecord = data;
           }
