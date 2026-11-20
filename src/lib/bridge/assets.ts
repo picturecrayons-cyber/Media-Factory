@@ -10,7 +10,6 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
-import { syncVerifiedProductionAsset } from "./production-assets";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
@@ -182,10 +181,8 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
     }
-    if (asset.byte_size != null) {
-      await syncVerifiedProductionAsset(sql, { assetId: asset.id, titleId: title.id });
+    if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
-    }
 
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
@@ -216,9 +213,6 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       sealedKey,
     });
     if (confirmed) {
-      // Keep the Production metadata register in sync with the verified source.
-      // This is idempotent and does not copy the OCI object or alter QC/rights state.
-      await syncVerifiedProductionAsset(sql, { assetId: asset.id, titleId: title.id });
       // UPLOADED is only recorded after persistVerifiedAsset succeeds.
       await sql`
         update loop_media_migration_queue
@@ -240,10 +234,8 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
         byte_size: number | null;
       }>`select byte_size from bridge_assets where id = ${asset.id}`;
       if (current[0]?.byte_size != null) {
-        // A concurrent confirmation persisted the asset successfully. Ensure its
-        // Production register reference exists before returning idempotently.
-        await syncVerifiedProductionAsset(sql, { assetId: asset.id, titleId: title.id });
-        // Bring the queue into line with that durable state before returning.
+        // A concurrent confirmation persisted the asset successfully. Bring the
+        // queue into line with that durable state before returning idempotently.
         await sql`
           update loop_media_migration_queue
           set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
@@ -378,26 +370,28 @@ export const listProductionAssets = createServerFn({ method: "GET" })
       verified_source: boolean;
     }>`
       select
-        production_asset.id,
-        production_asset.category,
-        production_asset.file_name,
-        production_asset.file_size,
-        production_asset.content_type,
-        production_asset.tags->>'source_kind' as source_kind,
+        a.id,
         case
-          when nullif(production_asset.tags->>'source_asset_id', '') is null then false
-          else coalesce(
-            source_asset.byte_size > 0
-            and source_asset.storage_business_state = 'ACTIVE'
-            and source_asset.restore_state = 'READY',
-            false
-          )
-        end as verified_source
-      from bridge_production_assets production_asset
-      left join bridge_assets source_asset
-        on source_asset.id = production_asset.tags->>'source_asset_id'
-      where production_asset.title_id = ${title.id}
-      order by production_asset.created_at desc, production_asset.id
+          when a.kind in ('master', 'screener') then 'raw_video'
+          when a.kind in ('poster', 'poster_vertical', 'poster_horizontal', 'thumbnail') then 'stills'
+          when a.kind in ('subtitle', 'technical', 'censor_certificate') then 'documents'
+        end as category,
+        regexp_replace(split_part(a.s3_key, '.verified/', 1), '^.*/', '') as file_name,
+        a.byte_size as file_size,
+        a.content_type,
+        a.kind as source_kind,
+        true as verified_source
+      from bridge_assets a
+      where a.title_id = ${title.id}
+        and a.byte_size > 0
+        and a.storage_business_state = 'ACTIVE'
+        and a.restore_state = 'READY'
+        and a.kind in (
+          'master', 'screener',
+          'poster', 'poster_vertical', 'poster_horizontal', 'thumbnail',
+          'subtitle', 'technical', 'censor_certificate'
+        )
+      order by a.created_at desc, a.id
       limit 500
     `;
 
