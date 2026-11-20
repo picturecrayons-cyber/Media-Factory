@@ -87,8 +87,8 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
       ) : activeTab === "Buyers" ? (
-        <BuyerRelease titles={data.titles} canApprove={hasPermission(actor, "title.approve")}
-          onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
+        <BuyerRelease titles={data.titles} gateRows={data.gates} canApprove={hasPermission(actor, "title.approve")} pending={gate.isPending}
+          onGate={(titleId, gateName, notes) => gate.mutate({ data: { titleId, gate: gateName, decision: "PASS", notes } })} />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
           <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
@@ -165,6 +165,37 @@ function ReviewQueue({ title, description, titles, canAct, actions, mutation }: 
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
 }
-function BuyerRelease({ titles, canApprove, onGate }: { titles: any[]; canApprove: boolean; onGate: (titleId: string, gateName: string) => void }) {
-  return <section className="space-y-3"><SectionHeader title="Buyer release" description="Pass a gate only after the required check." />{titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span>{canApprove ? <ActionButton label="Pass gate" onClick={() => onGate(t.id, "buyer")} /> : <span className="text-xs text-muted">Approval reserved to Super Admin</span>}</div>)}</section>;
+function BuyerRelease({ titles, canApprove, gateRows, pending, onGate }: { titles: any[]; canApprove: boolean; gateRows: any[]; pending: boolean; onGate: (titleId: string, gateName: "OTT" | "PACKAGING" | "CURATION" | "DELIVERY", notes: string) => void }) {
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const gates = [
+    ["OTT", "OTT preparation", "ott_preparation_status", "READY"],
+    ["PACKAGING", "Packaging", "packaging_status", "COMPLETE"],
+    ["CURATION", "Curation", "curation_status", "APPROVED"],
+    ["DELIVERY", "Delivery", "delivery_status", "READY"],
+  ] as const;
+  return <section className="space-y-3">
+    <SectionHeader title="Buyer release" description="Each PASS requires verified source evidence and a review rationale. Missing evidence keeps the gate on HOLD." />
+    {titles.map((t) => {
+      const row = gateRows.find((g) => g.title_id === t.id);
+      return <div key={t.id} className="rounded-2xl border border-line p-4 space-y-3">
+        <p className="font-medium">{t.name}</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {gates.map(([gateName, label, field, passedValue]) => {
+            const status = row?.[field] ?? "HOLD";
+            const key = t.id + ":" + gateName;
+            const rationale = notes[key] ?? "";
+            return <div key={gateName} className="rounded-xl bg-elevated p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm">{label}: <strong>{status}</strong></span>
+                {canApprove ? <ActionButton label={status === passedValue ? "Passed" : "Verify & pass"} disabled={status === passedValue || pending || rationale.trim().length < 10} onClick={() => onGate(t.id, gateName, rationale.trim())} /> : null}
+              </div>
+              {canApprove ? <textarea aria-label={label + " review rationale"} value={rationale} onChange={(event) => setNotes((current) => ({ ...current, [key]: event.target.value }))} placeholder="Required review rationale (minimum 10 characters)" rows={2} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs text-fg placeholder:text-muted" /> : null}
+            </div>;
+          })}
+        </div>
+        {!canApprove ? <span className="text-xs text-muted">Gate approval reserved to Super Admin</span> : null}
+      </div>;
+    })}
+    {!titles.length ? <Empty text="No titles in the Bridge catalog." /> : null}
+  </section>;
 }

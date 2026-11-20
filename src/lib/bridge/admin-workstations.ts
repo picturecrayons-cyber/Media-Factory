@@ -18,7 +18,7 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
     const actor = await actorFor(context.userId);
     if (!canAccessAdminWorkstations(actor)) throw new Error("Forbidden");
     const sql = await getSql();
-    const [titles, assets, assetVersions, qc, legal, rights, packages, publications, audit] = await Promise.all([
+    const [titles, assets, assetVersions, qc, legal, rights, packages, publications, audit, gates] = await Promise.all([
       sql`select id, name, owner_user_id, owner_account_type, status, language, updated_at from bridge_titles order by updated_at desc limit 200`,
       sql`select id, title_id, kind, s3_key, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
       sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`,
@@ -28,8 +28,9 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
       sql`select id, title_id, destination, package_version, rights_grant_id, qc_case_id, legal_case_id, readiness_state, authorized_by, authorized_at, created_at, commercial_model, distributor_exclusivity, revenue_share_percent from bridge_destination_packages order by created_at desc limit 200`,
       sql`select id, bridge_title_id, loop_title_id, authorization_status, territories, languages, exploitation_models, window_start, window_end, approved_by, approved_at, revoked_at, updated_at from bridge_loop_publications order by updated_at desc limit 200`,
       sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs order by created_at desc limit 200`,
+      sql`select title_id, ott_preparation_status, packaging_status, curation_status, delivery_status from bridge_title_gate_certifications order by updated_at desc limit 200`,
     ]);
-    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
+    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, audit, gates }, (_, value) => typeof value === "bigint" ? value.toString() : value));
   });
 
 const reviewInput = z.object({
@@ -85,10 +86,56 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
 
 const gateInput = z.object({
   titleId: z.string().min(1),
-  gate: z.enum(["OTT","PACKAGING","CURATION","DELIVERY"]),
-  decision: z.enum(["PASS","HOLD","FAIL","REVOKE"]),
-  notes: z.string().max(4000).optional(),
+  gate: z.enum(["OTT", "PACKAGING", "CURATION", "DELIVERY"]),
+  decision: z.enum(["PASS", "HOLD", "FAIL", "REVOKE"]),
+  notes: z.string().trim().min(10, "A review rationale of at least 10 characters is required").max(4000),
+}).refine((data) => data.decision !== "REVOKE" || data.gate === "DELIVERY", {
+  message: "Only the delivery gate can be revoked",
+  path: ["gate"],
 });
+
+type GateEvidence = { source: string; recordIds: string[]; verifiedAt: string };
+
+async function verifyBuyerGateEvidence(
+  sql: Awaited<ReturnType<typeof getSql>>,
+  titleId: string,
+  gate: z.infer<typeof gateInput>["gate"],
+): Promise<GateEvidence> {
+  let records: Array<{ id: string }> = [];
+  if (gate === "OTT") {
+    records = await sql<{ id: string }>`select id
+      from bridge_asset_versions where title_id = ${titleId} and asset_group = 'VIDEO'
+        and processing_state = 'PASSED' and checksum_sha256 is not null and length(checksum_sha256) = 64
+        and length(trim(s3_key)) > 0 order by version desc, created_at desc limit 1`;
+    if (!records.length) throw new Error("OTT gate blocked: no checksum-verified, PASSED video master asset version exists");
+    return { source: "bridge_asset_versions", recordIds: records.map((record) => record.id), verifiedAt: new Date().toISOString() };
+  }
+  if (gate === "PACKAGING") {
+    records = await sql<{ id: string }>`select id
+      from bridge_destination_packages where title_id = ${titleId} and readiness_state = 'READY'
+        and rights_grant_id is not null and qc_case_id is not null and legal_case_id is not null
+        and jsonb_array_length(case when jsonb_typeof(asset_version_ids) = 'array' then asset_version_ids else '[]'::jsonb end) > 0
+      order by created_at desc limit 1`;
+    if (!records.length) throw new Error("Packaging gate blocked: no READY destination package with rights, QC, legal and asset references exists");
+    return { source: "bridge_destination_packages", recordIds: records.map((record) => record.id), verifiedAt: new Date().toISOString() };
+  }
+  if (gate === "CURATION") {
+    records = await sql<{ id: string }>`select a.id
+      from bridge_titles t join bridge_assets a on a.title_id = t.id and a.s3_key = t.poster_key
+        and a.kind in ('poster', 'poster_vertical')
+      where t.id = ${titleId} and length(trim(coalesce(t.name, ''))) > 0
+        and length(trim(coalesce(t.language, ''))) > 0 and t.poster_key is not null
+        and length(trim(t.poster_key)) > 0 and coalesce(a.byte_size, 0) > 0
+        and a.content_type like 'image/%' order by a.created_at desc limit 1`;
+    if (!records.length) throw new Error("Curation gate blocked: verified poster artwork and required title metadata are missing");
+    return { source: "bridge_titles+bridge_assets", recordIds: records.map((record) => record.id), verifiedAt: new Date().toISOString() };
+  }
+  records = await sql<{ id: string }>`select id
+    from bridge_destination_packages where title_id = ${titleId} and readiness_state = 'DELIVERED'
+    order by authorized_at desc nulls last, created_at desc limit 1`;
+  if (!records.length) throw new Error("Delivery gate blocked: no destination package is recorded as DELIVERED");
+  return { source: "bridge_destination_packages", recordIds: records.map((record) => record.id), verifiedAt: new Date().toISOString() };
+}
 
 export const setBuyerPublicationGate = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -100,47 +147,35 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     const sql = await getSql();
     const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
     if (!rows[0]) throw new Error("Title not found");
-
-    const value = data.decision === "PASS"
-      ? ({OTT:"READY",PACKAGING:"COMPLETE",CURATION:"APPROVED",DELIVERY:"READY"} as const)[data.gate]
-      : data.decision === "REVOKE" && data.gate === "DELIVERY" ? "REVOKED"
-      : "HOLD";
-
-    await sql`
-      insert into bridge_title_gate_certifications (title_id, ott_preparation_status, packaging_status, curation_status, delivery_status, updated_by, evidence, updated_at)
-      values (${data.titleId}, 'HOLD', 'HOLD', 'HOLD', 'HOLD', ${actor.userId}, ${JSON.stringify({[data.gate]:{decision:data.decision,notes:data.notes??null,actor:actor.userId,at:new Date().toISOString()}})}::jsonb, now())
-      on conflict (title_id) do nothing
-    `;
-    const gateEvidence = JSON.stringify({
-      [data.gate]: {
-        decision: data.decision,
-        notes: data.notes ?? null,
-        actor: actor.userId,
-        at: new Date().toISOString(),
-      },
+    const transactionResult = await sql.transaction(async (tx) => {
+      const evidence = data.decision === "PASS" ? await verifyBuyerGateEvidence(tx, data.titleId, data.gate) : null;
+      const value = data.decision === "PASS"
+        ? ({ OTT: "READY", PACKAGING: "COMPLETE", CURATION: "APPROVED", DELIVERY: "READY" } as const)[data.gate]
+        : data.decision === "FAIL"
+          ? ({ OTT: "FAILED", PACKAGING: "FAILED", CURATION: "REJECTED", DELIVERY: "FAILED" } as const)[data.gate]
+          : data.decision === "REVOKE" ? "REVOKED" : "HOLD";
+      const gateEvidence = JSON.stringify({ [data.gate]: {
+        decision: data.decision, notes: data.notes, actor: actor.userId,
+        at: new Date().toISOString(), evidence,
+      } });
+      await tx`insert into bridge_title_gate_certifications
+        (title_id, ott_preparation_status, packaging_status, curation_status, delivery_status, updated_by, evidence, updated_at)
+        values (${data.titleId}, 'HOLD', 'HOLD', 'HOLD', 'HOLD', ${actor.userId}, '{}'::jsonb, now())
+        on conflict (title_id) do nothing`;
+      if (data.gate === "OTT") {
+        await tx`update bridge_title_gate_certifications set ott_preparation_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${gateEvidence}::jsonb, updated_at=now() where title_id=${data.titleId}`;
+      } else if (data.gate === "PACKAGING") {
+        await tx`update bridge_title_gate_certifications set packaging_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${gateEvidence}::jsonb, updated_at=now() where title_id=${data.titleId}`;
+      } else if (data.gate === "CURATION") {
+        await tx`update bridge_title_gate_certifications set curation_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${gateEvidence}::jsonb, updated_at=now() where title_id=${data.titleId}`;
+      } else {
+        await tx`update bridge_title_gate_certifications set delivery_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${gateEvidence}::jsonb, updated_at=now() where title_id=${data.titleId}`;
+      }
+      return { evidence };
     });
-    if (data.gate === "OTT") {
-      await sql`update bridge_title_gate_certifications
-        set ott_preparation_status=${value}, updated_by=${actor.userId},
-            evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
-        where title_id=${data.titleId}`;
-    } else if (data.gate === "PACKAGING") {
-      await sql`update bridge_title_gate_certifications
-        set packaging_status=${value}, updated_by=${actor.userId},
-            evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
-        where title_id=${data.titleId}`;
-    } else if (data.gate === "CURATION") {
-      await sql`update bridge_title_gate_certifications
-        set curation_status=${value}, updated_by=${actor.userId},
-            evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
-        where title_id=${data.titleId}`;
-    } else {
-      await sql`update bridge_title_gate_certifications
-        set delivery_status=${value}, updated_by=${actor.userId},
-            evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
-        where title_id=${data.titleId}`;
-    }
-    await writeAudit({actorUserId:actor.userId,action:`buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,entityType:"bridge_title",entityId:data.titleId,metadata:{gate:data.gate,decision:data.decision,notes:data.notes??null}});
-    const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
-    return {ok:true,gate:data.gate,decision:data.decision,publishable:result[0]?.ok===true};
+    await writeAudit({ actorUserId: actor.userId, action: `buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,
+      entityType: "bridge_title", entityId: data.titleId,
+      metadata: { gate: data.gate, decision: data.decision, notes: data.notes, evidence: transactionResult.evidence } });
+    const visibility = await sql<{ ok: boolean }>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
+    return { ok: true, gate: data.gate, decision: data.decision, publishable: visibility[0]?.ok === true, evidence: transactionResult.evidence };
   });
