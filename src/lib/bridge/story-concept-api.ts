@@ -66,8 +66,9 @@ function mapConcept(row: ConceptRow): StoryConceptSubmission {
     title_id: row.title_id,
     logline: row.logline,
     synopsis: row.synopsis,
-    treatment_url: row.treatment_url,
-    screenplay_url: row.screenplay_url,
+    // External treatment/screenplay URLs are not exposed in the review queue payload.
+    treatment_url: null,
+    screenplay_url: null,
     genre: row.genre ?? [],
     estimated_budget_range: row.estimated_budget_range,
     target_platforms: row.target_platforms ?? [],
@@ -517,31 +518,3 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
         if (data.status === "INTRODUCED_TO_BUYERS" && !canIntroduceStoryConceptToBuyers(current)) {
           throw new Error("Independent Editorial and Legal approvals plus fee certification are required before buyer introduction");
         }
-
-        const rows = await tx<ConceptRow>`
-          update bridge_story_concept_submissions
-          set curation_status = ${data.status},
-              admin_notes = case when ${data.adminNotes !== undefined} then ${data.adminNotes ?? null} else admin_notes end,
-              updated_at = now(),
-              introduced_to_buyers_at = case
-                when ${data.status} = 'INTRODUCED_TO_BUYERS' then coalesce(introduced_to_buyers_at, now())
-                else introduced_to_buyers_at
-              end
-          where id = ${data.id}
-          returning *
-        `;
-        const concept = rows[0];
-        if (!concept) throw new Error("Story / Concept curation update failed");
-        await writeAudit({
-          actorUserId: actor.userId,
-          action: "story_concept.curation_update",
-          entityType: "bridge_story_concept_submission",
-          entityId: data.id,
-          metadata: { from, status: data.status },
-        }, tx);
-        return { concept: mapConcept(concept) };
-      });
-    } catch (error) {
-      migrationHint(error);
-    }
-  });
