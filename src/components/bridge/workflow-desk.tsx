@@ -361,7 +361,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 <p className="text-xs font-medium" role="status">
                                   {checks.every(([, passed]) => passed)
                                     ? "All required fields are recorded. Documentary verification and Legal approval remain separate gates."
-                                    : "PENDING — do not mark READY until every required item is verified and the independent Legal Reviewer approves."}
+                                    : "PENDING — do not mark READY until every required item is verified and the authorised Legal Reviewer or verified Super Admin approves."}
                                 </p>
                               </>
                             );

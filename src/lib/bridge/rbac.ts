@@ -184,6 +184,16 @@ export function assertPermission(actor: Actor, permission: Permission): void {
   }
 }
 
+/**
+ * Legal draft authors cannot approve their own draft, except a verified Super Admin.
+ * The exception is explicit and does not bypass evidence, expiry, or audit requirements.
+ */
+export function canReviewLicenseDraft(actor: Actor, createdBy: string): boolean {
+  return actor.emailVerified &&
+    hasPermission(actor, "title.rights_review") &&
+    (actor.internalRole === "super_admin" || createdBy !== actor.userId);
+}
+
 export function canReadTitle(
   actor: Actor,
   title: { ownerUserId: string; status: TitleStatus; ownerAccountType?: AccountType; ownerOrganizationId?: string | null },

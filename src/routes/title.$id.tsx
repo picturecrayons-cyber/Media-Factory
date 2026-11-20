@@ -46,7 +46,7 @@ export const Route = createFileRoute("/title/$id")({
   component: TitlePage,
 });
 
-const WORKSPACE_TABS = ["Overview", "Files", "Production"] as const;
+const WORKSPACE_TABS = ["Overview", "Assets", "Production", "Metadata", "Rights"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -130,7 +130,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const pub = pubQ.data?.publication;
   const activeTab: WorkspaceTab = buyerView
     ? "Overview"
-    : chosenTab ?? (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Files" : "Overview");
+    : chosenTab ?? (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Assets" : "Overview");
   const visibleTabs = buyerView ? (["Overview"] as const) : WORKSPACE_TABS;
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
@@ -158,7 +158,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <WorkflowDesk title={title} actor={actor} />
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
@@ -209,7 +208,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setChosenTab("Files")}
+                  onClick={() => setChosenTab("Assets")}
                   className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
                 >
                   Upload Files
@@ -239,38 +238,26 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
       {activeTab === "Overview" ? (
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Metadata</p>
-              <h2 className="mt-1 font-display text-xl font-semibold">OTT title details</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Release readiness</p>
+              <h2 className="mt-1 font-display text-xl font-semibold">Title approval tracker</h2>
+              <p className="mt-1 text-sm text-muted">Approval gates remain separate. A READY indicator is not a substitute for evidence or formal approval.</p>
             </div>
             <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{title.status}</span>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Original title" value={title.nameMl || "—"} />
-            <Metric label="Content type" value={loopStageType(title.contentType)} />
-            <Metric label="Language" value={title.language || "—"} />
-            <Metric label="Year" value={title.year ? String(title.year) : "—"} />
-            <Metric label="Runtime" value={title.runtimeMinutes ? `${title.runtimeMinutes} min` : "—"} />
-            <Metric label="Country" value={title.countryOfOrigin || "—"} />
-            <Metric label="Release date" value={title.releaseDate || "—"} />
-            <Metric label="Director" value={title.credits?.filter((c) => c.role === "Director").map((c) => c.name).join(", ") || "—"} />
-            <Metric label="Producer" value={title.credits?.filter((c) => c.role === "Producer").map((c) => c.name).join(", ") || "—"} />
+            <Metric label="QC review" value={qcReady ? "READY" : "PENDING"} />
+            <Metric label="Rights approval" value={rightsReady ? "READY" : "PENDING"} />
+            <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
+            <Metric label="Publishing" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
           </div>
-          {!buyerView ? (
-            <>
-              <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
-              {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
-                <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
-                <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
-                <Metric label="Publish" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
-              </div>
-            </>
-          ) : null}
+          <div className="mt-5 rounded-xl border border-line bg-elevated/40 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Next blocker</p>
+            <p className="mt-1 text-sm font-medium">{!qcReady ? "QC approval and verified master/artwork" : !rightsReady ? "Valid rights evidence and legal approval" : !legalReady ? "Licensing readiness" : !distributionReady ? "Publishing authorization" : "No outstanding readiness blocker detected"}</p>
+          </div>
         </section>
-      ) : activeTab === "Files" && !buyerView ? (
+      ) : activeTab === "Assets" && !buyerView ? (
         <FilesPanel
           canUpload={
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
@@ -289,6 +276,55 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           loading={productionAssetsQ.isPending}
           error={productionAssetsQ.error instanceof Error ? productionAssetsQ.error.message : null}
         />
+      ) : activeTab === "Metadata" && !buyerView ? (
+        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Metadata</p>
+            <h2 className="mt-1 font-display text-xl font-semibold">OTT title details</h2>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Original title" value={title.nameMl || "—"} />
+            <Metric label="Content type" value={loopStageType(title.contentType)} />
+            <Metric label="Language" value={title.language || "—"} />
+            <Metric label="Year" value={title.year ? String(title.year) : "—"} />
+            <Metric label="Runtime" value={title.runtimeMinutes ? `${title.runtimeMinutes} min` : "—"} />
+            <Metric label="Country" value={title.countryOfOrigin || "—"} />
+            <Metric label="Release date" value={title.releaseDate || "—"} />
+            <Metric label="Director" value={title.credits?.filter((c) => c.role === "Director").map((c) => c.name).join(", ") || "—"} />
+            <Metric label="Producer" value={title.credits?.filter((c) => c.role === "Producer").map((c) => c.name).join(", ") || "—"} />
+          </div>
+          <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
+          {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
+        </section>
+      ) : activeTab === "Rights" && !buyerView ? (
+        <div className="space-y-4">
+          <WorkflowDesk title={title} actor={actor} />
+          <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Rights register</p>
+                <h2 className="mt-1 font-display text-xl font-semibold">License records</h2>
+              </div>
+              <span className="text-xs text-muted">{reviewQ.data?.grants.length ?? 0} records</span>
+            </div>
+            {reviewQ.isPending ? <p className="mt-4 text-sm text-muted">Loading rights records…</p> : null}
+            {reviewQ.isError ? <p role="alert" className="mt-4 text-sm text-red-600">Rights records unavailable: {reviewQ.error.message}</p> : null}
+            <div className="mt-4 space-y-2">
+              {(reviewQ.data?.grants ?? []).map((grant) => (
+                <article key={grant.id} className="rounded-xl border border-line p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">License record · {grant.id.slice(0, 8)}</p>
+                    <span className="rounded-full border border-line px-2 py-1 text-xs">{grant.status}</span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted">Territories: {grant.territories.join(", ") || "Not recorded"} · Languages: {grant.languages.join(", ") || "Not recorded"}</p>
+                  <p className="mt-1 text-xs text-muted">Validity: {grant.window_start ? new Date(grant.window_start).toLocaleDateString() : "—"} to {grant.window_end ? new Date(grant.window_end).toLocaleDateString() : "—"} · Exclusivity: {grant.exclusivity}</p>
+                </article>
+              ))}
+              {!reviewQ.isPending && !reviewQ.isError && (reviewQ.data?.grants.length ?? 0) === 0 ? <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">No license records are registered for this title.</p> : null}
+            </div>
+            <p className="mt-4 text-xs text-muted">Decisions and publishing controls remain subject to their existing approval services, evidence requirements and audit history.</p>
+          </section>
+        </div>
       ) : null}
     </div>
   );

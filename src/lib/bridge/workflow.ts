@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
-import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
+import { assertPermission, canReadTitle, canOperateOnTitle, canReviewLicenseDraft, type Actor } from "./rbac";
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
@@ -104,8 +104,8 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       created_by: string;
     }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
-    if (grant.created_by === actor.userId)
-      throw new Error("Another legal reviewer must approve this license");
+    if (!canReviewLicenseDraft(actor, grant.created_by))
+      throw new Error("Another authorised legal reviewer or verified Super Admin must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
