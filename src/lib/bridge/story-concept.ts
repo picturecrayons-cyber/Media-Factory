@@ -37,7 +37,9 @@ export interface StoryConceptSubmission {
   updated_at: string;
   rights_holder_name?: string | null;
   rights_basis?: string | null;
+  rights_basis_details?: string | null;
   third_party_materials_included?: boolean | null;
+  third_party_materials_details?: string | null;
   rights_declaration_accepted_at?: string | null;
   rights_declaration_version?: string | null;
   editorial_status?: ReviewStatus;
