@@ -370,26 +370,28 @@ export const listProductionAssets = createServerFn({ method: "GET" })
       verified_source: boolean;
     }>`
       select
-        production_asset.id,
-        production_asset.category,
-        production_asset.file_name,
-        production_asset.file_size,
-        production_asset.content_type,
-        production_asset.tags->>'source_kind' as source_kind,
+        a.id,
         case
-          when nullif(production_asset.tags->>'source_asset_id', '') is null then false
-          else coalesce(
-            source_asset.byte_size > 0
-            and source_asset.storage_business_state = 'ACTIVE'
-            and source_asset.restore_state = 'READY',
-            false
-          )
-        end as verified_source
-      from bridge_production_assets production_asset
-      left join bridge_assets source_asset
-        on source_asset.id = production_asset.tags->>'source_asset_id'
-      where production_asset.title_id = ${title.id}
-      order by production_asset.created_at desc, production_asset.id
+          when a.kind in ('master', 'screener') then 'raw_video'
+          when a.kind in ('poster', 'poster_vertical', 'poster_horizontal', 'thumbnail') then 'stills'
+          when a.kind in ('subtitle', 'technical', 'censor_certificate') then 'documents'
+        end as category,
+        regexp_replace(split_part(a.s3_key, '.verified/', 1), '^.*/', '') as file_name,
+        a.byte_size as file_size,
+        a.content_type,
+        a.kind as source_kind,
+        true as verified_source
+      from bridge_assets a
+      where a.title_id = ${title.id}
+        and a.byte_size > 0
+        and a.storage_business_state = 'ACTIVE'
+        and a.restore_state = 'READY'
+        and a.kind in (
+          'master', 'screener',
+          'poster', 'poster_vertical', 'poster_horizontal', 'thumbnail',
+          'subtitle', 'technical', 'censor_certificate'
+        )
+      order by a.created_at desc, a.id
       limit 500
     `;
 
