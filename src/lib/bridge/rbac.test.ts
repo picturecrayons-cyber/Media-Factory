@@ -268,3 +268,20 @@ it("reserves final approval, duplicate merge, and Loop publication to Super Admi
   assert.equal(hasPermission(qc, "title.rights_review"), false);
   assert.equal(hasPermission(legal, "title.qc_review"), false);
 });
+
+describe("independent Story / Concept reviewer permissions", () => {
+  it("assigns Editorial review only to QC reviewers and Super Admin", () => {
+    assert.equal(hasPermission(qc, "title.editorial_review"), true);
+    assert.equal(hasPermission(legal, "title.editorial_review"), false);
+    assert.equal(hasPermission(admin(), "title.editorial_review"), false);
+    assert.equal(hasPermission(creator(), "title.editorial_review"), false);
+    assert.equal(hasPermission(superAdmin(), "title.editorial_review"), true);
+  });
+
+  it("keeps Legal review separate from Editorial review", () => {
+    assert.equal(hasPermission(legal, "title.rights_review"), true);
+    assert.equal(hasPermission(qc, "title.rights_review"), false);
+    assert.equal(hasPermission(qc, "title.editorial_review"), true);
+    assert.equal(hasPermission(admin(), "title.rights_review"), false);
+  });
+});

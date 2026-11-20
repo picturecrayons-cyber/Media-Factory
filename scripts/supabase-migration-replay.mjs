@@ -18,6 +18,9 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
 const EXPECTED_MIGRATIONS = 72;
+const STORY_CONCEPT_PENDING_MIGRATION = "20261120101500_bridge_story_concept_rights_details_20261120.sql";
+const STORY_CONCEPT_PENDING_MIGRATION_BYTES = 1475;
+const STORY_CONCEPT_PENDING_MIGRATION_SHA256 = "ddd288ef4b183ec6b1f3dd16b6d9366e7aadbd7f88442850d7ddc9f1f77059b0";
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -446,6 +449,61 @@ try {
     }
     console.log(`[migration-replay] applied ${name}`);
   }
+
+  // Replay the pending Story/Concept detail migration only in this disposable local database.
+  // It is intentionally outside the Production ledger and is never applied to shared Testing here.
+  const stagedStoryConceptPath = resolve(
+    SCRIPT_DIR,
+    "../supabase/migrations_pending",
+    STORY_CONCEPT_PENDING_MIGRATION,
+  );
+  const stagedStoryConceptSql = await readFile(stagedStoryConceptPath, "utf8");
+  const stagedStoryConceptBytes = Buffer.byteLength(stagedStoryConceptSql, "utf8");
+  const stagedStoryConceptSha256 = createHash("sha256")
+    .update(stagedStoryConceptSql, "utf8")
+    .digest("hex");
+  if (
+    stagedStoryConceptBytes !== STORY_CONCEPT_PENDING_MIGRATION_BYTES ||
+    stagedStoryConceptSha256 !== STORY_CONCEPT_PENDING_MIGRATION_SHA256
+  ) {
+    throw new Error("Pending Story/Concept migration source integrity mismatch");
+  }
+  await client.query("BEGIN");
+  try {
+    await client.query(stagedStoryConceptSql);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw new Error(`Pending migration failed: ${STORY_CONCEPT_PENDING_MIGRATION}: ${error?.message || error}`);
+  }
+  const stagedStoryConceptChecks = await client.query(`
+    select
+      count(*) filter (where column_name in (
+        'rights_basis_details', 'third_party_materials_details'
+      ))::int as detail_columns,
+      (select count(*)::int from pg_constraint
+       where conname in (
+         'bridge_story_concept_rights_basis_details_check',
+         'bridge_story_concept_third_party_details_check'
+       )) as detail_constraints,
+      (select relrowsecurity from pg_class
+       where oid = 'public.bridge_story_concept_submissions'::regclass) as rls_enabled,
+      (select count(*)::int from pg_policy
+       where polrelid = 'public.bridge_story_concept_submissions'::regclass) as policy_count
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'bridge_story_concept_submissions'
+  `);
+  const stagedState = stagedStoryConceptChecks.rows[0];
+  if (
+    stagedState.detail_columns !== 2 ||
+    stagedState.detail_constraints !== 2 ||
+    !stagedState.rls_enabled ||
+    stagedState.policy_count < 2
+  ) {
+    throw new Error("Pending Story/Concept migration verification failed: " + JSON.stringify(stagedState));
+  }
+  console.log("[migration-replay] PASS: pending Story/Concept detail migration replayed and verified in disposable local DB only");
 
   // Production's current Bridge Data API security baseline is not fully
   // represented by the recorded Production migration ledger. Recreate it locally after

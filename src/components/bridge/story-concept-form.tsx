@@ -42,7 +42,9 @@ export function StoryConceptForm() {
   const [screenplayUrl, setScreenplayUrl] = useState("");
   const [rightsHolderName, setRightsHolderName] = useState("");
   const [rightsBasis, setRightsBasis] = useState("ORIGINAL_AUTHOR");
+  const [rightsBasisDetails, setRightsBasisDetails] = useState("");
   const [thirdPartyMaterialsIncluded, setThirdPartyMaterialsIncluded] = useState(false);
+  const [thirdPartyMaterialsDetails, setThirdPartyMaterialsDetails] = useState("");
   const [rightsDeclarationAccepted, setRightsDeclarationAccepted] = useState(false);
 
   const mut = useMutation({
@@ -60,7 +62,9 @@ export function StoryConceptForm() {
           screenplayUrl: screenplayUrl || undefined,
           rightsHolderName,
           rightsBasis: rightsBasis as "ORIGINAL_AUTHOR" | "ASSIGNED" | "LICENSED" | "PUBLIC_DOMAIN" | "OTHER",
+          rightsBasisDetails: rightsBasisDetails || undefined,
           thirdPartyMaterialsIncluded,
+          thirdPartyMaterialsDetails: thirdPartyMaterialsDetails || undefined,
           rightsDeclarationAccepted,
         },
       }),
@@ -88,6 +92,14 @@ export function StoryConceptForm() {
     }
     if (!rightsHolderName.trim() || !rightsDeclarationAccepted) {
       toast("Complete and accept the rights declaration before submitting");
+      return;
+    }
+    if (rightsBasis === "OTHER" && !rightsBasisDetails.trim()) {
+      toast("Explain the selected rights basis");
+      return;
+    }
+    if (thirdPartyMaterialsIncluded && !thirdPartyMaterialsDetails.trim()) {
+      toast("Describe the third-party material");
       return;
     }
     mut.mutate();
@@ -230,10 +242,22 @@ export function StoryConceptForm() {
             <option value="OTHER">Other / needs explanation</option>
           </select>
         </label>
+        {rightsBasis === "OTHER" ? (
+          <label className="block text-sm">
+            Explain the rights basis
+            <textarea required value={rightsBasisDetails} onChange={(e) => setRightsBasisDetails(e.target.value)} maxLength={2000} rows={3} className="mt-1 w-full rounded-lg border border-line-strong bg-surface px-3 py-2" />
+          </label>
+        ) : null}
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" checked={thirdPartyMaterialsIncluded} onChange={(e) => setThirdPartyMaterialsIncluded(e.target.checked)} className="mt-1" />
           <span>Third-party material is included (for example, adapted work, music, archive, artwork, or underlying IP).</span>
         </label>
+        {thirdPartyMaterialsIncluded ? (
+          <label className="block text-sm">
+            Describe the third-party material and the permission / license held
+            <textarea required value={thirdPartyMaterialsDetails} onChange={(e) => setThirdPartyMaterialsDetails(e.target.value)} maxLength={4000} rows={3} className="mt-1 w-full rounded-lg border border-line-strong bg-surface px-3 py-2" />
+          </label>
+        ) : null}
         <label className="flex items-start gap-2 text-sm">
           <input required type="checkbox" checked={rightsDeclarationAccepted} onChange={(e) => setRightsDeclarationAccepted(e.target.checked)} className="mt-1" />
           <span>I confirm that the information above is accurate and I am authorized to submit this concept for review.</span>

@@ -2,7 +2,7 @@ import { PERMISSIONS, type AccountType, type InternalRole, type Permission, type
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   viewer: ["title.read_catalog", "audit.read"],
-  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read"],
+  qc_reviewer: ["title.read_catalog", "title.qc_review", "title.editorial_review", "asset.sign_download", "audit.read"],
   legal_reviewer: [
     "title.read_catalog",
     "title.rights_review",
@@ -42,40 +42,17 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
 
 const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
   independent_creator: [
-    "title.create",
-    "title.read_own",
-    "title.update_own",
-    "title.advance_upload",
-    "service.quote_create",
-    "service.order_create",
-    "asset.sign_upload",
-    "asset.sign_download",
-    "entitlement.read_own",
-    "delivery.read",
-    "delivery.read_finance",
+    "title.create", "title.read_own", "title.update_own", "title.advance_upload",
+    "service.quote_create", "service.order_create", "asset.sign_upload", "asset.sign_download",
+    "entitlement.read_own", "delivery.read", "delivery.read_finance",
   ],
   studio: [
-    "title.create",
-    "title.read_own",
-    "title.update_own",
-    "title.advance_upload",
-    "service.quote_create",
-    "service.order_create",
-    "asset.sign_upload",
-    "asset.sign_download",
-    "entitlement.read_own",
-    "delivery.read",
-    "delivery.read_finance",
+    "title.create", "title.read_own", "title.update_own", "title.advance_upload",
+    "service.quote_create", "service.order_create", "asset.sign_upload", "asset.sign_download",
+    "entitlement.read_own", "delivery.read", "delivery.read_finance",
   ],
-  buyer: [
-    "title.read_catalog",
-    "payment.create_order",
-    "entitlement.read_own",
-    "asset.sign_download",
-  ],
-  investor: [
-    "entitlement.read_own",
-  ],
+  buyer: ["title.read_catalog", "payment.create_order", "entitlement.read_own", "asset.sign_download"],
+  investor: ["entitlement.read_own"],
 };
 
 export type Actor = {
@@ -102,9 +79,6 @@ export function permissionForTransition(from: TitleStatus, to: TitleStatus): Per
 }
 
 export function permissionsFor(actor: Actor): Set<Permission> {
-  // Internal staff identities are governed by their explicit staff role.
-  // Account-type powers must never silently widen a staff role (for example,
-  // a viewer profile whose account_type happens to be independent_creator).
   const staff = actor.internalRole ? INTERNAL_PERMISSIONS[actor.internalRole] : undefined;
   if (staff) return new Set<Permission>(staff);
   return new Set<Permission>(ACCOUNT_PERMISSIONS[actor.accountType] ?? []);
@@ -114,36 +88,30 @@ export function canAccessDashboard(actor: Actor): boolean {
   return actor.emailVerified && actor.internalRole === "super_admin";
 }
 
-/** Broad internal workstation datasets are restricted to verified Admin roles. */
 export function canAccessAdminWorkstations(actor: Actor): boolean {
   return actor.emailVerified &&
     (actor.internalRole === "admin" || actor.internalRole === "super_admin") &&
     hasPermission(actor, "title.read_catalog");
 }
 
-/** Title workspace is for Creator/Studio accounts and internal staff with catalog-read access. */
 export function canAccessTitleWorkspace(actor: Actor): boolean {
   if (!actor.emailVerified) return false;
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
-  return (
-    (actor.accountType === "independent_creator" || actor.accountType === "studio") &&
-    hasPermission(actor, "title.read_own")
-  );
+  return (actor.accountType === "independent_creator" || actor.accountType === "studio") &&
+    hasPermission(actor, "title.read_own");
 }
 
 function sharesStudioOrganization(
   actor: Actor,
   title: { ownerUserId: string; ownerAccountType?: AccountType; ownerOrganizationId?: string | null },
 ): boolean {
-  const actorOrg = actor.organizationId;
-  const ownerOrg = title.ownerOrganizationId;
   return Boolean(
     !actor.internalRole &&
     actor.accountType === "studio" &&
     title.ownerAccountType === "studio" &&
-    actorOrg &&
-    ownerOrg &&
-    actorOrg === ownerOrg
+    actor.organizationId &&
+    title.ownerOrganizationId &&
+    actor.organizationId === title.ownerOrganizationId
   );
 }
 
@@ -179,9 +147,7 @@ export function hasPermission(actor: Actor, permission: Permission): boolean {
 
 export function assertPermission(actor: Actor, permission: Permission): void {
   if (!actor.emailVerified) throw new Error("Email verification required");
-  if (!hasPermission(actor, permission)) {
-    throw new Error("Forbidden");
-  }
+  if (!hasPermission(actor, permission)) throw new Error("Forbidden");
 }
 
 export function canReadTitle(
@@ -189,12 +155,12 @@ export function canReadTitle(
   title: { ownerUserId: string; status: TitleStatus; ownerAccountType?: AccountType; ownerOrganizationId?: string | null },
 ): boolean {
   if (!actor.emailVerified) return false;
-  if (
-    (title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) &&
-    !actor.internalRole
-  ) return hasPermission(actor, "title.read_own");
+  if ((title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) && !actor.internalRole)
+    return hasPermission(actor, "title.read_own");
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
-  if (actor.accountType === "buyer") return ["LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status) && hasPermission(actor, "title.read_catalog");
+  if (actor.accountType === "buyer")
+    return ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status) &&
+      hasPermission(actor, "title.read_catalog");
   return false;
 }
 
@@ -206,10 +172,8 @@ export function canMutateTitle(
 ): boolean {
   if (!actor.emailVerified) return false;
   if (actor.internalRole) return hasPermission(actor, staffPermission);
-  return (
-    (title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) &&
-    hasPermission(actor, ownerPermission)
-  );
+  return (title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) &&
+    hasPermission(actor, ownerPermission);
 }
 
 export function canOperateOnTitle(
@@ -220,15 +184,11 @@ export function canOperateOnTitle(
 ): boolean {
   if (!actor.emailVerified) return false;
   if (actor.internalRole) return staffPermission ? hasPermission(actor, staffPermission) : false;
-  return (
-    (title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) &&
-    hasPermission(actor, ownerPermission)
-  );
+  return (title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) &&
+    hasPermission(actor, ownerPermission);
 }
 
 export function workspaceHome(actor: Actor): string {
-  // Resolve the post-auth destination from the server-backed Bridge profile.
-  // Signup query parameters are intent only and never grant privileges.
   if (canAccessDashboard(actor)) return "/dashboard";
   if (actor.internalRole === "qc_reviewer") return "/internal?desk=qc";
   if (actor.internalRole) return "/internal";

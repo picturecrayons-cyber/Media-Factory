@@ -87,6 +87,7 @@ export const PERMISSIONS = [
   "title.merge_duplicate",
   "title.advance_upload",
   "title.qc_review",
+  "title.editorial_review",
   "title.rights_review",
   "title.license",
   "title.approve",
