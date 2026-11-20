@@ -10,6 +10,7 @@ import { inviteInternalRole } from "@/lib/bridge/profiles";
 import { listAuditLogs, listTitles } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
+  founderAuthorizeLoopPublication,
   listLoopPublicationReadiness,
   suspendLoopPublication,
   revokeLoopPublication,
@@ -33,6 +34,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            isSuperAdmin={actor.internalRole === "super_admin"}
           />
         </BridgeShell>
       )}
@@ -44,10 +46,12 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  isSuperAdmin,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  isSuperAdmin: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -58,7 +62,7 @@ function InternalBody({
   return (
     <div className="grid gap-12">
       {/* 1. Master Distribution Desk */}
-      <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
+      <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} canFounderPublish={isSuperAdmin} />
 
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
@@ -126,6 +130,12 @@ function InternalBody({
   );
 }
 
+const FOUNDER_PUBLISH_TITLE_IDS = new Set([
+  "858f0ec5a11bc9acd2e9c20266541a3a",
+  "cb8c141dc72d727a53a4f35d8851e100",
+  "f15e0a5385aaf8365f6ad730de747da0",
+]);
+
 const DISTRIBUTION_TABS = [
   "Ready for Distribution",
   "Destinations",
@@ -139,7 +149,7 @@ const DISTRIBUTION_TABS = [
 
 type DistTab = (typeof DISTRIBUTION_TABS)[number];
 
-function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canRevoke: boolean }) {
+function DistributionDesk({ canPublish, canRevoke, canFounderPublish }: { canPublish: boolean; canRevoke: boolean; canFounderPublish: boolean }) {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<DistTab>("Ready for Distribution");
 
@@ -150,7 +160,10 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
   // Authorization Form State
   const [selectedTitleId, setSelectedTitleId] = useState<string>("");
-  const [territories, setTerritories] = useState("IN");
+  const [founderOverride, setFounderOverride] = useState(false);
+  const [founderReason, setFounderReason] = useState("");
+  const [rightsOwnerAttestation, setRightsOwnerAttestation] = useState(false);
+  const [territories, setTerritories] = useState("WORLDWIDE");
   const [languages, setLanguages] = useState("Malayalam");
   const [model] = useState<ExploitationModel>("TVOD");
   const [windowStart, setWindowStart] = useState("");
@@ -192,6 +205,29 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
     },
     onError: (err) =>
       toast.error(err instanceof Error ? err.message : "Distribution authorization failed"),
+  });
+
+  const founderPublishMut = useMutation({
+    mutationFn: (bridgeTitleId: string) => {
+      if (!windowStart || !windowEnd) throw new Error("Founder publication requires a start and end date.");
+      if (!rightsOwnerAttestation) throw new Error("Confirm the rights-holder authorization before publishing.");
+      return founderAuthorizeLoopPublication({ data: {
+        bridgeTitleId,
+        territories: territories.split(",").map((v) => v.trim()).filter(Boolean),
+        languages: languages.split(",").map((v) => v.trim()).filter(Boolean),
+        exploitationModels: [model], accessTier: "TVOD",
+        windowStart: new Date(windowStart).toISOString(),
+        windowEnd: new Date(windowEnd).toISOString(),
+        reason: founderReason, rightsOwnerAttestation: true,
+      }});
+    },
+    onSuccess: () => {
+      toast.success("Founder authorization recorded; Loop publication submitted.");
+      setSelectedTitleId(""); setFounderOverride(false); setFounderReason(""); setRightsOwnerAttestation(false);
+      void qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] });
+      void qc.invalidateQueries({ queryKey: ["bridge-audit"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Founder publication failed"),
   });
 
   const suspendMut = useMutation({
@@ -450,25 +486,30 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             </label>
           </div>
 
+          {founderOverride ? (
+            <div className="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+              <p className="text-xs font-semibold text-amber-400">Founder override — QC and Legal reviewer decisions remain unchanged.</p>
+              <label className="block space-y-1 text-xs">
+                <span className="font-semibold text-muted">Founder authorization reason (required)</span>
+                <textarea value={founderReason} onChange={(e) => setFounderReason(e.target.value)} rows={3} maxLength={1000} placeholder="Explain why you authorize this title for Crayons LOOP." className="w-full rounded-xl border border-line bg-elevated p-3 text-fg" />
+              </label>
+              <label className="flex items-start gap-2 text-xs text-muted">
+                <input type="checkbox" checked={rightsOwnerAttestation} onChange={(e) => setRightsOwnerAttestation(e.target.checked)} />
+                I confirm that I am authorized to distribute this title to Crayons LOOP.
+              </label>
+            </div>
+          ) : null}
           <div className="flex items-center gap-3 pt-2">
-            <Button
-              type="button"
-              disabled={publishMut.isPending}
-              onClick={() => publishMut.mutate(selectedTitleId)}
-              className="rounded-full px-5 text-xs font-semibold"
-            >
-              {publishMut.isPending
-                ? "Validating & Authorizing…"
-                : "Authorize & Publish to Crayons Loop"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setSelectedTitleId("")}
-              className="rounded-full border-line text-xs"
-            >
-              Cancel
-            </Button>
+            {founderOverride ? (
+              <Button type="button" disabled={founderPublishMut.isPending || founderReason.trim().length < 12 || !rightsOwnerAttestation || !windowStart || !windowEnd} onClick={() => founderPublishMut.mutate(selectedTitleId)} className="rounded-full px-5 text-xs font-semibold">
+                {founderPublishMut.isPending ? "Publishing…" : "Confirm Founder Publish to LOOP"}
+              </Button>
+            ) : (
+              <Button type="button" disabled={publishMut.isPending} onClick={() => publishMut.mutate(selectedTitleId)} className="rounded-full px-5 text-xs font-semibold">
+                {publishMut.isPending ? "Validating & Authorizing…" : "Authorize & Publish to Crayons Loop"}
+              </Button>
+            )}
+            <Button type="button" variant="outline" onClick={() => { setSelectedTitleId(""); setFounderOverride(false); }} className="rounded-full border-line text-xs">Cancel</Button>
           </div>
         </div>
       ) : null}
@@ -591,6 +632,11 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                {canFounderPublish && FOUNDER_PUBLISH_TITLE_IDS.has(t.id) && (!pub || !["AUTHORIZED", "LIVE"].includes(pub.authorizationStatus)) ? (
+                  <Button type="button" variant="outline" onClick={() => { setSelectedTitleId(t.id); setFounderOverride(true); }} className="rounded-full border-amber-500/40 text-xs font-semibold px-4 h-9">
+                    Founder Publish in LOOP
+                  </Button>
+                ) : null}
                 {canPublish &&
                 (!pub ||
                   pub.authorizationStatus === "SUSPENDED" ||

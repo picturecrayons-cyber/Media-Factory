@@ -101,8 +101,11 @@ export async function verifyDistributionPreflight(
     year: number | null;
     runtime_minutes: number | null;
     content_type: string | null;
+    trailer_key: string | null;
   }>`
-    select id, slug, name, status, language, master_key, poster_key, synopsis, year, runtime_minutes, content_type
+    select id, slug, name, status, language, master_key, poster_key, synopsis, year, runtime_minutes, content_type,
+      (select a.s3_key from bridge_assets a where a.title_id=bridge_titles.id and a.kind='trailer'
+        and a.storage_business_state='ACTIVE' and a.restore_state='READY' order by a.created_at desc limit 1) as trailer_key
     from bridge_titles
     where id = ${titleId}
     limit 1
@@ -436,11 +439,11 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       await sql`
       insert into loop_titles (
         id, bridge_title_id, slug, title, synopsis, content_type, language, year,
-        duration_minutes, poster_path, playback_path, metadata, status, listed,
+        duration_minutes, poster_path, trailer_path, playback_path, metadata, status, listed,
         published, featured, access_tier, updated_at
       ) values (
         ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
-        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
+        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.trailer_key}, ${title.master_key},
         ${JSON.stringify({
           source: "crayons-bridge-master-distribution",
           lane: loopStageType(title.content_type),
@@ -508,6 +511,136 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       );
 
       return { ok: true, loopTitleId, status: "AUTHORIZED" as const };
+    });
+  });
+
+/**
+ * Founder-only publication exception. This records the owner authorization explicitly;
+ * it never fabricates QC or Legal reviewer decisions. Required assets and distribution
+ * scope are still validated, and the exception is permanently visible in audit metadata.
+ */
+const FOUNDER_LOOP_PUBLICATION_TITLE_IDS = new Set([
+  "858f0ec5a11bc9acd2e9c20266541a3a",
+  "cb8c141dc72d727a53a4f35d8851e100",
+  "f15e0a5385aaf8365f6ad730de747da0",
+]);
+
+const founderPublishInput = z.object({
+  bridgeTitleId: z.string().min(1),
+  territories: z.array(z.string().min(2).max(32)).min(1).max(50),
+  languages: z.array(z.string().min(2).max(40)).min(1).max(20),
+  exploitationModels: z.array(z.enum(["SVOD", "TVOD", "AVOD", "FREE", "PROMOTIONAL"])).min(1).max(5),
+  accessTier: z.enum(["FREE", "SVOD", "TVOD"]),
+  windowStart: z.string().datetime(),
+  windowEnd: z.string().datetime(),
+  reason: z.string().trim().min(12).max(1000),
+  rightsOwnerAttestation: z.literal(true),
+});
+
+export const founderAuthorizeLoopPublication = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(founderPublishInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Founder / Super Admin access required");
+    if (!FOUNDER_LOOP_PUBLICATION_TITLE_IDS.has(data.bridgeTitleId))
+      throw new Error("Founder override is limited to the three specifically authorized titles.");
+    if (new Date(data.windowEnd) <= new Date(data.windowStart))
+      throw new Error("Distribution window end date must be after the start date.");
+    if (!data.exploitationModels.includes(data.accessTier))
+      throw new Error("Consumer access tier must be included in the selected exploitation models.");
+
+    return (await getSql()).transaction(async (sql) => {
+      const rows = await sql<{
+        id: string; slug: string; name: string; language: string; synopsis: string;
+        year: number | null; runtime_minutes: number | null; content_type: string | null;
+        master_key: string | null; poster_key: string | null; trailer_key: string | null;
+      }>`
+        select b.id, b.slug, b.name, b.language, b.synopsis, b.year, b.runtime_minutes, b.content_type, b.master_key, b.poster_key,
+          (select a.s3_key from bridge_assets a where a.title_id=b.id and a.kind='trailer'
+            and a.storage_business_state='ACTIVE' and a.restore_state='READY' order by a.created_at desc limit 1) as trailer_key
+        from bridge_titles b where b.id = ${data.bridgeTitleId} for update
+      `;
+      const title = rows[0];
+      if (!title) throw new Error("Canonical Bridge title not found.");
+      if (!title.master_key || !title.poster_key)
+        throw new Error("Founder publication requires both a master video and poster asset reference.");
+      if (data.languages.length === 0 || !data.territories.length)
+        throw new Error("At least one territory and language are required.");
+
+      const existing = await sql<{ id: string }>`
+        select id from loop_titles where bridge_title_id = ${title.id} limit 1
+      `;
+      const loopTitleId = existing[0]?.id ?? randomUUID();
+      const exception = {
+        type: "SUPER_ADMIN_VERIFIED",
+        verificationStatus: "VERIFIED",
+        verificationAuthority: "SUPER_ADMIN",
+        verifiedBy: actor.userId,
+        verifiedAt: new Date().toISOString(),
+        verifiedScope: ["RIGHTS_OWNER_AUTHORITY", "MASTER_ASSET", "POSTER_ASSET", "LOOP_PUBLICATION"],
+        reason: data.reason,
+        rightsOwnerAttestation: true,
+        reviewerApprovalMode: "SUPER_ADMIN_OWNER_VERIFICATION",
+        rightsGrantId: null,
+        source: "crayons-bridge-super-admin-verification",
+      };
+
+      await sql`
+        insert into loop_titles (
+          id, bridge_title_id, slug, title, synopsis, content_type, language, year,
+          duration_minutes, poster_path, trailer_path, playback_path, metadata, status, listed,
+          published, featured, access_tier, updated_at
+        ) values (
+          ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis},
+          ${loopStageType(title.content_type)}, ${title.language}, ${title.year},
+          ${title.runtime_minutes}, ${title.poster_key}, ${title.trailer_key}, ${title.master_key},
+          ${JSON.stringify({ source: "crayons-bridge-founder-publication", founderAuthorization: exception })}::jsonb,
+          'approved', true, true, false, ${data.accessTier}, now()
+        )
+        on conflict (bridge_title_id) do update set
+          slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
+          content_type = excluded.content_type, language = excluded.language, year = excluded.year,
+          duration_minutes = excluded.duration_minutes, poster_path = excluded.poster_path,
+          trailer_path = excluded.trailer_path, playback_path = excluded.playback_path, metadata = excluded.metadata,
+          status = 'approved', listed = true, published = true,
+          access_tier = excluded.access_tier, updated_at = now()
+      `;
+
+      await sql`
+        insert into bridge_loop_publications (
+          id, bridge_title_id, loop_title_id, authorization_status, territories, languages,
+          exploitation_models, window_start, window_end, approved_by, approved_at, metadata, updated_at
+        ) values (
+          ${randomUUID()}, ${title.id}, ${loopTitleId}, 'authorized', ${data.territories},
+          ${data.languages}, ${data.exploitationModels}, ${data.windowStart},
+          ${data.windowEnd}, ${actor.userId}, now(),
+          ${JSON.stringify({ destination: "CRAYONS_LOOP", founderAuthorization: exception })}::jsonb, now()
+        )
+        on conflict (bridge_title_id) do update set
+          loop_title_id = excluded.loop_title_id, authorization_status = 'authorized',
+          territories = excluded.territories, languages = excluded.languages,
+          exploitation_models = excluded.exploitation_models, window_start = excluded.window_start,
+          window_end = excluded.window_end, approved_by = excluded.approved_by,
+          approved_at = now(), revoked_at = null, metadata = excluded.metadata, updated_at = now()
+      `;
+
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "distribution.founder_override_publish_loop",
+        entityType: "bridge_title",
+        entityId: title.id,
+        metadata: {
+          destination: "CRAYONS_LOOP", loopTitleId, territories: data.territories,
+          languages: data.languages, exploitationModels: data.exploitationModels,
+          accessTier: data.accessTier, windowStart: data.windowStart, windowEnd: data.windowEnd,
+          reason: data.reason, rightsOwnerAttestation: true,
+          superAdminVerification: "VERIFIED", verificationAuthority: "SUPER_ADMIN", reviewerApprovalMode: "SUPER_ADMIN_OWNER_VERIFICATION",
+        },
+      }, sql);
+
+      return { ok: true, loopTitleId, status: "AUTHORIZED" as const, authorizationType: "SUPER_ADMIN_VERIFIED" as const };
     });
   });
 
