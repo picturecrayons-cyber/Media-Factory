@@ -157,3 +157,63 @@ test("title owner can confirm an upload when organization tables are absent", as
     await db.close();
   }
 });
+
+
+test("only a verified Super Admin can confirm a creator-owned asset created by another actor", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      insert into bridge_profiles (user_id,email,display_name,account_type,internal_role,email_verified)
+      values
+        ('verified-super-admin','super@example.test','Super Admin','independent_creator','super_admin',true),
+        ('ordinary-admin','admin@example.test','Admin','independent_creator','admin',true),
+        ('unverified-super-admin','unverified@example.test','Unverified','independent_creator','super_admin',false);
+      insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
+      values ('creator-title','creator-title','Creator Title','creator-owner','independent_creator','PREPARING');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values
+        ('creator-asset','creator-title','master','source/creator-master.mov','video/quicktime','creator-uploader');
+    `);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const common = {
+      assetId: "creator-asset",
+      titleId: "creator-title",
+      kind: "master",
+      byteSize: 41602918995,
+      contentType: "video/quicktime",
+      checksum: "oci-multipart-md5-metadata",
+      sourceKey: "source/creator-master.mov",
+      sealedKey: "source/creator-master.mov.verified/creator-asset",
+    };
+    assert.equal(await persistVerifiedAsset(sql, {
+      ...common, actorUserId: "ordinary-admin", internalActor: true,
+    }), false);
+    assert.equal(await persistVerifiedAsset(sql, {
+      ...common, actorUserId: "unverified-super-admin", internalActor: true,
+    }), false);
+    assert.equal(await persistVerifiedAsset(sql, {
+      ...common, actorUserId: "verified-super-admin", internalActor: true,
+    }), true);
+    const row = (await db.query<{ byte_size: number | null; master_key: string | null }>(`
+      select a.byte_size, t.master_key
+      from bridge_assets a join bridge_titles t on t.id = a.title_id
+      where a.id = 'creator-asset'
+    `)).rows[0];
+    assert.deepEqual(row, {
+      byte_size: 41602918995,
+      master_key: "source/creator-master.mov.verified/creator-asset",
+    });
+    const audit = await db.query<{ actor_user_id: string; action: string }>(
+      "select actor_user_id, action from bridge_audit_logs where entity_id='creator-asset'",
+    );
+    assert.deepEqual(audit.rows, [{
+      actor_user_id: "verified-super-admin",
+      action: "asset.upload_verified",
+    }]);
+  } finally {
+    await db.close();
+  }
+});

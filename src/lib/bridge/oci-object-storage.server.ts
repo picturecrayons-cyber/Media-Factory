@@ -256,24 +256,33 @@ export async function signDownload(opts: { key: string; expiresIn?: number; buck
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
-export async function verifyObject(key: string, expectedContentType?: string | null, bucket?: string) {
+async function headObjectMetadata(key: string, bucket?: string) {
   const cfg = config();
   const targetBucket = bucket?.trim() || cfg.bucket;
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
   const res = await signedFetch({ cfg, method: "HEAD", path });
+  if (res.status === 404) return null;
   if (!res.ok) throw new Error(`OCI object verification failed (${res.status})`);
   const contentLength = Number(res.headers.get("content-length") || 0);
-  const contentType = res.headers.get("content-type");
-  if (expectedContentType && contentType !== expectedContentType) {
-    throw new Error(`OCI object content type mismatch: expected ${expectedContentType}, received ${contentType || "missing"}`);
+  if (!Number.isSafeInteger(contentLength) || contentLength <= 0) {
+    throw new Error("Uploaded object has an invalid size");
   }
-  if (!Number.isSafeInteger(contentLength) || contentLength < 0) throw new Error("Uploaded object has an invalid size");
   return {
     byteSize: contentLength,
-    contentType,
+    contentType: res.headers.get("content-type"),
     etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
+    multipartMd5: res.headers.get("opc-multipart-md5"),
   };
+}
+
+export async function verifyObject(key: string, expectedContentType?: string | null, bucket?: string) {
+  const object = await headObjectMetadata(key, bucket);
+  if (!object) throw new Error("OCI object verification failed (404)");
+  if (expectedContentType && object.contentType !== expectedContentType) {
+    throw new Error(`OCI object content type mismatch: expected ${expectedContentType}, received ${object.contentType || "missing"}`);
+  }
+  return object;
 }
 
 async function pollWorkRequest(
@@ -332,7 +341,7 @@ async function pollWorkRequest(
   throw new Error(`OCI object copy did not complete within 45 seconds (last status: ${lastStatus})`);
 }
 
-/** Copy a verified upload into an immutable destination key. */
+/** Copy a verified upload into an immutable destination key, reusing a matching sealed object. */
 export async function sealVerifiedObject(
   sourceKey: string,
   destinationKey: string,
@@ -342,6 +351,37 @@ export async function sealVerifiedObject(
 ) {
   const cfg = config();
   const targetBucket = destinationBucket?.trim() || cfg.bucket;
+
+  // Always inspect the exact source first. Its ETag is the copy precondition;
+  // multipart MD5 is the content-parity evidence and is required on both sides.
+  const source = await headObjectMetadata(sourceKey);
+  if (!source) throw new Error("OCI source object is missing");
+  if (!source.etag || source.etag !== expectedEtag) {
+    throw new Error("OCI source ETag changed before immutable sealing");
+  }
+  if (!source.multipartMd5) {
+    throw new Error("OCI source multipart checksum metadata is missing");
+  }
+
+  const inspectDestination = async () => {
+    const destination = await headObjectMetadata(destinationKey, targetBucket);
+    if (!destination) return null;
+    if (
+      destination.byteSize !== source.byteSize ||
+      destination.contentType !== source.contentType ||
+      !destination.multipartMd5 ||
+      destination.multipartMd5 !== source.multipartMd5
+    ) {
+      throw new Error("Existing OCI sealed object does not match source metadata");
+    }
+    return destination;
+  };
+
+  // Idempotent retry path: a previous request may have completed CopyObject
+  // before the application persisted the database row.
+  const existing = await inspectDestination();
+  if (existing) return existing;
+
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/actions/copyObject`;
   const res = await signedFetch({
@@ -360,7 +400,22 @@ export async function sealVerifiedObject(
   if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId, pollOpts);
-  return verifyObject(destinationKey, undefined, targetBucket);
+
+  // OCI CopyObject can report a completed work request before the destination
+  // is visible to HEAD. Retry only 404s for a bounded propagation window; all
+  // authorization, transport, and metadata failures still fail immediately.
+  const propagationDeadline = Date.now() + (pollOpts?.propagationGracePeriodMs ?? 10_000);
+  const propagationPollIntervalMs = pollOpts?.pollIntervalMs ?? 1_000;
+  let sealed = await inspectDestination();
+  while (!sealed && Date.now() < propagationDeadline) {
+    const remainingMs = propagationDeadline - Date.now();
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(propagationPollIntervalMs, remainingMs)),
+    );
+    sealed = await inspectDestination();
+  }
+  if (!sealed) throw new Error("OCI sealed object was not visible after copy");
+  return sealed;
 }
 
 /** Stream an OCI object and verify its exact byte length and SHA-256 digest. */

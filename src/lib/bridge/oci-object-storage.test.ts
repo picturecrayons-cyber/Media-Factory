@@ -76,6 +76,14 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
           const method = init?.method || "GET";
           calls.push({ url, method });
           assert.equal(url.origin, "https://objectstorage.ap-mumbai-1.oraclecloud.com");
+          if (method === "HEAD") {
+            if (url.pathname.endsWith("/source-key")) {
+              return new Response(null, { headers: { "content-length": "12", "content-type": "video/mp4", etag: '"source-etag"', "opc-multipart-md5": "md5-source" } });
+            }
+            if (calls.filter((call) => call.method === "HEAD").length === 2) return new Response(null, { status: 404 });
+            assert.ok(url.pathname.endsWith("/sealed-key"));
+            return new Response(null, { headers: { "content-length": "12", "content-type": "video/mp4", etag: '"sealed-etag"', "opc-multipart-md5": "md5-source" } });
+          }
           if (method === "POST") {
             assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/actions/copyObject");
             assert.equal(JSON.parse(String(init?.body)).sourceObjectIfMatch, "source-etag");
@@ -92,17 +100,15 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
               ? new Response(null, { status: 403 })
               : Response.json({ status: outcome });
           }
-          assert.equal(method, "HEAD");
-          assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/o/sealed-key");
-          return new Response(null, { headers: { "content-length": "12", etag: '"sealed-etag"' } });
+          throw new Error("Unexpected OCI request method");
         };
         if (outcome === "SUCCEEDED" || outcome === "COMPLETED") {
           assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag")).byteSize, 12);
-          assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
+          assert.deepEqual(calls.map((call) => call.method), ["HEAD", "HEAD", "POST", "GET", "HEAD"]);
         } else {
           const message = outcome === "HTTP_ERROR" ? /lookup failed \(403\)/ : new RegExp(`copy ${outcome.toLowerCase()}`);
           await assert.rejects(sealVerifiedObject("source-key", "sealed-key", "source-etag"), message);
-          assert.deepEqual(calls.map((call) => call.method), ["POST", "GET"]);
+          assert.deepEqual(calls.map((call) => call.method), ["HEAD", "HEAD", "POST", "GET"]);
         }
       });
     }
@@ -115,6 +121,71 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
   }
 });
 
+
+test("OCI sealing reuses an existing sealed object only when metadata matches", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    const calls: string[] = [];
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      calls.push(init?.method || "GET");
+      assert.equal(init?.method, "HEAD");
+      if (url.pathname.endsWith("/source")) {
+        return new Response(null, { headers: { "content-length": "99", "content-type": "video/quicktime", etag: '"source-etag"', "opc-multipart-md5": "md5-identical" } });
+      }
+      return new Response(null, { headers: { "content-length": "99", "content-type": "video/quicktime", etag: '"different-destination-etag"', "opc-multipart-md5": "md5-identical" } });
+    };
+    const sealed = await sealVerifiedObject("source", "sealed", "source-etag");
+    assert.equal(sealed.byteSize, 99);
+    assert.equal(sealed.etag, "different-destination-etag");
+    assert.deepEqual(calls, ["HEAD", "HEAD"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI sealing rejects an existing sealed object with mismatched checksum metadata", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    let posts = 0;
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      if (init?.method === "POST") { posts += 1; return new Response(null, { status: 202 }); }
+      if (url.pathname.endsWith("/source")) {
+        return new Response(null, { headers: { "content-length": "99", "content-type": "video/quicktime", etag: '"source-etag"', "opc-multipart-md5": "md5-source" } });
+      }
+      return new Response(null, { headers: { "content-length": "99", "content-type": "video/quicktime", etag: '"sealed-etag"', "opc-multipart-md5": "md5-different" } });
+    };
+    await assert.rejects(sealVerifiedObject("source", "sealed", "source-etag"), /does not match source metadata/);
+    assert.equal(posts, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
 
 test("OCI object verification rejects an unexpected content type", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -157,6 +228,7 @@ test("OCI copy work-request handles transient 404 propagation delay and recovers
 
   try {
     let getAttempts = 0;
+    let destinationHeads = 0;
     globalThis.fetch = async (input, init) => {
       const url = new URL(String(input));
       const method = init?.method || "GET";
@@ -172,8 +244,13 @@ test("OCI copy work-request handles transient 404 propagation delay and recovers
         // Second attempt returns SUCCEEDED
         return Response.json({ status: "SUCCEEDED" });
       }
-      // HEAD on destination object
-      return new Response(null, { headers: { "content-length": "42", etag: '"sealed-etag"' } });
+      if (url.pathname.endsWith("/src")) {
+        return new Response(null, { headers: { "content-length": "42", "content-type": "video/mp4", etag: '"etag"', "opc-multipart-md5": "md5-src" } });
+      }
+      destinationHeads += 1;
+      return destinationHeads === 1
+        ? new Response(null, { status: 404 })
+        : new Response(null, { headers: { "content-length": "42", "content-type": "video/mp4", etag: '"sealed-etag"', "opc-multipart-md5": "md5-src" } });
     };
 
     const sealed = await sealVerifiedObject("src", "dst", "etag", {
@@ -208,14 +285,18 @@ test("OCI copy work-request fails closed on persistent 404 after propagation gra
 
   try {
     globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
       const method = init?.method || "GET";
+      if (method === "HEAD" && url.pathname.endsWith("/src")) {
+        return new Response(null, { headers: { "content-length": "42", "content-type": "video/mp4", etag: '"etag"', "opc-multipart-md5": "md5-src" } });
+      }
       if (method === "POST") {
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-persistent-404" } });
       }
       if (method === "GET") {
         return new Response(null, { status: 404 });
       }
-      return new Response(null, { headers: { "content-length": "42", etag: '"sealed-etag"' } });
+      return new Response(null, { status: 404 });
     };
 
     await assert.rejects(
@@ -234,7 +315,7 @@ test("OCI copy work-request fails closed on persistent 404 after propagation gra
   }
 });
 
-test("OCI copy fails when destination object is missing after copy completion", async () => {
+test("OCI copy fails when destination remains missing after the propagation window", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const values = {
     OCI_TENANCY_OCID: "test-tenancy",
@@ -251,14 +332,18 @@ test("OCI copy fails when destination object is missing after copy completion", 
 
   try {
     globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
       const method = init?.method || "GET";
+      if (method === "HEAD" && url.pathname.endsWith("/src")) {
+        return new Response(null, { headers: { "content-length": "42", "content-type": "video/mp4", etag: '"etag"', "opc-multipart-md5": "md5-src" } });
+      }
       if (method === "POST") {
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-ok" } });
       }
       if (method === "GET") {
         return Response.json({ status: "SUCCEEDED" });
       }
-      // Destination HEAD returns 404
+      // Destination HEAD remains absent for the entire propagation window.
       return new Response(null, { status: 404 });
     };
 
@@ -267,8 +352,55 @@ test("OCI copy fails when destination object is missing after copy completion", 
         propagationGracePeriodMs: 50,
         pollIntervalMs: 5,
       }),
-      /verification failed \(404\)/,
+      /sealed object was not visible after copy/,
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+
+
+test("OCI copy retries destination HEAD 404 after completed work request", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    let destinationHeads = 0;
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const method = init?.method || "GET";
+      if (method === "HEAD" && url.pathname.endsWith("/src")) {
+        return new Response(null, { headers: { "content-length": "42", "content-type": "video/mp4", etag: '"etag"', "opc-multipart-md5": "md5-src" } });
+      }
+      if (method === "HEAD") {
+        destinationHeads += 1;
+        return destinationHeads < 3
+          ? new Response(null, { status: 404 })
+          : new Response(null, { headers: { "content-length": "42", "content-type": "video/mp4", etag: '"sealed-etag"', "opc-multipart-md5": "md5-src" } });
+      }
+      if (method === "POST") return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-visible-after-copy" } });
+      if (method === "GET") return Response.json({ status: "SUCCEEDED" });
+      throw new Error("Unexpected OCI request method");
+    };
+    const sealed = await sealVerifiedObject("src", "dst", "etag", {
+      propagationGracePeriodMs: 100,
+      pollIntervalMs: 5,
+    });
+    assert.equal(sealed.byteSize, 42);
+    assert.equal(sealed.multipartMd5, "md5-src");
+    assert.equal(destinationHeads, 3);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
@@ -295,10 +427,13 @@ test("OCI copy fails closed when copyObject returns precondition error 412", asy
 
   try {
     globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
       const method = init?.method || "GET";
-      if (method === "POST") {
-        return new Response(null, { status: 412 });
+      if (method === "HEAD" && url.pathname.endsWith("/src")) {
+        return new Response(null, { headers: { "content-length": "42", "content-type": "video/mp4", etag: '"mismatched-etag"', "opc-multipart-md5": "md5-src" } });
       }
+      if (method === "HEAD") return new Response(null, { status: 404 });
+      if (method === "POST") return new Response(null, { status: 412 });
       return new Response(null, { status: 500 });
     };
 
@@ -334,10 +469,21 @@ test("OCI Recovery copy uses a distinct destination bucket and verifies the Reco
   Object.assign(process.env, values);
   try {
     const calls: Array<{ url: URL; method: string; body?: string }> = [];
+    let recoveryHeads = 0;
     globalThis.fetch = async (input, init) => {
       const url = new URL(String(input));
       const method = init?.method || "GET";
       calls.push({ url, method, body: typeof init?.body === "string" ? init.body : undefined });
+      if (method === "HEAD") {
+        if (url.pathname.endsWith("/source-key")) {
+          assert.equal(url.pathname, "/n/test-namespace/b/primary-vault/o/source-key");
+          return new Response(null, { headers: { "content-length": "12", "content-type": "video/mp4", etag: '"source-etag"', "opc-multipart-md5": "md5-src" } });
+        }
+        recoveryHeads += 1;
+        return recoveryHeads === 1
+          ? new Response(null, { status: 404 })
+          : new Response(null, { status: 200, headers: { "content-length": "12", "content-type": "video/mp4", etag: '"recovery-etag"', "opc-multipart-md5": "md5-src" } });
+      }
       if (method === "POST") {
         assert.equal(url.pathname, "/n/test-namespace/b/primary-vault/actions/copyObject");
         const body = JSON.parse(String(init?.body));
@@ -349,14 +495,12 @@ test("OCI Recovery copy uses a distinct destination bucket and verifies the Reco
         assert.equal(url.pathname, "/workRequests/recovery-copy%2F1");
         return Response.json({ status: "COMPLETED" });
       }
-      assert.equal(method, "HEAD");
-      assert.equal(url.pathname, "/n/test-namespace/b/recovery-vault/o/recovery-key");
-      return new Response(null, { status: 200, headers: { "content-length": "12", etag: '"recovery-etag"' } });
+      throw new Error("Unexpected OCI request method");
     };
     const result = await sealVerifiedObject("source-key", "recovery-key", "source-etag", undefined, "recovery-vault");
     assert.equal(result.byteSize, 12);
     assert.equal(result.etag, "recovery-etag");
-    assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
+    assert.deepEqual(calls.map((call) => call.method), ["HEAD", "HEAD", "POST", "GET", "HEAD"]);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
