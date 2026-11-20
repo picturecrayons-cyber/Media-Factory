@@ -54,9 +54,9 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
+if (names.length < EXPECTED_MIGRATIONS) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
+    `Expected at least ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
   );
 }
 if (new Set(names).size !== names.length) {
@@ -92,7 +92,33 @@ if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   );
 }
 
-for (const name of names) {
+// Keep the recovered Production ledger distinct from migrations introduced by
+// this pull request. The manifest remains an immutable record of the 69
+// historical Production migrations; the two explicit PR candidates are still
+// replayed below, after the historical ledger, in the disposable local DB.
+const pendingPullRequestMigrations = new Set([
+  "20261116233444_streamvista_legacy_links_unresolved_resolution_state.sql",
+  "20261117000100_harden_legacy_links_service_role_privileges.sql",
+]);
+const ledgerNames = names.filter((name) => !pendingPullRequestMigrations.has(name));
+const unclassifiedNames = names.filter(
+  (name) => !manifestRows.has(name) && !pendingPullRequestMigrations.has(name),
+);
+const missingPendingNames = [...pendingPullRequestMigrations].filter(
+  (name) => !names.includes(name),
+);
+if (
+  ledgerNames.length !== EXPECTED_MIGRATIONS ||
+  unclassifiedNames.length > 0 ||
+  missingPendingNames.length > 0
+) {
+  throw new Error(
+    "Migration lineage classification failed: " +
+      JSON.stringify({ ledgerCount: ledgerNames.length, unclassifiedNames, missingPendingNames }),
+  );
+}
+
+for (const name of ledgerNames) {
   const contents = await readFile(join(MIGRATIONS_DIR, name));
   const expected = manifestRows.get(name);
   if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
@@ -732,7 +758,7 @@ try {
   }
 
   console.log(
-    `[migration-replay] PASS: all ${names.length} Production-ledger migrations replayed in a fresh local Supabase stack.`,
+    `[migration-replay] PASS: all ${ledgerNames.length} manifest-verified Production-ledger migrations plus ${pendingPullRequestMigrations.size} explicit PR candidate migrations replayed in a fresh local Supabase stack.`,
   );
 } finally {
   client.release();
