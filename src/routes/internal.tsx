@@ -160,7 +160,7 @@ function DistributionDesk({ canPublish, canRevoke, canFounderPublish }: { canPub
   const [founderOverride, setFounderOverride] = useState(false);
   const [founderReason, setFounderReason] = useState("");
   const [rightsOwnerAttestation, setRightsOwnerAttestation] = useState(false);
-  const [territories, setTerritories] = useState("IN");
+  const [territories, setTerritories] = useState("WORLDWIDE");
   const [languages, setLanguages] = useState("Malayalam");
   const [model] = useState<ExploitationModel>("TVOD");
   const [windowStart, setWindowStart] = useState("");
