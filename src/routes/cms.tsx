@@ -1,11 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { listTitles } from "@/lib/bridge/titles";
-import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
+import { founderAuthorizeLoopPublication, listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { hasPermission } from "@/lib/bridge/rbac";
 
 export const Route = createFileRoute("/cms")({ component: OperationalCms });
@@ -55,7 +57,7 @@ function CmsBody({ actor }: { actor: any }) {
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
               Uses existing Bridge title, asset, rights and Loop publication services. This surface
-              does not bypass QC, rights, legal, payment or authorization gates.
+              includes the normal publication route and a separately audited Founder override for the three owner-authorized titles.
             </p>
           </div>
           <Link to="/workspace">
@@ -211,25 +213,55 @@ function LicensingDesk({ titles }: { titles: Array<any> }) {
   );
 }
 
+const FOUNDER_PUBLISH_TITLE_IDS = new Set([
+  "858f0ec5a11bc9acd2e9c20266541a3a",
+  "cb8c141dc72d727a53a4f35d8851e100",
+  "f15e0a5385aaf8365f6ad730de747da0",
+]);
+
 function PublishingDesk({ publications }: { publications: Array<any> }) {
+  const qc = useQueryClient();
+  const [selected, setSelected] = useState<any>(null);
+  const [territory, setTerritory] = useState("WORLDWIDE");
+  const [language, setLanguage] = useState("Malayalam");
+  const [windowStart, setWindowStart] = useState("");
+  const [windowEnd, setWindowEnd] = useState("");
+  const [reason, setReason] = useState("");
+  const [attested, setAttested] = useState(false);
+
+  const publish = useMutation({
+    mutationFn: () => {
+      if (!selected) throw new Error("Select a title first.");
+      if (!windowStart || !windowEnd) throw new Error("Set the publication start and end dates.");
+      if (!attested) throw new Error("Confirm your rights-holder authorization.");
+      return founderAuthorizeLoopPublication({ data: {
+        bridgeTitleId: selected.id,
+        territories: territory.split(",").map((v) => v.trim()).filter(Boolean),
+        languages: language.split(",").map((v) => v.trim()).filter(Boolean),
+        exploitationModels: ["TVOD"], accessTier: "TVOD",
+        windowStart: new Date(windowStart).toISOString(),
+        windowEnd: new Date(windowEnd).toISOString(),
+        reason, rightsOwnerAttestation: true,
+      }});
+    },
+    onSuccess: () => {
+      toast.success("Founder authorization submitted to Crayons LOOP.");
+      setSelected(null); setReason(""); setAttested(false);
+      void qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] });
+      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Founder publication failed"),
+  });
+
   return (
     <section className="rounded-3xl border border-line bg-surface p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-            Publishing desk
-          </p>
-          <h3 className="mt-1 font-display text-2xl font-semibold">
-            Crayons Loop authorization queue
-          </h3>
-          <p className="mt-2 text-sm text-muted">
-            Publication remains gated by active rights coverage, title status and required
-            master/artwork readiness.
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Publishing desk</p>
+          <h3 className="mt-1 font-display text-2xl font-semibold">Crayons Loop authorization queue</h3>
+          <p className="mt-2 text-sm text-muted">Normal publication uses the existing review gates. Founder override is separately recorded and limited to the three specifically authorized titles.</p>
         </div>
-        <Link to="/internal">
-          <Button>Open distribution controls</Button>
-        </Link>
+        <Link to="/internal"><Button>Open distribution controls</Button></Link>
       </div>
       <div className="mt-5 space-y-3">
         {publications.map((item) => (
@@ -237,39 +269,43 @@ function PublishingDesk({ publications }: { publications: Array<any> }) {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h4 className="font-semibold">{item.name}</h4>
-                <p className="mt-1 text-xs text-muted">
-                  {item.language} · {String(item.bridgeStatus).replaceAll("_", " ")}
-                </p>
+                <p className="mt-1 text-xs text-muted">{item.language} · {String(item.bridgeStatus).replaceAll("_", " ")}</p>
               </div>
-              <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
-                {item.publication?.published ? "LIVE" : item.ready ? "READY" : "BLOCKED"}
-              </span>
+              <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{item.publication?.published ? "LIVE" : item.ready ? "READY" : "BLOCKED"}</span>
             </div>
             {!item.ready && item.blockers?.length ? (
-              <ul className="mt-3 space-y-1 text-xs text-muted">
-                {item.blockers.map((b: string) => (
-                  <li key={b}>• {b}</li>
-                ))}
-              </ul>
+              <ul className="mt-3 space-y-1 text-xs text-muted">{item.blockers.map((b: string) => <li key={b}>• {b}</li>)}</ul>
             ) : null}
-            <div className="mt-3">
-              <Link to="/internal" className="text-sm font-semibold text-accent hover:underline">
-                {item.publication?.published
-                  ? "Manage publication"
-                  : item.ready
-                    ? "Authorize publication"
-                    : "Review blockers"}{" "}
-                →
-              </Link>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Link to="/title/$id" params={{ id: item.id }} className="text-sm font-semibold text-accent hover:underline">Open title →</Link>
+              {FOUNDER_PUBLISH_TITLE_IDS.has(item.id) && !item.publication?.published ? (
+                <Button type="button" variant="outline" className="border-amber-500/40" onClick={() => { setSelected(item); setLanguage(item.language || "Malayalam"); setTerritory("WORLDWIDE"); }}>
+                  Founder Publish in LOOP
+                </Button>
+              ) : null}
             </div>
           </article>
         ))}
-        {!publications.length ? (
-          <p className="py-8 text-center text-sm text-muted">
-            No publication candidates available.
-          </p>
-        ) : null}
+        {!publications.length ? <p className="py-8 text-center text-sm text-muted">No publication candidates available.</p> : null}
       </div>
+      {selected ? (
+        <div className="mt-5 space-y-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h4 className="font-semibold">Founder authorization — {selected.name}</h4>
+            <button type="button" onClick={() => setSelected(null)} className="text-xs text-muted">Cancel</button>
+          </div>
+          <p className="text-xs text-muted">This action does not create Legal Reviewer or QC Reviewer approvals. The founder exception is stored in the audit trail.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-muted">Territories<input value={territory} onChange={(e) => setTerritory(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-line bg-surface px-3 text-fg" /></label>
+            <label className="text-xs text-muted">Languages<input value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-line bg-surface px-3 text-fg" /></label>
+            <label className="text-xs text-muted">Publication start<input type="datetime-local" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-line bg-surface px-3 text-fg" /></label>
+            <label className="text-xs text-muted">Publication end<input type="datetime-local" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-line bg-surface px-3 text-fg" /></label>
+          </div>
+          <label className="block text-xs text-muted">Founder authorization reason (minimum 12 characters)<textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={1000} className="mt-1 w-full rounded-xl border border-line bg-surface p-3 text-fg" placeholder="Reason for authorizing this title for Crayons LOOP" /></label>
+          <label className="flex items-start gap-2 text-xs text-muted"><input type="checkbox" checked={attested} onChange={(e) => setAttested(e.target.checked)} />I confirm that I am authorized to distribute this title to Crayons LOOP.</label>
+          <Button type="button" disabled={publish.isPending || reason.trim().length < 12 || !attested || !windowStart || !windowEnd} onClick={() => publish.mutate()}>{publish.isPending ? "Publishing…" : "Confirm Founder Publish to LOOP"}</Button>
+        </div>
+      ) : null}
     </section>
   );
 }
