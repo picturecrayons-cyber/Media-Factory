@@ -101,8 +101,11 @@ export async function verifyDistributionPreflight(
     year: number | null;
     runtime_minutes: number | null;
     content_type: string | null;
+    trailer_key: string | null;
   }>`
-    select id, slug, name, status, language, master_key, poster_key, synopsis, year, runtime_minutes, content_type
+    select id, slug, name, status, language, master_key, poster_key, synopsis, year, runtime_minutes, content_type,
+      (select a.s3_key from bridge_assets a where a.title_id=bridge_titles.id and a.kind='trailer'
+        and a.storage_business_state='ACTIVE' and a.restore_state='READY' order by a.created_at desc limit 1) as trailer_key
     from bridge_titles
     where id = ${titleId}
     limit 1
