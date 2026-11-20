@@ -436,11 +436,11 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       await sql`
       insert into loop_titles (
         id, bridge_title_id, slug, title, synopsis, content_type, language, year,
-        duration_minutes, poster_path, playback_path, metadata, status, listed,
+        duration_minutes, poster_path, trailer_path, playback_path, metadata, status, listed,
         published, featured, access_tier, updated_at
       ) values (
         ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
-        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
+        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.trailer_key}, ${title.master_key},
         ${JSON.stringify({
           source: "crayons-bridge-master-distribution",
           lane: loopStageType(title.content_type),
@@ -516,6 +516,12 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
  * it never fabricates QC or Legal reviewer decisions. Required assets and distribution
  * scope are still validated, and the exception is permanently visible in audit metadata.
  */
+const FOUNDER_LOOP_PUBLICATION_TITLE_IDS = new Set([
+  "858f0ec5a11bc9acd2e9c20266541a3a",
+  "cb8c141dc72d727a53a4f35d8851e100",
+  "f15e0a5385aaf8365f6ad730de747da0",
+]);
+
 const founderPublishInput = z.object({
   bridgeTitleId: z.string().min(1),
   territories: z.array(z.string().min(2).max(32)).min(1).max(50),
@@ -535,6 +541,8 @@ export const founderAuthorizeLoopPublication = createServerFn({ method: "POST" }
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     if (actor.internalRole !== "super_admin") throw new Error("Founder / Super Admin access required");
+    if (!FOUNDER_LOOP_PUBLICATION_TITLE_IDS.has(data.bridgeTitleId))
+      throw new Error("Founder override is limited to the three specifically authorized titles.");
     if (new Date(data.windowEnd) <= new Date(data.windowStart))
       throw new Error("Distribution window end date must be after the start date.");
     if (!data.exploitationModels.includes(data.accessTier))
@@ -544,10 +552,12 @@ export const founderAuthorizeLoopPublication = createServerFn({ method: "POST" }
       const rows = await sql<{
         id: string; slug: string; name: string; language: string; synopsis: string;
         year: number | null; runtime_minutes: number | null; content_type: string | null;
-        master_key: string | null; poster_key: string | null;
+        master_key: string | null; poster_key: string | null; trailer_key: string | null;
       }>`
-        select id, slug, name, language, synopsis, year, runtime_minutes, content_type, master_key, poster_key
-        from bridge_titles where id = ${data.bridgeTitleId} for update
+        select b.id, b.slug, b.name, b.language, b.synopsis, b.year, b.runtime_minutes, b.content_type, b.master_key, b.poster_key,
+          (select a.s3_key from bridge_assets a where a.title_id=b.id and a.kind='trailer'
+            and a.storage_business_state='ACTIVE' and a.restore_state='READY' order by a.created_at desc limit 1) as trailer_key
+        from bridge_titles b where b.id = ${data.bridgeTitleId} for update
       `;
       const title = rows[0];
       if (!title) throw new Error("Canonical Bridge title not found.");
@@ -588,7 +598,7 @@ export const founderAuthorizeLoopPublication = createServerFn({ method: "POST" }
           slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
           content_type = excluded.content_type, language = excluded.language, year = excluded.year,
           duration_minutes = excluded.duration_minutes, poster_path = excluded.poster_path,
-          playback_path = excluded.playback_path, metadata = excluded.metadata,
+          trailer_path = excluded.trailer_path, playback_path = excluded.playback_path, metadata = excluded.metadata,
           status = 'approved', listed = true, published = true,
           access_tier = excluded.access_tier, updated_at = now()
       `;
