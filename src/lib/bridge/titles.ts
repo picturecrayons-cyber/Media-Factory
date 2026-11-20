@@ -332,7 +332,7 @@ export const createTitle = createServerFn({ method: "POST" })
     return { title, submission: isPublicSubmission };
   });
 
-export const listTitles = createServerFn({ method: "GET" })
+export const listTitles = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
@@ -373,7 +373,7 @@ export const listTitles = createServerFn({ method: "GET" })
     }) };
   });
 
-export const getTitle = createServerFn({ method: "GET" })
+export const getTitle = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ id: z.string().min(8) }))
   .handler(async ({ context, data }) => {
@@ -647,7 +647,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
     });
   });
 
-export const listAuditLogs = createServerFn({ method: "GET" })
+export const listAuditLogs = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await requireVerifiedActor(context.userId);

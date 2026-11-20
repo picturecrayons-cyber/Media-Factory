@@ -307,7 +307,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     return signed;
   });
 
-export const listTitleAssets = createServerFn({ method: "GET" })
+export const listTitleAssets = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
@@ -349,7 +349,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
  * Each row is visibility-checked against the canonical Bridge title before it
  * can be returned to an owner or an authorized internal reviewer.
  */
-export const listProductionAssets = createServerFn({ method: "GET" })
+export const listProductionAssets = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {

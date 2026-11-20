@@ -15,7 +15,7 @@ export type InvestorInvestment = {
 };
 
 /** Investor portfolio is always scoped to the authenticated, verified Bridge identity. */
-export const listInvestorInvestments = createServerFn({ method: "GET" })
+export const listInvestorInvestments = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<{ investments: InvestorInvestment[] }> => {
     assertNotDevUser(context.userId);
