@@ -212,6 +212,10 @@ function LicensingDesk({ titles }: { titles: Array<any> }) {
 }
 
 function PublishingDesk({ publications }: { publications: Array<any> }) {
+  const liveCount = publications.filter((item) => item.publication?.published).length;
+  const readyCount = publications.filter((item) => !item.publication?.published && item.ready).length;
+  const blockedCount = publications.filter((item) => !item.publication?.published && !item.ready).length;
+
   return (
     <section className="rounded-3xl border border-line bg-surface p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -222,48 +226,104 @@ function PublishingDesk({ publications }: { publications: Array<any> }) {
           <h3 className="mt-1 font-display text-2xl font-semibold">
             Crayons Loop authorization queue
           </h3>
-          <p className="mt-2 text-sm text-muted">
-            Publication remains gated by active rights coverage, title status and required
-            master/artwork readiness.
+          <p className="mt-2 max-w-2xl text-sm text-muted">
+            Publication is available only after active rights, title, QC, legal and delivery
+            requirements are satisfied. Blocked titles remain private to this admin queue.
           </p>
         </div>
         <Link to="/internal">
           <Button>Open distribution controls</Button>
         </Link>
       </div>
-      <div className="mt-5 space-y-3">
-        {publications.map((item) => (
-          <article key={item.id} className="rounded-2xl border border-line bg-elevated p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h4 className="font-semibold">{item.name}</h4>
-                <p className="mt-1 text-xs text-muted">
-                  {item.language} · {String(item.bridgeStatus).replaceAll("_", " ")}
-                </p>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-3" aria-label="Publication readiness summary">
+        <div className="rounded-2xl border border-line bg-elevated p-4">
+          <p className="text-xs font-medium text-muted">Blocked</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">{blockedCount}</p>
+          <p className="mt-1 text-xs text-muted">Needs review before authorization</p>
+        </div>
+        <div className="rounded-2xl border border-line bg-elevated p-4">
+          <p className="text-xs font-medium text-muted">Ready for authorization</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">{readyCount}</p>
+          <p className="mt-1 text-xs text-muted">All readiness checks currently pass</p>
+        </div>
+        <div className="rounded-2xl border border-line bg-elevated p-4">
+          <p className="text-xs font-medium text-muted">Published</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">{liveCount}</p>
+          <p className="mt-1 text-xs text-muted">Publication records marked live</p>
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold">Title queue</h4>
+        <p className="text-xs text-muted">Live readiness is recalculated from Bridge services.</p>
+      </div>
+
+      <div className="mt-3 space-y-3">
+        {publications.map((item) => {
+          const isLive = Boolean(item.publication?.published);
+          const isReady = !isLive && Boolean(item.ready);
+          const blockers = item.blockers ?? [];
+          const statusLabel = isLive ? "LIVE" : isReady ? "READY FOR AUTHORIZATION" : "BLOCKED";
+
+          return (
+            <article
+              key={item.id}
+              className="rounded-2xl border border-line bg-elevated p-4 sm:p-5"
+              aria-labelledby={`publication-title-${item.id}`}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <h5 id={`publication-title-${item.id}`} className="font-semibold">
+                    {item.name}
+                  </h5>
+                  <p className="mt-1 text-xs text-muted">
+                    {item.language || "Language not set"} · {String(item.bridgeStatus).replaceAll("_", " ")}
+                  </p>
+                </div>
+                <span
+                  className="inline-flex w-fit rounded-full border border-line px-3 py-1 text-[11px] font-semibold tracking-wide"
+                  aria-label={`Publication status: ${statusLabel}`}
+                >
+                  {statusLabel}
+                </span>
               </div>
-              <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
-                {item.publication?.published ? "LIVE" : item.ready ? "READY" : "BLOCKED"}
-              </span>
-            </div>
-            {!item.ready && item.blockers?.length ? (
-              <ul className="mt-3 space-y-1 text-xs text-muted">
-                {item.blockers.map((b: string) => (
-                  <li key={b}>• {b}</li>
-                ))}
-              </ul>
-            ) : null}
-            <div className="mt-3">
-              <Link to="/internal" className="text-sm font-semibold text-accent hover:underline">
-                {item.publication?.published
-                  ? "Manage publication"
-                  : item.ready
-                    ? "Authorize publication"
-                    : "Review blockers"}{" "}
-                →
-              </Link>
-            </div>
-          </article>
-        ))}
+
+              {!isLive && !isReady && blockers.length > 0 ? (
+                <div className="mt-4 rounded-xl border border-line bg-surface p-3">
+                  <p className="text-xs font-semibold">Required before publication ({blockers.length})</p>
+                  <ul className="mt-2 space-y-2 text-xs leading-relaxed text-muted">
+                    {blockers.map((blocker: string, index: number) => (
+                      <li key={blocker} className="flex gap-2">
+                        <span className="mt-px font-semibold text-fg" aria-hidden="true">
+                          {index + 1}.
+                        </span>
+                        <span>{blocker}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {isReady ? (
+                <p className="mt-3 text-xs text-muted">
+                  Readiness checks pass. Final authorization is still a separate admin action.
+                </p>
+              ) : null}
+
+              <div className="mt-4 border-t border-line pt-3">
+                <Link to="/internal" className="text-sm font-semibold text-accent hover:underline">
+                  {isLive
+                    ? "Manage publication"
+                    : isReady
+                      ? "Review authorization"
+                      : "Open blocker review"}{" "}
+                  →
+                </Link>
+              </div>
+            </article>
+          );
+        })}
         {!publications.length ? (
           <p className="py-8 text-center text-sm text-muted">
             No publication candidates available.
