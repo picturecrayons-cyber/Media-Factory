@@ -191,8 +191,16 @@ try {
       }
 
       for (const loopTitle of loopTitles) {
-        const posterKey = loopTitle.bridge_title_id
-          ? destinationKeys.get(loopTitle.bridge_title_id) ?? null
+        // Preserve the Loop record, but never carry a stale or mismatched Bridge link.
+        const linkedBridgeTitle = loopTitle.bridge_title_id
+          ? titles.find((candidate) =>
+              candidate.id === loopTitle.bridge_title_id &&
+              String(candidate.name).trim().toLowerCase() === String(loopTitle.title).trim().toLowerCase()
+            )
+          : null;
+        const safeBridgeTitleId = linkedBridgeTitle?.id ?? null;
+        const posterKey = safeBridgeTitleId
+          ? destinationKeys.get(safeBridgeTitleId) ?? null
           : null;
         const metadata = loopTitle.metadata && typeof loopTitle.metadata === "object"
           ? loopTitle.metadata
@@ -214,7 +222,7 @@ try {
             backdrop_url=null, trailer_url=null, status='DRAFT',
             is_listed=false, is_published=false, updated_at=now()
         `, [
-          loopTitle.id, loopTitle.bridge_title_id, loopTitle.slug, loopTitle.title,
+          loopTitle.id, safeBridgeTitleId, loopTitle.slug, loopTitle.title,
           loopTitle.synopsis, loopTitle.language, genres, loopTitle.duration_minutes,
           loopTitle.year, loopTitle.maturity_rating, posterKey,
           loopTitle.created_at, loopTitle.updated_at,
