@@ -15,7 +15,7 @@ export type StudioMember = {
 };
 
 /** Read-only roster, restricted to verified Studio owners/admins in their own organization. */
-export const listStudioMembers = createServerFn({ method: "GET" })
+export const listStudioMembers = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<{ members: StudioMember[] }> => {
     assertNotDevUser(context.userId);

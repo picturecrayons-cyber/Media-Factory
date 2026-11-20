@@ -12,7 +12,7 @@ async function actorFor(userId: string) {
   return requireVerifiedActor(userId);
 }
 
-export const listAdminWorkstations = createServerFn({ method: "GET" })
+export const listAdminWorkstations = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await actorFor(context.userId);

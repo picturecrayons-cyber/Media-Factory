@@ -24,7 +24,7 @@ export const LOOP_PLANS = [
 /**
  * Get active subscription status for consumer
  */
-export const getConsumerSubscription = createServerFn({ method: "GET" })
+export const getConsumerSubscription = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<LoopSubscription> => {
     const sql = await getSql();

@@ -180,7 +180,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     }
   });
 
-export const listMyStoryConcepts = createServerFn({ method: "GET" })
+export const listMyStoryConcepts = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
@@ -217,7 +217,7 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     }
   });
 
-export const listPendingStoryConcepts = createServerFn({ method: "GET" })
+export const listPendingStoryConcepts = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);

@@ -28,7 +28,7 @@ async function actorFor(userId: string) {
   return requireVerifiedActor(userId);
 }
 
-export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
+export const listBridgeDeliveryJobs = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await actorFor(context.userId);

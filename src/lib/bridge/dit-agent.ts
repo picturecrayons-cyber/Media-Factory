@@ -142,7 +142,7 @@ function audit(tx: Parameters<Parameters<Awaited<ReturnType<typeof getSql>>["tra
   `;
 }
 
-export const getDitWorkspace = createServerFn({ method: "GET" })
+export const getDitWorkspace = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);

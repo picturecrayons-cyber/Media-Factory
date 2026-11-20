@@ -1085,7 +1085,7 @@ export const recordServiceActualCost = createServerFn({ method: "POST" })
     return result;
   });
 
-export const getCommercialFinancialSummary = createServerFn({ method: "GET" })
+export const getCommercialFinancialSummary = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
