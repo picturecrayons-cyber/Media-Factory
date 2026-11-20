@@ -1,0 +1,37 @@
+name: Bridge OCI Primary to Recovery E2E
+
+on:
+  workflow_dispatch:
+  # Narrow fallback trigger to this dedicated certification branch only.
+  push:
+    branches:
+      - "certification/bridge-oci-recovery-e2e-*"
+    paths:
+      - ".github/workflows/bridge-oci-recovery-roundtrip-e2e.yml"
+      - "scripts/oci-recovery-roundtrip-e2e.mjs"
+
+jobs:
+  recovery-roundtrip:
+    # Must contain only isolated STAGING OCI credentials and require reviewer approval.
+    environment: bridge-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Run isolated synthetic Primary-to-Recovery round-trip
+        env:
+          BRIDGE_E2E_TARGET: staging
+          OCI_TENANCY_OCID: ${{ secrets.STAGING_OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.STAGING_OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.STAGING_OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.STAGING_OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.STAGING_OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.STAGING_OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.STAGING_OCI_BUCKET_NAME }}
+          OCI_RECOVERY_BUCKET_NAME: ${{ secrets.STAGING_OCI_RECOVERY_BUCKET_NAME }}
+        run: node --experimental-strip-types scripts/oci-recovery-roundtrip-e2e.mjs
