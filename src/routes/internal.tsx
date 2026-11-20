@@ -34,6 +34,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            isSuperAdmin={actor.internalRole === "super_admin"}
           />
         </BridgeShell>
       )}
@@ -45,10 +46,12 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  isSuperAdmin,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  isSuperAdmin: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -59,7 +62,7 @@ function InternalBody({
   return (
     <div className="grid gap-12">
       {/* 1. Master Distribution Desk */}
-      <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} canFounderPublish={actor.internalRole === "super_admin"} />
+      <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} canFounderPublish={isSuperAdmin} />
 
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
