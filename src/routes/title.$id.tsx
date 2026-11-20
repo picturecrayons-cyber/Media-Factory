@@ -391,7 +391,9 @@ function ProductionAssetsPanel({
             { label: "Artwork & stills", items: artwork },
             { label: "Documents & subtitles", items: documents },
             { label: "Other linked files", items: other },
-          ].map((group) => (
+          ]
+            .filter((group) => group.items.length > 0)
+            .map((group) => (
             <div key={group.label} className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold">{group.label}</h3>
