@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Children, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
@@ -146,9 +147,8 @@ function BuyerWorkspaceBody() {
   );
 }
 
-function Panel({ title, empty, children }: { title: string; empty: string; children: React.ReactNode }) {
-  const content = children as React.ReactNode;
-  return <section className="min-w-0 rounded-xl border border-line bg-surface p-4"><h2 className="mb-3 font-semibold">{title}</h2>{content ? <div>{content}</div> : <p className="text-sm text-muted">{empty}</p>}</section>;
+function Panel({ title, empty, children }: { title: string; empty: string; children: ReactNode }) {
+  return <section className="min-w-0 rounded-xl border border-line bg-surface p-4"><h2 className="mb-3 font-semibold">{title}</h2>{Children.count(children) > 0 ? <div>{children}</div> : <p className="text-sm text-muted">{empty}</p>}</section>;
 }
 function State({ value }: { value: string }) { return <span className="shrink-0 rounded-full border border-line px-2.5 py-1 text-[11px] font-medium">{value.replaceAll("_", " ")}</span>; }
 function date(value: string) { const parsed = new Date(value); return Number.isNaN(parsed.getTime()) ? "Date unavailable" : parsed.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); }
