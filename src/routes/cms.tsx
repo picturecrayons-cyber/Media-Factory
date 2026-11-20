@@ -20,27 +20,6 @@ function OperationalCms() {
 function CmsBody({ actor }: { actor: any }) {
   const search = Route.useSearch() as { tab?: Tab };
   const tab: Tab = tabs.includes(search.tab as Tab) ? (search.tab as Tab) : "ingest";
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const pubQ = useQuery({
-    queryKey: ["loop-publication-readiness"],
-    queryFn: () => listLoopPublicationReadiness(),
-  });
-  const titles = titlesQ.data?.titles ?? [];
-  const publications = pubQ.data?.titles ?? [];
-  if (titlesQ.isPending || pubQ.isPending)
-    return (
-      <BridgeShell actor={actor} title="Bridge CMS">
-        <p>Loading CMS…</p>
-      </BridgeShell>
-    );
-  if (titlesQ.isError || pubQ.isError)
-    return (
-      <BridgeShell actor={actor} title="Bridge CMS">
-        <p role="alert">
-          CMS data could not be loaded. Refresh to retry; no empty catalog is inferred.
-        </p>
-      </BridgeShell>
-    );
 
   return (
     <BridgeShell actor={actor} title="Bridge CMS">
@@ -79,8 +58,8 @@ function CmsBody({ actor }: { actor: any }) {
 
       <div className="mt-6">
         {tab === "ingest" ? <IngestDesk actor={actor} /> : null}
-        {tab === "licensing" ? <LicensingDesk titles={titles} /> : null}
-        {tab === "publishing" ? <PublishingDesk publications={publications} /> : null}
+        {tab === "licensing" ? <LicensingDesk /> : null}
+        {tab === "publishing" ? <PublishingDesk /> : null}
       </div>
     </BridgeShell>
   );
@@ -141,7 +120,11 @@ function IngestDesk({ actor }: { actor: any }) {
   );
 }
 
-function LicensingDesk({ titles }: { titles: Array<any> }) {
+function LicensingDesk() {
+  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  if (titlesQ.isPending) return <p className="py-8 text-center text-sm text-muted">Loading licensing titles…</p>;
+  if (titlesQ.isError) return <p role="alert" className="py-8 text-center text-sm text-muted">Licensing titles could not be loaded. Retry by refreshing this page.</p>;
+  const titles = titlesQ.data?.titles ?? [];
   const rows = titles.filter((title) =>
     ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(
       title.status,
@@ -211,7 +194,11 @@ function LicensingDesk({ titles }: { titles: Array<any> }) {
   );
 }
 
-function PublishingDesk({ publications }: { publications: Array<any> }) {
+function PublishingDesk() {
+  const pubQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
+  if (pubQ.isPending) return <p className="py-8 text-center text-sm text-muted">Loading publication readiness…</p>;
+  if (pubQ.isError) return <p role="alert" className="py-8 text-center text-sm text-muted">Publication readiness could not be loaded. Retry by refreshing this page.</p>;
+  const publications = pubQ.data?.titles ?? [];
   return (
     <section className="rounded-3xl border border-line bg-surface p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
