@@ -113,6 +113,16 @@ test("new and existing publications emit the status accepted by the Loop catalog
     const h = harness([grant], true, existing);
     const result = await h.authorize({ context, data });
     assert.equal((result as { status: string }).status, "AUTHORIZED");
+    const loopTitle = h.writes.find((write) =>
+      write.query.includes("insert into loop_titles"),
+    );
+    assert.ok(loopTitle);
+    assert.equal(loopTitle.values[0], existing ? "loop-existing" : "generated-id");
+    assert.match(
+      loopTitle.query,
+      /metadata = coalesce\(loop_titles\.metadata, '\{\}'::jsonb\) \|\| excluded\.metadata/,
+    );
+
     const publication = h.writes.find((write) =>
       write.query.includes("insert into bridge_loop_publications"),
     );
