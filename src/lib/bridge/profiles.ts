@@ -481,6 +481,70 @@ export const listAdminProfiles = createServerFn({ method: "GET" })
     };
   });
 
+/**
+ * Revoke a staff role without deleting the profile or its identity binding.
+ * Only a verified Super Admin may perform this operation. The canonical
+ * Super Admin identity is protected from revocation to prevent lockout.
+ */
+export const revokeInternalRole = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ userId: z.string().min(1).max(128) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") {
+      throw new Error("Super Admin access required");
+    }
+    if (data.userId === context.userId) {
+      throw new Error("The active Super Admin cannot revoke their own role.");
+    }
+
+    const sql = await getSql();
+    return await sql.transaction(async (tx) => {
+      const targetRows = await tx<{
+        user_id: string;
+        email: string;
+        internal_role: string | null;
+      }>`
+        select user_id, email, internal_role
+        from bridge_profiles
+        where user_id = ${data.userId}
+        for update
+      `;
+      const target = targetRows[0];
+      if (!target) throw new Error("Bridge profile not found");
+      if (!target.internal_role) {
+        return { revoked: false, reason: "no_internal_role" as const };
+      }
+      if (target.email.trim().toLowerCase() === CANONICAL_SUPER_ADMIN_EMAIL) {
+        throw new Error("The canonical Super Admin identity is protected.");
+      }
+
+      const updated = await tx<{ user_id: string }>`
+        update bridge_profiles
+        set internal_role = null, updated_at = now()
+        where user_id = ${target.user_id}
+          and internal_role = ${target.internal_role}
+        returning user_id
+      `;
+      if (updated.length !== 1) throw new Error("Role changed before revocation completed");
+
+      await writeAudit({
+        actorUserId: context.userId,
+        action: "users.internal_role_revoked",
+        entityType: "bridge_profile",
+        entityId: target.user_id,
+        metadata: {
+          email: target.email.trim().toLowerCase(),
+          previousRole: target.internal_role,
+          revokedBy: context.userId,
+        },
+      }, tx);
+
+      return { revoked: true, previousRole: target.internal_role };
+    });
+  });
+
 export const inviteInternalRole = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ email: z.string().email(), role: z.enum(INTERNAL_ROLES) }))
