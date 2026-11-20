@@ -329,6 +329,14 @@ export const updateStoryConceptRightsDeclaration = createServerFn({ method: "POS
             third_party_materials_details = ${data.thirdPartyMaterialsDetails?.trim() || null},
             rights_declaration_accepted_at = now(),
             rights_declaration_version = 'story-concept-rights-v1',
+            editorial_status = 'PENDING',
+            editorial_reviewed_by = null,
+            editorial_reviewed_at = null,
+            editorial_review_notes = null,
+            legal_status = 'PENDING',
+            legal_reviewed_by = null,
+            legal_reviewed_at = null,
+            legal_review_notes = null,
             updated_at = now()
         where id = ${data.id}
         returning *
