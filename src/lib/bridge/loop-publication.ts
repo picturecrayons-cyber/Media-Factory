@@ -585,12 +585,12 @@ export const founderAuthorizeLoopPublication = createServerFn({ method: "POST" }
       await sql`
         insert into loop_titles (
           id, bridge_title_id, slug, title, synopsis, content_type, language, year,
-          duration_minutes, poster_path, playback_path, metadata, status, listed,
+          duration_minutes, poster_path, trailer_path, playback_path, metadata, status, listed,
           published, featured, access_tier, updated_at
         ) values (
           ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis},
           ${loopStageType(title.content_type)}, ${title.language}, ${title.year},
-          ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
+          ${title.runtime_minutes}, ${title.poster_key}, ${title.trailer_key}, ${title.master_key},
           ${JSON.stringify({ source: "crayons-bridge-founder-publication", founderAuthorization: exception })}::jsonb,
           'approved', true, true, false, ${data.accessTier}, now()
         )
