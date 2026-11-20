@@ -401,8 +401,19 @@ export async function sealVerifiedObject(
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId, pollOpts);
 
-  // A successful work request is not enough: verify persisted destination metadata.
-  const sealed = await inspectDestination();
+  // OCI CopyObject can report a completed work request before the destination
+  // is visible to HEAD. Retry only 404s for a bounded propagation window; all
+  // authorization, transport, and metadata failures still fail immediately.
+  const propagationDeadline = Date.now() + (pollOpts?.propagationGracePeriodMs ?? 10_000);
+  const propagationPollIntervalMs = pollOpts?.pollIntervalMs ?? 1_000;
+  let sealed = await inspectDestination();
+  while (!sealed && Date.now() < propagationDeadline) {
+    const remainingMs = propagationDeadline - Date.now();
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(propagationPollIntervalMs, remainingMs)),
+    );
+    sealed = await inspectDestination();
+  }
   if (!sealed) throw new Error("OCI sealed object was not visible after copy");
   return sealed;
 }
