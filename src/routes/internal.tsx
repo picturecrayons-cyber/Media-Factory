@@ -127,6 +127,12 @@ function InternalBody({
   );
 }
 
+const FOUNDER_PUBLISH_TITLE_IDS = new Set([
+  "858f0ec5a11bc9acd2e9c20266541a3a",
+  "cb8c141dc72d727a53a4f35d8851e100",
+  "f15e0a5385aaf8365f6ad730de747da0",
+]);
+
 const DISTRIBUTION_TABS = [
   "Ready for Distribution",
   "Destinations",
@@ -623,7 +629,7 @@ function DistributionDesk({ canPublish, canRevoke, canFounderPublish }: { canPub
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                {canFounderPublish && (!pub || !["AUTHORIZED", "LIVE"].includes(pub.authorizationStatus)) ? (
+                {canFounderPublish && FOUNDER_PUBLISH_TITLE_IDS.has(t.id) && (!pub || !["AUTHORIZED", "LIVE"].includes(pub.authorizationStatus)) ? (
                   <Button type="button" variant="outline" onClick={() => { setSelectedTitleId(t.id); setFounderOverride(true); }} className="rounded-full border-amber-500/40 text-xs font-semibold px-4 h-9">
                     Founder Publish in LOOP
                   </Button>
