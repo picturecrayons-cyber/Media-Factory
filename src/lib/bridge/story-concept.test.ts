@@ -10,7 +10,9 @@ import {
 const complete: StoryConceptApprovalState = {
   rights_holder_name: "Original Author",
   rights_basis: "ORIGINAL_AUTHOR",
+  rights_basis_details: null,
   third_party_materials_included: false,
+  third_party_materials_details: null,
   rights_declaration_accepted_at: "2026-11-20T00:00:00.000Z",
   editorial_status: "APPROVED",
   editorial_reviewed_by: "editor-1",
@@ -25,6 +27,10 @@ describe("Story / Concept release gates", () => {
     assert.equal(hasCompleteRightsDeclaration({ ...complete, rights_declaration_accepted_at: null }), false);
     assert.equal(hasCompleteRightsDeclaration({ ...complete, rights_holder_name: " " }), false);
     assert.equal(hasCompleteRightsDeclaration({ ...complete, rights_basis: null }), false);
+    assert.equal(hasCompleteRightsDeclaration({ ...complete, rights_basis: "OTHER" }), false);
+    assert.equal(hasCompleteRightsDeclaration({ ...complete, rights_basis: "OTHER", rights_basis_details: "Assigned by contract" }), true);
+    assert.equal(hasCompleteRightsDeclaration({ ...complete, third_party_materials_included: true }), false);
+    assert.equal(hasCompleteRightsDeclaration({ ...complete, third_party_materials_included: true, third_party_materials_details: "Licensed archive footage" }), true);
     assert.equal(hasCompleteRightsDeclaration({ ...complete, third_party_materials_included: null }), false);
   });
 
