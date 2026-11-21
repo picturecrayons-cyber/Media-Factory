@@ -110,6 +110,7 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
           order by updated_at desc limit 200`
       : sql<TitleRow>`select * from bridge_titles
           where owner_user_id = ${userId}
+            and deleted_at is null
             and submission_type is distinct from 'story_concept'
           order by updated_at desc limit 200`;
   }
