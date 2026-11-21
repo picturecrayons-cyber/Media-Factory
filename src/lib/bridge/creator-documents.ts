@@ -8,7 +8,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { canReadTitle, canOperateOnTitle, hasPermission } from "./rbac";
 import { writeAudit } from "./audit";
-import { sameOwner, canDownloadCreatorDocument } from "./creator-document-policy";
+import { sameOwner, canDownloadCreatorDocument, canManageStudioDocuments } from "./creator-document-policy";
 
 const DOCUMENT_TYPES = [
   "FINISHED_FILM_AGREEMENT",
@@ -46,7 +46,7 @@ async function assertStudioDocumentManager(
       and status = 'active'
     limit 1
   `;
-  if (!rows[0] || !["owner", "admin"].includes(rows[0].membership_role)) {
+  if (!canManageStudioDocuments(rows[0]?.membership_role)) {
     throw new Error("Studio owner or admin membership is required for reusable legal documents");
   }
 }
