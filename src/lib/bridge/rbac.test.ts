@@ -50,7 +50,10 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(s, "asset.sign_upload"), true);
     assert.equal(canReadTitle(c, creatorTitle), true);
     assert.equal(canReadTitle(s, studioTitle), true);
-    assert.equal(canReadTitle(studio(), { ...studioTitle, ownerUserId: "studio-a" }), false);
+    const studioOwnerWithoutMembership = { ...studioTitle, ownerUserId: "studio-a" };
+    assert.equal(canReadTitle(studio(), studioOwnerWithoutMembership), false);
+    assert.equal(canMutateTitle(studio(), studioOwnerWithoutMembership, "title.update_own", "title.license"), false);
+    assert.equal(canOperateOnTitle(studio(), studioOwnerWithoutMembership, "asset.sign_upload"), false);
     assert.equal(canReadTitle(c, { ...creatorTitle, ownerUserId: "other-creator" }), false);
     assert.equal(canReadTitle(s, { ...studioTitle, ownerOrganizationId: "22222222-2222-4222-8222-222222222222" }), false);
     assert.equal(hasPermission(c, "title.qc_review"), false);
