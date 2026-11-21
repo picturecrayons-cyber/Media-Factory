@@ -15,3 +15,8 @@ export function sameOwner(
     Boolean(actor.organizationId) &&
     actor.organizationId === doc.owner_organization_id;
 }
+
+/** Safe client-facing error; detailed database diagnostics stay in server logs. */
+export function creatorDocumentListFailureMessage(reference: string): string {
+  return `Document Vault is temporarily unavailable. Retry the request. Reference: ${reference}`;
+}
