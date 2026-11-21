@@ -12,6 +12,31 @@ import { assertAccountMandateScope, loadTitle } from "./titles";
 import { assertCreatorTitleCanSubmit } from "./creator-title-lifecycle";
 import type { TitleStatus } from "./types";
 
+const BUYER_DESTINATION_MAP: Record<string, string> = {
+  "OTT platform": "External OTT",
+  "Broadcaster": "Broadcast / TV",
+  "Distributor": "Buyer delivery",
+  "Aggregator": "Buyer delivery",
+  "International buyer": "Buyer delivery",
+  "Educational buyer": "Festival / Educational",
+  "Festival / screening": "Festival / Educational",
+  "Crayons Loop": "Crayons Loop",
+  "Open to qualified buyers": "Buyer delivery",
+};
+
+const EXPLOITATION_MEDIA_MAP: Record<string, string> = {
+  "OTT / Streaming": "SVOD",
+  "SVOD": "SVOD",
+  "TVOD": "TVOD",
+  "AVOD": "AVOD",
+  "FAST": "FAST",
+  "Broadcast / TV": "BROADCAST",
+  "Theatrical": "THEATRICAL",
+  "Educational": "EDUCATIONAL",
+  "Airline / Ancillary": "AIRLINE",
+  "Festival / Screening": "FESTIVAL",
+};
+
 const submissionSchema = z.object({
   name: z.string().trim().min(1).max(160),
   synopsis: z.string().trim().min(1).max(4000),
@@ -43,7 +68,7 @@ const submissionSchema = z.object({
     "OTHER",
   ]),
   authorizationConfirmed: z.literal(true),
-  buyerChannels: z.array(z.string().trim().min(2).max(80)).max(30),
+  buyerChannels: z.array(z.string().trim().min(2).max(80)).min(1).max(30),
   screenerMode: z.enum(["NONE", "PRIVATE_BRIDGE", "SECURE_EXTERNAL"]),
   screenerUrl: z.string().url().max(2000).optional(),
 }).superRefine((data, ctx) => {
@@ -70,9 +95,16 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       throw new Error("A verified active Studio organization membership is required before creating a Studio submission.");
     }
 
+    const destinations = [...new Set(data.buyerChannels.map((value) => BUYER_DESTINATION_MAP[value]).filter(Boolean))];
+    const media = [...new Set(data.exploitation.map((value) => EXPLOITATION_MEDIA_MAP[value]).filter(Boolean))];
+    if (destinations.length !== data.buyerChannels.length || media.length !== data.exploitation.length) {
+      throw new Error("Select only supported Bridge distribution destinations and exploitation rights.");
+    }
+
     const id = randomBytes(16).toString("hex");
     const slug = `${data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "title"}-${id.slice(0, 6)}`;
     const sql = await getSql();
+    await assertAccountMandateScope(sql, actor, destinations, media, false);
 
     await sql`
       insert into bridge_titles (
@@ -94,7 +126,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
         exclusivity, evidence, status, created_by
       ) values (
         ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories)}::jsonb,
-        ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(data.exploitation)}::jsonb,
+        ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(media)}::jsonb,
         ${data.windowStart}, ${data.windowEnd}, ${data.exclusivity},
         ${JSON.stringify([{ type: data.authorizationEvidenceType, status: "PENDING_REVIEW" }])}::jsonb,
         'DRAFT', ${actor.userId}
@@ -121,7 +153,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
         buyer_channels, screener_mode, screener_url
       ) values (
         ${id}, ${data.authorityType}, ${data.authorizationEvidenceType}, ${data.authorizationConfirmed},
-        ${JSON.stringify(data.buyerChannels)}::jsonb, ${data.screenerMode}, ${data.screenerUrl ?? null}
+        ${JSON.stringify(destinations)}::jsonb, ${data.screenerMode}, ${data.screenerUrl ?? null}
       )
     `;
 
@@ -138,7 +170,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       metadata: {
         rightsGrantId: rightsRows[0]?.id ?? null,
         screenerMode: data.screenerMode,
-        buyerChannels: data.buyerChannels,
+        buyerChannels: destinations,
         loopDistributionPreference: data.loopDistributionPreference,
       },
     });
