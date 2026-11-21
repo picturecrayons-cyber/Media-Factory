@@ -906,7 +906,7 @@ function FilesPanel({
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Upload</p>
           <h2 className="mt-1 font-display text-xl font-semibold">Package in three steps</h2>
-          <p className="mt-1 text-sm text-muted">{readyCount} of 7 files ready. A file is Ready only after storage verification.</p>
+          <p className="mt-1 text-sm text-muted">{readyCount} of 7 files storage-ready. QC also requires a matching PASSED SHA-256 asset-version record.</p>
         </div>
       </div>
 
