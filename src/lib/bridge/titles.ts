@@ -157,16 +157,10 @@ function slugify(name: string, id: string): string {
 }
 
 async function isStoryConceptTitle(sql: Sql, titleId: string): Promise<boolean> {
-  const table = await sql<{ exists: boolean }>`
-    select to_regclass('public.bridge_story_concept_submissions') is not null as exists
+  const rows = await sql<{ submission_type: string | null }>`
+    select submission_type from bridge_titles where id = ${titleId} limit 1
   `;
-  if (!table[0]?.exists) return false;
-  const rows = await sql<{ exists: boolean }>`
-    select exists (
-      select 1 from bridge_story_concept_submissions where title_id = ${titleId}
-    ) as exists
-  `;
-  return Boolean(rows[0]?.exists);
+  return rows[0]?.submission_type === "story_concept";
 }
 
 export async function loadTitle(id: string): Promise<BridgeTitle | null> {
