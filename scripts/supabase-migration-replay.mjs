@@ -736,9 +736,13 @@ try {
        from pg_policy p
        where p.polrelid = 'public.bridge_titles'::regclass
          and p.polname = 'bridge_titles_owner_or_buyer_select') as archived_title_rls_filter,
-      (select position('BRIDGE_ORGANIZATION_MEMBERSHIPS' in upper(pg_get_functiondef('private.bridge_is_title_owner(text)'::regprocedure))) > 0
+      (select
+         position('BRIDGE_ORGANIZATION_MEMBERSHIPS' in upper(pg_get_functiondef('private.bridge_is_title_owner(text)'::regprocedure))) > 0
          and position('M.STATUS = ''ACTIVE''' in upper(pg_get_functiondef('private.bridge_is_title_owner(text)'::regprocedure))) > 0
-         and position('O.STATUS = ''ACTIVE''' in upper(pg_get_functiondef('private.bridge_is_title_owner(text)'::regprocedure))) > 0) as studio_membership_rls_filter,
+         and position('O.STATUS = ''ACTIVE''' in upper(pg_get_functiondef('private.bridge_is_title_owner(text)'::regprocedure))) > 0
+         and position('BRIDGE_ORGANIZATION_MEMBERSHIPS' in upper(pg_get_functiondef('private.bridge_can_read_title(text)'::regprocedure))) > 0
+         and position('M.STATUS = ''ACTIVE''' in upper(pg_get_functiondef('private.bridge_can_read_title(text)'::regprocedure))) > 0
+       ) as studio_membership_rls_filter,
       (select count(*) = 4
        from pg_policies p
        where p.schemaname = 'public'
