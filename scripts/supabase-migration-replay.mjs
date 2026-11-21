@@ -17,7 +17,7 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 69;
+const EXPECTED_MIGRATIONS = 73;
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -58,26 +58,6 @@ if (new Set(names).size !== names.length) {
   throw new Error("Duplicate migration filenames detected");
 }
 
-// The reconciliation manifest is an immutable snapshot of the 69 historical
-// Production-ledger statements. New feature migrations are replayed separately
-// after the historical source has passed exact byte/hash validation.
-const productionNames = names.filter((name) => name < "20261118130000_");
-if (productionNames.length !== EXPECTED_MIGRATIONS) {
-  throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} reconciled Production migrations; found ${productionNames.length}`,
-  );
-}
-const featureNames = names.filter((name) => name >= "20261118130000_");
-const supportedFeatureMigrations = new Set([
-  "20261118130000_loop_tvod_payment_fulfillment.sql",
-  "20261118150000_bridge_exclusive_sublicensing_authority.sql",
-]);
-for (const name of featureNames) {
-  if (!supportedFeatureMigrations.has(name)) {
-    throw new Error(`Unreviewed feature migration in replay set: ${name}`);
-  }
-}
-
 const manifestPath = resolve(
   SCRIPT_DIR,
   "../docs/release/bridge-supabase-migration-reconciliation-2026-11-16.md",
@@ -105,6 +85,24 @@ if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   throw new Error(
     `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
   );
+}
+
+// The manifest, not filename timestamp ranges, defines the applied Production
+// ledger. This keeps later-dated applied migrations in the historical replay
+// while separating only the two explicitly reviewed, unapplied feature migrations.
+const productionNames = [...manifestRows.keys()].sort((a, b) => a.localeCompare(b));
+if (productionNames.length !== EXPECTED_MIGRATIONS || productionNames.some((name) => !names.includes(name))) {
+  throw new Error("Production migration manifest does not match the active SQL source files");
+}
+const featureNames = names.filter((name) => !manifestRows.has(name));
+const supportedFeatureMigrations = new Set([
+  "20261118130000_loop_tvod_payment_fulfillment.sql",
+  "20261118150000_bridge_exclusive_sublicensing_authority.sql",
+]);
+for (const name of featureNames) {
+  if (!supportedFeatureMigrations.has(name)) {
+    throw new Error(`Unreviewed feature migration in replay set: ${name}`);
+  }
 }
 
 for (const name of productionNames) {
