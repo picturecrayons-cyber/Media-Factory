@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
@@ -29,6 +29,28 @@ function assertCreatorOrStudio(actor: { accountType: string }) {
   }
 }
 
+/** Reusable Studio legal documents are restricted to active organization owners/admins. */
+async function assertStudioDocumentManager(
+  actor: { userId: string; accountType: string; organizationId?: string | null },
+  sql: Sql,
+) {
+  if (actor.accountType !== "studio") return;
+  if (!actor.organizationId) {
+    throw new Error("A verified Studio organization mapping is required for Document Vault access");
+  }
+  const rows = await sql<{ membership_role: string }>`
+    select membership_role
+    from bridge_organization_memberships
+    where organization_id = ${actor.organizationId}::uuid
+      and user_id = ${actor.userId}
+      and status = 'active'
+    limit 1
+  `;
+  if (!rows[0] || !["owner", "admin"].includes(rows[0].membership_role)) {
+    throw new Error("Studio owner or admin membership is required for reusable legal documents");
+  }
+}
+
 export const requestCreatorDocumentUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({
@@ -41,6 +63,8 @@ export const requestCreatorDocumentUpload = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertCreatorOrStudio(actor);
+    const sql = await getSql();
+    await assertStudioDocumentManager(actor, sql);
     if (actor.accountType === "studio" && !actor.organizationId) {
       throw new Error("A verified Studio organization mapping is required before uploading reusable organization documents");
     }
@@ -49,7 +73,6 @@ export const requestCreatorDocumentUpload = createServerFn({ method: "POST" })
     const key = `bridge-private/creator-documents/${actor.userId}/${id}/${safeName}`;
     const { signUpload } = await import("./oci-object-storage.server");
     const signed = await signUpload({ key, contentType: data.contentType, expiresIn: 900 });
-    const sql = await getSql();
     await sql`
       insert into bridge_creator_documents
         (id,owner_user_id,owner_account_type,owner_organization_id,document_type,file_name,
@@ -76,6 +99,7 @@ export const confirmCreatorDocumentUpload = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertCreatorOrStudio(actor);
     const sql = await getSql();
+    await assertStudioDocumentManager(actor, sql);
     const rows = await sql<{
       id: string; owner_user_id: string; owner_account_type: string;
       owner_organization_id: string | null; storage_key: string;
@@ -119,6 +143,7 @@ export const listCreatorDocuments = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     assertCreatorOrStudio(actor);
     const sql = await getSql();
+    await assertStudioDocumentManager(actor, sql);
     const rows = await sql<{
       id: string; document_type: string; file_name: string; content_type: string;
       byte_size: number | null; status: string; verified_at: string | Date | null;
@@ -148,11 +173,12 @@ export const linkCreatorDocumentToTitle = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertCreatorOrStudio(actor);
+    const sql = await getSql();
+    await assertStudioDocumentManager(actor, sql);
     const title = await loadTitle(data.titleId);
     if (!title || !canOperateOnTitle(actor, title, "title.update_own", "title.license")) {
       throw new Error("Title not found");
     }
-    const sql = await getSql();
     const docs = await sql<{
       id: string; owner_user_id: string; owner_account_type: string;
       owner_organization_id: string | null; document_type: string; status: string;
@@ -192,6 +218,7 @@ export const listTitleDocumentEvidence = createServerFn({ method: "GET" })
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
+    await assertStudioDocumentManager(actor, sql);
     const rows = await sql<{
       id: string; document_id: string; evidence_type: string; file_name: string;
       document_type: string; status: string; byte_size: number | null; created_at: string | Date;
@@ -212,6 +239,7 @@ export const requestCreatorDocumentDownload = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
+    await assertStudioDocumentManager(actor, sql);
     const rows = await sql<{
       id: string; owner_user_id: string; owner_account_type: string;
       owner_organization_id: string | null; storage_key: string; status: string;
