@@ -5,11 +5,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { CreatorDraftDeleteButton } from "@/components/bridge/creator-title-actions";
+import type { BridgeActor } from "@/lib/bridge/session";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 const TITLE_LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English", "Other"];
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", actor }: { empty: string; query?: string; actor?: BridgeActor }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
@@ -41,6 +43,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <StatusChip status={t.status} />
             {t.creatorSubmissionStatus === "SUBMITTED" ? <span className="rounded-full border border-accent/30 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-accent">Submitted to Bridge</span> : null}
+            {actor ? <CreatorDraftDeleteButton title={t} actor={actor} /> : null}
             <Link
               to="/title/$id"
               params={{ id: t.id }}
