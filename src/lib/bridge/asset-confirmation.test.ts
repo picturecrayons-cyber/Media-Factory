@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { persistVerifiedAsset } from "./asset-confirmation.ts";
+import { isPersistedAssetVerified } from "./persisted-asset-state.ts";
 
 test("only a verified upload sets the master reference, once, with an audit event", async () => {
   const db = new PGlite();
@@ -159,17 +160,32 @@ test("title owner can confirm an upload when organization tables are absent", as
 });
 
 
-test("idempotent confirmation validates the sealed object, title reference and audit event", () => {
-  const source = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
-  const start = source.indexOf("if (asset.byte_size != null) {");
-  const end = source.indexOf("\n    }", start);
-  assert.notEqual(start, -1, "persisted-byte-size guard must exist");
-  assert.notEqual(end, -1, "persisted-byte-size guard must be closed");
-  const guard = source.slice(start, end);
-  assert.ok(guard.includes("const sealedSuffix = `.verified/${asset.id}`;"));
-  assert.match(guard, /verifyObject\(asset\.s3_key, asset\.content_type\)/);
-  assert.match(guard, /sealedObject\.byteSize !== Number\(asset\.byte_size\)/);
-  assert.match(guard, /title\.masterKey !== asset\.s3_key/);
-  assert.match(guard, /asset\.upload_verified/);
-  assert.match(guard, /return \{ assetId: asset\.id, byteSize: Number\(asset\.byte_size\), verified: true \}/);
+test("idempotent confirmation requires the centralized persisted verification contract", async () => {
+  const valid = {
+    id: "asset1234",
+    kind: "master",
+    s3Key: "bridge/creator/title1234/master/video.mp4.verified/asset1234",
+    byteSize: 120,
+    contentType: "video/mp4",
+    titleMasterKey: "bridge/creator/title1234/master/video.mp4.verified/asset1234",
+    titlePosterKey: null,
+    auditPresent: true,
+  };
+  const verifyObject = async (key: string, contentType: string | null) => {
+    assert.equal(key, valid.s3Key);
+    assert.equal(contentType, "video/mp4");
+    return { byteSize: 120, etag: "etag-verified" };
+  };
+
+  assert.equal(await isPersistedAssetVerified(valid, verifyObject), true);
+  assert.equal(await isPersistedAssetVerified({ ...valid, s3Key: "source/video.mp4" }, verifyObject), false);
+  assert.equal(await isPersistedAssetVerified({ ...valid, titleMasterKey: "different-key" }, verifyObject), false);
+  assert.equal(await isPersistedAssetVerified({ ...valid, auditPresent: false }, verifyObject), false);
+  assert.equal(await isPersistedAssetVerified({ ...valid, byteSize: 121 }, verifyObject), false);
+  assert.equal(await isPersistedAssetVerified(valid, async () => ({ byteSize: 119, etag: "etag-verified" })), false);
+  assert.equal(await isPersistedAssetVerified(valid, async () => ({ byteSize: 120, etag: null })), false);
+  await assert.rejects(
+    isPersistedAssetVerified(valid, async () => { throw new Error("OCI HEAD failed"); }),
+    /OCI HEAD failed/,
+  );
 });
