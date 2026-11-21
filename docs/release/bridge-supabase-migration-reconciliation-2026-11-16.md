@@ -92,6 +92,15 @@
 | 20261119203855 | bridge_story_concept_author_rights_declaration_20261120 | 2483 | `4daf83c1353fd6bde7fb68d633c6496d11252361499251f1cd88a03bf2072b8a` |
 | 20261121042907 | secure_production_asset_owner_helper | 1839 | `6fb227b87fd80762f55082fe6a8066835ba6d3ce78f706aafac0615395076523` |
 
+
+## Unapplied feature migrations and replay boundary
+
+- The canonical Production ledger contains 73 applied migrations. The two following source files are not recorded in that ledger and are never counted as applied Production history.
+- `20261118130000_loop_tvod_payment_fulfillment.sql` was replayed successfully only in the disposable local Supabase stack. It was not applied to Production.
+- `20261118150000_bridge_exclusive_sublicensing_authority.sql` references `public.bridge_creator_documents(id)`. Read-only Production catalog inspection found no public or private Creator Document Vault table/relation with that name, nor another document/vault table that can be used as a proven substitute. The migration is therefore explicitly deferred from automatic replay. No synthetic table, guessed FK, or fabricated Vault baseline is created.
+- Creator Document Vault and sublicensing application behavior is covered by the application test suite. The deferred SQL migration remains **NOT TESTED** until its complete schema dependency is recovered from authoritative source and separately validated in an isolated environment.
+- The replay runner reports this feature migration as deferred and continues to verify the 73 applied-ledger migrations. It does not mark the deferred migration as applied.
+
 ## Previously committed files
 
 All 17 files previously under `supabase/migrations/` are preserved byte-for-byte under `supabase/migrations_archive_unreconciled_20261116/`.
