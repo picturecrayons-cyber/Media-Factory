@@ -8,6 +8,10 @@ const replayScript = fileURLToPath(
   new URL("./supabase-migration-replay.mjs", import.meta.url),
 );
 const replaySource = readFileSync(replayScript, "utf8");
+const creatorLifecycleMigration = readFileSync(
+  new URL("../supabase/migrations/20261121160000_bridge_creator_draft_submission_lifecycle.sql", import.meta.url),
+  "utf8",
+);
 
 test("local replay restores Production Bridge RLS on every public Bridge table", () => {
   assert.match(replaySource, /substring\(c\.relname from 1 for 7\) = 'bridge_'/);
@@ -79,5 +83,5 @@ test("Creator draft lifecycle migration is replayed and verified", () => {
 
 test("Creator draft archive is enforced by authenticated title RLS after migration replay", () => {
   assert.match(replaySource, /archived_title_rls_filter/);
-  assert.match(replaySource, /deleted_at IS NULL/);
+  assert.match(creatorLifecycleMigration, /deleted_at is null/);
 });
