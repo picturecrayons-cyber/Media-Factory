@@ -315,3 +315,39 @@ This section is a design proposal only. It is not a migration file, has not been
 ### Current disposition
 
 **TVOD repair design: DRAFT / NOT IMPLEMENTED / NOT REPLAYED.** The proposal intentionally does not emit SQL until the complete Testing DDL, source checkout/webhook call graph, provider verification boundary and the disposable replay environment are available. No source migration file was created or modified in this step.
+
+## Application TVOD checkout/webhook call-graph audit — 2026-11-21
+
+Source files inspected:
+- `src/lib/loop/subscriptions.ts` — `rentTvodMovie` checkout.
+- `src/routes/api/razorpay/webhook.ts` and `src/lib/bridge/payments.ts` — application webhook endpoint and Bridge-only webhook processor.
+- `supabase/functions/razorpay-webhook/index.ts` — Supabase Edge webhook processor; this is where the Loop-specific capture/refund branches currently live.
+- `src/lib/loop/catalog.ts` — entitlement reads and playback authorization.
+- `src/lib/loop/tvod-payment.test.ts` — current source-level assertions.
+
+### Call graph
+
+1. Authenticated Loop client calls `rentTvodMovie({loopTitleId})`.
+2. Server checks `loop_rental_fulfillment_ready()`, reads Loop title + Bridge publication + Bridge consumer pricing, creates Razorpay order, then inserts `loop_tvod_orders`.
+3. Razorpay posts `payment.captured` to the Supabase Edge Function. The Edge Function verifies webhook HMAC, records/claims `bridge_webhook_events`, detects Loop via payment/order notes or an order lookup, checks provider payment ID, amount and INR, updates order to captured, then calls `loop_fulfill_captured_rental`.
+4. `refund.processed` resolves the Loop order (including a Razorpay payment lookup fallback) and calls `loop_refund_captured_rental`.
+5. `checkPlaybackEntitlement` / `getAuthorizedLoopPlayback` read `loop_user_tvod_entitlements`; Bridge publication authorization is checked again before signed playback.
+
+The application route `/api/razorpay/webhook` calls `ingestRazorpayWebhook` in `src/lib/bridge/payments.ts`, which handles Bridge payment capture only. It does not implement the Loop fulfillment branch. The Edge Function is therefore the current Loop webhook implementation path.
+
+### Blocking call-graph incompatibilities
+
+1. **Checkout validator blocks text title IDs.** `rentTvodMovie` requires `z.string().uuid()`, while Testing `loop_titles.id` is text. Existing Loop catalog APIs accept text IDs. This prevents a valid Testing text title ID from reaching checkout.
+2. **Checkout query uses non-existent Testing fields.** It reads `l.listed`, `l.published`, and `l.tvod_rental_price`; Testing has `is_listed`, `is_published`, and `price_paise`. It also compares Bridge pricing to `l.tvod_rental_price`. Checkout will fail against the inspected Testing schema.
+3. **Checkout casts the text title ID to UUID.** The insert into `loop_tvod_orders` casts `${title.id}::uuid`, inconsistent with Testing's text title ID. It also depends on the candidate order table definition being applied.
+4. **Order persistence is not atomic with provider order creation.** Razorpay order is created before the local row is inserted. If DB persistence fails, the provider order exists without a local order record; capture webhook correctly fails closed, but the payable orphan requires expiry/reconciliation. Add idempotency/recovery or create a local pending intent first and bind the provider ID transactionally.
+5. **Fulfillment RPC signature mismatch.** Edge Function calls `loop_fulfill_captured_rental(text,text)`; Testing exposes `loop_fulfill_captured_rental(text,text,uuid,text,timestamptz,timestamptz)`. Without a new, explicitly versioned compatible RPC, the current Loop capture path cannot execute on Testing.
+6. **Refund RPC signature mismatch.** Edge Function calls three arguments `(text,text,text)`; Testing exposes `loop_refund_captured_rental(text,text)`. Current refund path cannot execute on Testing as written.
+7. **Webhook timestamp is receipt time, not verified provider capture time.** Edge Function sets `captured_at` to `new Date()` when it first processes the webhook. Delayed/retried delivery therefore shifts the 48-hour rental window. The provider payment entity's authoritative timestamp must be validated and persisted (or a documented trusted provider lookup used).
+8. **Refund-before-capture handling is incomplete at the webhook boundary.** The refund handler tries to find an order by payment ID or provider lookup; if no order can be resolved and surface detection is not explicitly Loop, the event can be marked processed without a Loop tombstone. A later capture could then be treated as new. The repair must durably record unresolved refund identities or keep the webhook event retryable/blocked until reconciliation.
+9. **Loop event handling is separate from the app webhook path.** Verify the configured Razorpay webhook target is the Supabase Edge Function and not the app route; only the Edge Function contains Loop processing. This configuration was not inspected and remains NOT VERIFIED.
+10. **Source tests are largely text assertions.** Current TVOD tests assert source substrings and do not execute PostgreSQL, prove RPC signatures, check schema compatibility, simulate concurrent webhook claims, or exercise actual refund/capture state transitions.
+
+### Current disposition
+
+**Application call graph: FAIL against inspected Testing schema.** The end-to-end TVOD flow is not ready for implementation or release until checkout identifiers/columns, order persistence, fulfillment/refund RPC contracts, provider capture time, and refund tombstone behavior are reconciled. No application source code or migration SQL was modified in this audit step.
