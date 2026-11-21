@@ -60,3 +60,19 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
 }
+
+test("exclusive sublicensing replay restores the exact Creator Vault migration, not a synthetic schema", () => {
+  assert.match(replaySource, /0026_bridge_creator_document_vault\.sql/);
+  assert.match(replaySource, /restore that exact source migration only in this disposable local/);
+  assert.match(replaySource, /PASS feature migration \$\{name\}/);
+  assert.match(replaySource, /bridge_sublicense_authorizations/);
+  assert.match(replaySource, /bridge_creator_documents/);
+});
+
+test("Creator Vault and sublicensing remain server-only in the isolated replay", () => {
+  assert.match(replaySource, /sublicenseSecurity/);
+  assert.match(replaySource, /row\.policy_count !== 0/);
+  assert.match(replaySource, /row\.anon_select/);
+  assert.match(replaySource, /row\.authenticated_select/);
+  assert.match(replaySource, /!row\.service_select/);
+});
