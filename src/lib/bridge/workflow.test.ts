@@ -117,7 +117,7 @@ async function fixture() {
     );
     create table bridge_title_submission_consents(
       id uuid primary key default gen_random_uuid(),title_id text,submission_event_id integer unique,
-      actor_user_id text,actor_account_type text,consent_version text,accepted_at timestamptz
+      actor_user_id text,actor_account_type text,consent_version text,original_language text,master_language text,language_mismatch_confirmed boolean,accepted_at timestamptz
     );
     create table bridge_notification_outbox(
       id uuid primary key default gen_random_uuid(),
@@ -435,7 +435,7 @@ test("Submit for QC advances PREPARING and queues a deduplicated internal QC not
       (await f.sql.query<{ status: string }>("select status from bridge_titles where id='qc-submit-title'"))[0].status,
       "PREPARING",
     );
-    const result = await submitTitleForQc(f.sql, title, "owner", "Submit verified title for QC", "bridge-title-rights-v1");
+    const result = await submitTitleForQc(f.sql, title, "owner", "Submit verified title for QC", "bridge-title-rights-v1", true);
     assert.equal(result.title.status, "QC_REVIEW");
     assert.equal(
       (await f.sql.query<{ status: string }>(
