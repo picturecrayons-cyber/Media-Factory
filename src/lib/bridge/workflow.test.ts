@@ -75,6 +75,7 @@ async function fixture() {
   try {
     await db.exec(`create table bridge_titles(
       id text primary key,
+      name text,
       owner_user_id text,
       owner_account_type text not null default 'independent_creator',
       owner_organization_id uuid,
@@ -85,7 +86,17 @@ async function fixture() {
     );
     create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint);
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
-    create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);`);
+    create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);
+    create table bridge_profiles(user_id text primary key,email text,internal_role text,email_verified boolean);
+    create table bridge_notification_outbox(
+      id uuid primary key default gen_random_uuid(),
+      event_key text not null unique,
+      recipient_email text not null,
+      subject text not null,
+      text_body text not null,
+      html_body text,
+      status text not null default 'pending'
+    );`);
     await db.exec(
       readFileSync(
         new URL("../../../migrations/0010_bridge_prd_phase1.sql", import.meta.url),
@@ -333,7 +344,7 @@ test("license author cannot approve their own agreement", async () => {
 });
 
 
-test("Submit for QC advances PREPARING with the referenced vertical poster and writes lifecycle plus audit only", async () => {
+test("Submit for QC advances PREPARING and queues a deduplicated internal QC notification atomically", async () => {
   const f = await fixture();
   try {
     await f.sql.query(`
@@ -341,6 +352,8 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
       values ('qc-submit-title','owner','PREPARING','sealed/qc-master','sealed/qc-poster',now())
     `);
     await f.sql.query(`
+      insert into bridge_profiles(user_id,email,internal_role,email_verified)
+      values ('qc-reviewer','qc@example.test','qc_reviewer',true);
       insert into bridge_assets values
         ('qc-master','qc-submit-title','master','sealed/qc-master',4096),
         ('qc-old-poster','qc-submit-title','poster','older/unreferenced-poster',512),
@@ -372,6 +385,12 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
       )).length,
       1,
     );
+    const notifications = await f.sql.query<{ event_key: string; recipient_email: string; status: string }>(
+      "select event_key, recipient_email, status from bridge_notification_outbox where event_key like 'bridge-qc-submitted:qc-submit-title:%'",
+    );
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].recipient_email, "qc@example.test");
+    assert.equal(notifications[0].status, "pending");
     assert.equal(
       (await f.sql.query(
         "select * from bridge_qc_cases where title_id='qc-submit-title'",
