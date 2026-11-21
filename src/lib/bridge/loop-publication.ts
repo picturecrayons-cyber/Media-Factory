@@ -303,7 +303,13 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
              exists(
                select 1 from bridge_rights_grants rg
                where rg.title_id=b.id and rg.status='VALID'
-                 and (rg.evidence->0->'commercialTerms'->>'rightsOwnerSharePct') ~ '^[0-9]+
+                 and (rg.evidence->0->'commercialTerms'->>'rightsOwnerSharePct') ~ '^[0-9]+$'
+                 and (rg.evidence->0->'commercialTerms'->>'distributorSharePct') ~ '^[0-9]+$'
+                 and ((rg.evidence->0->'commercialTerms'->>'rightsOwnerSharePct')::integer
+                   + (rg.evidence->0->'commercialTerms'->>'distributorSharePct')::integer) = 100
+             ) as revenue_shares_ready,
+             exists(
+               select 1 from bridge_qc_cases q
                where q.title_id=b.id and q.status='PASSED'
                  and q.reviewer_findings->0->>'masterKey'=b.master_key
                  and q.reviewer_findings->0->>'posterKey'=b.poster_key
