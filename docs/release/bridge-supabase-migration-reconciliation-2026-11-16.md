@@ -130,7 +130,7 @@ Seven files did not match a Production ledger statement and remain archived for 
 
 ## Verified pre-ledger baseline fixtures used only for local replay
 
-Production contains six pre-ledger tables that are not created by any of the 69 recorded ledger statements, but are referenced by later historical migrations. Their empty schemas are recreated **only inside the disposable local Supabase CI database** before the respective historical migration is replayed:
+Production contains six pre-ledger tables that are not created by any of the 73 recorded ledger statements, but are referenced by later historical migrations. Their empty schemas are recreated **only inside the disposable local Supabase CI database** before the respective historical migration is replayed:
 
 - `public.loop_parental_controls`: exact Production columns, UUID primary key/FK to `auth.users`, 0–5 failed-attempt check, `locked_until` index, RLS enabled. The replay runner also recreates the verified updated-at trigger function and trigger. Its deny policy is deliberately left to migration `20261006231321`.
 - `public.bridge_creator_notifications`: exact Production columns, `bigserial` primary key, status check, RLS enabled; no rows and no policy before the historical deep-clean migration.
