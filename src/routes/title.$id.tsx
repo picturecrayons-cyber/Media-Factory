@@ -158,7 +158,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      {!actor.internalRole && (actor.accountType === "independent_creator" || actor.accountType === "studio") ? (
+      {!actor.internalRole && (actor.accountType === "independent_creator" || actor.accountType === "studio") &&
+      canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
         <OwnerMetadataCompletion title={title} />
       ) : null}
       <WorkflowDesk title={title} actor={actor} />
