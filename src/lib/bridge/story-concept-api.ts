@@ -196,7 +196,11 @@ export const getMyStoryConcept = createServerFn({ method: "GET" })
       join bridge_titles t on t.id = c.title_id
       where c.title_id = ${data.titleId}
         and (
-          t.owner_user_id = ${actor.userId}
+          (
+            ${actor.accountType} = 'independent_creator'
+            and t.owner_account_type = 'independent_creator'
+            and t.owner_user_id = ${actor.userId}
+          )
           or (
             ${actor.accountType} = 'studio'
             and t.owner_account_type = 'studio'
@@ -245,7 +249,11 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
         where (
-          t.owner_user_id = ${actor.userId}
+          (
+            ${actor.accountType} = 'independent_creator'
+            and t.owner_account_type = 'independent_creator'
+            and t.owner_user_id = ${actor.userId}
+          )
           or (
             ${actor.accountType} = 'studio'
             and t.owner_account_type = 'studio'
