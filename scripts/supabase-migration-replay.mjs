@@ -519,7 +519,7 @@ try {
         create policy bridge_titles_owner_or_buyer_select
           on public.bridge_titles
           for select to authenticated
-          using (exists (
+          using (bridge_titles.deleted_at is null and exists (
             select 1
             from public.bridge_loop_identity_links l
             where l.auth_user_id = (select auth.uid())
@@ -593,6 +593,7 @@ try {
           position('bridge_loop_identity_links' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
           and position('bridge_buyer_title_access' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
           and position('bridge_titles.owner_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+          and position('deleted_at IS NULL' in upper(coalesce(pg_get_expr(p.polqual, p.polrelid), ''))) > 0
         when 'bridge_loop_identity_links' then
           position('auth_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
         when 'bridge_buyer_title_access' then
