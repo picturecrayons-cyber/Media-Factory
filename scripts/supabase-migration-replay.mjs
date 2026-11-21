@@ -751,9 +751,6 @@ try {
        where p.oid = 'private.bridge_is_title_owner(text)'::regprocedure) as private_owner_helper_present,
       (select p.prosecdef
        from pg_proc p
-       where p.oid = 'private.bridge_has_buyer_title_access(text)'::regprocedure) as private_buyer_helper_present,
-      (select p.prosecdef
-       from pg_proc p
        where p.oid = 'private.bridge_can_read_title(text)'::regprocedure) as private_can_read_helper_present,
       has_schema_privilege('authenticated', 'private', 'USAGE') as private_schema_authenticated_usage
   `);
@@ -771,7 +768,6 @@ try {
     !creatorLifecycle.production_asset_rls_scoped ||
     !creatorLifecycle.definer_helper_removed ||
     !creatorLifecycle.private_owner_helper_present ||
-    !creatorLifecycle.private_buyer_helper_present ||
     !creatorLifecycle.private_can_read_helper_present ||
     !creatorLifecycle.private_schema_authenticated_usage
   ) {
