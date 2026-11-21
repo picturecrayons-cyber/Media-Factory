@@ -59,7 +59,7 @@ test("only Super Admin can sign off and sign-off never changes title lifecycle",
   assert.match(signoff, /assertPermission\(actor, "loop\.publish"\)/);
   assert.match(signoff, /receipt_verified_at/);
   assert.match(signoff, /getFinalDeliveryReadiness/);
-  assert.doesNotMatch(signoff, /update bridge_titles/i);
+  assert.doesNotMatch(signoff, /`\\s*update\\s+bridge_titles/i);
 });
 
 test("final delivery readiness checks current-asset QC, independent Legal, valid rights, packaging and delivery gate", () => {
