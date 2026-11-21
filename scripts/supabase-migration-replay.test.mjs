@@ -63,7 +63,7 @@ for (const [label, databaseUrl] of rejectedTargets) {
 
 test("exclusive sublicensing replay restores the exact Creator Vault migration, not a synthetic schema", () => {
   assert.match(replaySource, /0026_bridge_creator_document_vault\.sql/);
-  assert.match(replaySource, /restore that exact source migration only in this disposable local/);
+  assert.match(replaySource, /Restore that exact source migration only in this disposable local/);
   assert.match(replaySource, /PASS feature migration \$\{name\}/);
   assert.match(replaySource, /bridge_sublicense_authorizations/);
   assert.match(replaySource, /bridge_creator_documents/);
