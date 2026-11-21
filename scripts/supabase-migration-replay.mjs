@@ -709,6 +709,74 @@ try {
     }
   }
 
+  // Exercise actual PostgreSQL role behavior in this disposable local stack.
+  // These checks use no hosted credentials or data and run after all feature
+  // migrations have been applied to the local replay database.
+  const serverOnlyTables = [
+    "public.bridge_creator_documents",
+    "public.bridge_title_document_links",
+    "public.bridge_sublicense_authorizations",
+    "public.bridge_dit_ingest_sessions",
+    "public.bridge_dit_ingest_files",
+    "public.bridge_dit_copy_verifications",
+    "public.bridge_dit_storage_objects",
+  ];
+  for (const role of ["anon", "authenticated"]) {
+    for (const table of serverOnlyTables) {
+      await client.query("BEGIN");
+      try {
+        await client.query(`SET LOCAL ROLE ${role}`);
+        let denied = false;
+        try {
+          await client.query(`select 1 from ${table} limit 1`);
+        } catch (error) {
+          if (error?.code !== "42501") throw error;
+          denied = true;
+        }
+        if (!denied) {
+          throw new Error(`${role} unexpectedly read server-only table ${table}`);
+        }
+      } finally {
+        await client.query("ROLLBACK");
+      }
+    }
+    console.log(`[migration-replay] PASS: ${role} is denied SELECT on all ${serverOnlyTables.length} Creator Vault/Sublicensing/DIT tables`);
+  }
+
+  // Verify the trusted server role can execute read access on each protected
+  // table without granting browser-role access.
+  await client.query("BEGIN");
+  try {
+    await client.query("SET LOCAL ROLE service_role");
+    for (const table of serverOnlyTables) {
+      await client.query(`select 1 from ${table} limit 1`);
+    }
+  } finally {
+    await client.query("ROLLBACK");
+  }
+  console.log("[migration-replay] PASS: service_role can read all Creator Vault/Sublicensing/DIT tables");
+
+  // Exercise the Production Asset owner helper under an authenticated JWT
+  // context. A random, non-existent title must never be considered owned.
+  await client.query("BEGIN");
+  try {
+    await client.query("SET LOCAL ROLE authenticated");
+    await client.query(
+      "select set_config('request.jwt.claim.sub', $1, true)",
+      ["00000000-0000-4000-8000-000000000099"],
+    );
+    const ownership = await client.query(
+      "select private.bridge_is_title_owner($1) as is_owner",
+      ["replay-nonexistent-title"],
+    );
+    if (ownership.rows[0]?.is_owner !== false) {
+      throw new Error("Non-existent title unexpectedly passed Production Asset owner check");
+    }
+  } finally {
+    await client.query("ROLLBACK");
+  }
+  console.log("[migration-replay] PASS: authenticated non-owner is denied by Production Asset owner helper");
+
   const sublicenseSecurity = await client.query(`
     select
       c.relname,
