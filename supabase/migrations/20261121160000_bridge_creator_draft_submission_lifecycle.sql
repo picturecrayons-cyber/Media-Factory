@@ -43,3 +43,29 @@ alter table public.bridge_titles
 create index if not exists bridge_titles_active_creator_owner_idx
   on public.bridge_titles(owner_user_id, updated_at desc)
   where deleted_at is null and submission_type is distinct from 'story_concept';
+
+-- Soft-archived title rows must also disappear from direct authenticated PostgREST reads.
+drop policy if exists "bridge_titles_owner_or_buyer_select" on public.bridge_titles;
+create policy "bridge_titles_owner_or_buyer_select"
+on public.bridge_titles
+for select
+to authenticated
+using (
+  deleted_at is null
+  and exists (
+    select 1
+    from public.bridge_loop_identity_links l
+    where l.auth_user_id = (select auth.uid())
+      and (
+        l.bridge_user_id = bridge_titles.owner_user_id
+        or exists (
+          select 1
+          from public.bridge_buyer_title_access a
+          where a.title_id = bridge_titles.id
+            and a.buyer_user_id = l.bridge_user_id
+            and a.revoked_at is null
+            and (a.expires_at is null or a.expires_at > now())
+        )
+      )
+  )
+);
