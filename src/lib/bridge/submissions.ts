@@ -10,6 +10,7 @@ import { assertNotDevUser } from "./guards";
 import { storedBridgeContentType } from "./loop-lanes";
 import { loadTitle } from "./titles";
 import { assertCreatorTitleCanSubmit } from "./creator-title-lifecycle";
+import type { TitleStatus } from "./types";
 
 const submissionSchema = z.object({
   name: z.string().trim().min(1).max(160),
@@ -254,7 +255,7 @@ export const submitCreatorTitleToBridge = createServerFn({ method: "POST" })
         runtimeMinutes: data.runtimeMinutes,
       };
       assertCreatorTitleCanSubmit({
-        status: locked.status as "DRAFT",
+        status: locked.status as TitleStatus,
         submissionStatus: locked.creator_submission_status,
         deletedAt: locked.deleted_at,
         submissionType: locked.submission_type,
