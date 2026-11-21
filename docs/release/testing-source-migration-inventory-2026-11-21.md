@@ -199,3 +199,28 @@ The currently inspected Testing schema diverges from the source TVOD candidate i
 3. Complete DDL, RLS/policy, GRANT, function signature/body, SECURITY DEFINER, search_path and EXECUTE privilege review for every mapped pair.
 4. Build a source-compatible TVOD forward-only repair only after the existing order/payment/entitlement contract is established.
 5. Run the full replay in a disposable local Supabase stack and retain complete job logs and catalog assertions.
+
+## Name-based mapping candidates (not equivalence proof)
+
+A mechanical normalized-name comparison against the 73-row source manifest produces five unique name matches and two useful partial-name candidates. These are candidates only: Testing migration SQL bodies are not exposed by the available Supabase migration-ledger API, so none is certified as SQL-equivalent.
+
+| Testing version | Testing name | Candidate source version | Source name | Source SHA-256 | Classification |
+|---|---|---|---|---|---|
+| 20261114093221 | bridge_site_content_cms_20261114 | 20261114093357 | bridge_site_content_cms_20261114 | b6b366498c674b0c602e7a25b017bc5ea2ff1845f840092027ce92c43e84a5f8 | Name match; SQL NOT VERIFIED |
+| 20261116082227 | 20261115220000_bridge_production_documents | 20261115164250 | bridge_production_documents | 857e4fd12235104dae5384f1edf1d9cfeb19d9c46539a7831f87eba3dd5fa0cb | Name match after embedded timestamp normalization; SQL NOT VERIFIED |
+| 20261116082234 | 20261115221000_bridge_production_owner_rls_helper | 20261115164711 | bridge_production_owner_rls_helper | c304e0569da1b2909b1373f0b6920bbae1fc8c9a45da54be0d01e008e62ffa0a | Name match after embedded timestamp normalization; SQL NOT VERIFIED |
+| 20261118000102 | bridge_dit_storage_objects_20261114 | 20261114135434 | bridge_dit_storage_objects_20261114 | 4a8e8b34f68ed48c3452ae9ec439bb10922da41c58c6992fcdaece0c362da96c | Name match; SQL NOT VERIFIED |
+| 20261121042851 | secure_production_asset_owner_helper | 20261121042907 | secure_production_asset_owner_helper | 6fb227b87fd80762f55082fe6a8066835ba6d3ce78f706aafac0615395076523 | Name match; SQL NOT VERIFIED |
+| 20261028180900 | test_only_bridge_commercial_engine_20261006230000 | 20261006185556 | bridge_commercial_engine_20261006230000 | 886e50d73abbf7a5c444ee6a873e2bb25aa067ef2ea3690fc3edc8b3ce7464f9 | Partial name; Testing-only wrapper likely; SQL NOT VERIFIED |
+| 20261105143656 | 0018_bridge_rights_ready_submission | 20261009210503 | bridge_rights_ready_submission | 351af683aa6e38247caa1318bc29d1ad64bc2dd6c168ae48f927d1f5d52dd573 | Partial name; versioned migration label; SQL NOT VERIFIED |
+
+All remaining Testing rows are unmatched by normalized name and remain unresolved pending source SQL retrieval. Duplicate Testing name `20261106_story_concept_buyer_mandates` appears under two distinct Testing versions and must be reviewed as two separate migrations, not collapsed.
+
+## Updated mapping conclusion
+
+- Exact migration-version matches: 0.
+- Unique normalized full-name candidates: 5.
+- Partial-name candidates: 2.
+- Remaining Testing rows unresolved by name: 63.
+- SQL-equivalent mappings certified: 0.
+- Do not repair or rewrite the hosted migration ledger based on these candidates.
