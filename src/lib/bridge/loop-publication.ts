@@ -269,7 +269,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     }>`
       select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
-             p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
+             coalesce(p.loop_title_id, l.id) as loop_title_id,
+             p.authorization_status, p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
              l.status as loop_status, l.listed, l.published, l.playback_path,
              l.synopsis as loop_synopsis, l.language as loop_language,
@@ -285,11 +286,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                where a.title_id=b.id and a.kind='poster' and a.s3_key=b.poster_key
                  and a.byte_size > 0 and a.storage_business_state='ACTIVE' and a.restore_state='READY'
              ) as poster_asset_ready,
-             exists(
-               select 1 from bridge_loop_consumer_pricing cp
-               where cp.bridge_title_id=b.id and cp.status='APPROVED'
-                 and cp.access_tier='TVOD' and cp.rental_price_inr > 0
-             ) as consumer_pricing_ready,
+             (l.access_tier='TVOD' and coalesce(l.tvod_rental_price,0)>0) as consumer_pricing_ready,
              exists(
                select 1 from bridge_destination_packages dp
                where dp.title_id=b.id and dp.destination='CRAYONS_LOOP'
@@ -431,7 +428,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             { key: "playback", label: "Playback", status: r.playback_path ? "NOT_VERIFIED" : "BLOCKED" },
             { key: "catalogue", label: "Public catalogue", status: "NOT_VERIFIED" },
           ],
-          publication: r.authorization_status
+          publication: r.loop_title_id
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
