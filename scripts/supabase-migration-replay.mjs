@@ -16,6 +16,7 @@ import pg from "pg";
 const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
+const APP_MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
 const EXPECTED_MIGRATIONS = 73;
 const FIXTURE_MIGRATION =
@@ -671,18 +672,29 @@ try {
   // of the 73-row 2026-11-21 reconciliation manifest.
   for (const name of featureNames) {
     if (deferredFeatureMigrations.has(name)) {
-      const prerequisite = await client.query(
-        "select to_regclass('public.bridge_creator_documents') is not null as exists",
+      // The Creator Document Vault is an existing, versioned application
+      // migration in migrations/0026_bridge_creator_document_vault.sql. It is
+      // deliberately absent from the 73-row Production Supabase ledger.
+      // Restore that exact source migration only in this disposable local
+      // replay DB so the dependent sublicensing feature can be tested without
+      // inventing a synthetic table or applying anything to hosted Supabase.
+      const vaultMigration = await readFile(
+        join(APP_MIGRATIONS_DIR, "0026_bridge_creator_document_vault.sql"),
+        "utf8",
       );
-      if (!prerequisite.rows[0]?.exists) {
+      await client.query("BEGIN");
+      try {
+        await client.query(vaultMigration);
+        await client.query("COMMIT");
         console.log(
-          `[migration-replay] NOT TESTED feature migration ${name}: required public.bridge_creator_documents relation is absent from the canonical Production schema; no synthetic baseline was created and the migration was not applied`,
+          "[migration-replay] restored exact Creator Document Vault application migration 0026 locally; no Production rows or schema changed",
         );
-        continue;
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw new Error(
+          `Creator Document Vault local baseline failed: ${error.message}`,
+        );
       }
-      throw new Error(
-        `Feature migration ${name} requires a separately reviewed Creator Document Vault schema baseline; it is intentionally not auto-applied by Production-ledger replay`,
-      );
     }
 
     const sql = await readFile(join(MIGRATIONS_DIR, name), "utf8");
@@ -696,6 +708,44 @@ try {
       throw new Error(`Feature migration failed: ${name}: ${error.message}`);
     }
   }
+
+  const sublicenseSecurity = await client.query(`
+    select
+      c.relname,
+      c.relrowsecurity as rls_enabled,
+      (select count(*)::int from pg_policy p where p.polrelid = c.oid) as policy_count,
+      has_table_privilege('anon', c.oid, 'SELECT') as anon_select,
+      has_table_privilege('authenticated', c.oid, 'SELECT') as authenticated_select,
+      has_table_privilege('service_role', c.oid, 'SELECT') as service_select,
+      has_table_privilege('service_role', c.oid, 'INSERT') as service_insert,
+      has_table_privilege('service_role', c.oid, 'UPDATE') as service_update
+    from pg_class c
+    where c.oid in (
+      'public.bridge_creator_documents'::regclass,
+      'public.bridge_sublicense_authorizations'::regclass
+    )
+    order by c.relname
+  `);
+  if (
+    sublicenseSecurity.rows.length !== 2 ||
+    sublicenseSecurity.rows.some((row) =>
+      !row.rls_enabled ||
+      row.policy_count !== 0 ||
+      row.anon_select ||
+      row.authenticated_select ||
+      !row.service_select ||
+      !row.service_insert ||
+      !row.service_update
+    )
+  ) {
+    throw new Error(
+      "Creator Document Vault / sublicensing server-only security verification failed: " +
+      JSON.stringify(sublicenseSecurity.rows),
+    );
+  }
+  console.log(
+    "[migration-replay] verified Creator Document Vault and sublicensing tables are RLS-enabled, deny client roles, and grant service-role access only",
+  );
 
   const baselineRls = await client.query(`
     select

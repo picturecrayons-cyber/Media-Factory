@@ -51,6 +51,8 @@ export async function readDeliveryTraces(
     hasPermission(actor, "finance.read") &&
     hasPermission(actor, "delivery.read_finance");
   const canReadOwnFinance = !isInternal && hasPermission(actor, "delivery.read_finance");
+  const isStudioMember =
+    !isInternal && actor.accountType === "studio" && Boolean(actor.organizationId);
 
   assertPermission(actor, "delivery.read");
   // Title access never establishes authorization to another buyer's packages.
@@ -112,7 +114,18 @@ export async function readDeliveryTraces(
       where (
         ${isInternal}
         or t.owner_user_id = ${actor.userId}
-
+        or (
+          ${isStudioMember}
+          and t.owner_account_type = 'studio'
+          and t.owner_organization_id = ${actor.organizationId ?? null}
+          and exists (
+            select 1
+            from bridge_organization_memberships m
+            where m.organization_id = t.owner_organization_id
+              and m.user_id = ${actor.userId}
+              and m.status = 'active'
+          )
+        )
       )
       order by t.updated_at desc
       limit 200
