@@ -57,7 +57,23 @@ using (
     from public.bridge_loop_identity_links l
     where l.auth_user_id = (select auth.uid())
       and (
-        l.bridge_user_id = bridge_titles.owner_user_id
+        (
+          bridge_titles.owner_account_type = 'independent_creator'
+          and l.bridge_user_id = bridge_titles.owner_user_id
+        )
+        or (
+          bridge_titles.owner_account_type = 'studio'
+          and exists (
+            select 1
+            from public.bridge_organization_memberships m
+            join public.bridge_organizations o
+              on o.id = m.organization_id
+             and o.status = 'active'
+            where m.organization_id = bridge_titles.owner_organization_id
+              and m.user_id = l.bridge_user_id
+              and m.status = 'active'
+          )
+        )
         or exists (
           select 1
           from public.bridge_buyer_title_access a
