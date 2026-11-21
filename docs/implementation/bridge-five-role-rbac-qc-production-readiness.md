@@ -173,3 +173,19 @@ Target environments:
 5. Complete five-role negative tests and authenticated cross-organization Preview tests.
 
 PR #759 remains Draft, open and unmerged. Vercel work is Preview-only. No Production SQL, migration, grant, RLS, Auth, environment, storage, payment, customer-email, merge or promotion operation was performed. Production remains **HOLD / NOT CERTIFIED / NO-GO**.
+
+
+### Owner rights declaration and language confirmation
+- Added a Creator/Studio-only server action to save authority type, supported evidence type, secure evidence reference and explicit confirmation into the existing `bridge_title_submission_intake` and a DRAFT `bridge_rights_grants.evidence` record. Evidence type values were checked against the live Production constraint set.
+- If `original_language` and `master_language` differ, the submitter must explicitly confirm the master/version is intentional. The accepted values are stored alongside the legal submission consent. For Pranayam 1947, Malayalam vs Telugu remains a required owner confirmation before QC.
+- A Viewer/Buyer/internal user cannot submit or attest on behalf of the owner; the server action requires the title owner or an authorized Studio editor.
+
+### Selective Buyer integration
+- Ported #751's read-only `/buyer-workspace` and Buyer navigation into #759. Production schema inspection confirmed the referenced tables and selected columns exist.
+- All Buyer queries filter by the authenticated `buyer_id` / `user_id`; the page exposes only the signed-in Buyer user's own deals, payment records, entitlements, delivery jobs, screener requests and interest history. It has no write endpoints and does not grant title visibility or licensing rights.
+- Organization-wide Buyer membership and cross-user access remain disabled and unverified. A complete Buyer A/B negative test is still required.
+
+### Preview deployment check
+- The current branch deploys to Vercel project `media-factory` as Preview; the separate `bridge` project has no deployment for this commit.
+- Vercel environment inventory contains no branch-scoped Preview binding for `feat/bridge-five-role-rbac-qc-production-readiness`. The branch-specific Testing DB variables on other branches do not apply here. Do not run authenticated Preview tests or submit titles until the current branch is explicitly bound to Testing DB and that target is verified.
+- Exact-head CI and the Scope A disposable PostgreSQL workflow are still running on the current head; do not report PASS until complete.
