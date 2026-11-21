@@ -263,3 +263,55 @@ No repair migration has been authored or applied. A safe repair proposal must fi
 - Vault/Sublicensing/Production Assets preservation: PASS for observed table/policy presence; behavioral non-regression NOT VERIFIED.
 - Full source-to-Testing SQL semantic mapping: BLOCKED (Testing migration SQL bodies/hash manifest unavailable).
 - Disposable replay: BLOCKED / NOT VERIFIED (Docker and Supabase CLI unavailable in execution environment; prior Actions run supplied no jobs/logs).
+
+## TVOD repair design proposal — forward-only, NOT IMPLEMENTED
+
+This section is a design proposal only. It is not a migration file, has not been replayed, and is not approved for hosted application.
+
+### Contract decisions required before implementation
+
+1. **Keep existing public function contracts intact.** Testing currently has:
+   - `loop_fulfill_captured_rental(text,text,uuid,text,timestamptz,timestamptz)`
+   - `loop_refund_captured_rental(text,text)`
+   - `has_active_loop_tvod_entitlement(text)` (SECURITY DEFINER)
+   Do not drop, rename, or overload-replace these as a side effect of the repair. Add a separately named, versioned TVOD RPC only if a distinct contract is genuinely required, then update and test all server call sites in the same source change.
+
+2. **Use the existing canonical event ledger.** `public.loop_payment_events` is present and already used by the deployed Testing fulfillment/refund functions. A new parallel `loop_tvod_payment_events` is not proposed. Payment event idempotency, refund-before-capture tombstones and replay handling must all resolve through one ledger.
+
+3. **Use actual Testing identifiers.** The inspected Testing catalog has text `loop_titles.id`, text `loop_user_tvod_entitlements.title_id`, and UUID `user_id`. Proposed order identity therefore uses UUID `user_id` and text `loop_title_id`; no UUID cast of title IDs. Existing application checkout code currently casts both user and title identifiers to UUID, so its server call sites must be made schema-aware before the flow can be considered compatible.
+
+4. **Do not add assumed title columns.** Testing has `loop_titles.is_listed`, `is_published`, `status`, `access_tier`, and `price_paise`. Candidate code's `listed`, `published`, `tvod_rental_price`, `tvod_purchase_price` assumptions are not portable to Testing. Treat the Bridge-approved consumer price row as the authoritative TVOD price only after confirming the full `bridge_loop_consumer_pricing` DDL, FK, status constraints, and admin approval workflow. Compare the persisted order amount (integer paise) against the approved rental price converted deterministically to paise.
+
+5. **Bind payment to persisted order and verified capture.** Server-only checkout persists provider order ID, authenticated user UUID, text Loop title ID, amount paise, INR, and pending state. Fulfillment accepts only the persisted order and provider payment identity after server-side provider signature/capture verification. The RPC must independently validate order ownership, payment identity, amount/currency, captured state, current Bridge publication authorization, territory/language/exploitation rights, and approved price. Client input must never be the source of truth for price, title, owner, capture status or entitlement.
+
+6. **Idempotency and concurrency.** Serialize by provider payment ID and by user/title. Same payment + same order + same user/title/amount returns the original outcome; any identity/amount mismatch fails closed. A replayed refund or a refund-before-capture tombstone must never grant entitlement. A late capture after refund must remain blocked. A delayed older capture must not overwrite a newer entitlement or reactivate a revoked entitlement.
+
+7. **Rental expiry and entitlement.** Use the verified provider capture timestamp as purchase time and a single documented rental duration (currently the application presents 48 hours). Entitlement upsert must preserve the existing unique key and reject conflicting payment identity. Refund marks only the entitlement created by that payment as refunded; it must not revoke a later purchase for the same user/title.
+
+8. **Security.** Keep payment/order/entitlement writes server-only. Revoke function execution from PUBLIC, anon and authenticated; grant only to service_role. Keep an empty/locked search_path and schema-qualify all references. Do not broaden browser table grants. Audit actual effective table privileges, function EXECUTE grants and RLS behavior as part of tests. Review the existing SECURITY DEFINER entitlement-check function separately; do not change its behavior without a dedicated security test and approval.
+
+### Proposed additive migration shape (future implementation only)
+
+- Add an order table if not already present, with UUID user FK to auth.users, text Loop title ID, positive integer paise, INR-only currency, provider order/payment IDs, strict state constraint, capture timestamp, and audit timestamps.
+- Add indexes/uniqueness for provider order ID, provider payment ID, and user/title lookup. Add FK only where the actual Testing title/identity constraints support it; do not invent a UUID FK to text title IDs.
+- Add restrictive RLS and revoke browser access; service_role-only DML.
+- Do not create a second payment-event ledger.
+- Add a separately versioned fulfillment/refund RPC only if preserving the current signatures is insufficient; do not drop or replace existing RPCs. Coordinate call-site update in the same source PR.
+- Keep Bridge pricing and publication authorization separate from Loop delivery: Bridge authorization is required at checkout and again at fulfillment/playback; Loop never invents or grants licensing rights.
+
+### Required disposable regression suite before a repair can be marked ready
+
+- Fresh replay of the complete intended migration chain and replay against a Testing-catalog fixture.
+- Checkout with valid/invalid title, user, amount, currency and Bridge approval.
+- Capture with mismatched provider order/payment, wrong user/title/amount, unverified signature and non-captured status.
+- Duplicate webhook, concurrent duplicate fulfillment, and duplicate refund.
+- Refund-before-capture followed by late capture.
+- Refund after entitlement and verify only that payment's entitlement is revoked.
+- Newer entitlement followed by delayed older capture.
+- Expired rental, revoked Bridge publication, out-of-window rights, wrong territory/language/exploitation model and revoked pricing approval.
+- Browser anon/authenticated cannot read protected payment/order rows or execute mutation RPCs; service_role can perform intended operations.
+- Assert Creator Vault, Sublicensing, Production Assets and DIT schema/policies/records are unchanged across replay.
+
+### Current disposition
+
+**TVOD repair design: DRAFT / NOT IMPLEMENTED / NOT REPLAYED.** The proposal intentionally does not emit SQL until the complete Testing DDL, source checkout/webhook call graph, provider verification boundary and the disposable replay environment are available. No source migration file was created or modified in this step.
