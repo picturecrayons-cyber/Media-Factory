@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sameOwner, isSupportedCreatorDocumentMimeType, hasPdfMagicBytes, canDownloadCreatorDocument, canManageStudioDocuments } from "./creator-document-policy.ts";
 
@@ -52,4 +53,18 @@ test("Studio reusable document vault requires owner or admin membership", () => 
   assert.equal(canManageStudioDocuments("dit"), false);
   assert.equal(canManageStudioDocuments(null), false);
   assert.equal(canManageStudioDocuments(undefined), false);
+});
+
+test("story concepts stay out of finished-film lists and title workspaces", () => {
+  const titlesSource = readFileSync(new URL("./titles.ts", import.meta.url), "utf8");
+  const conceptApi = readFileSync(new URL("./story-concept-api.ts", import.meta.url), "utf8");
+  const conceptList = readFileSync(new URL("../../components/bridge/my-story-concepts.tsx", import.meta.url), "utf8");
+  const conceptRoute = readFileSync(new URL("../../routes/story-concept.$id.tsx", import.meta.url), "utf8");
+
+  assert.match(titlesSource, /submission_type is distinct from 'story_concept'/);
+  assert.match(titlesSource, /isStoryConceptTitle\(sql, id\)\) return null/);
+  assert.match(conceptApi, /export const getMyStoryConcept/);
+  assert.match(conceptList, /to="\\/story-concept\\/\\$id"/);
+  assert.doesNotMatch(conceptList, /to="\\/title\\/\\$id"/);
+  assert.doesNotMatch(conceptRoute, /listTitleAssets|requestAssetUpload|ProductionAssetsPanel/);
 });
