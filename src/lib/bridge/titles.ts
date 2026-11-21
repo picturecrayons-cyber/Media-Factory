@@ -204,7 +204,7 @@ export async function recordTransition(
   `;
 }
 
-async function assertAccountMandateScope(
+export async function assertAccountMandateScope(
   sql: Sql,
   actor: { userId: string; accountType: string; internalRole?: string | null },
   destinations: readonly string[],
