@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { persistVerifiedAsset } from "./asset-confirmation.ts";
+import { assertPersistedAssetVerified } from "./asset-verification.ts";
 
 test("only a verified upload sets the master reference, once, with an audit event", async () => {
   const db = new PGlite();
@@ -156,4 +157,18 @@ test("title owner can confirm an upload when organization tables are absent", as
   } finally {
     await db.close();
   }
+});
+
+
+test("persisted asset verification rejects byte-size-only and malformed state", async () => {
+  const base = { id: "asset-1", kind: "master", s3_key: "master.mov.verified/asset-1", byte_size: 120, content_type: "video/quicktime" };
+  const title = { masterKey: base.s3_key, posterKey: null };
+  const verify = async () => ({ byteSize: 120, etag: "etag-1" });
+  await assert.rejects(() => assertPersistedAssetVerified({ ...base, s3_key: "master.mov" }, title, "etag-1", verify), /immutable verified object/);
+  await assert.rejects(() => assertPersistedAssetVerified(base, { ...title, masterKey: "other" }, "etag-1", verify), /master reference/);
+  await assert.rejects(() => assertPersistedAssetVerified(base, title, null, verify), /audit checksum/);
+  await assert.rejects(() => assertPersistedAssetVerified({ ...base, byte_size: null }, title, "etag-1", verify), /persisted byte size/);
+  await assert.rejects(() => assertPersistedAssetVerified(base, title, "etag-1", async () => ({ byteSize: 119, etag: "etag-1" })), /metadata/);
+  await assert.rejects(() => assertPersistedAssetVerified(base, title, "etag-old", async () => ({ byteSize: 120, etag: "etag-new" })), /ETag and byte size/);
+  await assert.doesNotReject(() => assertPersistedAssetVerified(base, title, "etag-1", verify));
 });
