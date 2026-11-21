@@ -735,7 +735,12 @@ try {
       (select position('DELETED_AT IS NULL' in upper(coalesce(pg_get_expr(p.polqual, p.polrelid), ''))) > 0
        from pg_policy p
        where p.polrelid = 'public.bridge_titles'::regclass
-         and p.polname = 'bridge_titles_owner_or_buyer_select') as archived_title_rls_filter
+         and p.polname = 'bridge_titles_owner_or_buyer_select') as archived_title_rls_filter,
+      (select position('BRIDGE_ORGANIZATION_MEMBERSHIPS' in upper(coalesce(pg_get_expr(p.polqual, p.polrelid), ''))) > 0
+         and position('OWNER_ORGANIZATION_ID' in upper(coalesce(pg_get_expr(p.polqual, p.polrelid), ''))) > 0
+       from pg_policy p
+       where p.polrelid = 'public.bridge_titles'::regclass
+         and p.polname = 'bridge_titles_owner_or_buyer_select') as studio_membership_rls_filter
   `);
   const creatorLifecycle = creatorLifecycleCheck.rows[0];
   if (
@@ -746,7 +751,8 @@ try {
     !creatorLifecycle.submission_status_check_validated ||
     !creatorLifecycle.deleted_by_fk_validated ||
     !creatorLifecycle.active_owner_index ||
-    !creatorLifecycle.archived_title_rls_filter
+    !creatorLifecycle.archived_title_rls_filter ||
+    !creatorLifecycle.studio_membership_rls_filter
   ) {
     throw new Error("Creator draft submission/archive migration verification failed: " + JSON.stringify(creatorLifecycle));
   }
