@@ -65,8 +65,9 @@ export function CreatorTitleActions({ title, actor }: { title: BridgeTitle; acto
   const [year, setYear] = useState(title.year ? String(title.year) : "");
   const [runtime, setRuntime] = useState(title.runtimeMinutes ? String(title.runtimeMinutes) : "");
   const [territories, setTerritories] = useState<string[]>(["IN"]);
+  const [buyerChannels, setBuyerChannels] = useState<string[]>(["Crayons Loop"]);
   const [rightsLanguages, setRightsLanguages] = useState(title.language || "Malayalam");
-  const [exploitation, setExploitation] = useState<string[]>(["OTT / Streaming"]);
+  const [exploitation, setExploitation] = useState<string[]>(["SVOD"]);
   const [windowStart, setWindowStart] = useState(new Date().toISOString().slice(0, 10));
   const [windowEnd, setWindowEnd] = useState(defaultEndDate());
   const [exclusivity, setExclusivity] = useState<"EXCLUSIVE" | "NON_EXCLUSIVE">("NON_EXCLUSIVE");
