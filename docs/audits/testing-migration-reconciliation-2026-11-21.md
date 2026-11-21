@@ -239,3 +239,43 @@ Do not merge or patch directly on the diverged implementation branch. Do not cre
 - Hosted Testing migration / Production migration / merge / deployment: NOT RUN.
 
 The previous approval is treated as authorization for source-side audit and safe implementation planning only. No database, payment, asset, environment, merge, or deployment action is inferred from it.
+
+
+## Checkout, order creation, webhook and playback call-site audit — 2026-11-21
+
+### Exact refs checked
+
+- Protected `main` HEAD: `1253362e2bb19b9fbe513dd50be1e115a0dfc3c6`.
+- PR #767 remains OPEN and DRAFT; head `implementation/bridge-end-to-end-20261121` at `0b13e74daa08f3f5e4b6603eedd1cf85940f4438`; base is `reconcile/bridge-production-main-20261121` at `c20bc0da0f3042515ab45b4acd9738a3d415e83e`, not `main`.
+- The PR branch is not a direct release candidate and must not be merged to Production/main based on the PR description or CI claims alone.
+
+### Current protected main — confirmed LOOP flow gaps
+
+- `src/lib/loop/subscriptions.ts` exposes `rentTvodMovie`, but its implementation directly inserts into legacy `loop_entitlements` and returns success without creating a Razorpay order, validating capture, or requiring a paid payment. This is an entitlement-before-payment path and is incompatible with TVOD paid-only policy.
+- The same file exposes `subscribeToLoopPass`, which inserts into `loop_subscriptions` without payment. This is incompatible with TVOD-only policy.
+- `src/lib/loop/catalog.ts` reads `loop_entitlements` and `loop_subscriptions`; it supports SVOD and legacy entitlement paths.
+- Protected main's `src/routes/api/razorpay/webhook.ts` delegates to `src/lib/bridge/payments.ts`. The webhook implementation handles Bridge payment records and Bridge entitlements; no LOOP TVOD order/capture/refund routing was found in this main snapshot.
+- GitHub code search on main found no `createLoopOrder`, `loop_tvod_orders`, or LOOP-specific order-creation function. The only `rentTvodMovie` / `subscribeToLoopPass` definitions found are in `src/lib/loop/subscriptions.ts`; no additional call-site reference was returned by the repository search. This is a source-search result, not proof that no dynamically imported or separately deployed LOOP frontend exists.
+
+### PR #767 implementation branch — TVOD checkout path traced
+
+- `rentTvodMovie` now checks `loop_rental_fulfillment_ready()`, checks Bridge publication and approved TVOD pricing, calls Razorpay `/orders`, and inserts a pending `loop_tvod_orders` record. It does not itself grant entitlement. This is directionally correct.
+- The order insert casts both `context.userId` and `title.id` to UUID, while the migration declares both `loop_tvod_orders.user_id` and `loop_tvod_orders.loop_title_id` as TEXT. This is needlessly inconsistent and risks runtime failure for non-UUID/text identifiers.
+- `subscribeToLoopPass` is disabled in this branch, but the catalog and playback entitlement code still contains SVOD rails and `loop_subscriptions` checks. Therefore the product is not yet consistently TVOD-only.
+- `checkPlaybackEntitlement` and `getAuthorizedLoopPlayback` use UUID casts for both user and title IDs against `loop_user_tvod_entitlements`. The previously inspected Testing schema has `title_id TEXT`; this is not compatible without a verified schema contract and safe code adaptation.
+- The PR migration creates `loop_tvod_payment_events` in addition to the already-existing `loop_payment_events`, contrary to the one-canonical-payment-ledger requirement. It also creates a new `loop_tvod_orders` table. These are not approved to apply to hosted Testing.
+- The PR migration's `CREATE TABLE IF NOT EXISTS loop_user_tvod_entitlements` does not reconcile an existing table's column types. Its RPC then casts IDs to UUID and compares/inserts them against the table. With the observed Testing TEXT `title_id`, this is a schema/API incompatibility; a successful disposable replay against the exact target schema is mandatory.
+- The new fulfillment migration references `listed`, `published`, `tvod_rental_price`, and `bridge_loop_consumer_pricing`. The observed Testing catalog contract instead had `is_listed`, `is_published`, and `price_paise`, and did not expose `bridge_loop_consumer_pricing`. The migration/RPC cannot be assumed compatible with Testing.
+- The PR's source test `src/lib/loop/tvod-payment.test.ts` is primarily source-text assertions. It does not prove database RPC execution, PostgreSQL type compatibility, payment provider behavior, or real checkout-to-playback E2E.
+
+### Current disposition
+
+- Protected-main paid-only violation: FAIL (source-level direct entitlement insertion without payment).
+- Protected-main LOOP webhook integration: FAIL (not present in inspected main webhook).
+- PR checkout/order creation source path: PASS at code-inspection level only.
+- PR webhook / RPC / schema compatibility with observed Testing: FAIL / BLOCKED pending exact schema reconciliation.
+- PR TVOD-only completeness: FAIL (SVOD catalog and playback paths remain).
+- Full runtime checkout-to-playback E2E: NOT TESTED.
+- Automated tests/typecheck/local disposable replay on this turn: NOT RUN.
+- No source code was changed in this follow-up. Only this audit report was updated.
+- No hosted Testing migration, Production migration, payment, merge, or deployment was performed.
