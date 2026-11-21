@@ -43,10 +43,10 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
             <Link
               to="/title/$id"
               params={{ id: t.id }}
-              aria-label={t.status === "DRAFT" ? `Submit ${t.name} to Bridge workflow` : `Continue ${t.name} in Bridge`}
+              aria-label={t.status === "DRAFT" && t.creatorSubmissionStatus !== "SUBMITTED" ? `Submit ${t.name} to Bridge workflow` : `Continue ${t.name} in Bridge`}
               className="inline-flex min-h-9 items-center justify-center rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-bg hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
-              {t.status === "DRAFT" ? "Submit to Bridge" : "Continue in Bridge"}
+              {t.status === "DRAFT" && t.creatorSubmissionStatus !== "SUBMITTED" ? "Submit to Bridge" : "Continue in Bridge"}
             </Link>
           </div>
         </li>
