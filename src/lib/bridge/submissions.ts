@@ -219,8 +219,20 @@ export const submitCreatorTitleToBridge = createServerFn({ method: "POST" })
       `;
       const locked = lockedRows[0];
       if (!locked || locked.owner_user_id !== title.ownerUserId ||
-          locked.owner_account_type !== actor.accountType) {
+          locked.owner_account_type !== actor.accountType ||
+          (locked.owner_organization_id ?? null) !== (title.ownerOrganizationId ?? null)) {
         throw new Error("Title not found");
+      }
+      if (actor.accountType === "studio" && locked.owner_organization_id && locked.owner_user_id !== actor.userId) {
+        const activeMembership = await tx<{ allowed: boolean }>`
+          select exists (
+            select 1 from bridge_organization_memberships
+            where organization_id = ${locked.owner_organization_id}::uuid
+              and user_id = ${actor.userId}
+              and status = 'active'
+          ) as allowed
+        `;
+        if (!activeMembership[0]?.allowed) throw new Error("Active Studio membership is required to submit this title.");
       }
       if (locked.creator_submission_status === "SUBMITTED") {
         return { titleId: locked.id, status: "SUBMITTED" as const, alreadySubmitted: true };
