@@ -40,7 +40,7 @@ export function MyStoryConcepts() {
           return (
             <li key={c.id}>
               <Link
-                to="/title/$id"
+                to="/story-concept/$id"
                 params={{ id: c.title_id }}
                 className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
               >

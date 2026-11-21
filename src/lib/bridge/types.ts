@@ -60,6 +60,8 @@ export type BridgeTitle = {
   credits: Array<{ role: string; name: string }>;
   createdAt: string;
   updatedAt: string;
+  creatorSubmissionStatus?: "DRAFT" | "SUBMITTED";
+  creatorSubmittedAt?: string | null;
 };
 
 export const ASSET_KINDS = [

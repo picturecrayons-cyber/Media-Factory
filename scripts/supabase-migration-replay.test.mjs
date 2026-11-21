@@ -8,6 +8,10 @@ const replayScript = fileURLToPath(
   new URL("./supabase-migration-replay.mjs", import.meta.url),
 );
 const replaySource = readFileSync(replayScript, "utf8");
+const creatorLifecycleMigration = readFileSync(
+  new URL("../supabase/migrations/20261121160000_bridge_creator_draft_submission_lifecycle.sql", import.meta.url),
+  "utf8",
+);
 
 test("local replay restores Production Bridge RLS on every public Bridge table", () => {
   assert.match(replaySource, /substring\(c\.relname from 1 for 7\) = 'bridge_'/);
@@ -60,3 +64,43 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
 }
+
+test("Creator Vault migration replay verifies UUID organization FK and server-only grants", () => {
+  assert.ok(replaySource.includes("20261121140000_bridge_creator_document_org_uuid_fk.sql"));
+  assert.match(replaySource, /organization_id_is_uuid/);
+  assert.match(replaySource, /organization_fk_validated/);
+  assert.match(replaySource, /owner_scope_check_validated/);
+  assert.match(replaySource, /vault\.client_grants !== 0/);
+  assert.match(replaySource, /vault\.service_role_grants < 6/);
+});
+
+test("Creator draft lifecycle migration is replayed and verified", () => {
+  assert.ok(replaySource.includes("20261121160000_bridge_creator_draft_submission_lifecycle.sql"));
+  assert.match(replaySource, /submission_status_check_validated/);
+  assert.match(replaySource, /deleted_by_fk_validated/);
+  assert.match(replaySource, /active_owner_index/);
+});
+
+test("Creator draft archive is enforced by authenticated title RLS after migration replay", () => {
+  assert.match(replaySource, /archived_title_rls_filter/);
+  assert.match(creatorLifecycleMigration, /deleted_at is null/);
+});
+
+test("Creator title RLS requires active Studio organization membership", () => {
+  assert.match(creatorLifecycleMigration, /bridge_organization_memberships m/);
+  assert.match(creatorLifecycleMigration, /m\.status = 'active'/);
+  assert.match(replaySource, /studio_membership_rls_filter/);
+});
+
+test("Production asset RLS is owner-only and moves the definer helper out of public", () => {
+  assert.match(creatorLifecycleMigration, /bridge_production_assets_owner_select/);
+  assert.match(creatorLifecycleMigration, /create or replace function private\.bridge_is_title_owner/);
+  assert.match(creatorLifecycleMigration, /create or replace function private\.bridge_can_read_title/);
+  assert.match(creatorLifecycleMigration, /grant usage on schema private to authenticated, service_role/);
+  assert.match(creatorLifecycleMigration, /set search_path = ''/);
+  assert.match(creatorLifecycleMigration, /bridge_organization_memberships m/);
+  assert.match(creatorLifecycleMigration, /m\.status = 'active'/);
+  assert.match(creatorLifecycleMigration, /alter function public\.bridge_is_title_owner\(text\) set schema private/);
+  assert.match(replaySource, /production_asset_rls_scoped/);
+  assert.match(replaySource, /definer_helper_removed/);
+});

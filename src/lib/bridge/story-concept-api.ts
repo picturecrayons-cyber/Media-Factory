@@ -180,6 +180,62 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     }
   });
 
+export const getMyStoryConcept = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType !== "independent_creator" && actor.accountType !== "studio") {
+      throw new Error("Not found");
+    }
+    const sql = await getSql();
+    const rows = await sql<ConceptRow & { title_name: string }>`
+      select c.*, t.name as title_name
+      from bridge_story_concept_submissions c
+      join bridge_titles t on t.id = c.title_id
+      where c.title_id = ${data.titleId}
+        and (
+          (
+            ${actor.accountType} = 'independent_creator'
+            and t.owner_account_type = 'independent_creator'
+            and t.owner_user_id = ${actor.userId}
+          )
+          or (
+            ${actor.accountType} = 'studio'
+            and t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${actor.organizationId ?? null}
+            and ${actor.organizationId ?? null} is not null
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${actor.organizationId ?? null}
+                and m.user_id = ${actor.userId}
+                and m.status = 'active'
+            )
+          )
+        )
+      limit 1
+    `;
+    const row = rows[0];
+    if (!row) throw new Error("Not found");
+    const concept = mapConcept(row);
+    return {
+      concept: {
+        id: concept.id,
+        title_id: concept.title_id,
+        titleName: row.title_name,
+        logline: concept.logline,
+        synopsis: concept.synopsis,
+        genre: concept.genre,
+        estimated_budget_range: concept.estimated_budget_range,
+        target_platforms: concept.target_platforms,
+        curation_status: concept.curation_status,
+        created_at: concept.created_at,
+        updated_at: concept.updated_at,
+      },
+    };
+  });
+
 export const listMyStoryConcepts = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
@@ -192,12 +248,25 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
-           or (
-             t.owner_account_type = 'studio'
-             and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
-           )
+        where (
+          (
+            ${actor.accountType} = 'independent_creator'
+            and t.owner_account_type = 'independent_creator'
+            and t.owner_user_id = ${actor.userId}
+          )
+          or (
+            ${actor.accountType} = 'studio'
+            and t.owner_account_type = 'studio'
+            and t.owner_organization_id is not null
+            and t.owner_organization_id = ${actor.organizationId ?? null}
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${actor.organizationId ?? null}
+                and m.user_id = ${actor.userId}
+                and m.status = 'active'
+            )
+          )
+        )
         order by c.created_at desc
         limit 100
       `;

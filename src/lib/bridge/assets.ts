@@ -59,25 +59,53 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       kind: data.kind,
       filename: data.filename,
     });
-    const signed = await signUpload({
-      key,
-      contentType: data.contentType,
-      expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
-    });
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
-    await sql`
-      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
-      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
-    `;
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "asset.upload_signed",
-      entityType: "bridge_asset",
-      entityId: id,
-      metadata: { titleId: title.id, kind: data.kind },
+    return sql.transaction(async (tx) => {
+      const activeTitle = await tx<{
+        status: string; deleted_at: string | Date | null; owner_user_id: string;
+        owner_account_type: string; owner_organization_id: string | null;
+      }>`
+        select status, deleted_at, owner_user_id, owner_account_type, owner_organization_id
+        from bridge_titles where id = ${title.id} for update
+      `;
+      const current = activeTitle[0];
+      if (!current || current.deleted_at || !UPLOADABLE.has(current.status) ||
+          current.owner_user_id !== title.ownerUserId ||
+          current.owner_account_type !== title.ownerAccountType ||
+          (current.owner_organization_id ?? null) !== (title.ownerOrganizationId ?? null)) {
+        throw new Error("Uploads are closed for this title");
+      }
+      if (actor.accountType === "studio") {
+        if (!current.owner_organization_id) throw new Error("Studio title organization scope is missing; Bridge staff must reconcile it.");
+        const membership = await tx<{ allowed: boolean }>`
+          select exists (
+            select 1 from bridge_organization_memberships
+            where organization_id = ${current.owner_organization_id}::uuid
+              and user_id = ${actor.userId}
+              and status = 'active'
+          ) as allowed
+        `;
+        if (!membership[0]?.allowed) throw new Error("Active Studio membership is required to upload to this title.");
+      }
+      const signed = await signUpload({
+        key,
+        contentType: data.contentType,
+        expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
+      });
+      await tx`
+        insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
+        values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "asset.upload_signed",
+        entityType: "bridge_asset",
+        entityId: id,
+        metadata: { titleId: title.id, kind: data.kind },
+      }, tx);
+      return { assetId: id, ...signed };
     });
-    return { assetId: id, ...signed };
   });
 
 async function openUploadAsset(userId: string, assetId: string) {

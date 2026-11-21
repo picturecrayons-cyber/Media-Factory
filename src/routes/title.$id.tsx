@@ -40,6 +40,7 @@ import {
   sessionStorageKey,
 } from "@/lib/bridge/multipart-upload";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
+import { CreatorTitleActions } from "@/components/bridge/creator-title-actions";
 
 export const Route = createFileRoute("/title/$id")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -158,6 +159,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
+      {!buyerView ? <CreatorTitleActions title={title} actor={actor} /> : null}
       <WorkflowDesk
         title={title}
         actor={actor}
@@ -186,9 +188,12 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                   {title.runtimeMinutes ? ` · ${title.runtimeMinutes} min` : ""}
                 </p>
               </div>
-              <span className="rounded-full border border-line bg-elevated px-3 py-1.5 text-xs font-semibold">
-                {title.status}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-line bg-elevated px-3 py-1.5 text-xs font-semibold">
+                  {title.status}
+                </span>
+                {title.creatorSubmissionStatus === "SUBMITTED" ? <span className="rounded-full border border-accent/30 px-3 py-1.5 text-xs font-semibold text-accent">SUBMITTED TO BRIDGE</span> : null}
+              </div>
             </div>
             {title.synopsis ? (
               <p className="mt-4 max-w-3xl text-sm leading-6 text-muted">{title.synopsis}</p>

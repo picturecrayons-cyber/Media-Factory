@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["main", "feat/creator-studio-dashboard-clarity-20261121", "feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024"]
+    branches: ["main", "feat/creator-studio-dashboard-clarity-20261121", "fix/creator-concept-vault-guard-20261121", "feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024"]
   pull_request:
     branches: ["main", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024"]
   workflow_dispatch:
@@ -78,7 +78,7 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.2.0
 
       # Supabase CLI automatically applies files in supabase/migrations during
       # start. Hide the recovered ledger temporarily so the custom replay can

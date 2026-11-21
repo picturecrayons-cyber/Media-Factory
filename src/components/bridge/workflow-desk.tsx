@@ -202,7 +202,8 @@ export function WorkflowDesk({ title, actor, qcSubmissionReady = false }: {
                   : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
-              ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
+              ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) &&
+              (actor.internalRole !== null || title.status !== "DRAFT" || title.creatorSubmissionStatus === "SUBMITTED")
                 ? button(
                     title.status === "DRAFT"
                       ? "Start ingest"
@@ -224,6 +225,11 @@ export function WorkflowDesk({ title, actor, qcSubmissionReady = false }: {
                     title.status === "PREPARING" && !qcSubmissionReady,
                   )
                 : null}
+              {!actor.internalRole && title.status === "DRAFT" && title.creatorSubmissionStatus !== "SUBMITTED" ? (
+                <p role="status" className="rounded-lg border border-accent/30 p-3 text-sm text-muted">
+                  Submit this finished-film draft to Bridge before starting ingest. Submission records your rights package for review; it does not approve QC or Legal.
+                </p>
+              ) : null}
               {title.status === "PREPARING" && !qcSubmissionReady ? (
                 <p role="status" className="rounded-lg border border-amber-500/40 p-3 text-sm text-muted">
                   QC submission is blocked. Bridge needs a storage-verified main-film master and verified artwork linked to this exact title.

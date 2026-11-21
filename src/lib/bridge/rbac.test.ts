@@ -27,19 +27,39 @@ describe("PRD authorization matrix", () => {
     assert.throws(() => assertPermission(creator(false), "title.create"), /Email verification/);
   });
 
-  it("creator and studio can manage only their own private titles", () => {
-    for (const owner of [creator(), studio()]) {
-      assert.equal(hasPermission(owner, "title.create"), true);
-      assert.equal(hasPermission(owner, "asset.sign_upload"), true);
-      assert.equal(canReadTitle(owner, { ownerUserId: owner.userId, status: "DRAFT" }), true);
-      assert.equal(canReadTitle(owner, { ownerUserId: "other-org-user", status: "DRAFT" }), false);
-      assert.equal(
-        canReadTitle(owner, { ownerUserId: "other-org-user", status: "LIVE_FOR_BUYERS" }),
-        false,
-      );
-      assert.equal(hasPermission(owner, "title.qc_review"), false);
-      assert.equal(hasPermission(owner, "title.license"), false);
-    }
+  it("Creator owns private Creator titles while Studio access requires active organization scope", () => {
+    const c = creator();
+    const s: Actor = {
+      ...studio(),
+      organizationId: "11111111-1111-4111-8111-111111111111",
+    };
+    const creatorTitle = {
+      ownerUserId: c.userId,
+      ownerAccountType: "independent_creator" as const,
+      status: "DRAFT" as const,
+    };
+    const studioTitle = {
+      ownerUserId: "studio-owner",
+      ownerAccountType: "studio" as const,
+      ownerOrganizationId: "11111111-1111-4111-8111-111111111111",
+      status: "DRAFT" as const,
+    };
+    assert.equal(hasPermission(c, "title.create"), true);
+    assert.equal(hasPermission(s, "title.create"), true);
+    assert.equal(hasPermission(c, "asset.sign_upload"), true);
+    assert.equal(hasPermission(s, "asset.sign_upload"), true);
+    assert.equal(canReadTitle(c, creatorTitle), true);
+    assert.equal(canReadTitle(s, studioTitle), true);
+    const studioOwnerWithoutMembership = { ...studioTitle, ownerUserId: "studio-a" };
+    assert.equal(canReadTitle(studio(), studioOwnerWithoutMembership), false);
+    assert.equal(canMutateTitle(studio(), studioOwnerWithoutMembership, "title.update_own", "title.license"), false);
+    assert.equal(canOperateOnTitle(studio(), studioOwnerWithoutMembership, "asset.sign_upload"), false);
+    assert.equal(canReadTitle(c, { ...creatorTitle, ownerUserId: "other-creator" }), false);
+    assert.equal(canReadTitle(s, { ...studioTitle, ownerOrganizationId: "22222222-2222-4222-8222-222222222222" }), false);
+    assert.equal(hasPermission(c, "title.qc_review"), false);
+    assert.equal(hasPermission(s, "title.qc_review"), false);
+    assert.equal(hasPermission(c, "title.license"), false);
+    assert.equal(hasPermission(s, "title.license"), false);
   });
 
   it("buyer sees buyer-visible catalog but cannot create, upload, QC, license, or administer", () => {

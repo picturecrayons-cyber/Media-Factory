@@ -45,7 +45,7 @@ function Studio() {
               <NewSubmissionPanel />
               <div className="border-t border-line pt-4">
                 <h3 className="mb-3 font-semibold">Your studio catalogue</h3>
-                <TitleList empty="No titles are currently returned for this Studio account." />
+                <TitleList actor={actor} empty="No titles are currently returned for this Studio account." />
                 <div className="mt-4"><MyStoryConcepts /></div>
               </div>
             </section>

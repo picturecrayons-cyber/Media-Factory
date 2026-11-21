@@ -71,6 +71,8 @@ const featureNames = names.filter((name) => name >= "20261118130000_");
 const supportedFeatureMigrations = new Set([
   "20261118130000_loop_tvod_payment_fulfillment.sql",
   "20261118143000_bridge_creator_document_vault.sql",
+  "20261121140000_bridge_creator_document_org_uuid_fk.sql",
+  "20261121160000_bridge_creator_draft_submission_lifecycle.sql",
 ]);
 for (const name of featureNames) {
   if (!supportedFeatureMigrations.has(name)) {
@@ -680,6 +682,100 @@ try {
       await client.query("ROLLBACK");
       throw new Error(`Feature migration failed: ${name}: ${error.message}`);
     }
+  }
+
+  const creatorVaultCheck = await client.query(`
+    select
+      (select data_type = 'uuid'
+       from information_schema.columns
+       where table_schema = 'public'
+         and table_name = 'bridge_creator_documents'
+         and column_name = 'owner_organization_id') as organization_id_is_uuid,
+      (select c.convalidated
+       from pg_constraint c
+       where c.conrelid = 'public.bridge_creator_documents'::regclass
+         and c.conname = 'bridge_creator_documents_owner_organization_id_fkey') as organization_fk_validated,
+      (select c.convalidated
+       from pg_constraint c
+       where c.conrelid = 'public.bridge_creator_documents'::regclass
+         and c.conname = 'bridge_creator_documents_owner_scope_chk') as owner_scope_check_validated,
+      (select relrowsecurity from pg_class where oid = 'public.bridge_creator_documents'::regclass) as documents_rls,
+      (select relrowsecurity from pg_class where oid = 'public.bridge_title_document_links'::regclass) as links_rls,
+      (select count(*)::int from information_schema.role_table_grants
+       where table_schema = 'public'
+         and table_name in ('bridge_creator_documents', 'bridge_title_document_links')
+         and grantee in ('anon', 'authenticated')) as client_grants,
+      (select count(*)::int from information_schema.role_table_grants
+       where table_schema = 'public'
+         and table_name in ('bridge_creator_documents', 'bridge_title_document_links')
+         and grantee = 'service_role') as service_role_grants
+  `);
+  const vault = creatorVaultCheck.rows[0];
+  if (
+    !vault?.organization_id_is_uuid ||
+    !vault.organization_fk_validated ||
+    !vault.owner_scope_check_validated ||
+    !vault.documents_rls ||
+    !vault.links_rls ||
+    vault.client_grants !== 0 ||
+    vault.service_role_grants < 6
+  ) {
+    throw new Error("Creator Document Vault UUID/RLS/grant verification failed: " + JSON.stringify(vault));
+  }
+
+  const creatorLifecycleCheck = await client.query(`
+    select
+      exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bridge_titles' and column_name = 'creator_submission_status') as submission_status_column,
+      exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bridge_titles' and column_name = 'creator_submitted_at') as submitted_at_column,
+      exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bridge_titles' and column_name = 'deleted_at') as deleted_at_column,
+      exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bridge_titles' and column_name = 'deleted_by') as deleted_by_column,
+      (select convalidated from pg_constraint where conrelid = 'public.bridge_titles'::regclass and conname = 'bridge_titles_creator_submission_status_chk') as submission_status_check_validated,
+      (select convalidated from pg_constraint where conrelid = 'public.bridge_titles'::regclass and conname = 'bridge_titles_deleted_by_fkey') as deleted_by_fk_validated,
+      to_regclass('public.bridge_titles_active_creator_owner_idx') is not null as active_owner_index,
+      (select position('DELETED_AT IS NULL' in upper(coalesce(pg_get_expr(p.polqual, p.polrelid), ''))) > 0
+       from pg_policy p
+       where p.polrelid = 'public.bridge_titles'::regclass
+         and p.polname = 'bridge_titles_owner_or_buyer_select') as archived_title_rls_filter,
+      (select
+         position('BRIDGE_ORGANIZATION_MEMBERSHIPS' in upper(pg_get_functiondef('private.bridge_is_title_owner(text)'::regprocedure))) > 0
+         and position('M.STATUS = ''ACTIVE''' in upper(pg_get_functiondef('private.bridge_is_title_owner(text)'::regprocedure))) > 0
+         and position('O.STATUS = ''ACTIVE''' in upper(pg_get_functiondef('private.bridge_is_title_owner(text)'::regprocedure))) > 0
+         and position('BRIDGE_ORGANIZATION_MEMBERSHIPS' in upper(pg_get_functiondef('private.bridge_can_read_title(text)'::regprocedure))) > 0
+         and position('M.STATUS = ''ACTIVE''' in upper(pg_get_functiondef('private.bridge_can_read_title(text)'::regprocedure))) > 0
+       ) as studio_membership_rls_filter,
+      (select count(*) = 4
+       from pg_policies p
+       where p.schemaname = 'public'
+         and p.tablename = 'bridge_production_assets'
+         and position('PRIVATE.BRIDGE_IS_TITLE_OWNER' in upper(coalesce(p.qual, '') || ' ' || coalesce(p.with_check, ''))) > 0
+      ) as production_asset_rls_scoped,
+      to_regprocedure('public.bridge_is_title_owner(text)') is null as definer_helper_removed,
+      (select p.prosecdef
+       from pg_proc p
+       where p.oid = 'private.bridge_is_title_owner(text)'::regprocedure) as private_owner_helper_present,
+      (select p.prosecdef
+       from pg_proc p
+       where p.oid = 'private.bridge_can_read_title(text)'::regprocedure) as private_can_read_helper_present,
+      has_schema_privilege('authenticated', 'private', 'USAGE') as private_schema_authenticated_usage
+  `);
+  const creatorLifecycle = creatorLifecycleCheck.rows[0];
+  if (
+    !creatorLifecycle?.submission_status_column ||
+    !creatorLifecycle.submitted_at_column ||
+    !creatorLifecycle.deleted_at_column ||
+    !creatorLifecycle.deleted_by_column ||
+    !creatorLifecycle.submission_status_check_validated ||
+    !creatorLifecycle.deleted_by_fk_validated ||
+    !creatorLifecycle.active_owner_index ||
+    !creatorLifecycle.archived_title_rls_filter ||
+    !creatorLifecycle.studio_membership_rls_filter ||
+    !creatorLifecycle.production_asset_rls_scoped ||
+    !creatorLifecycle.definer_helper_removed ||
+    !creatorLifecycle.private_owner_helper_present ||
+    !creatorLifecycle.private_can_read_helper_present ||
+    !creatorLifecycle.private_schema_authenticated_usage
+  ) {
+    throw new Error("Creator draft submission/archive migration verification failed: " + JSON.stringify(creatorLifecycle));
   }
 
   const baselineRls = await client.query(`
