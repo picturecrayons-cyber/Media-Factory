@@ -55,6 +55,18 @@ test("Studio reusable document vault requires owner or admin membership", () => 
   assert.equal(canManageStudioDocuments(undefined), false);
 });
 
+test("Creator Vault organization ownership is migrated to the canonical UUID FK", () => {
+  const migration = readFileSync(
+    new URL("../../../supabase/migrations/20261121140000_bridge_creator_document_org_uuid_fk.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(migration, /alter column owner_organization_id type uuid/);
+  assert.match(migration, /references public\.bridge_organizations\(id\)/);
+  assert.match(migration, /owner_account_type = 'studio' and owner_organization_id is not null/);
+  assert.match(migration, /not valid/);
+  assert.match(migration, /validate constraint bridge_creator_documents_owner_organization_id_fkey/);
+});
+
 test("story concepts stay out of finished-film lists and title workspaces", () => {
   const titlesSource = readFileSync(new URL("./titles.ts", import.meta.url), "utf8");
   const conceptApi = readFileSync(new URL("./story-concept-api.ts", import.meta.url), "utf8");
