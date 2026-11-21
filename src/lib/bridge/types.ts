@@ -54,6 +54,7 @@ export type BridgeTitle = {
   posterKey: string | null;
   masterKey: string | null;
   contentType: string;
+  loopDistributionPreference: "NOT_DECIDED" | "CONSIDER_LOOP" | "NOT_FOR_LOOP";
   countryOfOrigin: string | null;
   releaseDate: string | null;
   credits: Array<{ role: string; name: string }>;
