@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { isStudioFinishedFilm, canStudioAccessTitle } from "./studio-title-classification.ts";
@@ -46,4 +47,16 @@ test("Studio sharing requires exact organization match and active membership", (
   assert.equal(canStudioAccessTitle({ ...base, actorOrganizationId: "org-b" }), false);
   assert.equal(canStudioAccessTitle({ ...base, activeOrganizationMembership: false }), false);
   assert.equal(canStudioAccessTitle({ ...base, actorOrganizationId: null }), false);
+});
+
+test("Studio Finished Films server query filters by submission_type and active organization membership", () => {
+  const source = readFileSync(new URL("./titles.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export const listStudioFinishedFilms");
+  const end = source.indexOf("export const getTitle", start);
+  const query = source.slice(start, end);
+  assert.match(query, /submission_type = 'finished_film'/);
+  assert.match(query, /owner_user_id = \$\{actor\.userId\}/);
+  assert.match(query, /owner_organization_id = \$\{organizationId\}/);
+  assert.match(query, /m\.status = 'active'/);
+  assert.doesNotMatch(query, /submission_type = 'story_concept'/);
 });
