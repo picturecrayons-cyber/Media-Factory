@@ -227,21 +227,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
+    // This GET handler is deliberately read-only. Expiry is derived in the response;
+    // state transitions must be performed by an explicitly authorized command.
     const rows = await sql<{
       id: string;
       slug: string;
@@ -264,6 +251,13 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       listed: boolean | null;
       published: boolean | null;
       playback_path: string | null;
+      loop_synopsis: string | null;
+      loop_language: string | null;
+      loop_year: number | null;
+      loop_duration_minutes: number | null;
+      submitted_at: string | Date | null;
+      master_asset_ready: boolean;
+      poster_asset_ready: boolean;
       qc_approved: boolean;
       legal_grant_ids: string[] | null;
       ott_preparation_status: string | null;
@@ -276,6 +270,19 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
              p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
              l.status as loop_status, l.listed, l.published, l.playback_path,
+             l.synopsis as loop_synopsis, l.language as loop_language,
+             l.year as loop_year, l.duration_minutes as loop_duration_minutes,
+             si.submitted_at,
+             exists(
+               select 1 from bridge_assets a
+               where a.title_id=b.id and a.kind='master' and a.s3_key=b.master_key
+                 and a.byte_size > 0 and a.storage_business_state='ACTIVE' and a.restore_state='READY'
+             ) as master_asset_ready,
+             exists(
+               select 1 from bridge_assets a
+               where a.title_id=b.id and a.kind='poster' and a.s3_key=b.poster_key
+                 and a.byte_size > 0 and a.storage_business_state='ACTIVE' and a.restore_state='READY'
+             ) as poster_asset_ready,
              exists(
                select 1 from bridge_qc_cases q
                where q.title_id=b.id and q.status='PASSED'
@@ -290,7 +297,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
              g.ott_preparation_status, g.packaging_status, g.curation_status, g.delivery_status
       from bridge_titles b
       left join bridge_loop_publications p on p.bridge_title_id = b.id
-      left join loop_titles l on l.id = p.loop_title_id
+      left join loop_titles l on l.bridge_title_id = b.id
+      left join bridge_title_submission_intake si on si.title_id = b.id
       left join bridge_title_gate_certifications g on g.title_id = b.id
       order by b.updated_at desc
       limit 200
@@ -323,10 +331,22 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           r.packaging_status === "COMPLETE" &&
           r.curation_status === "APPROVED" &&
           r.delivery_status === "READY";
+        const loopMetadataReady = Boolean(
+          r.loop_synopsis?.trim() &&
+          r.loop_language?.trim() &&
+          r.loop_year &&
+          r.loop_duration_minutes,
+        );
+        const masterDeliveryReady = Boolean(r.master_asset_ready && r.qc_approved);
+        const artworkReady = Boolean(r.poster_asset_ready && r.qc_approved);
         const isReady =
           Boolean(coveringGrant) &&
           legalApproved &&
           Boolean(r.qc_approved) &&
+          masterDeliveryReady &&
+          artworkReady &&
+          loopMetadataReady &&
+          Boolean(r.playback_path) &&
           gatesReady &&
           [
             "LICENSING_READY",
@@ -347,6 +367,10 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         if (r.packaging_status !== "COMPLETE") blockers.push("Consumer packaging is not certified COMPLETE");
         if (r.curation_status !== "APPROVED") blockers.push("Editorial curation is not APPROVED");
         if (r.delivery_status !== "READY") blockers.push("Final delivery is not certified READY");
+        if (!r.master_asset_ready) blockers.push("Canonical master object, size and storage readiness are not verified");
+        if (!r.poster_asset_ready) blockers.push("Consumer poster object, size and storage readiness are not verified");
+        if (!loopMetadataReady) blockers.push("Loop synopsis, language, year and duration must be complete");
+        if (!r.playback_path) blockers.push("A Loop playback path has not been configured");
         if (
           ![
             "LICENSING_READY",
@@ -369,9 +393,19 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           language: r.language,
           hasMaster: Boolean(r.master_key),
           hasPoster: Boolean(r.poster_key),
+          submittedAt: iso(r.submitted_at),
           ready: isReady,
           blockers,
-          publication: r.loop_title_id
+          checks: [
+            { key: "identity", label: "Film identity", status: r.id && r.slug && r.name ? "PASS" : "BLOCKED" },
+            { key: "rights", label: "Rights authorization", status: coveringGrant ? "PASS" : "BLOCKED" },
+            { key: "metadata", label: "Loop metadata", status: loopMetadataReady ? "PASS" : "BLOCKED" },
+            { key: "artwork", label: "Artwork", status: artworkReady ? "PASS" : "BLOCKED" },
+            { key: "master", label: "Master delivery", status: masterDeliveryReady ? "PASS" : "BLOCKED" },
+            { key: "playback", label: "Playback", status: r.playback_path ? "NOT_VERIFIED" : "BLOCKED" },
+            { key: "catalogue", label: "Public catalogue", status: r.published && r.listed ? "NOT_VERIFIED" : "BLOCKED" },
+          ],
+          publication: r.authorization_status
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
