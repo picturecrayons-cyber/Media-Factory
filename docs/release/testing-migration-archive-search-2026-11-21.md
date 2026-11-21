@@ -68,3 +68,19 @@ search_path and EXECUTE privileges for each proposed mapping.
 | Disposable CI | Build comparison/replay fixtures after export | Isolated WRITE | No hosted DB impact |
 | PRODUCTION `mlmgugivsyoxzdgwkbpu` | HOLD | No WRITE | NOT CERTIFIED / NO-GO |
 | Merge / promotion | Not authorized | No action | Separate approval required |
+
+
+## Correction — Testing DB-resident SQL bodies discovered (2026-11-21)
+
+The repository search above correctly found no standalone Testing SQL archive or Testing hash manifest in the inspected repository. However, the subsequent READ-ONLY inspection of the **STAGING / Testing DB** found the exact SQL bodies inside `supabase_migrations.schema_migrations.statements`. Therefore the earlier conclusion that SQL-body evidence was unavailable is superseded.
+
+- STAGING / Testing DB: `jbymleftneggcgutlcqu`.
+- Action: READ-ONLY query of migration ledger statements and SHA-256 calculation; no hosted writes.
+- 70/70 ledger rows contain exactly one stored SQL statement; 0 rows lack SQL; total stored SQL = 200,815 bytes.
+- Exact migration version overlap against 75 current source SQL files: 0.
+- Exact byte/hash matches against 73 canonical Production source SQL statements: 7.
+- Exact matches against the two active feature-candidate SQL files: 0.
+- Remaining 63 Testing SQL statements do not exactly hash-match the current 75 source files. This is **not** proof of semantic incompatibility or absence; each requires DDL/policy/grant/function/trigger/dependency/order review.
+- Full 70-row version/name/byte-count/SHA-256 inventory and the seven exact source mappings are recorded in [testing-db-migration-sql-hash-inventory-2026-11-21.md](testing-db-migration-sql-hash-inventory-2026-11-21.md).
+
+Status: Testing SQL-body evidence **FOUND**; exact mapping **7 PASS / 63 NOT VERIFIED**; hosted Testing parity **NOT CERTIFIED**. PRODUCTION remains HOLD / NOT CERTIFIED / NO-GO.
