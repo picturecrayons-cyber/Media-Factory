@@ -90,6 +90,59 @@ A follow-up read of the exact audited source commit confirms the application con
 
 The repository also contains `scripts/supabase-migration-replay.mjs`. It is designed to replay the 73-entry Production-ledger manifest on a fresh local Supabase stack, restricts its database URL to localhost port 55432, and recognizes the TVOD migration as a supported feature migration while deferring the Sublicensing feature migration. **The script was inspected but not executed in this work**; no local Supabase runtime or replay logs were available here. Its existence is not evidence of a successful replay.
 
+## Direct Testing DB read-only verification and compatible repair design
+
+Project `jbymleftneggcgutlcqu` was rechecked read-only on 2026-11-21 (Postgres 17.11, ACTIVE_HEALTHY). The following is live Testing schema evidence, not inferred from source:
+
+### Existing canonical objects
+
+- `loop_titles`: `id text`, `price_paise bigint`, `access_tier text`, `status text`, `is_listed boolean`, `is_published boolean`.
+- `bridge_loop_publications`: `bridge_title_id text`, `loop_title_id text`, `authorization_status`, `territories text[]`, `languages text[]`, `exploitation_models text[]`, `window_start/window_end`, `approved_at`, `revoked_at`.
+- `loop_user_tvod_entitlements`: `user_id uuid` FK to auth.users, `title_id text` FK to loop_titles, `payment_transaction_id text`, 48-hour expiry fields, unique `(user_id,title_id,access_type)` and unique payment transaction ID.
+- `loop_payment_events`: unique `event_id`, `razorpay_payment_id`, `user_id uuid`, status, JSON payload, timestamps. This is already the payment fulfillment ledger.
+- Both `loop_payment_events` and `loop_user_tvod_entitlements` have RLS enabled and a deny-browser policy. The observed table grants were limited to `service_role` and `postgres`; no browser role grants were returned.
+- Existing RPCs are executable by `service_role` (and postgres):
+  - `loop_fulfill_captured_rental(text,text,uuid,text,timestamptz,timestamptz)`
+  - `loop_refund_captured_rental(text,text)`
+  - `loop_rental_fulfillment_ready()`
+
+### Existing RPC behavior verified from pg_get_functiondef
+
+The six-argument fulfillment RPC already:
+- requires payment/order/user/title/purchase/expiry inputs;
+- requires expiry to equal purchase time + 48 hours;
+- serializes payment and user/title fulfillment with advisory locks;
+- deduplicates against `loop_payment_events.event_id = 'tvod:' || payment_id`;
+- rejects payment identity mismatch, refunded payment, and non-processed reconciliation states;
+- verifies the current LOOP publication is authorized, not revoked, within its time window, WORLDWIDE, TVOD-enabled, language-matched, and title status/listing/publishing gates are satisfied;
+- writes to the existing `loop_user_tvod_entitlements` and `loop_payment_events` only.
+
+The two-argument refund RPC already:
+- records a refund-before-capture event in `loop_payment_events`, preventing later fulfillment;
+- changes a matching entitlement to `REFUNDED`;
+- marks the same canonical payment event as refunded.
+
+### Recommended canonical contract (design only; no SQL/source changes made)
+
+**Prefer adapting the newer order-based webhook to the existing Testing contract**, rather than applying `20261118130000_loop_tvod_payment_fulfillment.sql` unchanged.
+
+1. Keep `loop_payment_events` as the single TVOD payment/fulfillment/refund ledger. Do not create `loop_tvod_payment_events`. `bridge_webhook_events` remains the separate cross-product webhook-delivery/idempotency log, not a second TVOD ledger.
+2. Keep `loop_user_tvod_entitlements` as the single entitlement store. Preserve its current UUID buyer identity + text title identity, FKs, unique constraints, RLS, deny-browser policy, and service-role-only writes.
+3. If the application needs a persisted Razorpay order mapping, add only a forward-only `loop_tvod_orders` table with:
+   - `provider_order_id text UNIQUE`;
+   - `provider_payment_id text UNIQUE NULL`;
+   - `user_id uuid NOT NULL REFERENCES auth.users(id)`;
+   - `loop_title_id text NOT NULL REFERENCES loop_titles(id)`;
+   - `amount_paise bigint > 0`, `currency='INR'`, rental-only access type, constrained lifecycle status, captured timestamp and audit timestamps.
+   - RLS enabled, deny-browser policy, no anon/authenticated grants, service_role-only table access. No text-to-UUID coercion.
+4. Do not add `bridge_loop_consumer_pricing` as a competing price source in this repair. Use the existing `loop_titles.price_paise` for the order amount, and compare the persisted order amount/currency against the Razorpay captured payment. Any future admin price history/versioning is a separate product/data-model decision.
+5. Before calling the existing six-argument fulfillment RPC, the webhook must verify the captured payment, persisted order mapping, exact amount/currency, and buyer/title match; then pass the validated UUID user ID, text title ID, captured timestamp, and exactly +48 hours. The RPC remains the final rights/publication gate.
+6. Route `refund.processed` to the existing two-argument refund RPC after identifying the matching payment. Preserve refund-before-capture behavior. A refund with an unresolved payment/order mapping must fail closed and enter reconciliation; never silently mark it processed.
+7. Remove the new migration's assumptions about `loop_titles.listed/published/tvod_rental_price`; use actual `is_listed/is_published/price_paise` fields and the existing Bridge publication authorization object. Do not change existing title/publication data as part of the schema repair.
+8. Source changes must update the webhook RPC argument names and order row identity types together. Any LOOP checkout/order-creation source that currently assumes the new pricing table must be audited and aligned before a migration is proposed.
+
+This is the least additive design because it reuses the actual Testing entitlement table, payment ledger, rights/publication gate, and existing service-role RPCs. It is a design recommendation only; no migration, source patch, webhook deployment, test payment, or hosted write was performed.
+
 ## Forward-only repair proposal (NOT IMPLEMENTED)
 
 1. Keep the existing Testing ledger and all current Creator Vault, Sublicensing, Production Assets, and Studio objects intact.
