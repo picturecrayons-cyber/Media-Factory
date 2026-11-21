@@ -72,6 +72,7 @@ const supportedFeatureMigrations = new Set([
   "20261118130000_loop_tvod_payment_fulfillment.sql",
   "20261118143000_bridge_creator_document_vault.sql",
   "20261121140000_bridge_creator_document_org_uuid_fk.sql",
+  "20261121160000_bridge_creator_draft_submission_lifecycle.sql",
 ]);
 for (const name of featureNames) {
   if (!supportedFeatureMigrations.has(name)) {
@@ -720,6 +721,29 @@ try {
     vault.service_role_grants < 6
   ) {
     throw new Error("Creator Document Vault UUID/RLS/grant verification failed: " + JSON.stringify(vault));
+  }
+
+  const creatorLifecycleCheck = await client.query(`
+    select
+      exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bridge_titles' and column_name = 'creator_submission_status') as submission_status_column,
+      exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bridge_titles' and column_name = 'creator_submitted_at') as submitted_at_column,
+      exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bridge_titles' and column_name = 'deleted_at') as deleted_at_column,
+      exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bridge_titles' and column_name = 'deleted_by') as deleted_by_column,
+      (select convalidated from pg_constraint where conrelid = 'public.bridge_titles'::regclass and conname = 'bridge_titles_creator_submission_status_chk') as submission_status_check_validated,
+      (select convalidated from pg_constraint where conrelid = 'public.bridge_titles'::regclass and conname = 'bridge_titles_deleted_by_fkey') as deleted_by_fk_validated,
+      to_regclass('public.bridge_titles_active_creator_owner_idx') is not null as active_owner_index
+  `);
+  const creatorLifecycle = creatorLifecycleCheck.rows[0];
+  if (
+    !creatorLifecycle?.submission_status_column ||
+    !creatorLifecycle.submitted_at_column ||
+    !creatorLifecycle.deleted_at_column ||
+    !creatorLifecycle.deleted_by_column ||
+    !creatorLifecycle.submission_status_check_validated ||
+    !creatorLifecycle.deleted_by_fk_validated ||
+    !creatorLifecycle.active_owner_index
+  ) {
+    throw new Error("Creator draft submission/archive migration verification failed: " + JSON.stringify(creatorLifecycle));
   }
 
   const baselineRls = await client.query(`
