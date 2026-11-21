@@ -7,6 +7,7 @@ import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { storedBridgeContentType } from "./loop-lanes";
 
 const submissionSchema = z.object({
   name: z.string().trim().min(1).max(160),
@@ -75,7 +76,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       ) values (
         ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType}, 'DRAFT',
         ${data.synopsis}, ${data.synopsis}, ${data.originalLanguage}, ${data.originalLanguage},
-        ${data.releaseYear}, ${data.runtimeMinutes}, ${data.contentType}, ${data.loopDistributionPreference}, ${data.countryOfOrigin},
+        ${data.releaseYear}, ${data.runtimeMinutes}, ${storedBridgeContentType(data.contentType)}, ${data.loopDistributionPreference}, ${data.countryOfOrigin},
         make_date(${data.releaseYear}, 1, 1)
       )
     `;
