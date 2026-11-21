@@ -1,7 +1,5 @@
--- Reconciled source for Production migration 20261119203855.
--- The same additive schema change is already recorded on Production as
--- bridge_story_concept_author_rights_declaration_20261120.
--- Keep this version aligned with the Production ledger; do not reapply it there.
+-- Additive fields only for Original IP author declarations and independent review.
+-- Preserve existing owner-based RLS policies and all existing submission rows.
 
 alter table public.bridge_story_concept_submissions
   add column if not exists rights_holder_name text,
@@ -18,24 +16,13 @@ alter table public.bridge_story_concept_submissions
   add column if not exists legal_reviewed_at timestamptz,
   add column if not exists legal_review_notes text;
 
-do $$
-begin
-  if not exists (select 1 from pg_constraint where conname = 'bridge_story_concept_rights_basis_check') then
-    alter table public.bridge_story_concept_submissions
-      add constraint bridge_story_concept_rights_basis_check
-      check (rights_basis is null or rights_basis in ('ORIGINAL_AUTHOR', 'ASSIGNED', 'LICENSED', 'PUBLIC_DOMAIN', 'OTHER'));
-  end if;
-  if not exists (select 1 from pg_constraint where conname = 'bridge_story_concept_editorial_status_check') then
-    alter table public.bridge_story_concept_submissions
-      add constraint bridge_story_concept_editorial_status_check
-      check (editorial_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'NEEDS_INFO'));
-  end if;
-  if not exists (select 1 from pg_constraint where conname = 'bridge_story_concept_legal_status_check') then
-    alter table public.bridge_story_concept_submissions
-      add constraint bridge_story_concept_legal_status_check
-      check (legal_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'NEEDS_INFO'));
-  end if;
-end $$;
+alter table public.bridge_story_concept_submissions
+  add constraint bridge_story_concept_rights_basis_check
+    check (rights_basis is null or rights_basis in ('ORIGINAL_AUTHOR', 'ASSIGNED', 'LICENSED', 'PUBLIC_DOMAIN', 'OTHER')),
+  add constraint bridge_story_concept_editorial_status_check
+    check (editorial_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'NEEDS_INFO')),
+  add constraint bridge_story_concept_legal_status_check
+    check (legal_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'NEEDS_INFO'));
 
 create index if not exists bridge_story_concept_editorial_queue_idx
   on public.bridge_story_concept_submissions (editorial_status, created_at);
