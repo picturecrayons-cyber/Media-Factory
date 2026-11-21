@@ -244,12 +244,21 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
-           or (
-             t.owner_account_type = 'studio'
-             and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
-           )
+        where (
+          t.owner_user_id = ${actor.userId}
+          or (
+            ${actor.accountType} = 'studio'
+            and t.owner_account_type = 'studio'
+            and t.owner_organization_id is not null
+            and t.owner_organization_id = ${actor.organizationId ?? null}
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${actor.organizationId ?? null}
+                and m.user_id = ${actor.userId}
+                and m.status = 'active'
+            )
+          )
+        )
         order by c.created_at desc
         limit 100
       `;
