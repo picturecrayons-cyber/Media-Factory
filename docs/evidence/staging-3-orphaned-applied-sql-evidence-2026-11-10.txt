@@ -1,0 +1,178 @@
+STAGING DB — RECOVERED APPLIED SQL EVIDENCE ADDENDUM
+NON-EXECUTABLE TEXT ARTIFACT — DO NOT RUN OR RENAME TO .sql
+
+Target: STAGING DB jbymleftneggcgutlcqu (Crayons Projects - Testing DB)
+Access: READ-ONLY
+Action: Preserve exact SQL statements read from supabase_migrations.schema_migrations
+Risk: Low / read-only; no database writes
+PRODUCTION DB mlmgugivsyoxzdgwkbpu: HOLD / NOT CERTIFIED / NO-GO; unchanged
+
+These three records were applied after the 28-record source manifest dated 2026-11-09.
+They have no matching canonical executable SQL files or matching source commits located in
+picturecrayons-cyber/Media-Factory at the time of this inspection. They are therefore
+ORPHANED_APPLIED_SQL, not canonical repository migrations. Exact statement text and MD5
+fingerprints below are preserved for source recovery and schema review only.
+
+================================================================
+VERSION: 20261109124007
+NAME: staging_film_content_owner_leads_20261109
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 1478
+MD5: 78b4615b21c05847b77d62eeb3dda527
+BEGIN EXACT RECOVERED SQL
+
+create table if not exists bridge_private.film_content_owner_leads (
+  id uuid primary key default gen_random_uuid(),
+  organization_name text not null,
+  contact_name text,
+  contact_email text not null,
+  film_titles text[] not null default '{}',
+  catalogue_summary text,
+  lead_priority text not null default 'FOLLOW_UP'
+    check (lead_priority in ('A','B','FOLLOW_UP','RESEARCH')),
+  rights_status text not null default 'NOT_VERIFIED'
+    check (rights_status in ('NOT_VERIFIED','PARTIAL_EVIDENCE','VERIFIED','REJECTED','DISPUTED')),
+  contact_status text not null default 'NOT_CONTACTED'
+    check (contact_status in ('NOT_CONTACTED','FOLLOW_UP_REQUIRED','REPLIED','INVITATION_DRAFTED','INVITED','ONBOARDED','CLOSED')),
+  source_period text,
+  evidence_summary text,
+  next_action text,
+  source_mailbox text not null default 'abijithasokan@crayonspictures.com',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (contact_email)
+);
+
+alter table bridge_private.film_content_owner_leads enable row level security;
+revoke all on bridge_private.film_content_owner_leads from public, anon, authenticated;
+grant select, insert, update, delete on bridge_private.film_content_owner_leads to service_role;
+comment on table bridge_private.film_content_owner_leads is
+'Internal Crayons LOOP film acquisition prospect list. Rights are unverified until documentary legal review is completed. Not exposed to public Data API.';
+
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261109134919
+NAME: buyer_requirement_intelligence_private_20261109
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 4974
+MD5: d5d3289691f3cd847f2c8a1e799762f9
+BEGIN EXACT RECOVERED SQL
+
+create table if not exists bridge_private.buyer_accounts (
+  id uuid primary key default gen_random_uuid(),
+  organization_name text not null,
+  buyer_name text,
+  primary_contact_name text,
+  primary_contact_email text,
+  normalized_contact_email text,
+  account_status text not null default 'active'
+    check (account_status in ('active','paused','restricted','closed')),
+  source_mailbox text not null default 'hostinger',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (normalized_contact_email)
+);
+
+create table if not exists bridge_private.buyer_requirements (
+  id uuid primary key default gen_random_uuid(),
+  buyer_account_id uuid not null references bridge_private.buyer_accounts(id) on delete cascade,
+  requirement_key text not null unique,
+  requirement_status text not null default 'new'
+    check (requirement_status in ('new','active','paused','closed','needs_review')),
+  content_types text[] not null default '{}',
+  languages text[] not null default '{}',
+  genres text[] not null default '{}',
+  territories text[] not null default '{}',
+  rights_types text[] not null default '{}',
+  platforms text[] not null default '{}',
+  commercial_models text[] not null default '{}',
+  technical_specs jsonb not null default '{}'::jsonb,
+  exclusions text[] not null default '{}',
+  min_runtime_minutes integer,
+  max_runtime_minutes integer,
+  release_window text,
+  requirement_summary text not null,
+  confidence numeric(5,2) not null default 0 check (confidence between 0 and 100),
+  last_mail_at timestamptz,
+  last_reviewed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (min_runtime_minutes is null or min_runtime_minutes >= 0),
+  check (max_runtime_minutes is null or max_runtime_minutes >= 0),
+  check (min_runtime_minutes is null or max_runtime_minutes is null or min_runtime_minutes <= max_runtime_minutes)
+);
+
+create table if not exists bridge_private.buyer_requirement_evidence (
+  id uuid primary key default gen_random_uuid(),
+  buyer_requirement_id uuid not null references bridge_private.buyer_requirements(id) on delete cascade,
+  source_mailbox text not null default 'hostinger',
+  source_folder text not null default 'INBOX',
+  source_uid text not null,
+  thread_id text,
+  subject text,
+  sender text,
+  received_at timestamptz,
+  evidence_kind text not null default 'requirement',
+  extracted_excerpt text,
+  extraction_notes text,
+  created_at timestamptz not null default now(),
+  unique (source_mailbox, source_folder, source_uid, evidence_kind)
+);
+
+create table if not exists bridge_private.buyer_title_matches (
+  id uuid primary key default gen_random_uuid(),
+  buyer_requirement_id uuid not null references bridge_private.buyer_requirements(id) on delete cascade,
+  title_id text not null references public.bridge_titles(id) on delete cascade,
+  match_status text not null default 'needs_review'
+    check (match_status in ('potential','partial','no_match','rights_blocked','technical_blocked','commercial_mismatch','needs_review')),
+  fit_score numeric(5,2) not null default 0 check (fit_score between 0 and 100),
+  matched_dimensions jsonb not null default '{}'::jsonb,
+  reasons jsonb not null default '[]'::jsonb,
+  blockers jsonb not null default '[]'::jsonb,
+  computed_at timestamptz not null default now(),
+  reviewed_by text,
+  reviewed_at timestamptz,
+  unique (buyer_requirement_id, title_id)
+);
+
+create index if not exists buyer_requirements_status_idx
+  on bridge_private.buyer_requirements (requirement_status, updated_at desc);
+create index if not exists buyer_evidence_requirement_idx
+  on bridge_private.buyer_requirement_evidence (buyer_requirement_id, received_at desc);
+create index if not exists buyer_matches_requirement_idx
+  on bridge_private.buyer_title_matches (buyer_requirement_id, match_status, fit_score desc);
+
+alter table bridge_private.buyer_accounts enable row level security;
+alter table bridge_private.buyer_requirements enable row level security;
+alter table bridge_private.buyer_requirement_evidence enable row level security;
+alter table bridge_private.buyer_title_matches enable row level security;
+
+revoke all on bridge_private.buyer_accounts from public, anon, authenticated;
+revoke all on bridge_private.buyer_requirements from public, anon, authenticated;
+revoke all on bridge_private.buyer_requirement_evidence from public, anon, authenticated;
+revoke all on bridge_private.buyer_title_matches from public, anon, authenticated;
+
+grant usage on schema bridge_private to service_role;
+grant select, insert, update, delete on bridge_private.buyer_accounts to service_role;
+grant select, insert, update, delete on bridge_private.buyer_requirements to service_role;
+grant select, insert, update, delete on bridge_private.buyer_requirement_evidence to service_role;
+grant select, insert, update, delete on bridge_private.buyer_title_matches to service_role;
+
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261109135114
+NAME: buyer_requirement_foreign_key_indexes_20261109
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 221
+MD5: 1fe87ff1c6ce961d2053cb6d1d0f0a07
+BEGIN EXACT RECOVERED SQL
+
+create index if not exists buyer_requirements_account_idx on bridge_private.buyer_requirements (buyer_account_id);
+create index if not exists buyer_title_matches_title_idx on bridge_private.buyer_title_matches (title_id);
+
+END EXACT RECOVERED SQL
+
+================================================================
+END OF ADDENDUM

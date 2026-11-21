@@ -1,0 +1,1015 @@
+STAGING DB — RECOVERED APPLIED SQL EVIDENCE ARCHIVE
+NON-EXECUTABLE TEXT ARTIFACT — DO NOT RUN OR RENAME TO .sql
+
+Target: STAGING DB jbymleftneggcgutlcqu (Crayons Projects - Testing DB)
+Access: READ-ONLY
+Action: Preserve exact statement text retrieved from supabase_migrations.schema_migrations
+Risk: Low / read-only; no database writes
+PRODUCTION DB mlmgugivsyoxzdgwkbpu: HOLD / NOT CERTIFIED / NO-GO; unchanged
+
+WARNING: This .txt file is an evidence archive only. It is deliberately outside supabase/migrations and must never be treated as an executable migration bundle.
+
+================================================================
+VERSION: 20261029014139
+NAME: test_bridge_workflow_schema_parity_20261029
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 5667
+BEGIN EXACT RECOVERED SQL
+-- Test-only schema parity, based on migrations/0010_bridge_prd_phase1.sql.
+-- This adds missing workflow tables to the isolated Testing DB; it does not modify Production.
+alter table public.bridge_titles
+  add column if not exists content_type text not null default 'FEATURE',
+  add column if not exists original_title text,
+  add column if not exists original_language text,
+  add column if not exists country_of_origin text,
+  add column if not exists release_date date,
+  add column if not exists long_synopsis text,
+  add column if not exists genres jsonb not null default '[]'::jsonb,
+  add column if not exists credits jsonb not null default '[]'::jsonb,
+  add column if not exists keywords jsonb not null default '[]'::jsonb,
+  add column if not exists external_ids jsonb not null default '{}'::jsonb;
+
+create table if not exists public.bridge_asset_versions (
+  id uuid primary key default gen_random_uuid(),
+  title_id text not null references public.bridge_titles(id) on delete cascade,
+  asset_group text not null check (asset_group in ('VIDEO','AUDIO','SUBTITLE','ACCESSIBILITY','ARTWORK','DOCUMENT','PROMO')),
+  asset_type text not null,
+  version integer not null default 1 check (version > 0),
+  language text,
+  channel_layout text,
+  codec text,
+  reference_asset_id uuid references public.bridge_asset_versions(id),
+  s3_key text not null,
+  checksum_sha256 text,
+  byte_size bigint,
+  technical_metadata jsonb not null default '{}'::jsonb,
+  processing_state text not null default 'PROCESSING' check (processing_state in ('PROCESSING','PASSED','WARNING','ACTION_REQUIRED','FAILED')),
+  created_by text not null,
+  created_at timestamptz not null default now(),
+  unique (title_id, asset_type, version, language)
+);
+
+create index if not exists bridge_asset_versions_title_idx on public.bridge_asset_versions(title_id);
+
+create table if not exists public.bridge_qc_cases (
+  id uuid primary key default gen_random_uuid(),
+  title_id text not null references public.bridge_titles(id) on delete cascade,
+  asset_version_id uuid references public.bridge_asset_versions(id) on delete set null,
+  status text not null default 'PENDING' check (status in ('PENDING','IN_REVIEW','PASSED','WARNING','ACTION_REQUIRED','FAILED')),
+  automated_findings jsonb not null default '[]'::jsonb,
+  reviewer_findings jsonb not null default '[]'::jsonb,
+  reviewed_by text,
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists bridge_qc_cases_title_idx on public.bridge_qc_cases(title_id);
+
+create table if not exists public.bridge_legal_cases (
+  id uuid primary key default gen_random_uuid(),
+  title_id text not null references public.bridge_titles(id) on delete cascade,
+  status text not null default 'PENDING' check (status in ('PENDING','IN_REVIEW','APPROVED','ACTION_REQUIRED','REJECTED')),
+  classification text,
+  evidence jsonb not null default '[]'::jsonb,
+  restrictions jsonb not null default '[]'::jsonb,
+  reviewed_by text,
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists bridge_legal_cases_title_idx on public.bridge_legal_cases(title_id);
+
+create table if not exists public.bridge_rights_grants (
+  id uuid primary key default gen_random_uuid(),
+  title_id text not null references public.bridge_titles(id) on delete cascade,
+  grant_type text not null default 'DISTRIBUTION',
+  territories jsonb not null default '[]'::jsonb,
+  languages jsonb not null default '[]'::jsonb,
+  media jsonb not null default '[]'::jsonb,
+  window_start timestamptz,
+  window_end timestamptz,
+  exclusivity text not null default 'NON_EXCLUSIVE' check (exclusivity in ('EXCLUSIVE','NON_EXCLUSIVE')),
+  holdbacks jsonb not null default '[]'::jsonb,
+  sublicensing_allowed boolean not null default false,
+  promotional_rights boolean not null default false,
+  restrictions jsonb not null default '[]'::jsonb,
+  evidence jsonb not null default '[]'::jsonb,
+  status text not null default 'DRAFT' check (status in ('DRAFT','VALID','EXPIRED','REVOKED')),
+  created_by text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists bridge_rights_grants_title_idx on public.bridge_rights_grants(title_id);
+
+create table if not exists public.bridge_destination_packages (
+  id uuid primary key default gen_random_uuid(),
+  title_id text not null references public.bridge_titles(id) on delete cascade,
+  destination text not null,
+  package_version integer not null default 1 check (package_version > 0),
+  rights_grant_id uuid references public.bridge_rights_grants(id) on delete restrict,
+  qc_case_id uuid references public.bridge_qc_cases(id) on delete restrict,
+  legal_case_id uuid references public.bridge_legal_cases(id) on delete restrict,
+  asset_version_ids jsonb not null default '[]'::jsonb,
+  consumer_metadata jsonb not null default '{}'::jsonb,
+  monetization jsonb not null default '{}'::jsonb,
+  readiness_state text not null default 'HOLD' check (readiness_state in ('HOLD','READY','AUTHORIZED','DELIVERED','REVOKED')),
+  authorized_by text,
+  authorized_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (title_id, destination, package_version)
+);
+create index if not exists bridge_destination_packages_title_idx on public.bridge_destination_packages(title_id);
+
+alter table public.bridge_asset_versions enable row level security;
+alter table public.bridge_qc_cases enable row level security;
+alter table public.bridge_legal_cases enable row level security;
+alter table public.bridge_rights_grants enable row level security;
+alter table public.bridge_destination_packages enable row level security;
+
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261029014203
+NAME: test_censor_certificate_metadata_versions_20261029
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 1746
+BEGIN EXACT RECOVERED SQL
+-- Test-only application of the draft certificate metadata migration.
+-- Never run this migration against Production until separate Preview certification is complete.
+alter table public.bridge_assets
+  add column if not exists original_filename text,
+  add column if not exists sha256 text,
+  add column if not exists replacement_requested_asset_id text references public.bridge_assets(id),
+  add column if not exists supersedes_asset_id text references public.bridge_assets(id),
+  add column if not exists certificate_duplicate_of_asset_id text references public.bridge_assets(id),
+  add column if not exists asset_version_id uuid references public.bridge_asset_versions(id);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'bridge_assets_sha256_format_chk'
+      AND conrelid = 'public.bridge_assets'::regclass
+  ) THEN
+    ALTER TABLE public.bridge_assets
+      ADD CONSTRAINT bridge_assets_sha256_format_chk
+      CHECK (sha256 IS NULL OR sha256 ~ '^[0-9a-f]{64}$');
+  END IF;
+END $$;
+
+create index if not exists bridge_assets_certificate_fingerprint_idx
+  on public.bridge_assets (title_id, kind, sha256)
+  where kind = 'censor_certificate' and sha256 is not null;
+
+create index if not exists bridge_assets_certificate_versions_idx
+  on public.bridge_assets (title_id, created_at desc)
+  where kind = 'censor_certificate';
+
+create unique index if not exists bridge_assets_certificate_supersedes_uidx
+  on public.bridge_assets (supersedes_asset_id)
+  where kind = 'censor_certificate' and supersedes_asset_id is not null;
+
+create index if not exists bridge_assets_certificate_duplicate_idx
+  on public.bridge_assets (certificate_duplicate_of_asset_id)
+  where certificate_duplicate_of_asset_id is not null;
+
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261030133503
+NAME: testing_security_hardening_20261030
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 460
+BEGIN EXACT RECOVERED SQL
+
+begin;
+
+alter table public.bridge_title_duplicate_reviews enable row level security;
+alter table public.bridge_title_reconciliation_snapshots enable row level security;
+alter table public.bridge_title_reconciliation_events enable row level security;
+
+revoke all on function public.bridge_duplicate_title_loop_release_allowed(text) from public;
+revoke all on function public.bridge_duplicate_title_loop_release_allowed(text) from anon, authenticated;
+
+commit;
+
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261104203045
+NAME: bridge_staging_data_api_lockdown_20261105
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 1023
+BEGIN EXACT RECOVERED SQL
+-- Crayons Bridge — server-only Supabase Data API boundary.
+-- STAGING project jbymleftneggcgutlcqu ONLY. Production is explicitly out of scope.
+do $$
+begin
+  if current_user <> 'postgres' then
+    raise exception 'Refusing Bridge Data API lockdown: migration must run as postgres owner';
+  end if;
+  if exists (
+    select 1 from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind in ('r','p','S')
+      and left(c.relname, 7) <> 'bridge_'
+  ) then
+    raise exception 'Refusing Bridge Data API lockdown: non-Bridge public relation found';
+  end if;
+end
+$$;
+revoke all privileges on all tables in schema public from anon, authenticated;
+revoke all privileges on all sequences in schema public from anon, authenticated;
+alter default privileges for role postgres in schema public
+  revoke all privileges on tables from anon, authenticated;
+alter default privileges for role postgres in schema public
+  revoke all privileges on sequences from anon, authenticated;
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261104203415
+NAME: bridge_staging_function_execute_defaults_20261105
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 282
+BEGIN EXACT RECOVERED SQL
+do $$
+begin
+  if current_user <> 'postgres' then
+    raise exception 'Refusing Bridge function ACL hardening: migration must run as postgres owner';
+  end if;
+end
+$$;
+alter default privileges for role postgres in schema public
+  revoke execute on functions from anon, authenticated;
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261105084111
+NAME: bridge_staging_identity_links_reconciliation_20261105
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 473
+BEGIN EXACT RECOVERED SQL
+CREATE TABLE public.bridge_loop_identity_links (
+  bridge_user_id text PRIMARY KEY
+    REFERENCES public.bridge_profiles(user_id)
+    ON DELETE RESTRICT,
+  auth_user_id uuid NOT NULL UNIQUE
+    REFERENCES auth.users(id)
+    ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.bridge_loop_identity_links
+  ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL PRIVILEGES
+  ON TABLE public.bridge_loop_identity_links
+  FROM PUBLIC, anon, authenticated;
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261106025823
+NAME: bridge_testing_workspace_rls_20261106
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 9314
+BEGIN EXACT RECOVERED SQL
+create schema if not exists bridge_private;
+revoke all on schema bridge_private from public, anon;
+grant usage on schema bridge_private to authenticated;
+
+create or replace function bridge_private.current_user_id()
+returns text language sql stable security definer
+set search_path = pg_catalog, public
+as $$
+  select coalesce(
+    (select l.bridge_user_id from public.bridge_loop_identity_links l
+      where l.auth_user_id = (select auth.uid()) limit 1),
+    (select p.user_id from public.bridge_profiles p
+      where p.user_id = (select auth.uid())::text limit 1)
+  );
+$$;
+
+create or replace function bridge_private.current_internal_role()
+returns text language sql stable security definer
+set search_path = pg_catalog, public
+as $$
+  select p.internal_role from public.bridge_profiles p
+  where p.user_id = bridge_private.current_user_id()
+    and p.email_verified = true limit 1;
+$$;
+
+create or replace function bridge_private.is_staff()
+returns boolean language sql stable security definer
+set search_path = pg_catalog, public
+as $$
+  select coalesce(bridge_private.current_internal_role() in
+    ('admin','qc_reviewer','legal_reviewer','finance','viewer'), false);
+$$;
+
+create or replace function bridge_private.is_admin()
+returns boolean language sql stable security definer
+set search_path = pg_catalog, public
+as $$
+  select coalesce(bridge_private.current_internal_role() = 'admin', false);
+$$;
+
+create or replace function bridge_private.can_manage_title(p_title_id text)
+returns boolean language sql stable security definer
+set search_path = pg_catalog, public
+as $$
+  select exists (
+    select 1 from public.bridge_titles t
+    where t.id = p_title_id and (
+      t.owner_user_id = bridge_private.current_user_id()
+      or bridge_private.is_admin()
+      or (
+        t.owner_account_type = 'studio'
+        and t.owner_organization_id is not null
+        and exists (
+          select 1 from public.bridge_organization_memberships m
+          where m.organization_id = t.owner_organization_id
+            and m.user_id = bridge_private.current_user_id()
+            and m.status = 'active'
+        )
+      )
+    )
+  );
+$$;
+
+create or replace function bridge_private.can_read_title(p_title_id text)
+returns boolean language sql stable security definer
+set search_path = pg_catalog, public
+as $$
+  select exists (
+    select 1 from public.bridge_titles t
+    where t.id = p_title_id and (
+      bridge_private.can_manage_title(t.id)
+      or bridge_private.is_staff()
+      or exists (
+        select 1 from public.bridge_buyer_title_access a
+        where a.title_id = t.id
+          and a.buyer_user_id = bridge_private.current_user_id()
+          and a.revoked_at is null
+          and (a.expires_at is null or a.expires_at > now())
+          and public.bridge_title_buyer_visibility(t.id)
+      )
+    )
+  );
+$$;
+
+create or replace function bridge_private.can_read_workspace_title(p_title_id text)
+returns boolean language sql stable security definer
+set search_path = pg_catalog, public
+as $$
+  select bridge_private.can_manage_title(p_title_id) or bridge_private.is_staff();
+$$;
+
+revoke all on all functions in schema bridge_private from public, anon, authenticated;
+grant execute on function bridge_private.current_user_id() to authenticated;
+grant execute on function bridge_private.current_internal_role() to authenticated;
+grant execute on function bridge_private.is_staff() to authenticated;
+grant execute on function bridge_private.is_admin() to authenticated;
+grant execute on function bridge_private.can_manage_title(text) to authenticated;
+grant execute on function bridge_private.can_read_title(text) to authenticated;
+grant execute on function bridge_private.can_read_workspace_title(text) to authenticated;
+
+drop policy if exists bridge_profiles_self_select on public.bridge_profiles;
+create policy bridge_profiles_self_select on public.bridge_profiles
+for select to authenticated
+using (user_id = bridge_private.current_user_id() or bridge_private.is_admin());
+
+drop policy if exists bridge_organizations_member_select on public.bridge_organizations;
+create policy bridge_organizations_member_select on public.bridge_organizations
+for select to authenticated
+using (
+  bridge_private.is_admin()
+  or exists (
+    select 1 from public.bridge_organization_memberships m
+    where m.organization_id = bridge_organizations.id
+      and m.user_id = bridge_private.current_user_id()
+      and m.status = 'active'
+  )
+);
+
+drop policy if exists bridge_organization_memberships_self_select on public.bridge_organization_memberships;
+create policy bridge_organization_memberships_self_select on public.bridge_organization_memberships
+for select to authenticated
+using (user_id = bridge_private.current_user_id() or bridge_private.is_admin());
+
+drop policy if exists bridge_titles_authorized_select on public.bridge_titles;
+create policy bridge_titles_authorized_select on public.bridge_titles
+for select to authenticated
+using (bridge_private.can_read_title(id));
+
+drop policy if exists bridge_titles_owner_insert on public.bridge_titles;
+create policy bridge_titles_owner_insert on public.bridge_titles
+for insert to authenticated
+with check (
+  owner_user_id = bridge_private.current_user_id()
+  and status = 'DRAFT'
+  and exists (
+    select 1 from public.bridge_profiles p
+    where p.user_id = bridge_private.current_user_id()
+      and p.email_verified = true
+      and p.account_type = bridge_titles.owner_account_type
+      and p.account_type in ('independent_creator','studio')
+  )
+);
+
+drop policy if exists bridge_titles_owner_update on public.bridge_titles;
+create policy bridge_titles_owner_update on public.bridge_titles
+for update to authenticated
+using (bridge_private.can_manage_title(id))
+with check (
+  bridge_private.can_manage_title(id)
+  and (owner_user_id = bridge_private.current_user_id() or bridge_private.is_admin())
+);
+
+drop policy if exists bridge_assets_workspace_select on public.bridge_assets;
+create policy bridge_assets_workspace_select on public.bridge_assets
+for select to authenticated
+using (bridge_private.can_read_workspace_title(title_id));
+
+drop policy if exists bridge_assets_owner_insert on public.bridge_assets;
+create policy bridge_assets_owner_insert on public.bridge_assets
+for insert to authenticated
+with check (created_by = bridge_private.current_user_id() and bridge_private.can_manage_title(title_id));
+
+drop policy if exists bridge_asset_versions_workspace_select on public.bridge_asset_versions;
+create policy bridge_asset_versions_workspace_select on public.bridge_asset_versions
+for select to authenticated
+using (bridge_private.can_read_workspace_title(title_id));
+
+drop policy if exists bridge_asset_versions_owner_insert on public.bridge_asset_versions;
+create policy bridge_asset_versions_owner_insert on public.bridge_asset_versions
+for insert to authenticated
+with check (created_by = bridge_private.current_user_id() and bridge_private.can_manage_title(title_id));
+
+drop policy if exists bridge_title_events_workspace_select on public.bridge_title_events;
+create policy bridge_title_events_workspace_select on public.bridge_title_events
+for select to authenticated
+using (bridge_private.can_read_workspace_title(title_id));
+
+drop policy if exists bridge_title_events_owner_insert on public.bridge_title_events;
+create policy bridge_title_events_owner_insert on public.bridge_title_events
+for insert to authenticated
+with check (actor_user_id = bridge_private.current_user_id() and bridge_private.can_manage_title(title_id));
+
+drop policy if exists bridge_title_submission_intake_workspace_select on public.bridge_title_submission_intake;
+create policy bridge_title_submission_intake_workspace_select on public.bridge_title_submission_intake
+for select to authenticated
+using (bridge_private.can_read_workspace_title(title_id));
+
+drop policy if exists bridge_title_submission_intake_owner_insert on public.bridge_title_submission_intake;
+create policy bridge_title_submission_intake_owner_insert on public.bridge_title_submission_intake
+for insert to authenticated
+with check (bridge_private.can_manage_title(title_id));
+
+drop policy if exists bridge_title_submission_intake_owner_update on public.bridge_title_submission_intake;
+create policy bridge_title_submission_intake_owner_update on public.bridge_title_submission_intake
+for update to authenticated
+using (bridge_private.can_manage_title(title_id))
+with check (bridge_private.can_manage_title(title_id));
+
+drop policy if exists bridge_story_concepts_workspace_select on public.bridge_story_concept_submissions;
+create policy bridge_story_concepts_workspace_select on public.bridge_story_concept_submissions
+for select to authenticated
+using (bridge_private.can_read_workspace_title(title_id));
+
+drop policy if exists bridge_story_concepts_owner_insert on public.bridge_story_concept_submissions;
+create policy bridge_story_concepts_owner_insert on public.bridge_story_concept_submissions
+for insert to authenticated
+with check (bridge_private.can_manage_title(title_id));
+
+drop policy if exists bridge_buyer_title_access_self_select on public.bridge_buyer_title_access;
+create policy bridge_buyer_title_access_self_select on public.bridge_buyer_title_access
+for select to authenticated
+using (buyer_user_id = bridge_private.current_user_id() or bridge_private.is_admin());
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261106025842
+NAME: bridge_asset_storage_provenance_0022_20261106
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 982
+BEGIN EXACT RECOVERED SQL
+-- Record the configured object-storage target on each Bridge asset.
+-- The existing s3_key column remains the canonical object path/key.
+alter table public.bridge_assets
+  add column if not exists storage_provider text,
+  add column if not exists storage_bucket text,
+  add column if not exists storage_namespace text,
+  add column if not exists storage_region text,
+  add column if not exists storage_endpoint text;
+
+alter table public.bridge_assets
+  drop constraint if exists bridge_assets_storage_provider_check;
+
+alter table public.bridge_assets
+  add constraint bridge_assets_storage_provider_check
+  check (storage_provider is null or storage_provider in ('oci', 'aws_s3', 'cloudflare_r2'));
+
+create index if not exists bridge_assets_storage_provider_idx
+  on public.bridge_assets(storage_provider)
+  where storage_provider is not null;
+create index if not exists bridge_assets_storage_bucket_idx
+  on public.bridge_assets(storage_bucket)
+  where storage_bucket is not null;
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261106031604
+NAME: bridge_titles_no_browser_update_policy_20261106
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 73
+BEGIN EXACT RECOVERED SQL
+drop policy if exists bridge_titles_owner_update on public.bridge_titles;
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261106031723
+NAME: bridge_server_authoritative_uploads_0023_20261106
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 6770
+BEGIN EXACT RECOVERED SQL
+-- Server-authoritative multipart manifests and immutable storage provenance.
+-- Apply only after staging isolation and RLS policy review. This migration is additive.
+begin;
+
+create schema if not exists bridge_private;
+
+alter table public.bridge_assets
+  drop constraint if exists bridge_assets_kind_chk;
+alter table public.bridge_assets
+  add constraint bridge_assets_kind_chk check (kind in ('poster','poster_vertical','poster_horizontal','thumbnail','screener','master','subtitle','technical','censor_certificate'));
+
+alter table public.bridge_assets
+  add column if not exists storage_provider text,
+  add column if not exists storage_bucket text,
+  add column if not exists storage_namespace text,
+  add column if not exists storage_region text,
+  add column if not exists storage_endpoint text,
+  add column if not exists checksum_sha256 text,
+  add column if not exists source_object_key text,
+  add column if not exists verified_object_key text,
+  add column if not exists object_version_id text,
+  add column if not exists object_generation text,
+  add column if not exists storage_verified_at timestamptz;
+
+update public.bridge_assets
+set source_object_key = coalesce(source_object_key, s3_key)
+where source_object_key is null;
+
+alter table public.bridge_assets
+  add constraint bridge_assets_storage_provider_chk
+    check (storage_provider is null or storage_provider in ('oci','aws_s3','cloudflare_r2','supabase_storage')),
+  add constraint bridge_assets_checksum_sha256_chk
+    check (checksum_sha256 is null or checksum_sha256 ~ '^[a-f0-9]{64}$'),
+  add constraint bridge_assets_verified_pointer_chk
+    check (
+      (verified_object_key is null and storage_verified_at is null)
+      or (verified_object_key is not null and storage_verified_at is not null
+          and checksum_sha256 is not null and storage_provider is not null
+          and storage_bucket is not null)
+    );
+
+create index if not exists bridge_assets_verified_title_idx
+  on public.bridge_assets (title_id, storage_verified_at desc)
+  where verified_object_key is not null;
+create index if not exists bridge_assets_checksum_idx
+  on public.bridge_assets (checksum_sha256)
+  where checksum_sha256 is not null;
+
+create or replace function bridge_private.prevent_verified_asset_pointer_mutation()
+returns trigger
+language plpgsql
+set search_path = pg_catalog
+as $bridge_function$
+begin
+  if old.verified_object_key is not null and (
+    new.verified_object_key is distinct from old.verified_object_key
+    or new.checksum_sha256 is distinct from old.checksum_sha256
+    or new.storage_provider is distinct from old.storage_provider
+    or new.storage_bucket is distinct from old.storage_bucket
+    or new.storage_namespace is distinct from old.storage_namespace
+    or new.storage_region is distinct from old.storage_region
+    or new.storage_endpoint is distinct from old.storage_endpoint
+    or new.object_version_id is distinct from old.object_version_id
+    or new.object_generation is distinct from old.object_generation
+    or new.storage_verified_at is distinct from old.storage_verified_at
+  ) then
+    raise exception 'Verified storage pointer and provenance are immutable';
+  end if;
+  return new;
+end;
+$bridge_function$;
+
+drop trigger if exists bridge_assets_verified_pointer_immutable on public.bridge_assets;
+create trigger bridge_assets_verified_pointer_immutable
+before update on public.bridge_assets
+for each row execute function bridge_private.prevent_verified_asset_pointer_mutation();
+
+create table if not exists bridge_private.upload_sessions (
+  id text primary key,
+  asset_id text not null references public.bridge_assets(id) on delete cascade,
+  actor_user_id text not null,
+  actor_is_internal boolean not null default false,
+  provider text not null check (provider in ('oci','aws_s3','cloudflare_r2')),
+  bucket text not null,
+  namespace text,
+  region text not null,
+  endpoint text not null,
+  source_object_key text not null,
+  provider_upload_id text not null,
+  part_base_url text not null,
+  expected_size bigint not null check (expected_size > 0),
+  part_size integer not null check (part_size between 10485760 and 67108864),
+  state text not null default 'initiated'
+    check (state in ('initiated','uploading','assembling','verification_pending','verified','failed','aborted','expired')),
+  idempotency_key text not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (asset_id, idempotency_key),
+  unique (provider, bucket, provider_upload_id)
+);
+
+create index if not exists bridge_upload_sessions_state_expiry_idx
+  on bridge_private.upload_sessions (state, expires_at);
+
+create table if not exists bridge_private.upload_parts (
+  session_id text not null references bridge_private.upload_sessions(id) on delete cascade,
+  part_number integer not null check (part_number > 0),
+  byte_start bigint not null check (byte_start >= 0),
+  byte_end bigint not null check (byte_end > byte_start),
+  byte_length bigint generated always as (byte_end - byte_start) stored,
+  etag text not null check (length(etag) between 1 and 512),
+  provider_checksum text,
+  recorded_at timestamptz not null default now(),
+  primary key (session_id, part_number)
+);
+
+create table if not exists bridge_private.asset_verification_jobs (
+  id bigserial primary key,
+  asset_id text not null references public.bridge_assets(id) on delete cascade,
+  session_id text not null references bridge_private.upload_sessions(id) on delete cascade,
+  status text not null default 'queued' check (status in ('queued','running','succeeded','failed')),
+  attempts integer not null default 0 check (attempts >= 0),
+  available_at timestamptz not null default now(),
+  locked_at timestamptz,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (session_id)
+);
+
+create index if not exists bridge_asset_verification_jobs_claim_idx
+  on bridge_private.asset_verification_jobs (available_at, created_at)
+  where status in ('queued','failed');
+
+alter table bridge_private.upload_sessions enable row level security;
+alter table bridge_private.upload_sessions force row level security;
+alter table bridge_private.upload_parts enable row level security;
+alter table bridge_private.upload_parts force row level security;
+alter table bridge_private.asset_verification_jobs enable row level security;
+alter table bridge_private.asset_verification_jobs force row level security;
+
+revoke all on schema bridge_private from public, anon, authenticated;
+revoke all on all tables in schema bridge_private from public, anon, authenticated;
+revoke all on all sequences in schema bridge_private from public, anon, authenticated;
+
+commit;
+
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261106032656
+NAME: bridge_workspace_verified_identity_guard_20261106
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 1003
+BEGIN EXACT RECOVERED SQL
+create or replace function bridge_private.can_manage_title(p_title_id text)
+returns boolean language sql stable security definer
+set search_path = pg_catalog, public
+as $$
+  select exists (
+    select 1 from public.bridge_titles t
+    where t.id = p_title_id and (
+      bridge_private.is_admin()
+      or exists (
+        select 1 from public.bridge_profiles p
+        where p.user_id = bridge_private.current_user_id()
+          and p.email_verified = true
+          and (
+            (t.owner_user_id = p.user_id and p.account_type in ('independent_creator','studio'))
+            or (
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id is not null
+              and exists (
+                select 1 from public.bridge_organization_memberships m
+                where m.organization_id = t.owner_organization_id
+                  and m.user_id = p.user_id
+                  and m.status = 'active'
+              )
+            )
+          )
+      )
+    )
+  );
+$$;
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261106051631
+NAME: story_concept_atomic_idempotency_testing_20261106
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 1485
+BEGIN EXACT RECOVERED SQL
+-- Additive Story Concept payment binding and durable idempotency for isolated Testing DB.
+ALTER TABLE public.bridge_titles
+  ADD COLUMN IF NOT EXISTS submission_type text
+  CHECK (submission_type IN ('finished_film', 'story_concept'))
+  DEFAULT 'finished_film';
+
+ALTER TABLE public.bridge_story_concept_submissions
+  ADD COLUMN IF NOT EXISTS payment_id text REFERENCES public.bridge_payments(id) ON DELETE RESTRICT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS bridge_story_concept_payment_unique_idx
+  ON public.bridge_story_concept_submissions (payment_id)
+  WHERE payment_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS public.bridge_story_concept_idempotency (
+  actor_user_id text NOT NULL,
+  idempotency_key uuid NOT NULL,
+  request_hash text NOT NULL,
+  title_id text NOT NULL REFERENCES public.bridge_titles(id) ON DELETE CASCADE,
+  concept_id uuid NOT NULL REFERENCES public.bridge_story_concept_submissions(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (actor_user_id, idempotency_key),
+  UNIQUE (concept_id)
+);
+
+CREATE INDEX IF NOT EXISTS bridge_story_concept_idempotency_title_idx
+  ON public.bridge_story_concept_idempotency (title_id);
+
+ALTER TABLE public.bridge_story_concept_idempotency ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.bridge_story_concept_idempotency FROM anon, authenticated;
+REVOKE ALL ON public.bridge_story_concept_submissions FROM anon, authenticated;
+REVOKE ALL ON public.bridge_buyer_interest FROM anon, authenticated;
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261106063206
+NAME: razorpay_webhook_processing_lease_schema
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 838
+BEGIN EXACT RECOVERED SQL
+ALTER TABLE public.bridge_webhook_events
+  ADD COLUMN IF NOT EXISTS processing_started_at timestamptz,
+  ADD COLUMN IF NOT EXISTS processing_token text,
+  ADD COLUMN IF NOT EXISTS attempts integer NOT NULL DEFAULT 0;
+
+COMMENT ON COLUMN public.bridge_webhook_events.processing_started_at IS
+  'Start time of the current webhook processing lease; stale leases may be reclaimed.';
+COMMENT ON COLUMN public.bridge_webhook_events.processing_token IS
+  'Random token fencing completion/failure updates to the current webhook lease owner.';
+COMMENT ON COLUMN public.bridge_webhook_events.attempts IS
+  'Number of processing lease claims attempted for this webhook event.';
+
+CREATE UNIQUE INDEX IF NOT EXISTS bridge_payments_provider_payment_id_unique_idx
+  ON public.bridge_payments (provider_payment_id)
+  WHERE provider_payment_id IS NOT NULL;
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261106083338
+NAME: revenue_distribution_intelligence_20261106
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 3783
+BEGIN EXACT RECOVERED SQL
+-- Revenue & Distribution Intelligence
+-- Additive, read-model foundation for Studio and Creator revenue visibility.
+-- No existing title, upload, payment, or service ledger rows are modified.
+
+create table if not exists public.bridge_channel_statement_lines (
+  id uuid primary key default gen_random_uuid(),
+  title_id text not null references public.bridge_titles(id) on delete restrict,
+  channel_code text not null check (channel_code ~ '^[a-z0-9][a-z0-9_-]{1,63}$'),
+  channel_name text not null,
+  period_start date not null,
+  period_end date not null,
+  currency text not null default 'INR' check (currency ~ '^[A-Z]{3}$'),
+  estimate_amount_minor bigint check (estimate_amount_minor is null or estimate_amount_minor >= 0),
+  reported_gross_minor bigint check (reported_gross_minor is null or reported_gross_minor >= 0),
+  adjustments_minor bigint not null default 0,
+  net_amount_minor bigint check (net_amount_minor is null or net_amount_minor >= 0),
+  statement_status text not null default 'ESTIMATED'
+    check (statement_status in ('ESTIMATED','REPORTED','RECONCILED','DISPUTED')),
+  statement_reference text,
+  source_hash text unique,
+  received_at timestamptz,
+  reconciled_at timestamptz,
+  created_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint bridge_channel_statement_period_chk check (period_end >= period_start),
+  constraint bridge_channel_statement_amounts_chk check (
+    net_amount_minor is null
+    or reported_gross_minor is null
+    or net_amount_minor = greatest(0, reported_gross_minor + adjustments_minor)
+  )
+);
+
+create index if not exists bridge_channel_statement_title_period_idx
+  on public.bridge_channel_statement_lines(title_id, period_end desc);
+create index if not exists bridge_channel_statement_channel_period_idx
+  on public.bridge_channel_statement_lines(channel_code, period_end desc);
+create index if not exists bridge_channel_statement_status_idx
+  on public.bridge_channel_statement_lines(statement_status, period_end desc);
+
+create table if not exists public.bridge_channel_payment_schedule (
+  id uuid primary key default gen_random_uuid(),
+  statement_line_id uuid not null unique
+    references public.bridge_channel_statement_lines(id) on delete restrict,
+  estimate_available_at date,
+  payment_due_at date,
+  payment_posted_at timestamptz,
+  paid_amount_minor bigint check (paid_amount_minor is null or paid_amount_minor >= 0),
+  payment_reference text,
+  payment_status text not null default 'SCHEDULED'
+    check (payment_status in ('SCHEDULED','PAYMENT_PENDING','PAID','OVERDUE','DISPUTED')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint bridge_channel_payment_dates_chk check (
+    payment_due_at is null or estimate_available_at is null or payment_due_at >= estimate_available_at
+  )
+);
+
+create index if not exists bridge_channel_payment_due_idx
+  on public.bridge_channel_payment_schedule(payment_status, payment_due_at);
+
+alter table public.bridge_channel_statement_lines enable row level security;
+alter table public.bridge_channel_payment_schedule enable row level security;
+
+-- Access is through verified, server-side Bridge functions only. Do not expose
+-- these financial records through the Supabase Data API.
+revoke all on public.bridge_channel_statement_lines from public, anon, authenticated;
+revoke all on public.bridge_channel_payment_schedule from public, anon, authenticated;
+
+comment on table public.bridge_channel_statement_lines is
+  'Channel-reported title-level estimates and statement amounts. Estimates are not payments.';
+comment on table public.bridge_channel_payment_schedule is
+  'Expected and confirmed channel payment dates linked to a statement line.';
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261106083617
+NAME: 20261106_story_concept_buyer_mandates
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 3260
+BEGIN EXACT RECOVERED SQL
+-- Authorized target: Crayons Projects - Testing DB only. Never apply to Production.
+-- Additive Story Concept Buyer / Investor mandate grants.
+-- Existing Testing schema uses UUID concept IDs and UUID organization IDs.
+alter table public.bridge_profiles
+  drop constraint if exists bridge_profiles_account_type_chk;
+alter table public.bridge_profiles
+  add constraint bridge_profiles_account_type_chk
+  check (account_type in ('independent_creator', 'studio', 'buyer', 'investor'));
+
+-- Private OCI object keys are server-only references.
+alter table public.bridge_story_concept_submissions
+  add column if not exists treatment_object_key text,
+  add column if not exists screenplay_object_key text,
+  add column if not exists treatment_pending_object_key text,
+  add column if not exists screenplay_pending_object_key text,
+  add column if not exists reviewed_by text,
+  add column if not exists reviewed_at timestamptz,
+  add column if not exists fee_certified_at timestamptz;
+
+-- Preserve legacy curation states while enabling the Story Concept workflow.
+alter table public.bridge_story_concept_submissions
+  drop constraint if exists bridge_story_concept_submissions_curation_status_check;
+alter table public.bridge_story_concept_submissions
+  add constraint bridge_story_concept_submissions_curation_status_check
+  check (curation_status in (
+    'PENDING', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'INTRODUCED_TO_BUYERS',
+    'PENDING_REVIEW', 'CHANGES_REQUESTED', 'BUYER_EVALUATION_APPROVED'
+  ));
+
+create table if not exists public.bridge_story_concept_mandates (
+  id uuid primary key default gen_random_uuid(),
+  concept_submission_id uuid not null
+    references public.bridge_story_concept_submissions(id) on delete cascade,
+  grantee_organization_id uuid not null
+    references public.bridge_organizations(id),
+  grantee_account_type text not null
+    check (grantee_account_type in ('buyer', 'investor')),
+  grant_status text not null default 'PENDING'
+    check (grant_status in ('PENDING', 'ACTIVE', 'REVOKED', 'EXPIRED')),
+  curation_status text not null default 'PENDING'
+    check (curation_status in ('PENDING', 'BUYER_EVALUATION_APPROVED', 'REJECTED')),
+  fee_certified_at timestamptz,
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  created_by text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint bridge_story_concept_mandates_expiry_after_creation
+    check (expires_at is null or expires_at > created_at)
+);
+
+create unique index if not exists bridge_story_concept_mandates_grantee_unique_idx
+  on public.bridge_story_concept_mandates
+    (concept_submission_id, grantee_organization_id, grantee_account_type);
+create index if not exists bridge_story_concept_mandates_org_active_idx
+  on public.bridge_story_concept_mandates
+    (grantee_organization_id, grantee_account_type, concept_submission_id, expires_at)
+  where grant_status = 'ACTIVE' and revoked_at is null;
+create index if not exists bridge_story_concept_mandates_concept_idx
+  on public.bridge_story_concept_mandates (concept_submission_id);
+
+alter table public.bridge_story_concept_mandates enable row level security;
+revoke all on public.bridge_story_concept_mandates from anon, authenticated;
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261106084908
+NAME: 20261106_story_concept_buyer_mandates
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 3500
+BEGIN EXACT RECOVERED SQL
+-- Additive Story Concept Buyer / Investor mandate grants.
+-- Authorized target: Crayons Projects - Testing DB only. Never apply to Production.
+-- Existing Testing schema uses UUID concept IDs and UUID organization IDs.
+-- Extend the existing profile check to include the supported Investor account class.
+alter table public.bridge_profiles
+  drop constraint if exists bridge_profiles_account_type_chk;
+alter table public.bridge_profiles
+  add constraint bridge_profiles_account_type_chk
+  check (account_type in ('independent_creator', 'studio', 'buyer', 'investor'));
+
+-- Keep source URLs out of the Buyer/Investor response path. OCI object keys
+-- are server-only references and are populated only by the secure upload flow.
+alter table public.bridge_story_concept_submissions
+  add column if not exists treatment_object_key text,
+  add column if not exists screenplay_object_key text,
+  add column if not exists treatment_pending_object_key text,
+  add column if not exists screenplay_pending_object_key text,
+  add column if not exists reviewed_by text,
+  add column if not exists reviewed_at timestamptz,
+  add column if not exists fee_certified_at timestamptz;
+
+-- Support the workflow's explicit review states while preserving any legacy
+-- statuses already stored in this Testing database.
+alter table public.bridge_story_concept_submissions
+  drop constraint if exists bridge_story_concept_submissions_curation_status_check;
+alter table public.bridge_story_concept_submissions
+  add constraint bridge_story_concept_submissions_curation_status_check
+  check (curation_status in (
+    'PENDING', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'INTRODUCED_TO_BUYERS',
+    'PENDING_REVIEW', 'CHANGES_REQUESTED', 'BUYER_EVALUATION_APPROVED'
+  ));
+
+create table if not exists public.bridge_story_concept_mandates (
+  id uuid primary key default gen_random_uuid(),
+  concept_submission_id uuid not null
+    references public.bridge_story_concept_submissions(id) on delete cascade,
+  grantee_organization_id uuid not null
+    references public.bridge_organizations(id),
+  grantee_account_type text not null
+    check (grantee_account_type in ('buyer', 'investor')),
+  grant_status text not null default 'PENDING'
+    check (grant_status in ('PENDING', 'ACTIVE', 'REVOKED', 'EXPIRED')),
+  curation_status text not null default 'PENDING'
+    check (curation_status in ('PENDING', 'BUYER_EVALUATION_APPROVED', 'REJECTED')),
+  fee_certified_at timestamptz,
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  created_by text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint bridge_story_concept_mandates_expiry_after_creation
+    check (expires_at is null or expires_at > created_at)
+);
+
+create unique index if not exists bridge_story_concept_mandates_grantee_unique_idx
+  on public.bridge_story_concept_mandates
+    (concept_submission_id, grantee_organization_id, grantee_account_type);
+create index if not exists bridge_story_concept_mandates_org_active_idx
+  on public.bridge_story_concept_mandates
+    (grantee_organization_id, grantee_account_type, concept_submission_id, expires_at)
+  where grant_status = 'ACTIVE' and revoked_at is null;
+create index if not exists bridge_story_concept_mandates_concept_idx
+  on public.bridge_story_concept_mandates (concept_submission_id);
+
+alter table public.bridge_story_concept_mandates enable row level security;
+revoke all on public.bridge_story_concept_mandates from anon, authenticated;
+END EXACT RECOVERED SQL
+
+================================================================
+VERSION: 20261108222208
+NAME: grant_authenticated_usage_bridge_private_schema
+STATEMENT_COUNT: 1
+SQL_CHAR_LENGTH: 54
+BEGIN EXACT RECOVERED SQL
+GRANT USAGE ON SCHEMA bridge_private TO authenticated;
+END EXACT RECOVERED SQL
