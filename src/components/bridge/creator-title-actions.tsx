@@ -111,6 +111,7 @@ export function CreatorTitleActions({ title, actor }: { title: BridgeTitle; acto
 
       {showSubmit ? (
         <form className="space-y-4 border-t border-line pt-4" onSubmit={(e: FormEvent) => { e.preventDefault(); setError(null); submit.mutate(); }}>
+          <p className="text-xs text-muted">If a complete rights package is already saved on this draft, Bridge preserves that package. The rights fields below create the package only when none exists.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-sm">Title name
               <input required maxLength={160} value={name} onChange={(e) => setName(e.target.value)} className="rounded-lg border border-line bg-elevated p-2" />
