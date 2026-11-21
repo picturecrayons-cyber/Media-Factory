@@ -7,7 +7,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { getTitle, updateTitle } from "@/lib/bridge/titles";
+import { getTitle, updateTitle, saveTitleSubmissionAuthority } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   abortAssetMultipart,
@@ -160,7 +160,10 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     <div className="space-y-5">
       {!actor.internalRole && (actor.accountType === "independent_creator" || actor.accountType === "studio") &&
       canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
-        <OwnerMetadataCompletion title={title} />
+        <>
+          <OwnerMetadataCompletion title={title} />
+          <OwnerRightsDeclaration title={title} />
+        </>
       ) : null}
       <WorkflowDesk title={title} actor={actor} />
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
@@ -351,6 +354,65 @@ function OwnerMetadataCompletion({ title }: { title: BridgeTitle }) {
         {!title.synopsis?.trim() ? <label className="grid gap-1 text-sm sm:col-span-2">Synopsis<textarea required minLength={20} maxLength={4000} value={synopsis} onChange={e=>setSynopsis(e.target.value)} rows={3} className="rounded-lg border border-line-strong bg-elevated p-3"/></label> : null}
         {error ? <p role="alert" className="text-sm text-red-600 sm:col-span-2">{error}</p> : null}
         <button type="submit" disabled={save.isPending} className="rounded-lg bg-fg px-4 py-2.5 text-sm font-semibold text-bg disabled:opacity-50 sm:col-span-2">{save.isPending ? "Saving…" : "Save missing details"}</button>
+      </form>
+    </section>
+  );
+}
+
+
+function OwnerRightsDeclaration({ title }: { title: BridgeTitle }) {
+  const qc = useQueryClient();
+  const [authorityType, setAuthorityType] = useState("RIGHTS_OWNER");
+  const [evidenceType, setEvidenceType] = useState("OWNERSHIP_DOCUMENT");
+  const [evidenceReference, setEvidenceReference] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [error, setError] = useState("");
+  const save = useMutation({
+    mutationFn: () => saveTitleSubmissionAuthority({ data: {
+      titleId: title.id,
+      authorityType: authorityType as "RIGHTS_OWNER" | "PRODUCER" | "LICENSEE_WITH_ONWARD_RIGHTS" | "DISTRIBUTOR_SALES_AGENT",
+      evidenceType: evidenceType as "OWNERSHIP_DOCUMENT" | "DISTRIBUTION_AGREEMENT" | "LICENSE_AGREEMENT" | "POWER_OF_ATTORNEY" | "OTHER",
+      evidenceReference,
+      authorizationConfirmed: true,
+    }}),
+    onSuccess: async () => {
+      setError("");
+      setConfirmed(false);
+      await qc.invalidateQueries({ queryKey: ["title-workflow", title.id] });
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Could not save rights declaration"),
+  });
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <h2 className="font-display text-xl font-semibold">Rights authority</h2>
+      <p className="mt-1 text-sm text-muted">One short declaration before QC. Legal will independently verify the documents later.</p>
+      <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
+        <label className="grid gap-1 text-sm">Your authority
+          <select value={authorityType} onChange={e=>setAuthorityType(e.target.value)} className="h-11 rounded-lg border border-line-strong bg-elevated px-3">
+            <option value="RIGHTS_OWNER">I own the rights</option>
+            <option value="PRODUCER">I am the producer</option>
+            <option value="LICENSEE_WITH_ONWARD_RIGHTS">I hold onward distribution rights</option>
+            <option value="DISTRIBUTOR_SALES_AGENT">I am the appointed distributor / sales agent</option>
+          </select>
+        </label>
+        <label className="grid gap-1 text-sm">Evidence type
+          <select value={evidenceType} onChange={e=>setEvidenceType(e.target.value)} className="h-11 rounded-lg border border-line-strong bg-elevated px-3">
+            <option value="OWNERSHIP_DOCUMENT">Ownership / chain-of-title document</option>
+            <option value="DISTRIBUTION_AGREEMENT">Distribution agreement</option>
+            <option value="LICENSE_AGREEMENT">License agreement</option>
+            <option value="POWER_OF_ATTORNEY">Authorization / power of attorney</option>
+            <option value="OTHER">Other supporting document</option>
+          </select>
+        </label>
+        <label className="grid gap-1 text-sm sm:col-span-2">Evidence reference
+          <input required minLength={3} maxLength={500} value={evidenceReference} onChange={e=>setEvidenceReference(e.target.value)} placeholder="Uploaded document name or secure evidence reference" className="h-11 rounded-lg border border-line-strong bg-elevated px-3"/>
+        </label>
+        <label className="flex items-start gap-2 text-sm sm:col-span-2">
+          <input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-1"/>
+          <span>I confirm this authority statement is accurate and the referenced evidence is genuine and available for independent Legal review.</span>
+        </label>
+        {error ? <p role="alert" className="text-sm text-red-600 sm:col-span-2">{error}</p> : null}
+        <button type="submit" disabled={!confirmed || save.isPending} className="rounded-lg bg-fg px-4 py-2.5 text-sm font-semibold text-bg disabled:opacity-50 sm:col-span-2">{save.isPending ? "Saving…" : "Save rights declaration"}</button>
       </form>
     </section>
   );
