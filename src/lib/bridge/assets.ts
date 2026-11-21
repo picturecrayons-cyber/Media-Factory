@@ -16,6 +16,10 @@ import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
+function canUploadAtTitleStatus(status: string, internalRole: string | null): boolean {
+  return UPLOADABLE.has(status) || (status === "RIGHTS_REVIEW" && internalRole === "super_admin");
+}
+
 async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
   const sql = await getSql();
   const rows = await sql<{ n: number }>`
@@ -43,7 +47,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     if (!canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) throw new Error("Forbidden");
-    if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    if (!canUploadAtTitleStatus(title.status, actor.internalRole)) throw new Error("Uploads are closed for this status");
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
     const ingestValidation = validateOttIngestFile({
@@ -52,6 +56,17 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       contentType: data.contentType,
     });
     if (!ingestValidation.ok) throw new Error(ingestValidation.message);
+    const sql = await getSql();
+    if (title.status === "RIGHTS_REVIEW") {
+      const existing = await sql<{ id: string }>`
+        select id from bridge_assets
+        where title_id = ${title.id} and kind = ${data.kind} and byte_size > 0
+        limit 1
+      `;
+      if (!existing.length) {
+        throw new Error("Rights-review replacement requires an existing storage-verified asset of the same kind");
+      }
+    }
     const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
     const key = titleAssetKey({
       ownerUserId: title.ownerUserId,
@@ -65,7 +80,6 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
     });
     const id = randomBytes(16).toString("hex");
-    const sql = await getSql();
     await sql`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
@@ -98,7 +112,7 @@ async function openUploadAsset(userId: string, assetId: string) {
   const asset = rows[0];
   if (!asset) throw new Error("Asset not found");
   const title = await loadTitle(asset.title_id);
-  if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
+  if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !canUploadAtTitleStatus(title.status, actor.internalRole)) {
     throw new Error("Upload confirmation is closed for this title");
   }
   return asset;
@@ -178,7 +192,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const asset = rows[0];
     if (!asset) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
+    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !canUploadAtTitleStatus(title.status, actor.internalRole)) {
       throw new Error("Upload confirmation is closed for this title");
     }
     if (asset.byte_size != null)
