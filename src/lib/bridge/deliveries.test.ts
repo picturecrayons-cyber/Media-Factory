@@ -26,7 +26,11 @@ async function fixture() {
     create function bridge_current_user_id() returns text language sql as 'select null::text';
     create table bridge_titles (
       id text primary key, name text, language text, year integer,
-      owner_user_id text, updated_at timestamptz default now()
+      owner_user_id text, owner_account_type text, owner_organization_id uuid,
+      updated_at timestamptz default now()
+    );
+    create table bridge_organization_memberships (
+      organization_id uuid not null, user_id text not null, status text not null
     );
     create table bridge_profiles (user_id text, organization_name text, display_name text);
     create table bridge_rights_grants (
@@ -50,8 +54,8 @@ async function fixture() {
   );
   await pg.exec(`
     insert into bridge_titles(id,name,language,year,owner_user_id) values
-      ('a','Title A','Malayalam',2026,'creator-a'),
-      ('b','Title B','Malayalam',2026,'studio-b');
+      ('a','Title A','Malayalam',2026,'creator-a','independent_creator',null),
+      ('b','Title B','Malayalam',2026,'studio-b','studio','11111111-1111-4111-8111-111111111111');
     insert into bridge_destination_packages(id,title_id,destination,readiness_state) values
       ('${packageA}','a','Buyer A','READY'),
       ('${packageB}','a','Buyer B','HOLD'),
@@ -141,6 +145,44 @@ describe("delivery trace authorization", () => {
         assert.equal(deliveries.find((row) => row.titleId === "a")?.settlementStatus, "SETTLED");
         assert.equal(deliveries.find((row) => row.titleId === "b")?.settlementStatus, "ON_HOLD");
       }
+    } finally {
+      await pg.close();
+    }
+  });
+
+  it("shares Studio delivery traces only with active members of the same organization", async () => {
+    const { pg, sql } = await fixture();
+    try {
+      const org = "11111111-1111-4111-8111-111111111111";
+      await pg.query(
+        "insert into bridge_organization_memberships(organization_id,user_id,status) values ($1,'studio-member','active'),($1,'suspended-member','suspended')",
+        [org],
+      );
+
+      const sameOrg = await readDeliveryTraces(
+        actor({ userId: "studio-member", accountType: "studio", organizationId: org }),
+        async () => sql,
+      );
+      assert.deepEqual(sameOrg.deliveries.map((row) => row.titleId), ["b"]);
+      // Organization membership does not grant access to settlement detail
+      // for a title owned by another member.
+      assert.equal(sameOrg.deliveries[0].settlementStatus, null);
+
+      const suspended = await readDeliveryTraces(
+        actor({ userId: "suspended-member", accountType: "studio", organizationId: org }),
+        async () => sql,
+      );
+      assert.deepEqual(suspended.deliveries, []);
+
+      const otherOrg = await readDeliveryTraces(
+        actor({
+          userId: "studio-member",
+          accountType: "studio",
+          organizationId: "22222222-2222-4222-8222-222222222222",
+        }),
+        async () => sql,
+      );
+      assert.deepEqual(otherOrg.deliveries, []);
     } finally {
       await pg.close();
     }
