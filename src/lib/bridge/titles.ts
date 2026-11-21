@@ -482,6 +482,81 @@ export const updateTitle = createServerFn({ method: "POST" })
     return { title: next };
   });
 
+
+export const saveTitleSubmissionAuthority = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8),
+    authorityType: z.enum(["RIGHTS_OWNER", "PRODUCER", "LICENSEE_WITH_ONWARD_RIGHTS", "DISTRIBUTOR_SALES_AGENT"]),
+    evidenceType: z.enum(["OWNERSHIP_DOCUMENT", "DISTRIBUTION_AGREEMENT", "LICENSE_AGREEMENT", "POWER_OF_ATTORNEY", "OTHER"]),
+    evidenceReference: z.string().trim().min(3).max(500),
+    authorizationConfirmed: z.literal(true),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const title = await loadTitle(data.titleId);
+    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType) ||
+        !canMutateTitle(actor, title, "title.update_own", "title.license")) {
+      throw new Error("Only the title owner or an authorized Studio editor can submit rights evidence");
+    }
+    if (!["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)) {
+      throw new Error("Rights declaration is locked after title submission");
+    }
+    const sql = await getSql();
+    await sql.transaction(async (tx) => {
+      await tx`
+        insert into bridge_title_submission_intake
+          (title_id, authority_type, authorization_evidence_type, authorization_confirmed, updated_at)
+        values
+          (${title.id}, ${data.authorityType}, ${data.evidenceType}, true, now())
+        on conflict (title_id) do update set
+          authority_type = excluded.authority_type,
+          authorization_evidence_type = excluded.authorization_evidence_type,
+          authorization_confirmed = true,
+          updated_at = now()
+      `;
+      const existing = await tx<{ id: string }>`
+        select id from bridge_rights_grants
+        where title_id = ${title.id} and status = 'DRAFT'
+        order by created_at desc limit 1 for update
+      `;
+      const attestation = {
+        type: "AUTHORIZATION_ATTESTATION",
+        rightsBasis: data.authorityType,
+        authorizationConfirmed: true,
+        evidenceType: data.evidenceType,
+        evidenceReference: data.evidenceReference,
+        submittedBy: actor.userId,
+      };
+      if (existing[0]) {
+        await tx`
+          update bridge_rights_grants
+          set evidence = (
+            select coalesce(jsonb_agg(item), '[]'::jsonb)
+            from jsonb_array_elements(evidence) item
+            where coalesce(item->>'type', '') <> 'AUTHORIZATION_ATTESTATION'
+          ) || ${JSON.stringify([attestation])}::jsonb
+          where id = ${existing[0].id}::uuid
+        `;
+      } else {
+        await tx`
+          insert into bridge_rights_grants (title_id, evidence, status, created_by)
+          values (${title.id}, ${JSON.stringify([attestation])}::jsonb, 'DRAFT', ${actor.userId})
+        `;
+      }
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.submission_authority_recorded",
+        entityType: "bridge_title",
+        entityId: title.id,
+        metadata: { authorityType: data.authorityType, evidenceType: data.evidenceType },
+      }, tx);
+    });
+    return { saved: true };
+  });
+
 async function assertLicensingReady(titleId: string) {
   const sql = await getSql();
   const rows = await sql<{
