@@ -85,3 +85,25 @@ The evidence does not support choosing between the Testing live schema and the c
 | Production | HOLD |
 
 This follow-up is documentation only. No application code, SQL migration, hosted database, payment state, secret, environment setting, or deployment was changed.
+
+
+## CI PostgreSQL log anomaly triage — 2026-11-21
+
+The PostgreSQL job log contained `ERROR: relation "bridge_audit_logs" does not exist`, while the workflow job concluded successfully. This was investigated against the exact protected-main test source and workflow:
+
+- `.github/workflows/ci.yml` runs `npm run test:workflow` against a disposable PostgreSQL 16 service using a hard-coded local-only connection string. The test refuses to run with that binding unless `CI=true`.
+- `src/lib/bridge/workflow.test.ts` creates `bridge_audit_logs` in its isolated fixture, then the explicit negative test **"an audit failure rolls back review records and lifecycle"** drops that table before calling the workflow. The expected assertion is that the transaction rejects and leaves the title at `QC_REVIEW` with no QC case.
+- The fetched PostgreSQL log shows the missing-relation error at the exact audit insert statement. This matches the deliberate failure-injection test, not an unexplained production/Testing database error.
+- The workflow job's recorded conclusion was `success`; the CI run is `44885070935`, job `136788834155`.
+
+### Log triage status
+
+| Check | Status |
+|---|---|
+| Error mapped to explicit negative test | PASS |
+| Error is expected failure injection in disposable CI database | PASS |
+| PostgreSQL workflow job conclusion | PASS |
+| Production or hosted Testing database involved | NO — isolated CI PostgreSQL service |
+| Application/schema change required for this log entry | NO |
+
+This resolves the previously noted CI log anomaly. It does not change the TVOD schema mismatch, database-target parity blocker, Preview evidence gap, or Production HOLD.
