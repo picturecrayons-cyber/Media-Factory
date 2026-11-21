@@ -201,7 +201,16 @@ export function CreatorDocumentVault() {
           <span className="text-xs text-muted">Only your Creator account or Studio organization documents</span>
         </div>
         {documentsQ.isPending ? <p className="text-sm text-muted">Loading documents…</p> : null}
-        {documentsQ.isError ? <p role="alert" className="text-sm text-muted">Documents could not be loaded. Refresh and retry.</p> : null}
+        {documentsQ.isError ? (
+          <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/40 p-3 text-sm">
+            <p>Documents could not be loaded. {message(documentsQ.error)}</p>
+            <button type="button" disabled={documentsQ.isFetching}
+              onClick={() => void documentsQ.refetch()}
+              className="rounded-full border border-line-strong px-3 py-1.5 font-semibold disabled:opacity-50">
+              {documentsQ.isFetching ? "Retrying…" : "Retry"}
+            </button>
+          </div>
+        ) : null}
         {!documentsQ.isPending && !documentsQ.isError && !documentsQ.data?.documents.length
           ? <p className="rounded-lg border border-dashed border-line p-4 text-sm text-muted">No documents uploaded yet.</p>
           : null}
