@@ -88,8 +88,11 @@ const gateInput = z.object({
   titleId: z.string().min(1),
   gate: z.enum(["OTT","PACKAGING","CURATION","DELIVERY"]),
   decision: z.enum(["PASS","HOLD","FAIL","REVOKE"]),
-  notes: z.string().max(4000).optional(),
-});
+  notes: z.string().trim().max(4000).optional(),
+}).refine(
+  (data) => data.decision !== "PASS" || Boolean(data.notes?.trim()),
+  { message: "An operator evidence note is required before a publication gate can pass.", path: ["notes"] },
+);
 
 export const setBuyerPublicationGate = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
