@@ -22,8 +22,10 @@ import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DeliveriesRouteImport } from './routes/deliveries'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as FinanceRouteImport } from './routes/finance'
 import { Route as InternalRouteImport } from './routes/internal'
 import { Route as InvestorRouteImport } from './routes/investor'
+import { Route as InvestorGovernanceRouteImport } from './routes/investor-governance'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoopCmsRouteImport } from './routes/loop-cms'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -109,6 +111,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FinanceRoute = FinanceRouteImport.update({
+  id: '/finance',
+  path: '/finance',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InternalRoute = InternalRouteImport.update({
   id: '/internal',
   path: '/internal',
@@ -117,6 +124,11 @@ const InternalRoute = InternalRouteImport.update({
 const InvestorRoute = InvestorRouteImport.update({
   id: '/investor',
   path: '/investor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvestorGovernanceRoute = InvestorGovernanceRouteImport.update({
+  id: '/investor-governance',
+  path: '/investor-governance',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -229,8 +241,12 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/finance': typeof FinanceRoute
+  '/finance': typeof FinanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
+  '/investor-governance': typeof InvestorGovernanceRoute
+  '/investor-governance': typeof InvestorGovernanceRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
@@ -338,8 +354,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/deliveries'
     | '/forgot-password'
+    | '/finance'
     | '/internal'
     | '/investor'
+    | '/investor-governance'
     | '/login'
     | '/loop-cms'
     | '/onboarding'
@@ -445,8 +463,10 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   DeliveriesRoute: typeof DeliveriesRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  FinanceRoute: typeof FinanceRoute
   InternalRoute: typeof InternalRoute
   InvestorRoute: typeof InvestorRoute
+  InvestorGovernanceRoute: typeof InvestorGovernanceRoute
   LoginRoute: typeof LoginRoute
   LoopCmsRoute: typeof LoopCmsRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -560,6 +580,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance': {
+      id: '/finance'
+      path: '/finance'
+      fullPath: '/finance'
+      preLoaderRoute: typeof FinanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/internal': {
       id: '/internal'
       path: '/internal'
@@ -572,6 +599,13 @@ declare module '@tanstack/react-router' {
       path: '/investor'
       fullPath: '/investor'
       preLoaderRoute: typeof InvestorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/investor-governance': {
+      id: '/investor-governance'
+      path: '/investor-governance'
+      fullPath: '/investor-governance'
+      preLoaderRoute: typeof InvestorGovernanceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -734,8 +768,10 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   DeliveriesRoute: DeliveriesRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  FinanceRoute: FinanceRoute,
   InternalRoute: InternalRoute,
   InvestorRoute: InvestorRoute,
+  InvestorGovernanceRoute: InvestorGovernanceRoute,
   LoginRoute: LoginRoute,
   LoopCmsRoute: LoopCmsRoute,
   OnboardingRoute: OnboardingRoute,
