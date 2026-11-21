@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sameOwner, isSupportedCreatorDocumentMimeType, creatorDocumentListFailureMessage } from "./creator-document-policy.ts";
+import { sameOwner, isSupportedCreatorDocumentMimeType, creatorDocumentListFailureMessage, isEvidenceCompatibleWithSubmission, canRevokeCreatorDocument } from "./creator-document-policy.ts";
 
 test("Creator document vault is isolated to the owning Creator account", () => {
   const document = {
@@ -37,4 +37,24 @@ test("Document Vault list failures return a retryable reference without leaking 
   assert.match(message, /Retry the request/);
   assert.match(message, /a1b2c3d4/);
   assert.doesNotMatch(message, /postgres|database_url|secret|password/i);
+});
+
+test("evidence types cannot cross Story Concept and Finished Film lanes", () => {
+  assert.equal(isEvidenceCompatibleWithSubmission("story_concept", "STORY_CONCEPT_AGREEMENT"), true);
+  assert.equal(isEvidenceCompatibleWithSubmission("finished_film", "FINISHED_FILM_AGREEMENT"), true);
+  assert.equal(isEvidenceCompatibleWithSubmission("finished_film", "STORY_CONCEPT_AGREEMENT"), false);
+  assert.equal(isEvidenceCompatibleWithSubmission("story_concept", "FINISHED_FILM_AGREEMENT"), false);
+  assert.equal(isEvidenceCompatibleWithSubmission(null, "OTHER"), false);
+});
+
+test("document revocation is restricted to the owner organization or independent Legal/Super Admin", () => {
+  const doc = {
+    owner_user_id: "studio-owner",
+    owner_account_type: "studio",
+    owner_organization_id: "org-a",
+  };
+  assert.equal(canRevokeCreatorDocument({ actorUserId: "member-a", accountType: "studio", organizationId: "org-a", ...doc }), true);
+  assert.equal(canRevokeCreatorDocument({ actorUserId: "member-b", accountType: "studio", organizationId: "org-b", ...doc }), false);
+  assert.equal(canRevokeCreatorDocument({ actorUserId: "legal", accountType: "independent_creator", internalRole: "legal_reviewer", ...doc }), true);
+  assert.equal(canRevokeCreatorDocument({ actorUserId: "viewer", accountType: "independent_creator", internalRole: "viewer", ...doc }), false);
 });
