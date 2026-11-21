@@ -209,8 +209,8 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     return {
       grants: grants.map((g) => ({
         ...g,
-        window_start: g.window_start ? new Date(g.window_start).toISOString() : "",
-        window_end: g.window_end ? new Date(g.window_end).toISOString() : "",
+        window_start: g.window_start ? new Date(g.window_start).toISOString() : null,
+        window_end: g.window_end ? new Date(g.window_end).toISOString() : null,
       })),
       qc: qc[0] ? { ...qc[0], reviewed_at: new Date(qc[0].reviewed_at).toISOString() } : null,
       legal: legal[0]
