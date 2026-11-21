@@ -32,6 +32,7 @@ type TitleRow = {
   poster_key: string | null;
   master_key: string | null;
   content_type: string;
+  loop_distribution_preference: "NOT_DECIDED" | "CONSIDER_LOOP" | "NOT_FOR_LOOP";
   country_of_origin: string | null;
   release_date: string | Date | null;
   credits: Array<{ role: string; name: string }>;
@@ -62,6 +63,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     posterKey: r.poster_key,
     masterKey: r.master_key,
     contentType: r.content_type,
+    loopDistributionPreference: r.loop_distribution_preference ?? "NOT_DECIDED",
     countryOfOrigin: r.country_of_origin,
     releaseDate: r.release_date ? asIso(r.release_date) : null,
     credits: r.credits,
@@ -220,6 +222,7 @@ export const createTitle = createServerFn({ method: "POST" })
       runtimeMinutes: z.number().int().min(1).max(600).optional(),
       licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
       contentType: z.string().min(1).max(80).optional(),
+      loopDistributionPreference: z.enum(["NOT_DECIDED", "CONSIDER_LOOP", "NOT_FOR_LOOP"]).optional(),
       countryOfOrigin: z.string().max(80).optional(),
       releaseDate: z.string().max(40).optional(),
       director: z.string().max(160).optional(),
@@ -303,12 +306,12 @@ export const createTitle = createServerFn({ method: "POST" })
         insert into bridge_titles (
           id, slug, name, name_ml, owner_user_id, owner_account_type, status,
           synopsis, language, year, runtime_minutes, licensing_fee_paise,
-          content_type, country_of_origin, release_date, credits, owner_organization_id
+          content_type, loop_distribution_preference, country_of_origin, release_date, credits, owner_organization_id
         ) values (
           ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
           ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
           ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0},
-          ${loopStageType(data.contentType)}, ${data.countryOfOrigin ?? null},
+          ${loopStageType(data.contentType)}, ${data.loopDistributionPreference ?? "NOT_DECIDED"}, ${data.countryOfOrigin ?? null},
           ${data.releaseDate ?? null}, ${JSON.stringify([
             ...(data.director ? [{ role: "Director", name: data.director }] : []),
             ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
@@ -365,7 +368,7 @@ export const createTitle = createServerFn({ method: "POST" })
         action: isPublicSubmission ? "title.public_submission" : "title.create",
         entityType: "bridge_title",
         entityId: id,
-        metadata: { publicSubmission: isPublicSubmission, rightsGrantStatus: isPublicSubmission ? "DRAFT" : undefined },
+        metadata: { publicSubmission: isPublicSubmission, rightsGrantStatus: isPublicSubmission ? "DRAFT" : undefined, loopDistributionPreference: data.loopDistributionPreference ?? "NOT_DECIDED" },
       }, tx);
     });
     const title = await loadTitle(id);
