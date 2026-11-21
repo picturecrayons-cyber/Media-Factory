@@ -740,7 +740,16 @@ try {
          and position('OWNER_ORGANIZATION_ID' in upper(coalesce(pg_get_expr(p.polqual, p.polrelid), ''))) > 0
        from pg_policy p
        where p.polrelid = 'public.bridge_titles'::regclass
-         and p.polname = 'bridge_titles_owner_or_buyer_select') as studio_membership_rls_filter
+         and p.polname = 'bridge_titles_owner_or_buyer_select') as studio_membership_rls_filter,
+      (select count(*) = 4
+       from pg_policies p
+       where p.schemaname = 'public'
+         and p.tablename = 'bridge_production_assets'
+         and position('BRIDGE_LOOP_IDENTITY_LINKS' in upper(coalesce(p.qual, '') || ' ' || coalesce(p.with_check, ''))) > 0
+         and position('BRIDGE_ORGANIZATION_MEMBERSHIPS' in upper(coalesce(p.qual, '') || ' ' || coalesce(p.with_check, ''))) > 0
+         and position('DELETED_AT IS NULL' in upper(coalesce(p.qual, '') || ' ' || coalesce(p.with_check, ''))) > 0
+      ) as production_asset_rls_scoped,
+      to_regprocedure('public.bridge_is_title_owner(text)') is null as definer_helper_removed
   `);
   const creatorLifecycle = creatorLifecycleCheck.rows[0];
   if (
@@ -752,7 +761,9 @@ try {
     !creatorLifecycle.deleted_by_fk_validated ||
     !creatorLifecycle.active_owner_index ||
     !creatorLifecycle.archived_title_rls_filter ||
-    !creatorLifecycle.studio_membership_rls_filter
+    !creatorLifecycle.studio_membership_rls_filter ||
+    !creatorLifecycle.production_asset_rls_scoped ||
+    !creatorLifecycle.definer_helper_removed
   ) {
     throw new Error("Creator draft submission/archive migration verification failed: " + JSON.stringify(creatorLifecycle));
   }
