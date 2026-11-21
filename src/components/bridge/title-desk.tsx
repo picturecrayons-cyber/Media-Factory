@@ -87,6 +87,7 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
     onSuccess: (res) => {
       toast("Title opened as DRAFT");
       void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+      void qc.invalidateQueries({ queryKey: ["bridge-studio-finished-films"] });
       if (res.title) navigate({ to: "/title/$id", params: { id: res.title.id } });
     },
     onError: (err) => toast(err instanceof Error ? err.message : "Could not create title"),
