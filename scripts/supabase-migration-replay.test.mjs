@@ -60,3 +60,12 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
 }
+
+test("Creator Vault migration replay verifies UUID organization FK and server-only grants", () => {
+  assert.ok(replaySource.includes("20261121140000_bridge_creator_document_org_uuid_fk.sql"));
+  assert.match(replaySource, /organization_id_is_uuid/);
+  assert.match(replaySource, /organization_fk_validated/);
+  assert.match(replaySource, /owner_scope_check_validated/);
+  assert.match(replaySource, /vault\.client_grants !== 0/);
+  assert.match(replaySource, /vault\.service_role_grants < 6/);
+});
