@@ -17,7 +17,7 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 69;
+const EXPECTED_MIGRATIONS = 73;
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -58,26 +58,6 @@ if (new Set(names).size !== names.length) {
   throw new Error("Duplicate migration filenames detected");
 }
 
-// The reconciliation manifest is an immutable snapshot of the 69 historical
-// Production-ledger statements. New feature migrations are replayed separately
-// after the historical source has passed exact byte/hash validation.
-const productionNames = names.filter((name) => name < "20261118130000_");
-if (productionNames.length !== EXPECTED_MIGRATIONS) {
-  throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} reconciled Production migrations; found ${productionNames.length}`,
-  );
-}
-const featureNames = names.filter((name) => name >= "20261118130000_");
-const supportedFeatureMigrations = new Set([
-  "20261118130000_loop_tvod_payment_fulfillment.sql",
-  "20261118150000_bridge_exclusive_sublicensing_authority.sql",
-]);
-for (const name of featureNames) {
-  if (!supportedFeatureMigrations.has(name)) {
-    throw new Error(`Unreviewed feature migration in replay set: ${name}`);
-  }
-}
-
 const manifestPath = resolve(
   SCRIPT_DIR,
   "../docs/release/bridge-supabase-migration-reconciliation-2026-11-16.md",
@@ -105,6 +85,26 @@ if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   throw new Error(
     `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
   );
+}
+
+// The manifest, not filename timestamp ranges, defines the applied Production
+// ledger. This keeps later-dated applied migrations in the historical replay
+// while separating only the two explicitly reviewed, unapplied feature migrations.
+const productionNames = [...manifestRows.keys()].sort((a, b) => a.localeCompare(b));
+if (productionNames.length !== EXPECTED_MIGRATIONS || productionNames.some((name) => !names.includes(name))) {
+  throw new Error("Production migration manifest does not match the active SQL source files");
+}
+const featureNames = names.filter((name) => !manifestRows.has(name));
+const supportedFeatureMigrations = new Set([
+  "20261118130000_loop_tvod_payment_fulfillment.sql",
+]);
+const deferredFeatureMigrations = new Set([
+  "20261118150000_bridge_exclusive_sublicensing_authority.sql",
+]);
+for (const name of featureNames) {
+  if (!supportedFeatureMigrations.has(name) && !deferredFeatureMigrations.has(name)) {
+    throw new Error(`Unreviewed feature migration in replay set: ${name}`);
+  }
 }
 
 for (const name of productionNames) {
@@ -168,7 +168,7 @@ try {
     await client.query("BEGIN");
     try {
       // Production contains this legacy trigger helper, but it is not part
-      // of the 69-row migration ledger (it predates the recorded history).
+      // of the 73-row migration ledger (it predates the recorded history).
       // Recreate that verified baseline object only in the disposable replay DB
       // before the historical migration alters its search_path.
       if (name === "20261006154551_harden_authz_server_only_surfaces_20261006.sql") {
@@ -232,7 +232,7 @@ try {
       }
 
       // Three server-only tables exist in the Production baseline but are
-      // intentionally absent from the 69-row Supabase migration ledger.
+      // intentionally absent from the 73-row Supabase migration ledger.
       // Recreate their verified, empty schemas only in this disposable local
       // replay DB. The historical deep-clean migration below adds the deny
       // policies, so this fixture enables RLS but does not create policies.
@@ -293,7 +293,7 @@ try {
         console.log("[migration-replay] restored two verified empty pre-ledger server-only table baselines locally");
       }
 
-      // The Story/Concept module predates the 69-row migration ledger.
+      // The Story/Concept module predates the 73-row migration ledger.
       // Production has three rows in bridge_story_concept_submissions; recreate
       // only the schema/policies/grants locally and never copy those records.
       if (name === "20261113090257_bridge_story_concept_nonrow_privileges_20261113.sql") {
@@ -391,7 +391,7 @@ try {
         console.log("[migration-replay] restored Story/Concept pre-ledger schema and RLS baseline locally; no Production rows copied");
       }
 
-      // The Delivery Desk table predates the 69-row migration ledger.
+      // The Delivery Desk table predates the 73-row migration ledger.
       // Recreate its empty schema and existing internal-only RLS policy locally;
       // the Production table currently has zero rows, and no live data is copied.
       if (name === "20261114135437_bridge_delivery_job_ownership_20261114.sql") {
@@ -463,7 +463,7 @@ try {
   }
 
   // Production's current Bridge Data API security baseline is not fully
-  // represented by the 69-row migration ledger. Recreate it locally after
+  // represented by the 73-row migration ledger. Recreate it locally after
   // replay from read-only Production catalog evidence only.
   await client.query(`
     do $bridge_rls_baseline$
@@ -668,8 +668,23 @@ try {
 
   // Replay newly introduced feature migrations only after the historical
   // production-ledger baseline has replayed successfully. They are not part
-  // of the 69-row 2026-11-16 reconciliation manifest.
+  // of the 73-row 2026-11-21 reconciliation manifest.
   for (const name of featureNames) {
+    if (deferredFeatureMigrations.has(name)) {
+      const prerequisite = await client.query(
+        "select to_regclass('public.bridge_creator_documents') is not null as exists",
+      );
+      if (!prerequisite.rows[0]?.exists) {
+        console.log(
+          `[migration-replay] NOT TESTED feature migration ${name}: required public.bridge_creator_documents relation is absent from the canonical Production schema; no synthetic baseline was created and the migration was not applied`,
+        );
+        continue;
+      }
+      throw new Error(
+        `Feature migration ${name} requires a separately reviewed Creator Document Vault schema baseline; it is intentionally not auto-applied by Production-ledger replay`,
+      );
+    }
+
     const sql = await readFile(join(MIGRATIONS_DIR, name), "utf8");
     await client.query("BEGIN");
     try {
@@ -764,7 +779,7 @@ try {
   }
 
   console.log(
-    `[migration-replay] PASS: all ${names.length} Production-ledger migrations replayed in a fresh local Supabase stack.`,
+    `[migration-replay] PASS: all ${productionNames.length} applied Production-ledger migrations replayed in a fresh local Supabase stack.`,
   );
 } finally {
   client.release();

@@ -21,6 +21,7 @@ import {
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
+import { MASTER_LANGUAGES, type MasterLanguage } from "@/lib/bridge/types";
 import {
   OTT_INGEST_SPEC,
   getOttIngestAccept,
@@ -281,6 +282,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         />
       ) : activeTab === "Production" && !buyerView ? (
         <ProductionAssetsPanel
+          titleId={title.id}
+          masterLanguage={title.masterLanguage ?? null}
+          locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)}
           assets={productionAssets}
           loading={productionAssetsQ.isPending}
           error={productionAssetsQ.error instanceof Error ? productionAssetsQ.error.message : null}
@@ -316,14 +320,27 @@ type ProductionAssetView = {
 };
 
 function ProductionAssetsPanel({
+  titleId,
+  masterLanguage,
+  locked,
   assets,
   loading,
   error,
 }: {
+  titleId: string;
+  masterLanguage: MasterLanguage | null;
+  locked: boolean;
   assets: ProductionAssetView[];
   loading: boolean;
   error: string | null;
 }) {
+  const qc = useQueryClient();
+  const saveLanguage = useMutation({
+    mutationFn: (nextLanguage: MasterLanguage | null) => updateTitle({ data: { id: titleId, masterLanguage: nextLanguage } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["bridge-title", titleId] });
+    },
+  });
   const videos = assets.filter((asset) => asset.category === "raw_video");
   const artwork = assets.filter((asset) => asset.category === "stills");
   const documents = assets.filter((asset) => asset.category === "documents");
@@ -339,6 +356,26 @@ function ProductionAssetsPanel({
         <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
           {assets.length} linked
         </span>
+      </div>
+      <div className="mt-5 max-w-md rounded-xl border border-line bg-elevated/30 p-4">
+        <label className="block text-sm font-semibold" htmlFor="bridge-master-language">Master language</label>
+        <select
+          id="bridge-master-language"
+          value={masterLanguage ?? ""}
+          disabled={locked || saveLanguage.isPending}
+          onChange={(event) => saveLanguage.mutate(event.target.value === "" ? null : event.target.value as MasterLanguage)}
+          className="mt-2 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
+        >
+          <option value="">Select master language</option>
+          {MASTER_LANGUAGES.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+        <p className="mt-2 text-xs text-muted">
+          Applies to the master language for this title. It does not change or move any stored files.
+          {locked ? " Editing is locked for this title status." : ""}
+          {saveLanguage.isError ? ` ${saveLanguage.error instanceof Error ? saveLanguage.error.message : "Could not save language."}` : ""}
+        </p>
       </div>
       {error ? <p role="alert" className="mt-4 text-sm text-red-600">Production assets unavailable: {error}</p> : null}
       {loading ? <p className="mt-4 text-sm text-muted">Loading Production register…</p> : null}
