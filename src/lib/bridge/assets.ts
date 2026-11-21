@@ -360,9 +360,16 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       s3_key: string;
       content_type: string | null;
       byte_size: number | null;
+      verified_audit: boolean;
       created_at: string | Date;
     }>`
-      select id, kind, s3_key, content_type, byte_size, created_at
+      select id, kind, s3_key, content_type, byte_size, created_at,
+        exists (
+          select 1 from bridge_audit_logs audit
+          where audit.action = 'asset.upload_verified'
+            and audit.entity_type = 'bridge_asset'
+            and audit.entity_id = bridge_assets.id
+        ) as verified_audit
       from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
     `;
     return {
@@ -374,7 +381,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
             await assertPersistedAssetVerified(
               r,
               title,
-              await hasVerifiedAudit(r.id),
+              r.verified_audit,
               verifyStoredObject,
             );
             verified = true;
