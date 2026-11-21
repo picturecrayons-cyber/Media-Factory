@@ -27,6 +27,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [statementRef, setStatementRef] = useState("");
   const [settlementAmount, setSettlementAmount] = useState("");
   const [note, setNote] = useState("");
+  const [legalConsentAccepted, setLegalConsentAccepted] = useState(false);
   const [error, setError] = useState("");
   const qc = useQueryClient();
   const workflow = useQuery({
@@ -161,6 +162,12 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit for QC. QC is not reviewed yet."
                   : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
+              {title.status === "PREPARING" && !actor.internalRole && (actor.accountType === "independent_creator" || actor.accountType === "studio") ? (
+                <label className="flex items-start gap-3 rounded-xl border border-line bg-elevated/40 p-3 text-sm">
+                  <input type="checkbox" checked={legalConsentAccepted} onChange={(event) => setLegalConsentAccepted(event.target.checked)} className="mt-1" />
+                  <span>I have reviewed the <a href="/legal/title-submission" target="_blank" rel="noreferrer" className="underline">Title Submission & Rights Declaration</a>. I confirm I am authorized to submit this title and the information and rights evidence are accurate.</span>
+                </label>
+              ) : null}
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
               ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
                 ? button(
@@ -179,6 +186,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                               : title.status === "UPLOADING"
                                 ? "PREPARING"
                                 : "QC_REVIEW",
+                          legalConsentAccepted: title.status === "PREPARING" ? legalConsentAccepted : undefined,
+                          legalConsentVersion: title.status === "PREPARING" ? "bridge-title-rights-v1" : undefined,
                         },
                       }),
                   )
