@@ -50,6 +50,16 @@ const ADMIN_MODULES = [
     to: "/internal",
   },
   {
+    title: "Finance oversight",
+    description: "Read-only payments, settlement records and ledger summaries.",
+    to: "/finance",
+  },
+  {
+    title: "Investor mapping",
+    description: "Read-only investor-to-title allocation records.",
+    to: "/investor-governance",
+  },
+  {
     title: "CMS & site content",
     description: "Bridge-managed website content.",
     to: "/cms",
