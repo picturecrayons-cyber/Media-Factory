@@ -45,14 +45,31 @@ export const deleteTitle = createServerFn({ method: "POST" })
 
     return sql.transaction(async (tx) => {
       const rows = await tx<{
-        id: string; status: string; creator_submission_status: "DRAFT" | "SUBMITTED";
+        id: string; owner_user_id: string; owner_account_type: string; owner_organization_id: string | null;
+        status: string; creator_submission_status: "DRAFT" | "SUBMITTED";
         deleted_at: string | Date | null; submission_type: string | null;
       }>`
-        select id, status, creator_submission_status, deleted_at, submission_type
+        select id, owner_user_id, owner_account_type, owner_organization_id,
+          status, creator_submission_status, deleted_at, submission_type
         from bridge_titles where id = ${data.id} for update
       `;
       const locked = rows[0];
-      if (!locked) throw new Error("Title not found");
+      if (!locked || locked.owner_user_id !== title.ownerUserId ||
+          locked.owner_account_type !== actor.accountType ||
+          (locked.owner_organization_id ?? null) !== (title.ownerOrganizationId ?? null)) {
+        throw new Error("Title not found");
+      }
+      if (actor.accountType === "studio" && locked.owner_organization_id && locked.owner_user_id !== actor.userId) {
+        const activeMembership = await tx<{ allowed: boolean }>`
+          select exists (
+            select 1 from bridge_organization_memberships
+            where organization_id = ${locked.owner_organization_id}::uuid
+              and user_id = ${actor.userId}
+              and status = 'active'
+          ) as allowed
+        `;
+        if (!activeMembership[0]?.allowed) throw new Error("Active Studio membership is required to delete this draft.");
+      }
       const assetRows = await tx<{ count: number }>`
         select count(*)::int as count from bridge_assets where title_id = ${locked.id}
       `;
