@@ -736,20 +736,22 @@ try {
        from pg_policy p
        where p.polrelid = 'public.bridge_titles'::regclass
          and p.polname = 'bridge_titles_owner_or_buyer_select') as archived_title_rls_filter,
-      (select position('BRIDGE_ORGANIZATION_MEMBERSHIPS' in upper(coalesce(pg_get_expr(p.polqual, p.polrelid), ''))) > 0
-         and position('OWNER_ORGANIZATION_ID' in upper(coalesce(pg_get_expr(p.polqual, p.polrelid), ''))) > 0
-       from pg_policy p
-       where p.polrelid = 'public.bridge_titles'::regclass
-         and p.polname = 'bridge_titles_owner_or_buyer_select') as studio_membership_rls_filter,
+      (select position('BRIDGE_ORGANIZATION_MEMBERSHIPS' in upper(pg_get_functiondef('private.bridge_is_title_owner(text)'::regprocedure))) > 0
+         and position('M.STATUS = ''ACTIVE''' in upper(pg_get_functiondef('private.bridge_is_title_owner(text)'::regprocedure))) > 0
+         and position('O.STATUS = ''ACTIVE''' in upper(pg_get_functiondef('private.bridge_is_title_owner(text)'::regprocedure))) > 0) as studio_membership_rls_filter,
       (select count(*) = 4
        from pg_policies p
        where p.schemaname = 'public'
          and p.tablename = 'bridge_production_assets'
-         and position('BRIDGE_LOOP_IDENTITY_LINKS' in upper(coalesce(p.qual, '') || ' ' || coalesce(p.with_check, ''))) > 0
-         and position('BRIDGE_ORGANIZATION_MEMBERSHIPS' in upper(coalesce(p.qual, '') || ' ' || coalesce(p.with_check, ''))) > 0
-         and position('DELETED_AT IS NULL' in upper(coalesce(p.qual, '') || ' ' || coalesce(p.with_check, ''))) > 0
+         and position('PRIVATE.BRIDGE_IS_TITLE_OWNER' in upper(coalesce(p.qual, '') || ' ' || coalesce(p.with_check, ''))) > 0
       ) as production_asset_rls_scoped,
-      to_regprocedure('public.bridge_is_title_owner(text)') is null as definer_helper_removed
+      to_regprocedure('public.bridge_is_title_owner(text)') is null as definer_helper_removed,
+      (select p.prosecdef
+       from pg_proc p
+       where p.oid = 'private.bridge_is_title_owner(text)'::regprocedure) as private_owner_helper_present,
+      (select p.prosecdef
+       from pg_proc p
+       where p.oid = 'private.bridge_has_buyer_title_access(text)'::regprocedure) as private_buyer_helper_present
   `);
   const creatorLifecycle = creatorLifecycleCheck.rows[0];
   if (
@@ -763,7 +765,9 @@ try {
     !creatorLifecycle.archived_title_rls_filter ||
     !creatorLifecycle.studio_membership_rls_filter ||
     !creatorLifecycle.production_asset_rls_scoped ||
-    !creatorLifecycle.definer_helper_removed
+    !creatorLifecycle.definer_helper_removed ||
+    !creatorLifecycle.private_owner_helper_present ||
+    !creatorLifecycle.private_buyer_helper_present
   ) {
     throw new Error("Creator draft submission/archive migration verification failed: " + JSON.stringify(creatorLifecycle));
   }
