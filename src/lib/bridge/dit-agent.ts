@@ -5,7 +5,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
-import { ditManifestDigest, ditManifestTotals, normalizeDitFiles } from "./dit-manifest";
+import { assertDitCopiesMatch, ditManifestDigest, ditManifestTotals, normalizeDitFiles } from "./dit-manifest";
 const loadDitOciStorage = createServerOnlyFn(async () => {
   const [{ bridgeEnv }, storage] = await Promise.all([
     import("./env"),
@@ -382,9 +382,7 @@ export const verifyDitFileUpload = createServerFn({ method: "POST" })
       Number(primary.byte_size),
       recoveryBucket,
     );
-    if (sourceHash.sha256 !== recoveryHash.sha256) {
-      throw new Error("Primary and Recovery OCI SHA-256 values differ");
-    }
+    assertDitCopiesMatch(sourceHash, recoveryHash);
 
     await sql.transaction(async (tx) => {
       await tx`
