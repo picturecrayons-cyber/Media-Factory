@@ -163,3 +163,25 @@ A source-side GitHub check against protected `main` (SHA `1253362e2bb19b9fbe513d
 - It still does **not** prove the current Production database's exact schema or migration state; no Production DB was queried in this scope.
 
 Decision refined: protected-main source lineage is the authoritative **repository contract** for implementation work; Testing is a deliberately separate test project whose schema must be reconciled in an isolated test migration/replay path, not used to rewrite production source types by guess. Before any hosted Testing migration, the Testing-only lineage must be reconciled to the source baseline and tested on a disposable local database. This is not permission to write to hosted Testing or Production.
+
+
+### Isolated replay evidence reviewed (existing CI run; no new run triggered)
+
+Reviewed GitHub Actions run `44885070935` and decoded job logs:
+
+- Workflow run: `https://github.com/picturecrayons-cyber/Media-Factory/actions/runs/44885070935`
+- The migration replay job checked out PR #767's merge ref `f60e2b5ff995c8a34e8a10570f87cffc8b4f3ead` (merge of candidate `0b13e74...` into base `c20bc0d...`), **not** protected `main` SHA `1253362...` and not the audit branch head.
+- The job moved the repo migration directory aside, started a fresh isolated local Supabase stack, restored the recovered Production-ledger migrations, and replayed them against local `127.0.0.1:55432/postgres`.
+- Log reports all 73 recovered Production-ledger migrations replayed successfully, RLS verified on 54 Bridge tables, and the candidate TVOD feature migration `20261118130000_loop_tvod_payment_fulfillment.sql` passed the job's replay checks.
+- Creator Document Vault and exclusive sublicensing migrations also passed in that same isolated job.
+- No hosted Supabase URL was used by this replay job. No Testing or Production database write is evidenced.
+
+### What this replay does and does not prove
+
+- PASS: The CI candidate merge ref can replay the recovered 73-migration Production ledger on a disposable local Supabase stack.
+- NOT TESTED: A clean replay of the exact protected-main SHA without PR #767 changes.
+- NOT TESTED: The Testing project's separate 70-record migration lineage; its Testing-specific migration SQL is not present in the protected-main source tree or the inspected audit branch path.
+- NOT PROVEN: Compatibility between the live Testing schema and the protected-main source baseline; the observed UUID/TEXT and catalog-field divergence remains.
+- NOT PROVEN: Razorpay webhook runtime/Edge Function deployment, checkout-to-capture-to-refund end-to-end behavior, canonical Bridge Vercel Preview, or Production readiness.
+
+No new CI run was triggered, no source/SQL files were changed, and no hosted database or deployment was modified.
