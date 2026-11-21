@@ -519,7 +519,7 @@ try {
         create policy bridge_titles_owner_or_buyer_select
           on public.bridge_titles
           for select to authenticated
-          using (bridge_titles.deleted_at is null and exists (
+          using (exists (
             select 1
             from public.bridge_loop_identity_links l
             where l.auth_user_id = (select auth.uid())
@@ -593,7 +593,6 @@ try {
           position('bridge_loop_identity_links' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
           and position('bridge_buyer_title_access' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
           and position('bridge_titles.owner_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
-          and position('deleted_at IS NULL' in upper(coalesce(pg_get_expr(p.polqual, p.polrelid), ''))) > 0
         when 'bridge_loop_identity_links' then
           position('auth_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
         when 'bridge_buyer_title_access' then
@@ -732,7 +731,11 @@ try {
       exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bridge_titles' and column_name = 'deleted_by') as deleted_by_column,
       (select convalidated from pg_constraint where conrelid = 'public.bridge_titles'::regclass and conname = 'bridge_titles_creator_submission_status_chk') as submission_status_check_validated,
       (select convalidated from pg_constraint where conrelid = 'public.bridge_titles'::regclass and conname = 'bridge_titles_deleted_by_fkey') as deleted_by_fk_validated,
-      to_regclass('public.bridge_titles_active_creator_owner_idx') is not null as active_owner_index
+      to_regclass('public.bridge_titles_active_creator_owner_idx') is not null as active_owner_index,
+      (select position('deleted_at IS NULL' in upper(coalesce(pg_get_expr(p.polqual, p.polrelid), ''))) > 0
+       from pg_policy p
+       where p.polrelid = 'public.bridge_titles'::regclass
+         and p.polname = 'bridge_titles_owner_or_buyer_select') as archived_title_rls_filter
   `);
   const creatorLifecycle = creatorLifecycleCheck.rows[0];
   if (
@@ -742,7 +745,8 @@ try {
     !creatorLifecycle.deleted_by_column ||
     !creatorLifecycle.submission_status_check_validated ||
     !creatorLifecycle.deleted_by_fk_validated ||
-    !creatorLifecycle.active_owner_index
+    !creatorLifecycle.active_owner_index ||
+    !creatorLifecycle.archived_title_rls_filter
   ) {
     throw new Error("Creator draft submission/archive migration verification failed: " + JSON.stringify(creatorLifecycle));
   }
