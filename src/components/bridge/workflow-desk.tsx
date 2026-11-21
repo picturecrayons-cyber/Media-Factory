@@ -190,6 +190,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           legalConsentVersion: title.status === "PREPARING" ? "bridge-title-rights-v1" : undefined,
                         },
                       }),
+                    title.status === "PREPARING" && !actor.internalRole && !legalConsentAccepted,
                   )
                 : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
