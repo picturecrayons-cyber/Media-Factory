@@ -268,3 +268,15 @@ it("reserves final approval, duplicate merge, and Loop publication to Super Admi
   assert.equal(hasPermission(qc, "title.rights_review"), false);
   assert.equal(hasPermission(legal, "title.qc_review"), false);
 });
+
+
+describe("title revenue authorization", () => {
+  it("requires the explicit owner finance-read capability and explicit staff finance permission", () => {
+    const studioOwner = studio();
+    const ownStudioTitle = { ownerUserId: "studio-a", ownerAccountType: "studio" as const, ownerOrganizationId: null };
+    assert.equal(canOperateOnTitle(studioOwner, ownStudioTitle, "delivery.read_finance", "finance.read"), true);
+    assert.equal(canOperateOnTitle(viewer(), ownStudioTitle, "delivery.read_finance", "finance.read"), false);
+    assert.equal(canOperateOnTitle(finance, ownStudioTitle, "delivery.read_finance", "finance.read"), true);
+    assert.equal(canOperateOnTitle(qc, ownStudioTitle, "delivery.read_finance", "finance.read"), false);
+  });
+});
