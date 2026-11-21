@@ -47,8 +47,8 @@ function Studio() {
 
             <section className="space-y-4">
               <div>
-                <h3 className="font-display text-xl font-semibold">Add a studio title</h3>
-                <p className="mt-1 text-sm text-muted">Finished films and story concepts remain separate. A title upload does not bypass QC, rights or licensing approvals.</p>
+                <h3 className="font-display text-xl font-semibold">What would you like to submit?</h3>
+                <p className="mt-1 text-sm text-muted">Choose one option to get started. Both submissions stay private until approved through Bridge.
               </div>
               <NewSubmissionPanel />
             </section>
