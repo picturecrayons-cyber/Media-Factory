@@ -683,6 +683,45 @@ try {
     }
   }
 
+  const creatorVaultCheck = await client.query(`
+    select
+      (select data_type = 'uuid'
+       from information_schema.columns
+       where table_schema = 'public'
+         and table_name = 'bridge_creator_documents'
+         and column_name = 'owner_organization_id') as organization_id_is_uuid,
+      (select c.convalidated
+       from pg_constraint c
+       where c.conrelid = 'public.bridge_creator_documents'::regclass
+         and c.conname = 'bridge_creator_documents_owner_organization_id_fkey') as organization_fk_validated,
+      (select c.convalidated
+       from pg_constraint c
+       where c.conrelid = 'public.bridge_creator_documents'::regclass
+         and c.conname = 'bridge_creator_documents_owner_scope_chk') as owner_scope_check_validated,
+      (select relrowsecurity from pg_class where oid = 'public.bridge_creator_documents'::regclass) as documents_rls,
+      (select relrowsecurity from pg_class where oid = 'public.bridge_title_document_links'::regclass) as links_rls,
+      (select count(*)::int from information_schema.role_table_grants
+       where table_schema = 'public'
+         and table_name in ('bridge_creator_documents', 'bridge_title_document_links')
+         and grantee in ('anon', 'authenticated')) as client_grants,
+      (select count(*)::int from information_schema.role_table_grants
+       where table_schema = 'public'
+         and table_name in ('bridge_creator_documents', 'bridge_title_document_links')
+         and grantee = 'service_role') as service_role_grants
+  `);
+  const vault = creatorVaultCheck.rows[0];
+  if (
+    !vault?.organization_id_is_uuid ||
+    !vault.organization_fk_validated ||
+    !vault.owner_scope_check_validated ||
+    !vault.documents_rls ||
+    !vault.links_rls ||
+    vault.client_grants !== 0 ||
+    vault.service_role_grants < 6
+  ) {
+    throw new Error("Creator Document Vault UUID/RLS/grant verification failed: " + JSON.stringify(vault));
+  }
+
   const baselineRls = await client.query(`
     select
       c.relname,
