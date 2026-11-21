@@ -87,8 +87,8 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
       ) : activeTab === "Buyers" ? (
-        <BuyerRelease titles={data.titles} canApprove={hasPermission(actor, "title.approve")}
-          onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
+        <BuyerRelease titles={data.titles} gateCertifications={data.gateCertifications} canApprove={hasPermission(actor, "title.approve")}
+          onGate={(titleId, gateName, notes) => gate.mutate({ data: { titleId, gate: gateName, decision: "PASS", notes } })} />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
           <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
@@ -165,6 +165,86 @@ function ReviewQueue({ title, description, titles, canAct, actions, mutation }: 
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
 }
-function BuyerRelease({ titles, canApprove, onGate }: { titles: any[]; canApprove: boolean; onGate: (titleId: string, gateName: string) => void }) {
-  return <section className="space-y-3"><SectionHeader title="Buyer release" description="Pass a gate only after the required check." />{titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span>{canApprove ? <ActionButton label="Pass gate" onClick={() => onGate(t.id, "buyer")} /> : <span className="text-xs text-muted">Approval reserved to Super Admin</span>}</div>)}</section>;
+type PublicationGate = "OTT" | "PACKAGING" | "CURATION" | "DELIVERY";
+type GateCertification = {
+  title_id: string;
+  ott_preparation_status: string;
+  packaging_status: string;
+  curation_status: string;
+  delivery_status: string;
+  evidence: unknown;
+  updated_by: string | null;
+  updated_at: string;
+};
+
+function BuyerRelease({
+  titles,
+  gateCertifications,
+  canApprove,
+  onGate,
+}: {
+  titles: any[];
+  gateCertifications: GateCertification[];
+  canApprove: boolean;
+  onGate: (titleId: string, gateName: PublicationGate, notes: string) => void;
+}) {
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const fields: Array<{ gate: PublicationGate; label: string; field: keyof GateCertification }> = [
+    { gate: "OTT", label: "OTT readiness", field: "ott_preparation_status" },
+    { gate: "PACKAGING", label: "Packaging", field: "packaging_status" },
+    { gate: "CURATION", label: "Curation", field: "curation_status" },
+    { gate: "DELIVERY", label: "Delivery", field: "delivery_status" },
+  ];
+  const byTitle = new Map(gateCertifications.map((row) => [row.title_id, row]));
+
+  return (
+    <section className="space-y-3">
+      <SectionHeader title="Buyer release" description="Record each gate independently. A gate pass requires an operator evidence note; overall buyer visibility remains governed by the server-side publication predicate." />
+      {titles.map((title) => {
+        const record = byTitle.get(title.id);
+        return (
+          <article key={title.id} className="space-y-3 rounded-2xl border border-line p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium">{title.name}</span>
+              <span className="text-xs text-muted">{title.status}</span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {fields.map(({ gate: gateName, label, field }) => {
+                const status = record ? String(record[field] ?? "NOT_RECORDED") : "NOT_RECORDED";
+                const key = `${title.id}:${gateName}`;
+                return (
+                  <div key={gateName} className="rounded-xl border border-line bg-surface p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{label}</span>
+                      <span className="text-xs text-muted">{status}</span>
+                    </div>
+                    {canApprove ? (
+                      <div className="mt-2 space-y-2">
+                        <input
+                          value={notes[key] ?? ""}
+                          onChange={(event) => setNotes((current) => ({ ...current, [key]: event.target.value }))}
+                          maxLength={4000}
+                          placeholder="Operator evidence / verification note"
+                          aria-label={`${label} evidence note for ${title.name}`}
+                          className="w-full rounded-sm border border-line bg-bg px-3 py-2 text-xs"
+                        />
+                        <ActionButton
+                          label={`Pass ${label}`}
+                          disabled={!notes[key]?.trim()}
+                          onClick={() => onGate(title.id, gateName, notes[key].trim())}
+                        />
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-muted">Publication approval is reserved to Super Admin.</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </article>
+        );
+      })}
+      {!titles.length ? <Empty text="No titles are available for publication-gate review." /> : null}
+    </section>
+  );
 }
