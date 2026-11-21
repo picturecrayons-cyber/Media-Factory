@@ -48,3 +48,40 @@ Do not patch checkout, catalog, playback or webhook against a guessed database t
 | Production | HOLD |
 
 No source code, database schema, records, payment state, secrets, environment settings, or deployments were changed.
+
+
+## Follow-up source inspection — 2026-11-21
+
+The isolated branch was re-read after the release-readiness approval. This confirms that the protected-main application source still has an unsafe legacy TVOD/SVOD path:
+
+- `rentTvodMovie` in `src/lib/loop/subscriptions.ts` directly inserts a `TVOD_RENTAL` row into `loop_entitlements` and returns success without creating a Razorpay order or verifying a captured payment.
+- `subscribeToLoopPass` directly inserts an active `loop_subscriptions` row without a paid checkout. This conflicts with the TVOD-only product boundary.
+- `src/lib/loop/catalog.ts` reads legacy `listed`, `published`, `tvod_rental_price`, and `tvod_purchase_price` fields and exposes an SVOD/Loop Pass rail. It is not compatible with the observed Testing TEXT-ID / `is_listed` / `is_published` / `price_paise` contract.
+- The protected-main `supabase/functions/razorpay-webhook/index.ts` source inspected on this branch does not establish the candidate's LOOP TVOD fulfillment path; its server-side Supabase target remains independently configured from the app's `getSql()` connection.
+
+### Canonical contract decision — not yet safe to implement
+
+The evidence does not support choosing between the Testing live schema and the checked-in protected-main migration chain as the authoritative contract. The safe decision is therefore to **freeze implementation**, not guess:
+
+1. Preserve the existing Testing `loop_payment_events` ledger; do not create `loop_tvod_payment_events` as a second ledger.
+2. Do not add `loop_tvod_orders` or alter entitlement ID types until a canonical schema owner and migration lineage are confirmed.
+3. Require one canonical order identifier and provider payment identifier, unique idempotency constraints, capture-only fulfillment, 48-hour entitlement expiry, refund revocation, publication-window checks, and service-role-only mutation.
+4. Make checkout and webhook use the same proven database target. Compare only non-secret project refs/hostnames; never print credentials.
+5. Remove or disable direct unpaid rental/pass activation and SVOD surfaces only after the canonical schema and all callers are mapped.
+6. Reconcile Supabase migration chain and embedded PGLite chain, then run isolated replay and database-backed tests before proposing a hosted Testing change.
+
+### Updated gate status
+
+| Gate | Status |
+|---|---|
+| Source inspection of protected-main checkout/catalog/webhook | PASS (read-only) |
+| Unpaid entitlement / unpaid pass source paths identified | FAIL |
+| Testing schema vs protected-main migration parity | FAIL |
+| Single canonical TVOD ledger/order contract | BLOCKED |
+| App DB ↔ Edge Function DB target parity | BLOCKED |
+| Safe application source patch | BLOCKED — authority and target unresolved |
+| Disposable replay of this isolated branch after a repair | NOT RUN |
+| Hosted Testing writes / webhook deployment | NOT RUN |
+| Production | HOLD |
+
+This follow-up is documentation only. No application code, SQL migration, hosted database, payment state, secret, environment setting, or deployment was changed.
