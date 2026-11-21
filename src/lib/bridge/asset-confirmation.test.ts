@@ -166,7 +166,7 @@ test("idempotent confirmation validates the sealed object, title reference and a
   assert.notEqual(start, -1, "persisted-byte-size guard must exist");
   assert.notEqual(end, -1, "persisted-byte-size guard must be closed");
   const guard = source.slice(start, end);
-  assert.match(guard, /\\.verified\\/\$\\{asset\.id\\}/);
+  assert.ok(guard.includes("const sealedSuffix = `.verified/${asset.id}`;"));
   assert.match(guard, /verifyObject\(asset\.s3_key, asset\.content_type\)/);
   assert.match(guard, /sealedObject\.byteSize !== Number\(asset\.byte_size\)/);
   assert.match(guard, /title\.masterKey !== asset\.s3_key/);
