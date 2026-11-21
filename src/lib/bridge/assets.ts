@@ -107,11 +107,12 @@ async function openUploadAsset(userId: string, assetId: string) {
   const rows = await sql<{
     id: string;
     title_id: string;
+    kind: string;
     s3_key: string;
     content_type: string | null;
     byte_size: number | null;
   }>`
-    select id, title_id, s3_key, content_type, byte_size
+    select id, title_id, kind, s3_key, content_type, byte_size
     from bridge_assets where id = ${assetId} limit 1
   `;
   const asset = rows[0];
