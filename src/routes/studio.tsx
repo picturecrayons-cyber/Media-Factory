@@ -2,35 +2,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
+import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
-
-const studioModules = [
-  ["Productions", "Track production projects and title ownership.", "Production project tracking is not connected yet.", "#studio-productions"],
-  ["QC & Rights", "Track quality checks and rights approvals.", "Use each title's verified review status; submission does not approve rights.", "#studio-titles"],
-  ["Schedule", "Coordinate production and delivery milestones.", "A shared studio schedule is not connected yet.", "#studio-schedule"],
-  ["Statements", "Review verified licensing and settlement records.", "Financial statements are not connected yet.", "#studio-business"],
-  ["Insights", "Review verified studio portfolio activity.", "Studio analytics are not connected yet.", "#studio-business"],
-] as const;
-
-function ServiceCard({ title, description, href, status }: {
-  title: string;
-  description: string;
-  href: string;
-  status?: string;
-}) {
-  return (
-    <a href={href} className="block rounded-xl border border-line bg-surface p-4 transition hover:border-accent hover:bg-accent/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-      <strong className="block">{title}</strong>
-      <span className="mt-1 block text-sm text-muted">{description}</span>
-      {status && <span className="mt-3 block text-xs font-medium text-muted">{status}</span>}
-    </a>
-  );
-}
 
 function Studio() {
   return (
@@ -66,12 +44,13 @@ function Studio() {
               <NewSubmissionPanel />
             </section>
 
-            <section id="studio-titles"            <section id="studio-titles" className="scroll-mt-20 space-y-4">
+            <section id="studio-titles" className="scroll-mt-20 space-y-4">
               <div>
                 <h3 className="font-display text-xl font-semibold">Studio titles</h3>
                 <p className="mt-1 text-sm text-muted">Finished films and story concepts are listed separately. Submission does not bypass QC, rights or licensing approval.</p>
               </div>
               <TitleList empty="No finished films are currently returned for this studio account." />
+              <MyStoryConcepts />
             </section>
 
             <section id="studio-storage" className="scroll-mt-20 rounded-xl border border-line p-4 sm:p-5">
