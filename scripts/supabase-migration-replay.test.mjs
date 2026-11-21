@@ -91,3 +91,11 @@ test("Creator title RLS requires active Studio organization membership", () => {
   assert.match(creatorLifecycleMigration, /m\.status = 'active'/);
   assert.match(replaySource, /studio_membership_rls_filter/);
 });
+
+test("Production asset RLS is owner-only and removes the public definer helper", () => {
+  assert.match(creatorLifecycleMigration, /bridge_production_assets_owner_select/);
+  assert.match(creatorLifecycleMigration, /bridge_organization_memberships m/);
+  assert.match(creatorLifecycleMigration, /drop function if exists public\.bridge_is_title_owner\(text\)/);
+  assert.match(replaySource, /production_asset_rls_scoped/);
+  assert.match(replaySource, /definer_helper_removed/);
+});
