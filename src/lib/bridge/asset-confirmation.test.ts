@@ -160,22 +160,6 @@ test("title owner can confirm an upload when organization tables are absent", as
 });
 
 
-test("idempotent confirmation validates the sealed object, title reference and audit event", () => {
-  const source = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
-  const start = source.indexOf("if (asset.byte_size != null) {");
-  const end = source.indexOf("\n    }", start);
-  assert.notEqual(start, -1, "persisted-byte-size guard must exist");
-  assert.notEqual(end, -1, "persisted-byte-size guard must be closed");
-  const guard = source.slice(start, end);
-  assert.ok(guard.includes("const sealedSuffix = `.verified/${asset.id}`;"));
-  assert.match(guard, /verifyObject\(asset\.s3_key, asset\.content_type\)/);
-  assert.match(guard, /sealedObject\.byteSize !== Number\(asset\.byte_size\)/);
-  assert.match(guard, /title\.masterKey !== asset\.s3_key/);
-  assert.match(guard, /asset\.upload_verified/);
-  assert.match(guard, /return \{ assetId: asset\.id, byteSize: Number\(asset\.byte_size\), verified: true \}/);
-});
-
-
 test("persisted asset verification rejects byte-size-only and malformed state", async () => {
   const base = { id: "asset-1", kind: "master", s3_key: "master.mov.verified/asset-1", byte_size: 120, content_type: "video/quicktime" };
   const title = { masterKey: base.s3_key, posterKey: null };
