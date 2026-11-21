@@ -95,8 +95,8 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       throw new Error("A verified active Studio organization membership is required before creating a Studio submission.");
     }
 
-    const destinations = [...new Set(data.buyerChannels.map((value) => BUYER_DESTINATION_MAP[value]).filter(Boolean))];
-    const media = [...new Set(data.exploitation.map((value) => EXPLOITATION_MEDIA_MAP[value]).filter(Boolean))];
+    const destinations = [...new Set(data.buyerChannels.map((value) => BUYER_DESTINATION_MAP[value]).filter((value): value is string => Boolean(value)))];
+    const media = [...new Set(data.exploitation.map((value) => EXPLOITATION_MEDIA_MAP[value]).filter((value): value is string => Boolean(value)))];
     if (destinations.length !== data.buyerChannels.length || media.length !== data.exploitation.length) {
       throw new Error("Select only supported Bridge distribution destinations and exploitation rights.");
     }
