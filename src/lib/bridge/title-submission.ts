@@ -45,6 +45,43 @@ export async function submitTitleForQc(
         ${JSON.stringify({ from: title.status, to: "QC_REVIEW" })}
       )
     `;
+
+    // QC submission and its internal notification queue entry are one commit.
+    // Do not silently accept a submission when the notification schema is absent.
+    const schema = await tx<{ outbox: string | null }>`
+      select to_regclass('public.bridge_notification_outbox')::text as outbox
+    `;
+    if (!schema[0]?.outbox) {
+      throw new Error("QC notification outbox is not installed in this environment");
+    }
+    const [titleRecord] = await tx<{ name: string }>`
+      select name from bridge_titles where id = ${title.id} limit 1
+    `;
+    const reviewers = await tx<{ user_id: string; email: string }>`
+      select user_id, email
+      from bridge_profiles
+      where internal_role = 'qc_reviewer'
+        and email_verified = true
+        and email is not null
+        and btrim(email) <> ''
+      order by user_id
+    `;
+    if (reviewers.length === 0) {
+      throw new Error("No verified QC reviewer is configured; submission was not accepted");
+    }
+    const eventKey = `bridge-qc-submitted:${title.id}:${new Date().toISOString()}`;
+    const titleName = titleRecord?.name ?? title.id;
+    const subject = `QC review requested: ${titleName}`;
+    const textBody = `A title has been submitted for QC review in Crayons Bridge. Title: ${titleName}. Title reference: ${title.id}. Open the internal QC desk: https://www.crayonspictures.in/internal?desk=qc`;
+    for (const reviewer of reviewers) {
+      await tx`
+        insert into bridge_notification_outbox (
+          event_key, recipient_email, subject, text_body, html_body
+        ) values (
+          ${`${eventKey}:${reviewer.user_id}`}, ${reviewer.email}, ${subject}, ${textBody}, null
+        ) on conflict (event_key) do nothing
+      `;
+    }
   });
   return { title: { id: title.id, status: "QC_REVIEW" } };
 }
