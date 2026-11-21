@@ -4,8 +4,8 @@ import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
-import type { AccountType, TitleStatus } from "./types";
-import { TITLE_STATUSES, type BridgeTitle } from "./types";
+import type { AccountType, MasterLanguage, TitleStatus } from "./types";
+import { MASTER_LANGUAGES, TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
 import { assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition } from "./rbac";
 import { requireVerifiedActor } from "./session";
@@ -26,6 +26,7 @@ type TitleRow = {
   status: string;
   synopsis: string;
   language: string;
+  master_language?: MasterLanguage | null;
   year: number | null;
   runtime_minutes: number | null;
   licensing_fee_paise: number;
@@ -56,6 +57,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     status: r.status as TitleStatus,
     synopsis: r.synopsis,
     language: r.language,
+    masterLanguage: r.master_language ?? null,
     year: r.year,
     runtimeMinutes: r.runtime_minutes,
     licensingFeePaise: Number(r.licensing_fee_paise ?? 0),
@@ -473,6 +475,7 @@ export const updateTitle = createServerFn({ method: "POST" })
       nameMl: z.string().max(160).optional(),
       synopsis: z.string().max(4000).optional(),
       language: z.string().min(2).max(40).optional(),
+      masterLanguage: z.enum(MASTER_LANGUAGES).nullable().optional(),
       year: z.number().int().min(1895).max(2100).nullable().optional(),
       runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
       licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
@@ -502,6 +505,7 @@ export const updateTitle = createServerFn({ method: "POST" })
         name_ml = ${data.nameMl ?? title.nameMl},
         synopsis = ${data.synopsis ?? title.synopsis},
         language = ${data.language ?? title.language},
+        master_language = ${data.masterLanguage === undefined ? title.masterLanguage ?? null : data.masterLanguage},
         year = ${data.year === undefined ? title.year : data.year},
         runtime_minutes = ${data.runtimeMinutes === undefined ? title.runtimeMinutes : data.runtimeMinutes},
         licensing_fee_paise = ${data.licensingFeePaise ?? title.licensingFeePaise},
