@@ -195,9 +195,12 @@ export async function recordTransition(
   transaction?: Sql,
 ) {
   const sql = transaction ?? (await getSql());
-  await sql`
-    update bridge_titles set status = ${opts.to}, updated_at = now() where id = ${opts.titleId}
+  const updated = await sql<{ id: string }>`
+    update bridge_titles set status = ${opts.to}, updated_at = now()
+    where id = ${opts.titleId} and deleted_at is null
+    returning id
   `;
+  if (!updated.length) throw new Error("Title is archived and cannot change lifecycle status");
   await sql`
     insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
     values (${opts.titleId}, ${opts.from}, ${opts.to}, ${opts.actorUserId}, ${opts.note ?? null})
@@ -516,6 +519,9 @@ export const updateTitle = createServerFn({ method: "POST" })
     const owns = !actor.internalRole && canMutateTitle(actor, title, "title.update_own", "title.license");
     if (!canMutateTitle(actor, title, "title.update_own", "title.license"))
       throw new Error("Forbidden");
+    if (owns && title.creatorSubmissionStatus === "SUBMITTED") {
+      throw new Error("This title has been submitted to Bridge. Use the authorized correction workflow to amend it.");
+    }
     if (
       owns &&
       title.status !== "DRAFT" &&
@@ -525,7 +531,7 @@ export const updateTitle = createServerFn({ method: "POST" })
       throw new Error("Title is locked after prepare");
     }
     const sql = await getSql();
-    await sql`
+    const updated = await sql<{ id: string }>`
       update bridge_titles set
         name = ${data.name ?? title.name},
         name_ml = ${data.nameMl ?? title.nameMl},
@@ -536,8 +542,10 @@ export const updateTitle = createServerFn({ method: "POST" })
         licensing_fee_paise = ${data.licensingFeePaise ?? title.licensingFeePaise},
         content_type = ${data.contentType ? loopStageType(data.contentType) : title.contentType},
         updated_at = now()
-      where id = ${title.id}
+      where id = ${title.id} and deleted_at is null
+      returning id
     `;
+    if (!updated.length) throw new Error("Title is archived and cannot be edited");
     await writeAudit({
       actorUserId: actor.userId,
       action: "title.update",
