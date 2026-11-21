@@ -120,7 +120,22 @@ export const listStudioOperations = createServerFn({ method: "GET" })
     `;
 
     const titleIds = productions.map((row) => row.id);
-    const schedule = titleIds.length
+    // These modules are present in the isolated Testing schema but are not
+    // yet part of the canonical Production schema. Detect capability rather
+    // than issuing queries that would turn the whole Studio dashboard into
+    // HTTP 500; never create a Production table from this read model.
+    const capabilities = await sql<{
+      schedule: boolean;
+      statements: boolean;
+    }>`
+      select
+        to_regclass('public.bridge_production_schedule_events') is not null as schedule,
+        to_regclass('public.bridge_channel_statement_lines') is not null as statements
+    `;
+    const scheduleAvailable = capabilities[0]?.schedule === true;
+    const statementsAvailable = capabilities[0]?.statements === true;
+
+    const schedule = titleIds.length && scheduleAvailable
       ? await sql<{
           id: string; title_id: string; title_name: string; event_type: string;
           event_name: string; starts_at: string | Date; ends_at: string | Date;
@@ -137,7 +152,7 @@ export const listStudioOperations = createServerFn({ method: "GET" })
         `
       : [];
 
-    const statements = titleIds.length
+    const statements = titleIds.length && statementsAvailable
       ? await sql<{
           id: string; title_id: string; title_name: string; channel_name: string;
           period_start: string | Date; period_end: string | Date; currency: string;
@@ -162,6 +177,7 @@ export const listStudioOperations = createServerFn({ method: "GET" })
 
     return {
       organizationId: actor.organizationId,
+      capabilities: { schedule: scheduleAvailable, statements: statementsAvailable },
       productions: productions.map((row): StudioProductionRow => ({
         id: row.id, name: row.name, language: row.language, year: row.year,
         status: row.status, qcStatus: row.qc_status, legalStatus: row.legal_status,
