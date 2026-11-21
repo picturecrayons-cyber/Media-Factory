@@ -32,6 +32,12 @@ function toLocalDateTimeInput(value: Date) {
   const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
 }
+
+export function displayLicenseDate(value: string | null | undefined): string {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleDateString() : "Not recorded";
+}
 export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
   const [stage, setStage] = useState<(typeof stages)[number]>("Prepare");
   const [settlementRef, setSettlementRef] = useState("");
@@ -66,7 +72,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     queryFn: () => listTitleDocumentEvidence({ data: { titleId: title.id } }),
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
-  const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
+  const canFinance = canOperateOnTitle(actor, title, "delivery.read_finance", "finance.read");
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
     queryFn: () => getTitleRevenue({ data: { titleId: title.id } }),
@@ -353,7 +359,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       >
                         {agreementGrants.map((grant, index) => (
                           <option key={grant.id} value={grant.id}>
-                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · {new Date(grant.window_start).toLocaleDateString()}
+                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · {displayLicenseDate(grant.window_start)}
                           </option>
                         ))}
                       </select>
@@ -367,7 +373,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           <span>· {selectedGrant.languages.join(", ")}</span>
                         </div>
                         <p className="text-xs text-muted">
-                          {selectedGrant.window_start} → {selectedGrant.window_end}
+                          {displayLicenseDate(selectedGrant.window_start)} → {displayLicenseDate(selectedGrant.window_end)}
                         </p>
                         <p className="break-all text-xs text-muted">Grant record: {selectedGrant.id}</p>
                         <div className="space-y-2 rounded-lg border border-line bg-surface p-3">
