@@ -8,7 +8,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { canReadTitle, canOperateOnTitle } from "./rbac";
 import { writeAudit } from "./audit";
-import { sameOwner } from "./creator-document-policy";
+import { sameOwner, creatorDocumentListFailureMessage } from "./creator-document-policy";
 
 const DOCUMENT_TYPES = [
   "FINISHED_FILM_AGREEMENT",
@@ -144,7 +144,7 @@ export const listCreatorDocuments = createServerFn({ method: "GET" })
         errorName: diagnostic?.name ?? "UnknownError",
         databaseCode: diagnostic?.code ?? "unavailable",
       });
-      throw new Error(`Document Vault is temporarily unavailable. Retry the request. Reference: ${reference}`);
+      throw new Error(creatorDocumentListFailureMessage(reference));
     }
   });
 
