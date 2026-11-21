@@ -107,3 +107,46 @@ The PostgreSQL job log contained `ERROR: relation "bridge_audit_logs" does not e
 | Application/schema change required for this log entry | NO |
 
 This resolves the previously noted CI log anomaly. It does not change the TVOD schema mismatch, database-target parity blocker, Preview evidence gap, or Production HOLD.
+
+
+## Read-only Testing TVOD contract re-verification — 2026-11-21
+
+The approved Testing project `jbymleftneggcgutlcqu` was re-inspected read-only. This adds a more precise contract snapshot and supersedes any earlier shorthand that implied the six-argument fulfillment RPC was absent.
+
+### Live Testing project evidence
+
+- Project status: `ACTIVE_HEALTHY`; region `ap-south-1`; PostgreSQL 17.11.
+- Migration ledger: 70 records. It contains a Testing-specific runtime migration `20261110183454 loop_runtime_tables_and_atomic_tvod_fulfillment_staging` and later Testing-only TVOD catalog/entitlement/readiness migrations.
+- Existing tables: `loop_titles`, `loop_user_tvod_entitlements`, `loop_payment_events`, `bridge_loop_publications`.
+- Absent tables: `loop_tvod_orders`, `loop_tvod_payment_events`.
+- Identifier types:
+  - `loop_titles.id TEXT`
+  - `loop_titles.bridge_title_id TEXT`
+  - `loop_user_tvod_entitlements.user_id UUID`
+  - `loop_user_tvod_entitlements.title_id TEXT`
+  - `loop_user_tvod_entitlements.payment_transaction_id TEXT`
+  - `bridge_loop_publications.loop_title_id TEXT`
+  - `loop_payment_events.razorpay_payment_id TEXT`, `user_id UUID`, `event_id TEXT`
+- Live Testing fulfillment RPC is present with signature:
+  `loop_fulfill_captured_rental(text,text,uuid,text,timestamptz,timestamptz)`.
+- Refund RPC is `loop_refund_captured_rental(text,text)`; readiness RPC exists.
+- The live function definition checks the Testing-specific fields `is_listed`, `is_published`, `destination='CRAYONS_LOOP'`, uppercase publication state, publication language/territory, and uses the existing `loop_payment_events` ledger.
+- Function privilege checks: `anon=false`, `authenticated=false`, `service_role=true` for all three RPCs.
+- RLS is enabled on the four inspected TVOD/catalog/publication tables; browser roles have explicit deny policies on those tables.
+- The only deployed Edge Function listed in this Testing project is `loop-public-catalog` (active v3); `razorpay-webhook` is not listed as deployed.
+
+### Reconciliation against source candidates
+
+1. The protected-main source migration `20261002171708_loop_release_safety.sql` defines the six-argument fulfillment RPC with `p_title_id UUID`, and uses `listed`, `published`, and UUID title IDs. It therefore does **not** match the live Testing function signature or schema.
+2. The PR #767 implementation migration/source expects an order-based API, `loop_tvod_orders`, `loop_tvod_payment_events`, a separate payment-event ledger, and other catalog field assumptions. Those objects/fields are not present in the live Testing snapshot.
+3. The live Testing TVOD schema is a distinct Testing-specific contract with a TEXT title identifier, UUID user identifier, one payment event ledger, and a six-argument capture RPC. Its exact source migration is not present on protected `main` under the corresponding Testing migration version/name; GitHub default-branch code search did not locate the Testing-specific migration file.
+4. This gives a concrete schema/API mismatch, but does not establish that the Testing schema is the canonical production contract. It is a Testing-only lineage and cannot be promoted as authoritative without an approved source-of-truth decision and a migration reconciliation.
+
+### Updated decision
+
+- Do not add a second TVOD payment ledger.
+- Do not introduce `loop_tvod_orders` based solely on PR #767.
+- Do not cast TEXT title identifiers to UUID or alter existing entitlement rows.
+- Do not deploy the webhook: it is absent from the Testing Edge Function inventory.
+- Source repair remains BLOCKED until the canonical schema owner chooses and documents the authoritative title identifier, order persistence contract, and webhook fulfillment API, then reconciles the Testing-only migration lineage with the protected-main migration chain.
+- No hosted Testing or Production writes were performed; no migration, webhook, environment, secret, payment, or deployment was changed.
