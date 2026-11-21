@@ -766,11 +766,11 @@ try {
       ["00000000-0000-4000-8000-000000000099"],
     );
     const ownership = await client.query(
-      "select private.bridge_is_title_owner($1) as is_owner",
+      "select count(*)::int as visible_rows from public.bridge_production_assets where title_id = $1",
       ["replay-nonexistent-title"],
     );
-    if (ownership.rows[0]?.is_owner !== false) {
-      throw new Error("Non-existent title unexpectedly passed Production Asset owner check");
+    if (ownership.rows[0]?.visible_rows !== 0) {
+      throw new Error("Authenticated non-owner unexpectedly read a Production Asset row");
     }
   } finally {
     await client.query("ROLLBACK");
