@@ -76,7 +76,7 @@ function RightsReadySubmission() {
         data: {
           name: name.trim(),
           synopsis: synopsis.trim(),
-          contentType: contentType === "Series" ? "SERIES" : contentType === "Short" ? "SHORT" : contentType === "Vertical drama" ? "OTHER" : "FEATURE",
+          contentType,
           loopDistributionPreference: loopPreference,
           originalLanguage: language,
           countryOfOrigin: country,
