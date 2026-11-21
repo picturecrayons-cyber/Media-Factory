@@ -31,9 +31,9 @@ export function NewSubmissionPanel() {
           disabled={!STORY_CONCEPT_ENABLED}
           className="rounded-xl border-2 border-accent bg-surface p-5 text-left transition hover:bg-accent/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <span className="block text-base font-semibold">+ Find a Producer / Investor — Story or Concept</span>
+          <span className="block text-base font-semibold">+ Find a Producer / Investor / OTT Original Buyer — Story or Concept</span>
           <span className="mt-2 block text-sm text-muted">
-            Share a script, story or concept for Bridge admin review and producer / investor discovery.
+            Share a script or concept for admin review and discovery with producers, investors, and OTT Original commissioning / acquisition teams.
           </span>
           <span className="mt-3 inline-block text-xs font-semibold text-accent">
             {STORY_CONCEPT_ENABLED ? "Story / concept submission" : "Coming soon — submission is not enabled"}
