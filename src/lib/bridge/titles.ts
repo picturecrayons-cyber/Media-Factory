@@ -14,6 +14,7 @@ import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
+import { isStudioFinishedFilm } from "./studio-title-classification";
 
 type TitleRow = {
   id: string;
@@ -32,6 +33,7 @@ type TitleRow = {
   poster_key: string | null;
   master_key: string | null;
   content_type: string;
+  submission_type?: string | null;
   country_of_origin: string | null;
   release_date: string | Date | null;
   credits: Array<{ role: string; name: string }>;
@@ -458,7 +460,7 @@ export const listStudioFinishedFilms = createServerFn({ method: "GET" })
             order by t.updated_at desc limit 200
           `;
     }
-    return { titles: rows.map(mapTitle) };
+    return { titles: rows.filter((row) => isStudioFinishedFilm(row.submission_type)).map(mapTitle) };
   });
 
 export const getTitle = createServerFn({ method: "GET" })
