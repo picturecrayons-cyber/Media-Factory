@@ -390,7 +390,7 @@ test("Submit for QC advances PREPARING and queues a deduplicated internal QC not
       )
     `);
     await f.sql.query(`
-      insert into bridge_profiles(user_id,email,internal_role,email_verified)
+      insert into bridge_profiles(user_id,email,internal_role,email_verified,account_type,organization_id)
       values
         ('owner','owner@example.test',null,true,'independent_creator',null),
         ('qc-reviewer','qc@example.test','qc_reviewer',true,'independent_creator',null);
@@ -413,6 +413,14 @@ test("Submit for QC advances PREPARING and queues a deduplicated internal QC not
       masterKey: "sealed/qc-master",
       posterKey: "sealed/qc-poster",
     };
+    await assert.rejects(
+      submitTitleForQc(f.sql, title, "owner", "Missing legal declaration"),
+      /declaration acceptance is required/,
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_titles where id='qc-submit-title'"))[0].status,
+      "PREPARING",
+    );
     const result = await submitTitleForQc(f.sql, title, "owner", "Submit verified title for QC", "bridge-title-rights-v1");
     assert.equal(result.title.status, "QC_REVIEW");
     assert.equal(
