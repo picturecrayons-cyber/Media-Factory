@@ -417,6 +417,50 @@ export const listTitles = createServerFn({ method: "GET" })
     }) };
   });
 
+
+/** Server-authoritative Studio Finished Films list. Story concepts are served by their own workflow. */
+export const listStudioFinishedFilms = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType !== "studio") throw new Error("Studio account required");
+    assertPermission(actor, "title.read_own");
+    const sql = await getSql();
+    const organizationId = actor.organizationId ?? null;
+    const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+    let rows: TitleRow[];
+    if (!organizationId) {
+      rows = mergeColumnAvailable
+        ? await sql<TitleRow>`select * from bridge_titles where owner_user_id = ${actor.userId} and submission_type = 'finished_film' and merged_into_title_id is null order by updated_at desc limit 200`
+        : await sql<TitleRow>`select * from bridge_titles where owner_user_id = ${actor.userId} and submission_type = 'finished_film' order by updated_at desc limit 200`;
+    } else {
+      rows = mergeColumnAvailable
+        ? await sql<TitleRow>`
+            select t.* from bridge_titles t
+            where t.submission_type = 'finished_film'
+              and t.merged_into_title_id is null
+              and (
+                t.owner_user_id = ${actor.userId}
+                or (t.owner_account_type = 'studio' and t.owner_organization_id = ${organizationId}
+                  and exists (select 1 from bridge_organization_memberships m
+                    where m.organization_id = ${organizationId} and m.user_id = ${actor.userId} and m.status = 'active'))
+              )
+            order by t.updated_at desc limit 200
+          `
+        : await sql<TitleRow>`
+            select t.* from bridge_titles t
+            where t.submission_type = 'finished_film'
+              and (t.owner_user_id = ${actor.userId}
+                or (t.owner_account_type = 'studio' and t.owner_organization_id = ${organizationId}
+                  and exists (select 1 from bridge_organization_memberships m
+                    where m.organization_id = ${organizationId} and m.user_id = ${actor.userId} and m.status = 'active')))
+            order by t.updated_at desc limit 200
+          `;
+    }
+    return { titles: rows.map(mapTitle) };
+  });
+
 export const getTitle = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ id: z.string().min(8) }))
