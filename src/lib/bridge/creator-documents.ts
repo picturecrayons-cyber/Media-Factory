@@ -23,18 +23,18 @@ const DOCUMENT_TYPES = [
 const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
 const MIME_TYPES = new Set(["application/pdf"]);
 
-function assertCreatorOrStudio(actor: { accountType: string }) {
-  if (actor.accountType !== "independent_creator" && actor.accountType !== "studio") {
+function assertCreatorOrStudio(actor: { accountType: string; internalRole?: string | null }) {
+  if (actor.internalRole || (actor.accountType !== "independent_creator" && actor.accountType !== "studio")) {
     throw new Error("Creator or Studio account required");
   }
 }
 
 /** Reusable Studio legal documents are restricted to active organization owners/admins. */
 async function assertStudioDocumentManager(
-  actor: { userId: string; accountType: string; organizationId?: string | null },
+  actor: { userId: string; accountType: string; organizationId?: string | null; internalRole?: string | null },
   sql: Sql,
 ) {
-  if (actor.accountType !== "studio") return;
+  if (actor.internalRole || actor.accountType !== "studio") return;
   if (!actor.organizationId) {
     throw new Error("A verified Studio organization mapping is required for Document Vault access");
   }
