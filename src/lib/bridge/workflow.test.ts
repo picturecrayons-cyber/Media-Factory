@@ -99,11 +99,6 @@ async function fixture() {
       storage_namespace text,storage_region text,storage_endpoint text,storage_verified_at timestamptz
     );
     create table bridge_title_events(id serial primary key,title_id text,from_status text,to_status text,actor_user_id text,note text);
-    create table bridge_asset_versions(
-      id uuid primary key default gen_random_uuid(),title_id text,asset_type text,asset_group text,
-      version integer,language text,s3_key text,checksum_sha256 text,byte_size bigint,
-      technical_metadata jsonb not null default '{}',processing_state text,created_by text,created_at timestamptz default now()
-    );
     create table bridge_title_submission_intake(
       title_id text primary key,authority_type text,authorization_evidence_type text,
       authorization_confirmed boolean not null default false
