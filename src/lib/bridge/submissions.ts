@@ -65,6 +65,9 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       throw new Error("Only creator and studio accounts can submit titles");
     }
     assertPermission(actor, "title.create");
+    if (actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("A verified active Studio organization membership is required before creating a Studio submission.");
+    }
 
     const id = randomBytes(16).toString("hex");
     const slug = `${data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "title"}-${id.slice(0, 6)}`;
@@ -72,11 +75,12 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
 
     await sql`
       insert into bridge_titles (
-        id, slug, name, original_title, owner_user_id, owner_account_type, status,
+        id, slug, name, original_title, owner_user_id, owner_account_type, owner_organization_id, status,
         synopsis, long_synopsis, language, original_language, year, runtime_minutes,
         content_type, loop_distribution_preference, country_of_origin, release_date
       ) values (
-        ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType}, 'DRAFT',
+        ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType},
+        ${actor.accountType === "studio" ? actor.organizationId : null}, 'DRAFT',
         ${data.synopsis}, ${data.synopsis}, ${data.originalLanguage}, ${data.originalLanguage},
         ${data.releaseYear}, ${data.runtimeMinutes}, ${storedBridgeContentType(data.contentType)}, ${data.loopDistributionPreference}, ${data.countryOfOrigin},
         make_date(${data.releaseYear}, 1, 1)
