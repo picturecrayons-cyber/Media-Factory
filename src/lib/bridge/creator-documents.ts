@@ -8,7 +8,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { canReadTitle, canOperateOnTitle } from "./rbac";
 import { writeAudit } from "./audit";
-import { sameOwner, creatorDocumentListFailureMessage } from "./creator-document-policy";
+import { sameOwner, creatorDocumentListFailureMessage, isEvidenceCompatibleWithSubmission, canRevokeCreatorDocument } from "./creator-document-policy";
 
 const DOCUMENT_TYPES = [
   "FINISHED_FILM_AGREEMENT",
@@ -178,6 +178,9 @@ export const linkCreatorDocumentToTitle = createServerFn({ method: "POST" })
     if (doc.document_type !== data.evidenceType) {
       throw new Error("Evidence type must match the uploaded document type");
     }
+    if (!isEvidenceCompatibleWithSubmission(title.submissionType, doc.document_type)) {
+      throw new Error("This document type is not valid evidence for the selected title submission type");
+    }
     const linkId = randomBytes(16).toString("hex");
     await sql`
       insert into bridge_title_document_links(id,title_id,document_id,evidence_type,linked_by)
@@ -255,4 +258,44 @@ export const requestCreatorDocumentDownload = createServerFn({ method: "POST" })
       entityId: doc.id,
     });
     return { url: signed.url, expiresIn: 180 };
+  });
+
+
+export const revokeCreatorDocument = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ documentId: z.string().min(16), note: z.string().trim().min(8).max(1000) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    const docs = await sql<{
+      id: string; owner_user_id: string; owner_account_type: string;
+      owner_organization_id: string | null; status: string;
+    }>`
+      select id,owner_user_id,owner_account_type,owner_organization_id,status
+      from bridge_creator_documents where id=${data.documentId} limit 1
+    `;
+    const doc = docs[0];
+    if (!doc || !canRevokeCreatorDocument({
+      actorUserId: actor.userId,
+      accountType: actor.accountType,
+      organizationId: actor.organizationId,
+      internalRole: actor.internalRole,
+      ...doc,
+    })) throw new Error("Document not found");
+    if (doc.status === "REVOKED") return { documentId: doc.id, revoked: true as const, alreadyRevoked: true as const };
+    const changed = await sql<{ id: string }>`
+      update bridge_creator_documents set status='REVOKED'
+      where id=${doc.id} and status <> 'REVOKED'
+      returning id
+    `;
+    if (!changed[0]) throw new Error("Document status changed before revocation");
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "creator_document.revoked",
+      entityType: "bridge_creator_document",
+      entityId: doc.id,
+      metadata: { note: data.note },
+    });
+    return { documentId: doc.id, revoked: true as const, alreadyRevoked: false as const };
   });
