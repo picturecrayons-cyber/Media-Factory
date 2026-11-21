@@ -147,6 +147,18 @@ function sharesStudioOrganization(
   );
 }
 
+function ownsOrSharesTitle(
+  actor: Actor,
+  title: { ownerUserId: string; ownerAccountType?: AccountType; ownerOrganizationId?: string | null },
+): boolean {
+  if (actor.internalRole) return false;
+  if (actor.accountType === "studio") return sharesStudioOrganization(actor, title);
+  if (actor.accountType === "independent_creator") {
+    return title.ownerAccountType === "independent_creator" && title.ownerUserId === actor.userId;
+  }
+  return false;
+}
+
 const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
   viewer: [],
   qc_reviewer: [],
@@ -190,7 +202,7 @@ export function canReadTitle(
 ): boolean {
   if (!actor.emailVerified) return false;
   if (
-    (title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) &&
+    ownsOrSharesTitle(actor, title) &&
     !actor.internalRole
   ) return hasPermission(actor, "title.read_own");
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
@@ -207,7 +219,7 @@ export function canMutateTitle(
   if (!actor.emailVerified) return false;
   if (actor.internalRole) return hasPermission(actor, staffPermission);
   return (
-    (title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) &&
+    ownsOrSharesTitle(actor, title) &&
     hasPermission(actor, ownerPermission)
   );
 }
@@ -221,7 +233,7 @@ export function canOperateOnTitle(
   if (!actor.emailVerified) return false;
   if (actor.internalRole) return staffPermission ? hasPermission(actor, staffPermission) : false;
   return (
-    (title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) &&
+    ownsOrSharesTitle(actor, title) &&
     hasPermission(actor, ownerPermission)
   );
 }
