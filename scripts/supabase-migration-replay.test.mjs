@@ -60,3 +60,21 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
 }
+
+
+test("Delivery Desk pre-ledger baseline is restored before the historical ownership migration", () => {
+  const baseline = replaySource.indexOf("create table public.bridge_delivery_jobs");
+  const ownershipMigration = replaySource.indexOf('name === "20261114135437_bridge_delivery_job_ownership_20261114.sql"');
+  assert.ok(baseline >= 0 && ownershipMigration > baseline, "Delivery Desk baseline must precede ownership migration replay");
+  assert.match(replaySource, /bridge_delivery_jobs_internal_only/);
+  assert.match(replaySource, /private\.bridge_is_internal\(\)/);
+  assert.match(replaySource, /alter table public\.bridge_delivery_jobs enable row level security/);
+});
+
+test("delivery evidence migration is additive and does not mutate existing job records", () => {
+  const migration = readFileSync(new URL("../supabase/migrations/20261121220000_bridge_delivery_job_idempotency_evidence.sql", import.meta.url), "utf8");
+  assert.match(migration, /add column if not exists idempotency_key uuid/i);
+  assert.match(migration, /add column if not exists receipt_sha256 text/i);
+  assert.match(migration, /create unique index if not exists bridge_delivery_jobs_request_idempotency_idx/i);
+  assert.doesNotMatch(migration, /\b(delete from|update public\.bridge_delivery_jobs|drop table)\b/i);
+});
