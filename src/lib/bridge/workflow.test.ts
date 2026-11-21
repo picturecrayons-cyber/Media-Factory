@@ -108,7 +108,17 @@ async function fixture() {
       status text not null default 'DRAFT',created_at timestamptz not null default now()
     );
     create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);
-    create table bridge_profiles(user_id text primary key,email text,internal_role text,email_verified boolean);
+    create table bridge_profiles(
+      user_id text primary key,email text,internal_role text,email_verified boolean,
+      account_type text not null default 'independent_creator',organization_id uuid
+    );
+    create table bridge_organization_memberships(
+      organization_id uuid,user_id text,status text
+    );
+    create table bridge_title_submission_consents(
+      id uuid primary key default gen_random_uuid(),title_id text,submission_event_id integer unique,
+      actor_user_id text,actor_account_type text,consent_version text,accepted_at timestamptz
+    );
     create table bridge_notification_outbox(
       id uuid primary key default gen_random_uuid(),
       event_key text not null unique,
@@ -381,7 +391,9 @@ test("Submit for QC advances PREPARING and queues a deduplicated internal QC not
     `);
     await f.sql.query(`
       insert into bridge_profiles(user_id,email,internal_role,email_verified)
-      values ('qc-reviewer','qc@example.test','qc_reviewer',true);
+      values
+        ('owner','owner@example.test',null,true,'independent_creator',null),
+        ('qc-reviewer','qc@example.test','qc_reviewer',true,'independent_creator',null);
       insert into bridge_title_submission_intake(title_id,authority_type,authorization_evidence_type,authorization_confirmed)
       values ('qc-submit-title','RIGHTS_OWNER','OWNERSHIP_DOCUMENT',true);
       insert into bridge_rights_grants(title_id,evidence,status)
@@ -401,7 +413,7 @@ test("Submit for QC advances PREPARING and queues a deduplicated internal QC not
       masterKey: "sealed/qc-master",
       posterKey: "sealed/qc-poster",
     };
-    const result = await submitTitleForQc(f.sql, title, "owner", "Submit verified title for QC");
+    const result = await submitTitleForQc(f.sql, title, "owner", "Submit verified title for QC", "bridge-title-rights-v1");
     assert.equal(result.title.status, "QC_REVIEW");
     assert.equal(
       (await f.sql.query<{ status: string }>(
@@ -427,6 +439,12 @@ test("Submit for QC advances PREPARING and queues a deduplicated internal QC not
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].recipient_email, "qc@example.test");
     assert.equal(notifications[0].status, "pending");
+    const consents = await f.sql.query<{ actor_user_id: string; consent_version: string }>(
+      "select actor_user_id, consent_version from bridge_title_submission_consents where title_id='qc-submit-title'",
+    );
+    assert.equal(consents.length, 1);
+    assert.equal(consents[0].actor_user_id, "owner");
+    assert.equal(consents[0].consent_version, "bridge-title-rights-v1");
     assert.equal(
       (await f.sql.query(
         "select * from bridge_qc_cases where title_id='qc-submit-title'",
