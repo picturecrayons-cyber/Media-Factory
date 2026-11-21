@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ditManifestDigest, ditManifestTotals, normalizeDitFiles } from "./dit-manifest.ts";
+import { assertDitCopiesMatch, ditManifestDigest, ditManifestTotals, normalizeDitFiles } from "./dit-manifest.ts";
 
 const hashA = "a".repeat(64);
 const hashB = "b".repeat(64);
@@ -39,4 +39,11 @@ test("rejects unsafe aggregate sizes", () => {
     { relativePath: "a.mov", byteSize: Number.MAX_SAFE_INTEGER, sha256: hashA },
     { relativePath: "b.mov", byteSize: 1, sha256: hashB },
   ]), /safe integer limit/);
+});
+
+test("Primary and Recovery copies require identical byte sizes and SHA-256 digests", () => {
+  const primary = { byteSize: 4096, sha256: hashA };
+  assert.equal(assertDitCopiesMatch(primary, { byteSize: 4096, sha256: hashA }), true);
+  assert.throws(() => assertDitCopiesMatch(primary, { byteSize: 4097, sha256: hashA }), /byte sizes differ/);
+  assert.throws(() => assertDitCopiesMatch(primary, { byteSize: 4096, sha256: hashB }), /SHA-256 values differ/);
 });
