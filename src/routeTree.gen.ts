@@ -242,10 +242,8 @@ export interface FileRoutesByFullPath {
   '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/finance': typeof FinanceRoute
-  '/finance': typeof FinanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
-  '/investor-governance': typeof InvestorGovernanceRoute
   '/investor-governance': typeof InvestorGovernanceRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
@@ -274,14 +272,17 @@ export interface FileRoutesByTo {
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
+  '/buyer-workspace': typeof BuyerWorkspaceRoute
   '/cms': typeof CmsRoute
   '/contact': typeof ContactRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/finance': typeof FinanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
+  '/investor-governance': typeof InvestorGovernanceRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
@@ -310,14 +311,17 @@ export interface FileRoutesById {
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
+  '/buyer-workspace': typeof BuyerWorkspaceRoute
   '/cms': typeof CmsRoute
   '/contact': typeof ContactRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/finance': typeof FinanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
+  '/investor-governance': typeof InvestorGovernanceRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
@@ -385,14 +389,17 @@ export interface FileRouteTypes {
     | '/admin-cms'
     | '/app'
     | '/buyer'
+    | '/buyer-workspace'
     | '/cms'
     | '/contact'
     | '/creator'
     | '/dashboard'
     | '/deliveries'
     | '/forgot-password'
+    | '/finance'
     | '/internal'
     | '/investor'
+    | '/investor-governance'
     | '/login'
     | '/loop-cms'
     | '/onboarding'
@@ -420,14 +427,17 @@ export interface FileRouteTypes {
     | '/admin-cms'
     | '/app'
     | '/buyer'
+    | '/buyer-workspace'
     | '/cms'
     | '/contact'
     | '/creator'
     | '/dashboard'
     | '/deliveries'
     | '/forgot-password'
+    | '/finance'
     | '/internal'
     | '/investor'
+    | '/investor-governance'
     | '/login'
     | '/loop-cms'
     | '/onboarding'
