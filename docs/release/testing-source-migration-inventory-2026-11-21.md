@@ -351,3 +351,49 @@ The application route `/api/razorpay/webhook` calls `ingestRazorpayWebhook` in `
 ### Current disposition
 
 **Application call graph: FAIL against inspected Testing schema.** The end-to-end TVOD flow is not ready for implementation or release until checkout identifiers/columns, order persistence, fulfillment/refund RPC contracts, provider capture time, and refund tombstone behavior are reconciled. No application source code or migration SQL was modified in this audit step.
+
+## Follow-up READ-ONLY Testing catalog/function verification — 2026-11-21
+
+Target: Supabase project `jbymleftneggcgutlcqu` (Crayons Projects - Testing DB).
+Action: catalog, constraints, policies, function definitions and EXECUTE grants only.
+Access: READ-ONLY.
+Risk: no hosted data or schema changes.
+
+### Confirmed schema facts
+
+- `public.loop_tvod_orders` is absent.
+- `public.bridge_loop_consumer_pricing` is absent.
+- `public.loop_payment_events` exists and is the canonical payment-event ledger. Its `event_id` is UNIQUE; allowed statuses are `received`, `processed`, `refunded`, `failed`, `reconciliation_required`. `user_id` references `auth.users(id)`.
+- `public.loop_titles.id` is TEXT; status constraint values are uppercase `DRAFT`, `APPROVED`, `PUBLISHED`, `ARCHIVED`, `REVOKED`. Listing fields are `is_listed`, `is_published`; price field is `price_paise` (BIGINT).
+- `public.bridge_loop_publications` has TEXT `loop_title_id` and TEXT `bridge_title_id`, destination constrained to `CRAYONS_LOOP`, authorization values constrained to uppercase `HOLD`, `AUTHORIZED`, `REVOKED`, `EXPIRED`. It has `approved_at`, `window_start`, `window_end`, `territories`, `languages`, and `exploitation_models`.
+- `public.loop_user_tvod_entitlements` uses UUID `user_id`, TEXT `title_id`, access types `RENTAL`/`PURCHASE`, statuses `ACTIVE`/`REFUNDED`/`REVOKED`/`EXPIRED`, and UNIQUE `payment_transaction_id` plus UNIQUE `(user_id,title_id,access_type)`.
+- The four inspected tables `loop_titles`, `loop_payment_events`, `loop_user_tvod_entitlements`, and `bridge_loop_publications` each have a `deny_browser_access` policy for anon/authenticated with false USING and WITH CHECK.
+
+### Exact existing RPC contracts and behavior
+
+- `loop_fulfill_captured_rental(text,text,uuid,text,timestamptz,timestamptz)` exists. It validates non-null identity/timestamps, enforces a 48-hour window, advisory-locks payment and user/title, uses `loop_payment_events` event key `tvod:<payment>`, refuses a refunded payment, checks uppercase publication/title states and approved publication window/territory/language/model, and upserts the existing entitlement.
+- `loop_refund_captured_rental(text,text)` exists. It inserts a `refunded` payment event when no capture record exists (refund-before-capture tombstone), or marks the payment event and matching entitlement refunded.
+- `loop_rental_fulfillment_ready()` checks for the canonical payment event and the six-argument fulfillment function.
+- EXECUTE grants are present for `service_role` and `postgres`; no anon/authenticated EXECUTE grants appeared in `information_schema.routine_privileges` for these functions. This is catalog evidence, not an effective-role runtime test.
+- `has_active_loop_tvod_entitlement(text)` is SECURITY DEFINER and checks active, unexpired `RENTAL` entitlement for `auth.uid()`; keep it out of this repair unless a separate explicit security review demonstrates a necessary change.
+
+### Revised implementation contract
+
+1. Do not create another payment-event ledger. Use `loop_payment_events` and preserve its unique event identity/status vocabulary.
+2. Do not add a parallel `loop_tvod_orders` dependency without a separate schema proposal. A durable order-intent representation must first be designed against actual available schema and current application behavior.
+3. Do not create/use `bridge_loop_consumer_pricing` as though it already exists. Current Testing price source is `loop_titles.price_paise`; any Bridge-side pricing authority requires a separately justified schema design and reconciliation with source policy.
+4. Update checkout validation to accept the actual text title ID and avoid UUID casts of title IDs. User IDs remain UUID.
+5. Align title/publication status casing and publication gate with the actual uppercase constraints and the existing fulfillment RPC.
+6. Call the existing six-argument fulfillment function with persisted/verified payment ID, order ID, UUID user ID, TEXT title ID, authoritative capture timestamp and exactly 48-hour expiry. Never call a two-argument overload that is not present.
+7. Call the existing two-argument refund function; its current implementation already creates a refund-before-capture tombstone. Verify that webhook routing and payment ID resolution always reach it for Loop events.
+8. Persist/verify provider order and capture identity, amount and currency before fulfillment. The present Edge Function's `loop_tvod_orders` lookup/update must be replaced by a contract that can be durably reconciled without a nonexistent table.
+9. Treat the current Edge Function as the only inspected implementation containing Loop TVOD fulfillment; production webhook target/configuration remains NOT VERIFIED. The app route delegates to Bridge-only `ingestRazorpayWebhook`.
+
+### Revised status
+
+- Testing catalog/function inspection: PASS (READ-ONLY evidence gathered).
+- Existing order table / Bridge consumer pricing table: FAIL (both absent).
+- Existing fulfillment/refund RPC compatibility with current Edge Function: FAIL.
+- Browser-deny policies and service_role EXECUTE grants: PASS as catalog observations; effective runtime authorization: NOT VERIFIED.
+- Application checkout/webhook compatibility: FAIL.
+- No hosted writes, no SQL migrations, no source application changes, no Production operations.
