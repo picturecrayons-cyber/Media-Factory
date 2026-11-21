@@ -64,6 +64,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     posterKey: r.poster_key,
     masterKey: r.master_key,
     contentType: r.content_type,
+    submissionType: r.submission_type ?? null,
     countryOfOrigin: r.country_of_origin,
     releaseDate: r.release_date ? asIso(r.release_date) : null,
     credits: r.credits,
