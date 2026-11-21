@@ -76,3 +76,8 @@ test("Creator draft lifecycle migration is replayed and verified", () => {
   assert.match(replaySource, /deleted_by_fk_validated/);
   assert.match(replaySource, /active_owner_index/);
 });
+
+test("Creator draft archive is enforced by authenticated title RLS", () => {
+  assert.match(replaySource, /bridge_titles\.deleted_at is null and exists/);
+  assert.match(replaySource, /deleted_at IS NULL/);
+});
