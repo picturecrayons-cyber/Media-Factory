@@ -40,6 +40,7 @@ import {
   sessionStorageKey,
 } from "@/lib/bridge/multipart-upload";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
+import { CreatorTitleActions } from "@/components/bridge/creator-title-actions";
 
 export const Route = createFileRoute("/title/$id")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -158,6 +159,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
+      {!buyerView ? <CreatorTitleActions title={title} actor={actor} /> : null}
       <WorkflowDesk
         title={title}
         actor={actor}
