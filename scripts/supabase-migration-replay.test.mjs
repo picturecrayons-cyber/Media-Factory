@@ -85,3 +85,9 @@ test("Creator draft archive is enforced by authenticated title RLS after migrati
   assert.match(replaySource, /archived_title_rls_filter/);
   assert.match(creatorLifecycleMigration, /deleted_at is null/);
 });
+
+test("Creator title RLS requires active Studio organization membership", () => {
+  assert.match(creatorLifecycleMigration, /bridge_organization_memberships m/);
+  assert.match(creatorLifecycleMigration, /m\.status = 'active'/);
+  assert.match(replaySource, /studio_membership_rls_filter/);
+});
