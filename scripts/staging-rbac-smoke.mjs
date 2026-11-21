@@ -36,7 +36,7 @@ async function main() {
   const client = new Client({
     connectionString,
     ssl: { rejectUnauthorized: true },
-    application_name: "bridge-staging-rbac-smoke-readwrite-transactional",
+    application_name: "bridge-staging-rbac-db-layer-transactional",
     connectionTimeoutMillis: 10000,
   });
 
@@ -135,8 +135,8 @@ async function main() {
     await client.query("ROLLBACK");
     transactionOpen = false;
     console.log("PASS: profile-only workspace query loads without organization joins and leaves organization scope null.");
-    console.log("PASS: staging schema/RLS grants verified; same-organization upload confirmation allowed; cross-organization confirmation denied.");
-    console.log("PASS: all synthetic fixture rows were rolled back; no lasting staging records or storage objects were created.");
+    console.log("PASS: STAGING DB schema/RLS grants verified; synthetic same-organization upload confirmation allowed; synthetic cross-organization confirmation denied. (Database-layer test only; not authenticated Supabase Auth/PostgREST runtime certification.)");
+    console.log("PASS: all synthetic fixture rows were rolled back; no lasting STAGING DB records or storage objects were created. (Authenticated identities and app-server sessions were not exercised.)");
   } finally {
     if (transactionOpen) {
       try { await client.query("ROLLBACK"); } catch { /* Preserve the original failure. */ }
