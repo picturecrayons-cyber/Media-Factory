@@ -126,3 +126,19 @@ Risk: **High** for any unreviewed write because the database is live.
 5. Verify authenticated Bridge Preview and confirm its database URL/key target before any end-to-end test.
 
 No merge, production write, production environment change, storage mutation, live email or payment operation was performed. Production remains HOLD / NOT CERTIFIED / NO-GO.
+
+
+## Implementation update — 21 November 2026 (QC submission hardening)
+
+Target: **PRODUCTION DB** `mlmgugivsyoxzdgwkbpu` and **STAGING / Testing DB** `jbymleftneggcgutlcqu`.
+
+- **PRODUCTION DB** — Action: verify existing notification outbox migration only. Access: **READ-ONLY**. Risk: **High** for any write. The migration `20261114135443_bridge_notification_outbox_20261114` is already present in the ledger and the table exists with RLS enabled. No duplicate migration or Production write was performed.
+- **STAGING / Testing DB** — Action: compare migration ledger and outbox table presence. Access: **READ-ONLY**. Risk: **Medium**. The Testing ledger contains 68 migrations and the QC outbox table was absent at audit time. No migration was applied; the previously discussed staging-only write has not been authorized in this message.
+- PR #759 now validates the seven required QC assets inside the lifecycle transaction: master, trailer, vertical poster, horizontal artwork, thumbnail, subtitles and censor/legal certificate. Each requires a positive byte size, immutable verified object key, complete storage provenance, verification timestamp and 64-character SHA-256 checksum. The master and vertical poster must match the title's current master/artwork pointers.
+- Finished-film metadata and rights-holder classification/authorization evidence are validated before PREPARING → QC_REVIEW. Title and existing asset rows are locked before validation; lifecycle, audit and queued internal notifications commit atomically.
+- Notification idempotency now derives from the persisted `bridge_title_events.id`, not a wall-clock timestamp. The application URL comes from the approved Bridge origin resolver.
+- Test fixture now models the required metadata, seven immutable asset rows, rights declaration and reviewer. Exact-head CI is currently **IN PROGRESS** on `b0d054c5a86f7de0a7072ba8157c5ff97590b660`; do not report PASS until the workflow run completes.
+- Reviewer lookup still selects all verified `qc_reviewer` profiles. A title/organization-specific QC assignment schema does not currently exist in the inspected Production table inventory. This remains a scope/assignment design gate; do not invent an assignment join.
+- Dispatcher implementation, bounded retries/lease recovery/provider idempotency, and selective functional port of #746/#712/#751 remain **NOT VERIFIED / NOT IMPLEMENTED** on this head. Existing `mail.server.ts` SMTP helper is not a bounded outbox dispatcher. Sending remains disabled pending a separately reviewed provider/idempotency design.
+- Seven-file multipart cleanup from #491 is deliberately not ported in this increment: it performs real OCI abort and manifest deletion operations. Keep it isolated until its tests and concurrency behavior are independently reviewed.
+- PR #759 remains Draft, open and unmerged. No Production SQL, grant, policy, Auth setting, environment variable, storage object, customer email, payment, merge or deployment promotion was performed.
