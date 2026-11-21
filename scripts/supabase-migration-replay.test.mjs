@@ -69,3 +69,10 @@ test("Creator Vault migration replay verifies UUID organization FK and server-on
   assert.match(replaySource, /vault\.client_grants !== 0/);
   assert.match(replaySource, /vault\.service_role_grants < 6/);
 });
+
+test("Creator draft lifecycle migration is replayed and verified", () => {
+  assert.ok(replaySource.includes("20261121160000_bridge_creator_draft_submission_lifecycle.sql"));
+  assert.match(replaySource, /submission_status_check_validated/);
+  assert.match(replaySource, /deleted_by_fk_validated/);
+  assert.match(replaySource, /active_owner_index/);
+});
