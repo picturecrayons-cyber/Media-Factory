@@ -49,7 +49,7 @@ export async function submitTitleForQc(
     // QC submission and its internal notification queue entry are one commit.
     // Do not silently accept a submission when the notification schema is absent.
     const schema = await tx<{ outbox: string | null }>`
-      select to_regclass('public.bridge_notification_outbox')::text as outbox
+      select to_regclass('bridge_notification_outbox')::text as outbox
     `;
     if (!schema[0]?.outbox) {
       throw new Error("QC notification outbox is not installed in this environment");
