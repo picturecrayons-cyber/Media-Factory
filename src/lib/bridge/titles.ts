@@ -97,13 +97,21 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
   if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
+      ? sql<TitleRow>`select * from bridge_titles
+          where owner_user_id = ${userId}
+            and submission_type is distinct from 'story_concept'
+            and merged_into_title_id is null
+          order by updated_at desc limit 200`
+      : sql<TitleRow>`select * from bridge_titles
+          where owner_user_id = ${userId}
+            and submission_type is distinct from 'story_concept'
+          order by updated_at desc limit 200`;
   }
   return mergeColumnAvailable
     ? sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.merged_into_title_id is null
+        where t.submission_type is distinct from 'story_concept'
+          and t.merged_into_title_id is null
           and (
             t.owner_user_id = ${userId}
             or (
@@ -121,15 +129,18 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
       `
     : sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
-          or (
-            t.owner_account_type = 'studio'
-            and t.owner_organization_id = ${orgId}
-            and exists (
-              select 1 from bridge_organization_memberships m
-              where m.organization_id = ${orgId}
-                and m.user_id = ${userId}
-                and m.status = 'active'
+        where t.submission_type is distinct from 'story_concept'
+          and (
+            t.owner_user_id = ${userId}
+            or (
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id = ${orgId}
+              and exists (
+                select 1 from bridge_organization_memberships m
+                where m.organization_id = ${orgId}
+                  and m.user_id = ${userId}
+                  and m.status = 'active'
+              )
             )
           )
         order by t.updated_at desc limit 200
@@ -145,8 +156,22 @@ function slugify(name: string, id: string): string {
   return `${base || "title"}-${id.slice(0, 6)}`;
 }
 
+async function isStoryConceptTitle(sql: Sql, titleId: string): Promise<boolean> {
+  const table = await sql<{ exists: boolean }>`
+    select to_regclass('public.bridge_story_concept_submissions') is not null as exists
+  `;
+  if (!table[0]?.exists) return false;
+  const rows = await sql<{ exists: boolean }>`
+    select exists (
+      select 1 from bridge_story_concept_submissions where title_id = ${titleId}
+    ) as exists
+  `;
+  return Boolean(rows[0]?.exists);
+}
+
 export async function loadTitle(id: string): Promise<BridgeTitle | null> {
   const sql = await getSql();
+  if (await isStoryConceptTitle(sql, id)) return null;
   const rows = await sql<TitleRow>`
     select t.* from bridge_titles t
     where t.id = ${id}
