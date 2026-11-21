@@ -158,6 +158,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
+      {!actor.internalRole && (actor.accountType === "independent_creator" || actor.accountType === "studio") ? (
+        <OwnerMetadataCompletion title={title} />
+      ) : null}
       <WorkflowDesk title={title} actor={actor} />
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
@@ -293,6 +296,65 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     </div>
   );
 }
+
+function OwnerMetadataCompletion({ title }: { title: BridgeTitle }) {
+  const qc = useQueryClient();
+  const [year, setYear] = useState(title.year ? String(title.year) : "");
+  const [runtime, setRuntime] = useState(title.runtimeMinutes ? String(title.runtimeMinutes) : "");
+  const [country, setCountry] = useState(title.countryOfOrigin ?? "");
+  const [releaseDate, setReleaseDate] = useState(title.releaseDate?.slice(0, 10) ?? "");
+  const [language, setLanguage] = useState(title.language ?? "");
+  const [synopsis, setSynopsis] = useState(title.synopsis ?? "");
+  const [error, setError] = useState("");
+  const save = useMutation({
+    mutationFn: () => updateTitle({ data: {
+      id: title.id,
+      ...(year.trim() ? { year: Number(year) } : {}),
+      ...(runtime.trim() ? { runtimeMinutes: Number(runtime) } : {}),
+      ...(country.trim() ? { countryOfOrigin: country.trim() } : {}),
+      ...(releaseDate ? { releaseDate } : {}),
+      ...(language.trim() ? { language: language.trim() } : {}),
+      ...(synopsis.trim() ? { synopsis: synopsis.trim() } : {}),
+    }}),
+    onSuccess: async () => {
+      setError("");
+      await qc.invalidateQueries({ queryKey: ["bridge-title", title.id] });
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Could not save title details"),
+  });
+  const missing = [
+    !title.year ? "release year" : null,
+    !title.runtimeMinutes ? "runtime" : null,
+    !title.countryOfOrigin?.trim() ? "country" : null,
+    !title.releaseDate ? "release date" : null,
+    !title.language?.trim() ? "original language" : null,
+    !title.synopsis?.trim() ? "synopsis" : null,
+  ].filter(Boolean);
+  if (missing.length === 0) return null;
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Before submission</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Complete title details</h2>
+          <p className="mt-1 text-sm text-muted">Only missing details are requested. Your files remain unchanged.</p>
+        </div>
+        <span className="rounded-full border border-line px-3 py-1 text-xs">{missing.length} items left</span>
+      </div>
+      <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
+        {!title.year ? <label className="grid gap-1 text-sm">Release year<input required type="number" min="1888" max={new Date().getFullYear()+2} value={year} onChange={e=>setYear(e.target.value)} className="h-11 rounded-lg border border-line-strong bg-elevated px-3"/></label> : null}
+        {!title.runtimeMinutes ? <label className="grid gap-1 text-sm">Runtime (minutes)<input required type="number" min="1" max="600" value={runtime} onChange={e=>setRuntime(e.target.value)} className="h-11 rounded-lg border border-line-strong bg-elevated px-3"/></label> : null}
+        {!title.countryOfOrigin?.trim() ? <label className="grid gap-1 text-sm">Country of origin<input required maxLength={80} value={country} onChange={e=>setCountry(e.target.value)} placeholder="India" className="h-11 rounded-lg border border-line-strong bg-elevated px-3"/></label> : null}
+        {!title.releaseDate ? <label className="grid gap-1 text-sm">Release date<input required type="date" value={releaseDate} onChange={e=>setReleaseDate(e.target.value)} className="h-11 rounded-lg border border-line-strong bg-elevated px-3"/></label> : null}
+        {!title.language?.trim() ? <label className="grid gap-1 text-sm">Original language<input required maxLength={40} value={language} onChange={e=>setLanguage(e.target.value)} placeholder="Malayalam" className="h-11 rounded-lg border border-line-strong bg-elevated px-3"/></label> : null}
+        {!title.synopsis?.trim() ? <label className="grid gap-1 text-sm sm:col-span-2">Synopsis<textarea required minLength={20} maxLength={4000} value={synopsis} onChange={e=>setSynopsis(e.target.value)} rows={3} className="rounded-lg border border-line-strong bg-elevated p-3"/></label> : null}
+        {error ? <p role="alert" className="text-sm text-red-600 sm:col-span-2">{error}</p> : null}
+        <button type="submit" disabled={save.isPending} className="rounded-lg bg-fg px-4 py-2.5 text-sm font-semibold text-bg disabled:opacity-50 sm:col-span-2">{save.isPending ? "Saving…" : "Save missing details"}</button>
+      </form>
+    </section>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-elevated/40 p-4">
