@@ -535,7 +535,7 @@ export const saveTitleSubmissionAuthority = createServerFn({ method: "POST" })
           update bridge_rights_grants
           set evidence = (
             select coalesce(jsonb_agg(item), '[]'::jsonb)
-            from jsonb_array_elements(evidence) item
+            from jsonb_array_elements(evidence) as entries(item)
             where coalesce(item->>'type', '') <> 'AUTHORIZATION_ATTESTATION'
           ) || ${JSON.stringify([attestation])}::jsonb
           where id = ${existing[0].id}::uuid
