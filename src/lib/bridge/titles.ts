@@ -670,6 +670,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
       note: z.string().max(500).optional(),
       legalConsentAccepted: z.boolean().optional(),
       legalConsentVersion: z.string().max(40).optional(),
+      languageMismatchConfirmed: z.boolean().optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -700,7 +701,15 @@ export const advanceTitle = createServerFn({ method: "POST" })
       if (data.legalConsentAccepted !== true || data.legalConsentVersion !== "bridge-title-rights-v1") {
         throw new Error("Review the current title submission declaration and confirm before submitting");
       }
-      return submitTitleForQc(sql, title, actor.userId, data.note, data.legalConsentVersion);
+      const languageMismatch = Boolean(title.language && title.masterLanguage &&
+        title.language.toLowerCase() !== title.masterLanguage.toLowerCase());
+      if (languageMismatch && data.languageMismatchConfirmed !== true) {
+        throw new Error("Confirm that the master language is intentionally different from the title's original language");
+      }
+      return submitTitleForQc(
+        sql, title, actor.userId, data.note, data.legalConsentVersion,
+        data.languageMismatchConfirmed === true || !languageMismatch,
+      );
     }
     return sql.transaction(async (tx) => {
       const [locked] = await tx<{
