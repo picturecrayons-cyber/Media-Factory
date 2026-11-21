@@ -76,6 +76,20 @@ The source migration `20261118130000_loop_tvod_payment_fulfillment.sql` defines 
 
 This is a real API/schema divergence, not just a migration-name mismatch. It also means that a proposed repair must first choose and document one canonical TVOD contract across Bridge, LOOP, webhook handler, and DB. Do not add a second competing fulfillment ledger or duplicate entitlements.
 
+## Application/webhook contract cross-check at audited source SHA
+
+A follow-up read of the exact audited source commit confirms the application contract is the newer **order-based** API:
+
+- `supabase/functions/razorpay-webhook/index.ts` looks up `loop_tvod_orders`, verifies captured payment ID, amount, currency, buyer/title notes, persists capture, then calls `loop_fulfill_captured_rental(p_order_id, p_payment_id)`.
+- The same webhook calls `loop_refund_captured_rental(p_payment_id, p_refund_id, p_order_id)` for refunds.
+- The source migration `20261118130000_loop_tvod_payment_fulfillment.sql` creates `loop_tvod_orders`, `loop_tvod_payment_events`, and `bridge_loop_consumer_pricing`; it also defines the two-argument fulfillment and three-argument refund functions.
+- The older `20261002171708_loop_release_safety.sql` defines a six-argument fulfillment RPC and two-argument refund RPC. The newer migration does not remove the older six-argument fulfillment overload. This evolution is visible in source and must be checked against actual Testing `pg_proc` signatures and grants; the webhook specifically needs the newer two-/three-argument signatures.
+- The newer migration keeps `loop_payment_events` and additionally introduces `loop_tvod_payment_events`. The Bridge revenue read model unions both ledgers. This is an intentional source design, but it creates a dual-ledger reconciliation obligation and must not be simplified or duplicated further without an explicit canonical event ownership rule.
+- The newer migration defines order identity fields as text, then casts buyer/title identifiers to UUID when writing the entitlement table. That is safe only if all persisted IDs are validated canonical UUIDs; it is not a general-purpose text-ID compatibility solution.
+- The migration's publication/price predicate expects `loop_titles.listed`, `published`, and `tvod_rental_price`. Testing's observed `loop_titles` shape instead exposes `is_listed`, `is_published`, and `price_paise`. This mismatch must be explicitly adapted or the migration will fail at runtime.
+
+The repository also contains `scripts/supabase-migration-replay.mjs`. It is designed to replay the 73-entry Production-ledger manifest on a fresh local Supabase stack, restricts its database URL to localhost port 55432, and recognizes the TVOD migration as a supported feature migration while deferring the Sublicensing feature migration. **The script was inspected but not executed in this work**; no local Supabase runtime or replay logs were available here. Its existence is not evidence of a successful replay.
+
 ## Forward-only repair proposal (NOT IMPLEMENTED)
 
 1. Keep the existing Testing ledger and all current Creator Vault, Sublicensing, Production Assets, and Studio objects intact.
