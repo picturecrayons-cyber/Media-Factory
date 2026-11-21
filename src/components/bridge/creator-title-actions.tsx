@@ -13,6 +13,7 @@ export function CreatorDraftDeleteButton({ title, actor }: { title: BridgeTitle;
   const [error, setError] = useState<string | null>(null);
   const allowed = !actor.internalRole &&
     ["independent_creator", "studio"].includes(actor.accountType) &&
+    (actor.accountType !== "studio" || Boolean(actor.organizationId)) &&
     canOperateOnTitle(actor, title, "title.update_own", null);
   const mutation = useMutation({
     mutationFn: () => deleteTitle({ data: { id: title.id, confirmation: "DELETE DRAFT" } }),
@@ -72,6 +73,7 @@ export function CreatorTitleActions({ title, actor }: { title: BridgeTitle; acto
 
   const canManage = !actor.internalRole &&
     ["independent_creator", "studio"].includes(actor.accountType) &&
+    (actor.accountType !== "studio" || Boolean(actor.organizationId)) &&
     canOperateOnTitle(actor, title, "title.update_own", null);
   const isUnsubmittedDraft = title.status === "DRAFT" && title.creatorSubmissionStatus !== "SUBMITTED";
 
