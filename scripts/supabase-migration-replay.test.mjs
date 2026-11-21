@@ -96,6 +96,8 @@ test("Production asset RLS is owner-only and removes the public definer helper",
   assert.match(creatorLifecycleMigration, /bridge_production_assets_owner_select/);
   assert.match(creatorLifecycleMigration, /create or replace function private\.bridge_is_title_owner/);
   assert.match(creatorLifecycleMigration, /create or replace function private\.bridge_has_buyer_title_access/);
+  assert.match(creatorLifecycleMigration, /create or replace function private\.bridge_can_read_title/);
+  assert.match(creatorLifecycleMigration, /grant usage on schema private to authenticated, service_role/);
   assert.match(creatorLifecycleMigration, /set search_path = ''/);
   assert.match(creatorLifecycleMigration, /bridge_organization_memberships m/);
   assert.match(creatorLifecycleMigration, /m\.status = 'active'/);
