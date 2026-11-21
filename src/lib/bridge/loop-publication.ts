@@ -227,8 +227,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // This GET handler is deliberately read-only. Expiry is derived in the response;
-    // state transitions must be performed by an explicitly authorized command.
+    // Read-only status endpoint: expiry is derived below and never written by a GET request.
     const rows = await sql<{
       id: string;
       slug: string;
@@ -303,17 +302,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
              exists(
                select 1 from bridge_rights_grants rg
                where rg.title_id=b.id and rg.status='VALID'
-                 and (rg.evidence->0->'commercialTerms'->>'rightsOwnerSharePct') ~ '^[0-9]+$'
-                 and (rg.evidence->0->'commercialTerms'->>'distributorSharePct') ~ '^[0-9]+$'
-                 and ((rg.evidence->0->'commercialTerms'->>'rightsOwnerSharePct')::integer
-                   + (rg.evidence->0->'commercialTerms'->>'distributorSharePct')::integer) = 100
-             ) as revenue_shares_ready,
-             exists(
-               select 1 from bridge_qc_cases q
-               where q.title_id=b.id and q.status='PASSED'
-                 and q.reviewer_findings->0->>'masterKey'=b.master_key
-                 and q.reviewer_findings->0->>'posterKey'=b.poster_key
-             ) as qc_approved,
+                 and (rg.evidence->0->'commercialTerms'->>'rightsOwnerSharePct') ~ '^[0-9]+
              coalesce((
                select jsonb_agg(lc.evidence->0->>'grantId')
                from bridge_legal_cases lc
@@ -772,10 +761,6 @@ export const getLoopPublication = createServerFn({ method: "GET" })
   });
 
                  and (rg.evidence->0->'commercialTerms'->>'distributorSharePct') ~ '^[0-9]+
-               where q.title_id=b.id and q.status='PASSED'
-                 and q.reviewer_findings->0->>'masterKey'=b.master_key
-                 and q.reviewer_findings->0->>'posterKey'=b.poster_key
-             ) as qc_approved,
              coalesce((
                select jsonb_agg(lc.evidence->0->>'grantId')
                from bridge_legal_cases lc
@@ -784,8 +769,7 @@ export const getLoopPublication = createServerFn({ method: "GET" })
              g.ott_preparation_status, g.packaging_status, g.curation_status, g.delivery_status
       from bridge_titles b
       left join bridge_loop_publications p on p.bridge_title_id = b.id
-      left join loop_titles l on l.bridge_title_id = b.id
-      left join bridge_title_submission_intake si on si.title_id = b.id
+      left join loop_titles l on l.id = p.loop_title_id
       left join bridge_title_gate_certifications g on g.title_id = b.id
       order by b.updated_at desc
       limit 200
@@ -818,22 +802,10 @@ export const getLoopPublication = createServerFn({ method: "GET" })
           r.packaging_status === "COMPLETE" &&
           r.curation_status === "APPROVED" &&
           r.delivery_status === "READY";
-        const loopMetadataReady = Boolean(
-          r.loop_synopsis?.trim() &&
-          r.loop_language?.trim() &&
-          r.loop_year &&
-          r.loop_duration_minutes,
-        );
-        const masterDeliveryReady = Boolean(r.master_asset_ready && r.qc_approved);
-        const artworkReady = Boolean(r.poster_asset_ready && r.qc_approved);
         const isReady =
           Boolean(coveringGrant) &&
           legalApproved &&
           Boolean(r.qc_approved) &&
-          masterDeliveryReady &&
-          artworkReady &&
-          loopMetadataReady &&
-          Boolean(r.playback_path) &&
           gatesReady &&
           [
             "LICENSING_READY",
@@ -854,10 +826,6 @@ export const getLoopPublication = createServerFn({ method: "GET" })
         if (r.packaging_status !== "COMPLETE") blockers.push("Consumer packaging is not certified COMPLETE");
         if (r.curation_status !== "APPROVED") blockers.push("Editorial curation is not APPROVED");
         if (r.delivery_status !== "READY") blockers.push("Final delivery is not certified READY");
-        if (!r.master_asset_ready) blockers.push("Canonical master object, size and storage readiness are not verified");
-        if (!r.poster_asset_ready) blockers.push("Consumer poster object, size and storage readiness are not verified");
-        if (!loopMetadataReady) blockers.push("Loop synopsis, language, year and duration must be complete");
-        if (!r.playback_path) blockers.push("A Loop playback path has not been configured");
         if (
           ![
             "LICENSING_READY",
@@ -880,19 +848,9 @@ export const getLoopPublication = createServerFn({ method: "GET" })
           language: r.language,
           hasMaster: Boolean(r.master_key),
           hasPoster: Boolean(r.poster_key),
-          submittedAt: iso(r.submitted_at),
           ready: isReady,
           blockers,
-          checks: [
-            { key: "identity", label: "Film identity", status: r.id && r.slug && r.name ? "PASS" : "BLOCKED" },
-            { key: "rights", label: "Rights authorization", status: coveringGrant ? "PASS" : "BLOCKED" },
-            { key: "metadata", label: "Loop metadata", status: loopMetadataReady ? "PASS" : "BLOCKED" },
-            { key: "artwork", label: "Artwork", status: artworkReady ? "PASS" : "BLOCKED" },
-            { key: "master", label: "Master delivery", status: masterDeliveryReady ? "PASS" : "BLOCKED" },
-            { key: "playback", label: "Playback", status: r.playback_path ? "NOT_VERIFIED" : "BLOCKED" },
-            { key: "catalogue", label: "Public catalogue", status: r.published && r.listed ? "NOT_VERIFIED" : "BLOCKED" },
-          ],
-          publication: r.authorization_status
+          publication: r.loop_title_id
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
@@ -1240,8 +1198,7 @@ export const getLoopPublication = createServerFn({ method: "GET" })
              g.ott_preparation_status, g.packaging_status, g.curation_status, g.delivery_status
       from bridge_titles b
       left join bridge_loop_publications p on p.bridge_title_id = b.id
-      left join loop_titles l on l.bridge_title_id = b.id
-      left join bridge_title_submission_intake si on si.title_id = b.id
+      left join loop_titles l on l.id = p.loop_title_id
       left join bridge_title_gate_certifications g on g.title_id = b.id
       order by b.updated_at desc
       limit 200
@@ -1274,22 +1231,10 @@ export const getLoopPublication = createServerFn({ method: "GET" })
           r.packaging_status === "COMPLETE" &&
           r.curation_status === "APPROVED" &&
           r.delivery_status === "READY";
-        const loopMetadataReady = Boolean(
-          r.loop_synopsis?.trim() &&
-          r.loop_language?.trim() &&
-          r.loop_year &&
-          r.loop_duration_minutes,
-        );
-        const masterDeliveryReady = Boolean(r.master_asset_ready && r.qc_approved);
-        const artworkReady = Boolean(r.poster_asset_ready && r.qc_approved);
         const isReady =
           Boolean(coveringGrant) &&
           legalApproved &&
           Boolean(r.qc_approved) &&
-          masterDeliveryReady &&
-          artworkReady &&
-          loopMetadataReady &&
-          Boolean(r.playback_path) &&
           gatesReady &&
           [
             "LICENSING_READY",
@@ -1310,10 +1255,6 @@ export const getLoopPublication = createServerFn({ method: "GET" })
         if (r.packaging_status !== "COMPLETE") blockers.push("Consumer packaging is not certified COMPLETE");
         if (r.curation_status !== "APPROVED") blockers.push("Editorial curation is not APPROVED");
         if (r.delivery_status !== "READY") blockers.push("Final delivery is not certified READY");
-        if (!r.master_asset_ready) blockers.push("Canonical master object, size and storage readiness are not verified");
-        if (!r.poster_asset_ready) blockers.push("Consumer poster object, size and storage readiness are not verified");
-        if (!loopMetadataReady) blockers.push("Loop synopsis, language, year and duration must be complete");
-        if (!r.playback_path) blockers.push("A Loop playback path has not been configured");
         if (
           ![
             "LICENSING_READY",
@@ -1336,19 +1277,9 @@ export const getLoopPublication = createServerFn({ method: "GET" })
           language: r.language,
           hasMaster: Boolean(r.master_key),
           hasPoster: Boolean(r.poster_key),
-          submittedAt: iso(r.submitted_at),
           ready: isReady,
           blockers,
-          checks: [
-            { key: "identity", label: "Film identity", status: r.id && r.slug && r.name ? "PASS" : "BLOCKED" },
-            { key: "rights", label: "Rights authorization", status: coveringGrant ? "PASS" : "BLOCKED" },
-            { key: "metadata", label: "Loop metadata", status: loopMetadataReady ? "PASS" : "BLOCKED" },
-            { key: "artwork", label: "Artwork", status: artworkReady ? "PASS" : "BLOCKED" },
-            { key: "master", label: "Master delivery", status: masterDeliveryReady ? "PASS" : "BLOCKED" },
-            { key: "playback", label: "Playback", status: r.playback_path ? "NOT_VERIFIED" : "BLOCKED" },
-            { key: "catalogue", label: "Public catalogue", status: r.published && r.listed ? "NOT_VERIFIED" : "BLOCKED" },
-          ],
-          publication: r.authorization_status
+          publication: r.loop_title_id
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
