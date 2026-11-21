@@ -20,3 +20,39 @@ export function sameOwner(
 export function creatorDocumentListFailureMessage(reference: string): string {
   return `Document Vault is temporarily unavailable. Retry the request. Reference: ${reference}`;
 }
+
+export function isEvidenceCompatibleWithSubmission(
+  submissionType: string | null | undefined,
+  documentType: string,
+): boolean {
+  if (submissionType === "story_concept") {
+    return ["STORY_CONCEPT_AGREEMENT", "OWNERSHIP_CHAIN_OF_TITLE", "AUTHOR_ASSIGNMENT", "OTHER"].includes(documentType);
+  }
+  if (submissionType === "finished_film") {
+    return [
+      "FINISHED_FILM_AGREEMENT",
+      "DISTRIBUTION_AGREEMENT",
+      "OWNERSHIP_CHAIN_OF_TITLE",
+      "AUTHOR_ASSIGNMENT",
+      "MUSIC_RIGHTS",
+      "OTHER",
+    ].includes(documentType);
+  }
+  return false;
+}
+
+export function canRevokeCreatorDocument(input: {
+  actorUserId: string;
+  accountType: string;
+  organizationId?: string | null;
+  internalRole?: string | null;
+  owner_user_id: string;
+  owner_account_type: string;
+  owner_organization_id: string | null;
+}): boolean {
+  if (input.internalRole === "super_admin" || input.internalRole === "legal_reviewer") return true;
+  return sameOwner(
+    { userId: input.actorUserId, accountType: input.accountType, organizationId: input.organizationId },
+    input,
+  );
+}
