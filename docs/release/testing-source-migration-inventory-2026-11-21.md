@@ -397,3 +397,11 @@ Risk: no hosted data or schema changes.
 - Browser-deny policies and service_role EXECUTE grants: PASS as catalog observations; effective runtime authorization: NOT VERIFIED.
 - Application checkout/webhook compatibility: FAIL.
 - No hosted writes, no SQL migrations, no source application changes, no Production operations.
+
+### CI and replay evidence update
+
+- Audit branch CI push run for commit `d1a45ebb23cc5ffa28a65b939afe1872b9fa77aa`: run `44888334395`, conclusion `failure`.
+- GitHub returned zero jobs for that run; there are no job steps or logs available to establish a code/test failure or a migration replay result.
+- Earlier isolated replay run `44887864847` also concluded `failure` with zero reported jobs.
+- Local environment previously inspected has neither Docker nor Supabase CLI. A disposable PostgreSQL/Supabase replay therefore remains BLOCKED / NOT VERIFIED.
+- A red/failed workflow with no jobs is not evidence that the SQL chain passed or failed; do not label replay PASS.
