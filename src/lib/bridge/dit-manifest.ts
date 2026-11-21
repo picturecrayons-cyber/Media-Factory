@@ -68,3 +68,16 @@ export function ditManifestTotals(files: DitManifestFile[]) {
   if (!Number.isSafeInteger(totalBytes)) throw new Error("Manifest total size exceeds the safe integer limit");
   return { fileCount: files.length, totalBytes };
 }
+
+export function assertDitCopiesMatch(
+  primary: { byteSize: number; sha256: string },
+  recovery: { byteSize: number; sha256: string },
+): true {
+  if (primary.byteSize !== recovery.byteSize) {
+    throw new Error("Primary and Recovery byte sizes differ");
+  }
+  if (primary.sha256.toLowerCase() !== recovery.sha256.toLowerCase()) {
+    throw new Error("Primary and Recovery OCI SHA-256 values differ");
+  }
+  return true;
+}
