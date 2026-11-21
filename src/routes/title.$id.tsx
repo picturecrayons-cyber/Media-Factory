@@ -21,7 +21,7 @@ import {
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
-import { MASTER_LANGUAGES, type MasterLanguage } from "@/lib/bridge/types";
+import { MASTER_LANGUAGES, type BridgeTitle, type MasterLanguage } from "@/lib/bridge/types";
 import {
   OTT_INGEST_SPEC,
   getOttIngestAccept,
