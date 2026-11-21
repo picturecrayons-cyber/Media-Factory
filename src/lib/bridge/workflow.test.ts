@@ -76,6 +76,15 @@ async function fixture() {
     await db.exec(`create table bridge_titles(
       id text primary key,
       name text,
+      content_type text,
+      original_language text,
+      country_of_origin text,
+      release_date date,
+      synopsis text,
+      runtime_minutes integer,
+      year integer,
+      master_language text,
+      submission_type text,
       owner_user_id text,
       owner_account_type text not null default 'independent_creator',
       owner_organization_id uuid,
@@ -84,8 +93,20 @@ async function fixture() {
       poster_key text,
       updated_at timestamptz
     );
-    create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint);
-    create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
+    create table bridge_assets(
+      id text,title_id text,kind text,s3_key text,byte_size bigint,
+      checksum_sha256 text,verified_object_key text,storage_provider text,storage_bucket text,
+      storage_namespace text,storage_region text,storage_endpoint text,storage_verified_at timestamptz
+    );
+    create table bridge_title_events(id serial primary key,title_id text,from_status text,to_status text,actor_user_id text,note text);
+    create table bridge_title_submission_intake(
+      title_id text primary key,authority_type text,authorization_evidence_type text,
+      authorization_confirmed boolean not null default false
+    );
+    create table bridge_rights_grants(
+      id uuid primary key default gen_random_uuid(),title_id text,evidence jsonb not null default '[]',
+      status text not null default 'DRAFT',created_at timestamptz not null default now()
+    );
     create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);
     create table bridge_profiles(user_id text primary key,email text,internal_role text,email_verified boolean);
     create table bridge_notification_outbox(
@@ -348,16 +369,31 @@ test("Submit for QC advances PREPARING and queues a deduplicated internal QC not
   const f = await fixture();
   try {
     await f.sql.query(`
-      insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
-      values ('qc-submit-title','owner','PREPARING','sealed/qc-master','sealed/qc-poster',now())
+      insert into bridge_titles(
+        id,name,content_type,original_language,country_of_origin,release_date,synopsis,
+        runtime_minutes,year,master_language,submission_type,owner_user_id,status,master_key,poster_key,updated_at
+      )
+      values (
+        'qc-submit-title','QC Test Feature','FEATURE','Malayalam','India','2024-01-01',
+        'A complete feature film submission for QC.',110,2024,'Malayalam','finished_film',
+        'owner','PREPARING','sealed/qc-master','sealed/qc-poster',now()
+      )
     `);
     await f.sql.query(`
       insert into bridge_profiles(user_id,email,internal_role,email_verified)
       values ('qc-reviewer','qc@example.test','qc_reviewer',true);
+      insert into bridge_title_submission_intake(title_id,authority_type,authorization_evidence_type,authorization_confirmed)
+      values ('qc-submit-title','RIGHTS_OWNER','OWNERSHIP_DOCUMENT',true);
+      insert into bridge_rights_grants(title_id,evidence,status)
+      values ('qc-submit-title','[{"type":"AUTHORIZATION_ATTESTATION","rightsBasis":"OWNER","authorizationConfirmed":true}]'::jsonb,'DRAFT');
       insert into bridge_assets values
-        ('qc-master','qc-submit-title','master','sealed/qc-master',4096),
-        ('qc-old-poster','qc-submit-title','poster','older/unreferenced-poster',512),
-        ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster',1024)
+        ('qc-master','qc-submit-title','master','sealed/qc-master',4096,repeat('a',64),'sealed/qc-master','oci','bucket','namespace','ap-south-1','https://objectstorage.ap-south-1.oraclecloud.com',now()),
+        ('qc-trailer','qc-submit-title','screener','sealed/qc-trailer',1024,repeat('b',64),'sealed/qc-trailer','oci','bucket','namespace','ap-south-1','https://objectstorage.ap-south-1.oraclecloud.com',now()),
+        ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster',1024,repeat('c',64),'sealed/qc-poster','oci','bucket','namespace','ap-south-1','https://objectstorage.ap-south-1.oraclecloud.com',now()),
+        ('qc-horizontal','qc-submit-title','poster_horizontal','sealed/qc-horizontal',512,repeat('d',64),'sealed/qc-horizontal','oci','bucket','namespace','ap-south-1','https://objectstorage.ap-south-1.oraclecloud.com',now()),
+        ('qc-thumbnail','qc-submit-title','thumbnail','sealed/qc-thumbnail',256,repeat('e',64),'sealed/qc-thumbnail','oci','bucket','namespace','ap-south-1','https://objectstorage.ap-south-1.oraclecloud.com',now()),
+        ('qc-subtitle','qc-submit-title','subtitle','sealed/qc-subtitle',128,repeat('f',64),'sealed/qc-subtitle','oci','bucket','namespace','ap-south-1','https://objectstorage.ap-south-1.oraclecloud.com',now()),
+        ('qc-certificate','qc-submit-title','censor_certificate','sealed/qc-certificate',128,repeat('a',64),'sealed/qc-certificate','oci','bucket','namespace','ap-south-1','https://objectstorage.ap-south-1.oraclecloud.com',now())
     `);
     const title = {
       id: "qc-submit-title",
@@ -386,7 +422,7 @@ test("Submit for QC advances PREPARING and queues a deduplicated internal QC not
       1,
     );
     const notifications = await f.sql.query<{ event_key: string; recipient_email: string; status: string }>(
-      "select event_key, recipient_email, status from bridge_notification_outbox where event_key like 'bridge-qc-submitted:qc-submit-title:%'",
+      "select event_key, recipient_email, status from bridge_notification_outbox where event_key like 'bridge-qc-submitted:%'",
     );
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].recipient_email, "qc@example.test");
