@@ -47,6 +47,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
   const [titleId, setTitleId] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   const jobsQuery = useQuery({
     queryKey: ["bridge-delivery-jobs"],
@@ -54,9 +55,9 @@ function VendorJobs({ actor }: { actor: Actor }) {
   });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["bridge-delivery-jobs"] });
   const request = useMutation({
-    mutationFn: (data: { titleId: string; type: VendorJobType; note?: string }) =>
+    mutationFn: (data: { titleId: string; type: VendorJobType; note?: string; idempotencyKey: string }) =>
       requestBridgeDeliveryJob({ data }),
-    onSuccess: async () => { setTitleId(""); setNote(""); setError(""); await refresh(); },
+    onSuccess: async () => { setTitleId(""); setNote(""); setError(""); setIdempotencyKey(crypto.randomUUID()); await refresh(); },
     onError: (reason) => setError(reason instanceof Error ? reason.message : "Delivery request failed"),
   });
   const jobs = jobsQuery.data?.jobs ?? [];
@@ -107,7 +108,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
             />
           </label>
           <button type="button" className="self-end rounded-lg border border-line px-3 py-2 text-sm disabled:opacity-50"
-            disabled={request.isPending || !titleId.trim()} onClick={() => request.mutate({ titleId: titleId.trim(), type, note: note.trim() })}>
+            disabled={request.isPending || !titleId.trim()} onClick={() => request.mutate({ titleId: titleId.trim(), type, note: note.trim(), idempotencyKey })}>
             {request.isPending ? "Saving…" : "Request"}
           </button>
         </div>
@@ -115,7 +116,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
         <p className="mt-3 text-sm text-muted">You can view delivery jobs. New requests require an authorized Creator, Studio or delivery operator account.</p>
       )}
       {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
-      {jobsQuery.isError ? <p className="mt-3 text-sm text-red-600" role="alert">Delivery records could not be loaded.</p> : null}
+      {jobsQuery.isError ? <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-red-600" role="alert"><p>{jobsQuery.error instanceof Error ? jobsQuery.error.message : "Delivery records could not be loaded."}</p><button type="button" disabled={jobsQuery.isFetching} onClick={() => void jobsQuery.refetch()} className="rounded border border-line px-3 py-1.5 text-xs disabled:opacity-50">{jobsQuery.isFetching ? "Retrying…" : "Retry"}</button></div> : null}
       {jobsQuery.isPending ? <p className="mt-4 text-sm text-muted">Loading persisted delivery jobs…</p> : (
         <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
           {jobs.map((job: {
@@ -134,7 +135,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
                   {job.state.replaceAll("_", " ").toUpperCase()}{job.signedOff ? " · SIGNED OFF" : ""}
                 </span>
               </div>
-              {job.receiptUrl ? <a href={job.receiptUrl} target="_blank" rel="noreferrer" className="text-xs text-accent underline">Open delivery receipt</a> : null}
+              {job.receiptVerified ? <p className="text-xs text-muted">Receipt verified · {job.receiptByteSize?.toLocaleString()} bytes · SHA-256 {job.receiptSha256?.slice(0, 12)}…</p> : job.receiptUrl ? <p className="text-xs text-muted">Legacy receipt URL — not verified for final sign-off</p> : null}
               {(canManage && job.state === "requested") || (canManage && job.state === "in_progress") || (canApprove && job.state === "completed") ? (
                 <DeliveryJobActions job={job} canManage={canManage} canApprove={canApprove} onUpdated={refresh} />
               ) : null}
@@ -156,7 +157,9 @@ function DeliveryJobActions({
   onUpdated: () => Promise<unknown>;
 }) {
   const [vendor, setVendor] = useState("");
-  const [receiptUrl, setReceiptUrl] = useState("");
+  const [receiptObjectKey, setReceiptObjectKey] = useState("");
+  const [receiptSha256, setReceiptSha256] = useState("");
+  const [receiptByteSize, setReceiptByteSize] = useState("");
   const [note, setNote] = useState("Delivery receipt and technical evidence reviewed");
   const [error, setError] = useState("");
   const assign = useMutation({
@@ -165,7 +168,7 @@ function DeliveryJobActions({
     onError: (reason) => setError(reason instanceof Error ? reason.message : "Assignment failed"),
   });
   const complete = useMutation({
-    mutationFn: () => completeBridgeDeliveryJob({ data: { jobId: job.id, receiptUrl } }),
+    mutationFn: () => completeBridgeDeliveryJob({ data: { jobId: job.id, receiptObjectKey, receiptSha256, receiptByteSize: Number(receiptByteSize) } }),
     onSuccess: async () => { setError(""); await onUpdated(); },
     onError: (reason) => setError(reason instanceof Error ? reason.message : "Completion failed"),
   });
@@ -185,10 +188,18 @@ function DeliveryJobActions({
       </> : null}
       {canManage && job.state === "in_progress" ? <>
         <label className="min-w-[220px] flex-1 space-y-1 text-xs text-muted">
-          <span>HTTPS delivery receipt URL</span>
-          <input className="w-full rounded border border-line bg-transparent px-2 py-1.5 text-sm text-fg" value={receiptUrl} onChange={(e) => setReceiptUrl(e.target.value)} placeholder="https://…" />
+          <span>Private OCI receipt object key</span>
+          <input className="w-full rounded border border-line bg-transparent px-2 py-1.5 text-sm text-fg" value={receiptObjectKey} onChange={(e) => setReceiptObjectKey(e.target.value)} placeholder={`bridge-private/vendor-delivery-receipts/${job.id}/receipt.pdf`} />
         </label>
-        <button type="button" disabled={complete.isPending || !receiptUrl.startsWith("https://")} onClick={() => complete.mutate()} className="rounded border border-line px-3 py-2 text-xs disabled:opacity-50">Mark completed</button>
+        <label className="min-w-[220px] flex-1 space-y-1 text-xs text-muted">
+          <span>Receipt SHA-256</span>
+          <input className="w-full rounded border border-line bg-transparent px-2 py-1.5 text-sm text-fg" value={receiptSha256} onChange={(e) => setReceiptSha256(e.target.value)} placeholder="64-character SHA-256" />
+        </label>
+        <label className="w-32 space-y-1 text-xs text-muted">
+          <span>Bytes</span>
+          <input type="number" min="1" className="w-full rounded border border-line bg-transparent px-2 py-1.5 text-sm text-fg" value={receiptByteSize} onChange={(e) => setReceiptByteSize(e.target.value)} placeholder="Bytes" />
+        </label>
+        <button type="button" disabled={complete.isPending || !receiptObjectKey || !/^[a-fA-F0-9]{64}$/.test(receiptSha256) || !Number.isSafeInteger(Number(receiptByteSize)) || Number(receiptByteSize) <= 0} onClick={() => complete.mutate()} className="rounded border border-line px-3 py-2 text-xs disabled:opacity-50">Verify receipt & complete</button>
       </> : null}
       {canApprove && job.state === "completed" ? <>
         <label className="min-w-[220px] flex-1 space-y-1 text-xs text-muted">
