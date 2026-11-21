@@ -10,6 +10,7 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
+import { isPersistedAssetVerified } from "./persisted-asset-state";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
@@ -101,7 +102,26 @@ async function openUploadAsset(userId: string, assetId: string) {
   if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
     throw new Error("Upload confirmation is closed for this title");
   }
-  return asset;
+  return { ...asset, title };
+}
+
+async function assertPersistedAssetVerified(asset: {
+  id: string; kind: string; s3_key: string; content_type: string | null; byte_size: number | null;
+  title: Awaited<ReturnType<typeof loadTitle>>;
+}) {
+  if (!asset.title) throw new Error("Asset title is unavailable");
+  const sql = await getSql();
+  const audit = await sql<{ present: boolean }>`select exists (
+    select 1 from bridge_audit_logs
+    where action = 'asset.upload_verified' and entity_type = 'bridge_asset' and entity_id = ${asset.id}
+  ) as present`;
+  const { verifyObject } = await import("./oci-object-storage.server");
+  const valid = await isPersistedAssetVerified({
+    id: asset.id, kind: asset.kind, s3Key: asset.s3_key, byteSize: asset.byte_size,
+    contentType: asset.content_type, titleMasterKey: asset.title.masterKey,
+    titlePosterKey: asset.title.posterKey, auditPresent: Boolean(audit[0]?.present),
+  }, verifyObject);
+  if (!valid) throw new Error("Persisted asset verification is incomplete; upload confirmation is required");
 }
 
 export const beginAssetMultipart = createServerFn({ method: "POST" })
@@ -112,7 +132,10 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
   }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
-    if (asset.byte_size != null) return { assetId: asset.id, alreadyVerified: true as const };
+    if (asset.byte_size != null) {
+      await assertPersistedAssetVerified(asset);
+      return { assetId: asset.id, alreadyVerified: true as const };
+    }
     const { beginMultipartUpload } = await import("./oci-object-storage.server");
     const expiresIn = uploadUrlLifetimeSeconds(data.byteSize);
     const started = await beginMultipartUpload({
@@ -134,7 +157,10 @@ export const commitAssetMultipart = createServerFn({ method: "POST" })
   .validator(z.object({ assetId: z.string().min(8), partBaseUrl: z.string().url().max(2000) }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
-    if (asset.byte_size != null) return { committed: true };
+    if (asset.byte_size != null) {
+      await assertPersistedAssetVerified(asset);
+      return { committed: true };
+    }
     const { commitMultipartUpload } = await import("./oci-object-storage.server");
     await commitMultipartUpload(data.partBaseUrl, asset.s3_key);
     return { committed: true };
@@ -352,20 +378,30 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       select id, kind, s3_key, content_type, byte_size, created_at
       from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
     `;
-    return {
-      assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
-        .map((r) => ({
-          id: r.id,
-          kind: r.kind,
-          key: buyer ? null : r.s3_key,
-          contentType: r.content_type,
-          byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0,
-          createdAt:
-            r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-        })),
-    };
+    const visibleRows = rows.filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind));
+    const { verifyObject } = await import("./oci-object-storage.server");
+    const assets = await Promise.all(visibleRows.map(async (r) => {
+      const audit = await sql<{ present: boolean }>`select exists (
+        select 1 from bridge_audit_logs
+        where action = 'asset.upload_verified' and entity_type = 'bridge_asset' and entity_id = ${r.id}
+      ) as present`;
+      let verified = false;
+      try {
+        verified = await isPersistedAssetVerified({
+          id: r.id, kind: r.kind, s3Key: r.s3_key, byteSize: r.byte_size,
+          contentType: r.content_type, titleMasterKey: title.masterKey,
+          titlePosterKey: title.posterKey, auditPresent: Boolean(audit[0]?.present),
+        }, verifyObject);
+      } catch {
+        verified = false;
+      }
+      return {
+        id: r.id, kind: r.kind, key: buyer ? null : r.s3_key,
+        contentType: r.content_type, byteSize: r.byte_size, verified,
+        createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+      };
+    }));
+    return { assets };
   });
 
 
