@@ -181,10 +181,35 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
     }
-    if (asset.byte_size != null)
-      return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
-
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    if (asset.byte_size != null) {
+      const sealedSuffix = `.verified/${asset.id}`;
+      if (!asset.s3_key.endsWith(sealedSuffix)) {
+        throw new Error("Asset has a stored byte size but does not reference its immutable verified object");
+      }
+      const sealedObject = await verifyObject(asset.s3_key, asset.content_type);
+      if (sealedObject.byteSize !== Number(asset.byte_size) || !sealedObject.etag) {
+        throw new Error("Stored asset metadata does not match its immutable verified object");
+      }
+      if (asset.kind === "master" && title.masterKey !== asset.s3_key) {
+        throw new Error("Verified master reference does not match the asset record");
+      }
+      if ([ "poster", "poster_vertical" ].includes(asset.kind) && title.posterKey !== asset.s3_key) {
+        throw new Error("Verified poster reference does not match the asset record");
+      }
+      const verifiedAudit = await sql<{ present: boolean }>`
+        select exists (
+          select 1 from bridge_audit_logs
+          where action = 'asset.upload_verified'
+            and entity_type = 'bridge_asset'
+            and entity_id = ${asset.id}
+        ) as present
+      `;
+      if (!verifiedAudit[0]?.present) {
+        throw new Error("Verified asset audit record is missing");
+      }
+      return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
+    }
     const object = await verifyObject(asset.s3_key, asset.content_type);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
