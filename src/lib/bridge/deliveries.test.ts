@@ -53,7 +53,7 @@ async function fixture() {
     ),
   );
   await pg.exec(`
-    insert into bridge_titles(id,name,language,year,owner_user_id) values
+    insert into bridge_titles(id,name,language,year,owner_user_id,owner_account_type,owner_organization_id) values
       ('a','Title A','Malayalam',2026,'creator-a','independent_creator',null),
       ('b','Title B','Malayalam',2026,'studio-b','studio','11111111-1111-4111-8111-111111111111');
     insert into bridge_destination_packages(id,title_id,destination,readiness_state) values
