@@ -73,6 +73,25 @@ export const deleteTitle = createServerFn({ method: "POST" })
       const assetRows = await tx<{ count: number }>`
         select count(*)::int as count from bridge_assets where title_id = ${locked.id}
       `;
+      const rightsRows = await tx<{ count: number }>`
+        select count(*)::int as count from bridge_rights_grants where title_id = ${locked.id}
+      `;
+      const legalRows = await tx<{ count: number }>`
+        select count(*)::int as count from bridge_legal_cases where title_id = ${locked.id}
+      `;
+      const documentLinkTable = await tx<{ exists: boolean }>`
+        select to_regclass('public.bridge_title_document_links') is not null as exists
+      `;
+      const documentRows = documentLinkTable[0]?.exists
+        ? await tx<{ count: number }>`
+            select count(*)::int as count from bridge_title_document_links where title_id = ${locked.id}
+          `
+        : [{ count: 0 }];
+      if (Number(rightsRows[0]?.count ?? 0) > 0 ||
+          Number(legalRows[0]?.count ?? 0) > 0 ||
+          Number(documentRows[0]?.count ?? 0) > 0) {
+        throw new Error("This draft already has rights or legal evidence linked. Use the authorized withdrawal/reconciliation workflow instead of archiving it.");
+      }
       assertCreatorTitleCanBeSoftDeleted({
         status: locked.status as "DRAFT",
         submissionStatus: locked.creator_submission_status,
