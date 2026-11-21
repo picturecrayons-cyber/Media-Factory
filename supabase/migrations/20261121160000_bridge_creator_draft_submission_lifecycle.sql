@@ -91,6 +91,30 @@ $function$;
 revoke all on function private.bridge_is_title_owner(text) from public, anon, authenticated;
 grant execute on function private.bridge_is_title_owner(text) to authenticated;
 
+create or replace function private.bridge_has_buyer_title_access(p_title_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+set row_security = off
+as $function$
+  select (select auth.uid()) is not null
+    and exists (
+      select 1
+      from public.bridge_loop_identity_links l
+      join public.bridge_buyer_title_access a
+        on a.buyer_user_id = l.bridge_user_id
+      where l.auth_user_id = (select auth.uid())
+        and a.title_id = p_title_id
+        and a.revoked_at is null
+        and (a.expires_at is null or a.expires_at > now())
+    );
+$function$;
+
+revoke all on function private.bridge_has_buyer_title_access(text) from public, anon, authenticated;
+grant execute on function private.bridge_has_buyer_title_access(text) to authenticated;
+
 -- Archived title rows disappear from direct authenticated reads. Buyers retain
 -- their separate title-access path; Studio owners must still be active members.
 drop policy if exists "bridge_titles_owner_or_buyer_select" on public.bridge_titles;
@@ -102,16 +126,7 @@ using (
   deleted_at is null
   and (
     private.bridge_is_title_owner(bridge_titles.id)
-    or exists (
-      select 1
-      from public.bridge_loop_identity_links l
-      join public.bridge_buyer_title_access a
-        on a.buyer_user_id = l.bridge_user_id
-      where l.auth_user_id = (select auth.uid())
-        and a.title_id = bridge_titles.id
-        and a.revoked_at is null
-        and (a.expires_at is null or a.expires_at > now())
-    )
+    or private.bridge_has_buyer_title_access(bridge_titles.id)
   )
 );
 
