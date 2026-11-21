@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle, hasPermission } from "./rbac";
@@ -243,7 +243,7 @@ export const completeBridgeDeliveryJob = createServerFn({ method: "POST" })
     return { id: data.jobId, status: "completed" as const, receiptVerified: true as const };
   });
 
-async function getFinalDeliveryReadiness(sql: Awaited<ReturnType<typeof getSql>>, titleId: string) {
+async function getFinalDeliveryReadiness(sql: Sql, titleId: string) {
   const rows = await sql<{
     submission_type: string | null;
     status: string;
@@ -326,7 +326,7 @@ export const approveBridgeDeliveryJob = createServerFn({ method: "POST" })
           !job.receipt_object_key || !job.receipt_sha256 || !job.receipt_byte_size) {
         throw new Error("Super Admin sign-off requires a completed job with verified receipt evidence");
       }
-      const gate = await getFinalDeliveryReadiness(tx as Awaited<ReturnType<typeof getSql>>, job.title_id);
+      const gate = await getFinalDeliveryReadiness(tx, job.title_id);
       if (!gate.ready) throw new Error(`Final delivery authorization blocked: ${gate.reasons.join(" ")}`);
       const updated = await tx<{ id: string; title_id: string }>`
         update bridge_delivery_jobs
