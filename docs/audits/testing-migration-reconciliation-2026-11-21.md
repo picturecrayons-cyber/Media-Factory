@@ -209,3 +209,33 @@ This addendum inspects the repository default-branch source files through GitHub
 - Remove or explicitly retire legacy SVOD/Loop Pass and `loop_entitlements` read paths only after all callers are migrated and regression-tested. No subscription, entitlement, or payment data should be deleted as part of this source correction.
 - Only after code changes are reviewed should a forward-only migration be drafted, if any schema addition is still necessary. No hosted DB change is authorized by this audit.
 
+
+
+## Follow-up canonical branch and source reconciliation — 2026-11-21
+
+### Branch comparison
+
+Compared `main` (base SHA `1253362e2bb19b9fbe513dd50be1e115a0dfc3c6`) with `implementation/bridge-end-to-end-20261121`. GitHub reports the implementation branch as diverged: 176 commits ahead and 20 commits behind, merge base `73e33e342596e6f6f9e6c0b82f4b986136417457`. It is not safe to use this branch as an unqualified patch base or merge candidate. The comparison also shows broad unrelated Bridge changes, so cherry-picking a broad branch merge would be unsafe.
+
+### Implementation branch source observations
+
+- `supabase/functions/razorpay-webhook/index.ts` contains a LOOP capture branch that queries `loop_tvod_orders`, updates the order, and invokes the two-argument `loop_fulfill_captured_rental` RPC. Refund routing calls the three-argument `loop_refund_captured_rental` RPC.
+- The same branch's `src/lib/loop/catalog.ts` queries `listed`, `published`, `tvod_rental_price`, and `tvod_purchase_price`, then reads `loop_user_tvod_entitlements` while casting both `user_id` and `title_id` to UUID. This conflicts with the observed Testing contract where title IDs are TEXT and catalog fields are `is_listed`, `is_published`, and `price_paise`.
+- Catalog still exposes an SVOD rail and checks `loop_subscriptions`; therefore it is not yet TVOD-only.
+- Searches against the main source snapshot found no `loop_tvod_orders` implementation and found legacy `loop_entitlements` writes in `src/lib/loop/subscriptions.ts`. A complete call-site inventory is still required; search absence alone is not proof of no other entry points.
+
+### Safe decision
+
+Do not merge or patch directly on the diverged implementation branch. Do not create a replacement order table or change the Testing database based on these findings alone. First identify every current checkout/order creation and verification entry point on the intended release baseline, then decide whether the order mapping can be persisted in an existing server-owned table or requires a narrowly scoped forward-only schema addition. Existing TVOD payment events and entitlements must remain the single financial/authorization source of truth.
+
+### Work completed and not completed
+
+- Branch comparison and targeted source inspection: PASS.
+- Checkout/order creation path fully traced: NOT TESTED.
+- Canonical TVOD-only application patch: NOT IMPLEMENTED.
+- Webhook RPC compatibility patch: NOT IMPLEMENTED.
+- Automated tests / typecheck: NOT RUN.
+- Disposable local migration replay: NOT RUN.
+- Hosted Testing migration / Production migration / merge / deployment: NOT RUN.
+
+The previous approval is treated as authorization for source-side audit and safe implementation planning only. No database, payment, asset, environment, merge, or deployment action is inferred from it.
