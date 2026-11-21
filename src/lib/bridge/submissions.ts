@@ -8,7 +8,7 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { storedBridgeContentType } from "./loop-lanes";
-import { loadTitle } from "./titles";
+import { assertAccountMandateScope, loadTitle } from "./titles";
 import { assertCreatorTitleCanSubmit } from "./creator-title-lifecycle";
 import type { TitleStatus } from "./types";
 
@@ -156,6 +156,7 @@ const creatorBridgeSubmissionSchema = z.object({
   year: z.number().int().min(1895).max(2100),
   runtimeMinutes: z.number().int().min(1).max(600),
   territories: z.array(z.string().trim().min(2).max(80)).min(1).max(200),
+  buyerChannels: z.array(z.string().trim().min(2).max(80)).min(1).max(20),
   rightsLanguages: z.array(z.string().trim().min(2).max(40)).min(1).max(30),
   exploitation: z.array(z.string().trim().min(2).max(80)).min(1).max(30),
   windowStart: z.string().datetime(),
@@ -264,6 +265,7 @@ export const submitCreatorTitleToBridge = createServerFn({ method: "POST" })
       const counts = await tx<{
         grant_count: number; intake_count: number; legal_case_count: number;
         valid_grant_count: number; valid_intake_count: number;
+        saved_destinations: unknown; saved_media: unknown;
       }>`
         select
           (select count(*)::int from bridge_rights_grants where title_id = ${locked.id}) as grant_count,
@@ -280,10 +282,22 @@ export const submitCreatorTitleToBridge = createServerFn({ method: "POST" })
             where title_id = ${locked.id}
               and authorization_confirmed = true
               and nullif(trim(authority_type), '') is not null
-              and nullif(trim(authorization_evidence_type), '') is not null) as valid_intake_count
+              and nullif(trim(authorization_evidence_type), '') is not null) as valid_intake_count,
+          (select buyer_channels from bridge_title_submission_intake where title_id = ${locked.id} limit 1) as saved_destinations,
+          (select media from bridge_rights_grants where title_id = ${locked.id} limit 1) as saved_media
       `;
       const existing = counts[0];
       const packageRows = existing.grant_count + existing.intake_count + existing.legal_case_count;
+      const mandateDestinations = packageRows === 0
+        ? data.buyerChannels
+        : Array.isArray(existing.saved_destinations) ? existing.saved_destinations as string[] : [];
+      const mandateMedia = packageRows === 0
+        ? data.exploitation
+        : Array.isArray(existing.saved_media) ? existing.saved_media as string[] : [];
+      if (!mandateDestinations.length || !mandateMedia.length) {
+        throw new Error("Rights destinations and exploitation scope must be present before submission.");
+      }
+      await assertAccountMandateScope(tx, actor, mandateDestinations, mandateMedia, false);
       if (packageRows === 0) {
         await tx`
           insert into bridge_rights_grants (
@@ -315,7 +329,7 @@ export const submitCreatorTitleToBridge = createServerFn({ method: "POST" })
             buyer_channels, screener_mode, screener_url
           ) values (
             ${locked.id}, ${data.authorityType}, ${data.authorizationEvidenceType}, true,
-            '[]'::jsonb, 'NONE', null
+            ${JSON.stringify(data.buyerChannels)}::jsonb, 'NONE', null
           )
         `;
       } else if (
