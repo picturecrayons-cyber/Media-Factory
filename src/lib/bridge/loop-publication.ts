@@ -430,12 +430,12 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           blockers,
           checks: [
             { key: "identity", label: "Film identity", status: r.id && r.slug && r.name ? "PASS" : "BLOCKED" },
-            { key: "rights", label: "Rights authorization", status: coveringGrant && legalApproved && r.revenue_shares_ready ? "PASS" : "BLOCKED" },
+            { key: "rights", label: "Rights authorization", status: coveringGrant && legalApproved && r.revenue_shares_ready && r.consumer_pricing_ready ? "PASS" : "BLOCKED" },
             { key: "metadata", label: "Loop metadata", status: loopMetadataReady ? "PASS" : "BLOCKED" },
             { key: "artwork", label: "Artwork", status: artworkReady ? "PASS" : "BLOCKED" },
             { key: "master", label: "Master delivery", status: masterDeliveryReady ? "PASS" : "BLOCKED" },
             { key: "playback", label: "Playback", status: r.playback_path ? "NOT_VERIFIED" : "BLOCKED" },
-            { key: "catalogue", label: "Public catalogue", status: r.published && r.listed ? "NOT_VERIFIED" : "BLOCKED" },
+            { key: "catalogue", label: "Public catalogue", status: "NOT_VERIFIED" },
           ],
           publication: r.authorization_status
             ? {
