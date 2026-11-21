@@ -45,13 +45,13 @@ function CreatorDashboard({ actor }: { actor: { userId: string; organizationId?:
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Crayons Bridge · Creator Desk</p>
             <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Your Creator Workspace</h1>
-            <p className="mt-2 text-sm leading-relaxed text-muted">Submit a film or story, follow its review, and see authorized buyer updates in one place.</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted">Submit a film or story and follow its review and authorized delivery status in one place.</p>
           </div>
           <Link to="/account" className="rounded-full border border-line-strong px-4 py-2 text-sm font-semibold hover:border-accent">Account & access</Link>
         </div>
         <div className="mt-5 grid gap-2 sm:grid-cols-3">
           <a href="#submissions" className="rounded-xl bg-bg p-3 text-sm font-semibold hover:ring-1 hover:ring-accent">My submissions <span className="block text-xs font-normal text-muted">Films, stories and status</span></a>
-          <a href="#updates" className="rounded-xl bg-bg p-3 text-sm font-semibold hover:ring-1 hover:ring-accent">Review & buyer updates <span className="block text-xs font-normal text-muted">Corrections and responses</span></a>
+          <a href="#updates" className="rounded-xl bg-bg p-3 text-sm font-semibold hover:ring-1 hover:ring-accent">Review & delivery <span className="block text-xs font-normal text-muted">Corrections and delivery status</span></a>
           <a href="#documents" className="rounded-xl bg-bg p-3 text-sm font-semibold hover:ring-1 hover:ring-accent">Documents <span className="block text-xs font-normal text-muted">Private rights evidence</span></a>
         </div>
       </header>
@@ -89,7 +89,6 @@ function CreatorDashboard({ actor }: { actor: { userId: string; organizationId?:
             <h2 className="mt-1 font-display text-2xl font-semibold">My Submissions</h2>
             <p className="mt-1 text-sm text-muted">Only records returned by the authenticated, server-scoped account query are shown.</p>
           </div>
-          <a href="#submissions" className="text-sm font-semibold text-accent underline">Refresh this view</a>
         </div>
         <TitleList empty="No finished-film submissions yet. Use the submission options above to get started." />
         <div className="border-t border-line pt-4">
@@ -101,7 +100,7 @@ function CreatorDashboard({ actor }: { actor: { userId: string; organizationId?:
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-accent">Activity</p>
-            <h2 className="mt-1 font-display text-xl font-semibold">Latest review updates</h2>
+            <h2 className="mt-1 font-display text-xl font-semibold">Latest submission activity</h2>
           </div>
           <Link to="/deliveries" className="text-sm font-semibold text-accent underline">Updates & deliveries</Link>
         </div>
