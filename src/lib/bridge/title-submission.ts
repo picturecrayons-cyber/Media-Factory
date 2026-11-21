@@ -48,6 +48,7 @@ export async function submitTitleForQc(
   actorUserId: string,
   note?: string,
   consentVersion?: string,
+  languageMismatchConfirmed = false,
 ): Promise<{ title: Pick<BridgeTitle, "id" | "status"> & { status: TitleStatus } }> {
   if (title.status !== "PREPARING") throw new Error("Title is not ready for QC submission");
 
@@ -66,9 +67,10 @@ export async function submitTitleForQc(
       runtime_minutes: number | null;
       year: number | null;
       master_language: string | null;
+      original_language: string | null;
     }>`
       select status, owner_user_id, owner_organization_id, name, submission_type, content_type, original_language,
-        country_of_origin, release_date, synopsis, runtime_minutes, year, master_language
+        country_of_origin, release_date, synopsis, runtime_minutes, year, master_language, original_language
       from bridge_titles where id = ${title.id} for update
     `;
     if (!locked || locked.status !== title.status) {
@@ -140,6 +142,11 @@ export async function submitTitleForQc(
     ].filter((item): item is string => Boolean(item));
     if (metadataMissing.length) {
       throw new Error(`QC blocked: finished-film metadata incomplete (${metadataMissing.join(", ")})`);
+    }
+    const languageMismatch = Boolean(locked.original_language && locked.master_language &&
+      locked.original_language.toLowerCase() !== locked.master_language.toLowerCase());
+    if (languageMismatch && !languageMismatchConfirmed) {
+      throw new Error("QC blocked: owner must confirm the master-language difference");
     }
     if (locked.submission_type && locked.submission_type !== "finished_film") {
       throw new Error("QC blocked: this submission is not classified as a finished film");
@@ -228,9 +235,11 @@ export async function submitTitleForQc(
 
     await tx`
       insert into bridge_title_submission_consents
-        (title_id, submission_event_id, actor_user_id, actor_account_type, consent_version, accepted_at)
+        (title_id, submission_event_id, actor_user_id, actor_account_type, consent_version,
+         original_language, master_language, language_mismatch_confirmed, accepted_at)
       values
-        (${title.id}, ${event.id}, ${actorUserId}, ${submitter.account_type}, ${consentVersion}, now())
+        (${title.id}, ${event.id}, ${actorUserId}, ${submitter.account_type}, ${consentVersion},
+         ${locked.original_language}, ${locked.master_language}, ${languageMismatchConfirmed}, now())
     `;
     // Stable idempotency key: tied to the persisted lifecycle event, not wall-clock time.
     const eventKey = `bridge-qc-submitted:${event.id}`;
