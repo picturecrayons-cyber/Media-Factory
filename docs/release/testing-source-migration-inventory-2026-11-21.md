@@ -405,3 +405,80 @@ Risk: no hosted data or schema changes.
 - Earlier isolated replay run `44887864847` also concluded `failure` with zero reported jobs.
 - Local environment previously inspected has neither Docker nor Supabase CLI. A disposable PostgreSQL/Supabase replay therefore remains BLOCKED / NOT VERIFIED.
 - A red/failed workflow with no jobs is not evidence that the SQL chain passed or failed; do not label replay PASS.
+
+## Approved next-step repair design — source contract, not implementation
+
+Scope: source inspection and documentation only.
+Action: define a compatible application/database contract from the verified Testing catalog.
+Access: source repository WRITE (documentation only); STAGING / Testing DB READ-ONLY; PRODUCTION DB no access.
+Risk: no runtime behavior changed; no hosted schema/data changed.
+
+### A. Checkout contract
+
+Current source `rentTvodMovie` is incompatible in four direct ways:
+- Zod requires UUID for `loopTitleId`; Testing title IDs are TEXT.
+- Checkout selects `listed`, `published`, `tvod_rental_price` and joins the absent `bridge_loop_consumer_pricing`; Testing exposes `is_listed`, `is_published`, `price_paise`.
+- Checkout casts `title.id` to UUID when inserting the absent `loop_tvod_orders`.
+- Razorpay order is created before durable local intent is persisted.
+
+Required source behavior:
+1. Accept a non-empty bounded TEXT Loop title ID; keep authenticated user identity UUID.
+2. Read the actual Testing title fields and enforce the actual uppercase status/publication values.
+3. Derive INR paise from the authoritative persisted price field without float rounding; use integer paise end-to-end.
+4. Validate Bridge publication state, authorization window, territory, language and TVOD exploitation using actual columns and enum casing.
+5. Persist a local pending order intent before making a provider order payable. Bind provider order ID to that intent using a unique constraint and idempotent update; if provider creation succeeds but binding fails, mark/reconcile the intent and never return a payable checkout to the client.
+6. Do not assume `loop_tvod_orders` or `bridge_loop_consumer_pricing` exists. Any new order-intent table is a forward-only migration proposal requiring separate review of DDL, RLS, indexes, retention and service-role-only writes before implementation.
+
+### B. Payment event and fulfillment contract
+
+- Keep `loop_payment_events` as the only canonical event ledger.
+- Keep existing `loop_fulfill_captured_rental(text,text,uuid,text,timestamptz,timestamptz)` unchanged.
+- The webhook must call the existing function with verified provider order ID, provider payment ID, persisted UUID user ID, TEXT Loop title ID, authoritative provider capture time, and capture time + 48 hours.
+- Provider capture timestamp must come from a trusted Razorpay payment entity/API response and be validated as a finite, plausible timestamp. Webhook receipt time is not the rental start time.
+- Before RPC, compare persisted order intent to Razorpay payment: order ID, payment ID (if already bound), amount paise, INR currency, user/title notes and captured status. A mismatch is retryable/reconciliation-required and never grants access.
+- Preserve function's own publication/rights/territory/language/exploitation revalidation at capture time.
+- Do not duplicate or reimplement the SQL function's locking, dedupe and entitlement rules in the Edge Function.
+
+### C. Refund contract
+
+- Keep existing `loop_refund_captured_rental(text,text)` unchanged.
+- Call it with exactly payment ID and refund ID.
+- Resolve Loop surface using durable order-intent identity, including provider lookup fallback; never infer Loop from an untrusted title note alone.
+- If refund is a Loop payment but the local order intent is not yet reconciled, persist a retryable reconciliation record or safely invoke the existing two-argument refund RPC only after establishing Loop ownership. Do not mark the webhook event processed while a Loop refund is unresolved.
+- Existing DB RPC already creates a refund-before-capture tombstone; test that a later capture cannot revive entitlement.
+- A refund for one payment must revoke only the entitlement whose `payment_transaction_id` equals that payment.
+
+### D. Playback/catalog contract
+
+The same schema mismatch extends beyond checkout:
+- `src/lib/loop/catalog.ts` selects legacy `listed`, `published`, `tvod_rental_price`, `tvod_purchase_price` and lower-case authorization/status values.
+- Entitlement reads cast TEXT title IDs to UUID in both entitlement checks and playback authorization.
+- Change catalog DTO mapping only after a deliberate field mapping from actual Testing columns. Do not silently pretend `price_paise` is rupees or expose a stale price field.
+- Keep playback fail-closed on Bridge authorization, publication window, and active unexpired entitlement. Never expose raw OCI playback keys.
+
+### E. Test matrix required before implementation is considered verified
+
+1. TEXT title ID accepted; UUID user identity remains enforced.
+2. Unlisted, unpublished, non-TVOD, non-approved, revoked, expired-window, wrong-territory, wrong-language and non-TVOD exploitation all reject checkout and fulfillment.
+3. Exact paise amount/currency match; one-paise mismatch rejects.
+4. Provider order persistence failure after provider creation enters reconciliation and does not return checkout success.
+5. Valid capture grants one 48-hour entitlement from provider capture time, not webhook receipt time.
+6. Duplicate and concurrent capture events grant exactly one entitlement.
+7. Payment/order/user/title mismatch rejects.
+8. Refund after capture revokes only the matching payment entitlement.
+9. Refund-before-capture creates a tombstone; late capture cannot restore access.
+10. Older delayed capture cannot overwrite newer entitlement or revive revoked entitlement.
+11. Anonymous/authenticated roles cannot write event/order/entitlement rows or execute service-only RPCs; service_role can perform only required operations.
+12. Creator Vault, Sublicensing, Production Assets and DIT storage schema/policies remain unchanged; effective-role behavior must be tested, not inferred from catalog presence.
+
+### F. Delivery gates
+
+- Source code repair: NOT STARTED.
+- New migration DDL: NOT WRITTEN.
+- SQL parity mapping: 0 certified semantic mappings until Testing migration SQL archive/hash manifest is available.
+- Disposable DB replay: BLOCKED / NOT VERIFIED (no Docker/Supabase CLI and GitHub Actions runs reported zero jobs).
+- STAGING hosted write: NOT AUTHORIZED.
+- PRODUCTION: HOLD / NOT CERTIFIED / NO-GO.
+- Merge/deploy: NOT AUTHORIZED.
+
+Next safe action after this design is to obtain a disposable PostgreSQL/Supabase runtime or a reproducible CI runner with PostgreSQL, then implement and test the forward-only migration and source changes in an isolated branch. No hosted DB credential or password reset is required.
