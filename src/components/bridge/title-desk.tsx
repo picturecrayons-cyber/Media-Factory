@@ -4,11 +4,14 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { createTitle, listTitles, listStudioFinishedFilms } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+export function TitleList({ empty, query = "", finishedFilmsOnly = false }: { empty: string; query?: string; finishedFilmsOnly?: boolean }) {
+  const titlesQ = useQuery({
+    queryKey: finishedFilmsOnly ? ["bridge-studio-finished-films"] : ["bridge-titles"],
+    queryFn: () => finishedFilmsOnly ? listStudioFinishedFilms() : listTitles(),
+  });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
