@@ -84,10 +84,16 @@ export async function submitTitleForQc(
       throw new Error("Only the verified Creator or Studio submitting account can accept the title declaration");
     }
     const ownerAllowed = locked.owner_user_id === actorUserId;
-    const studioMember = submitter.account_type === "studio" && locked.owner_organization_id !== null &&
-      submitter.organization_id === locked.owner_organization_id;
-    if (!ownerAllowed && !studioMember) {
-      throw new Error("Only the title owner or a member of the owning Studio can submit this title");
+    const membership = submitter.account_type === "studio" && locked.owner_organization_id
+      ? await tx<{ active: boolean }>`select exists (
+          select 1 from bridge_organization_memberships
+          where organization_id = ${locked.owner_organization_id}
+            and user_id = ${actorUserId}
+            and status = 'active'
+        ) as active`
+      : [];
+    if (!ownerAllowed && membership[0]?.active !== true) {
+      throw new Error("Only the title owner or an active member of the owning Studio can submit this title");
     }
     const assets = await tx<QcAsset>`
       select id, kind, s3_key, byte_size, checksum_sha256, verified_object_key,
