@@ -88,3 +88,41 @@ These PRs are candidates for code/diff reconciliation. Their open/Draft status i
 - A deduplicated pending outbox row is inserted per reviewer; if the outbox schema or a verified reviewer is missing, the transaction fails and the lifecycle/audit changes roll back.
 - This change queues internal QC email notifications only. It does not send customer email or invoke SMTP. Outbox dispatch/retry operations, exact Testing migration reconciliation, and end-to-end Preview delivery remain separate NOT VERIFIED gates.
 - An isolated PostgreSQL/PGlite regression assertion checks that the submission queues the notification. Exact-head CI has not yet reported a result for the latest commit.
+
+
+## PR review and reconciliation evidence — 21 November 2026
+
+### PR #759 review
+- PR #759 remains Draft, open and unmerged. Current head at review: `47eff0c3615289242056b9af149afc6d3e2984b5`.
+- Exact-head CI run `44862423582`: gate, PostgreSQL workflow tests and isolated Supabase migration replay all completed **PASS**. The gate ran build, typecheck, targeted ESLint, unit tests, secret scan and legacy dump guard. This is code/isolated replay evidence only, not a production certification or authenticated Preview test.
+- The outbox enqueue code's column names match the existing outbox migration: `event_key`, `recipient_email`, `subject`, `text_body`, `html_body`. The production schema also has attempts, next-attempt scheduling, processing lease, provider message ID and sent timestamp fields. The production outbox migration revokes all client grants and enables RLS.
+- `bridge_profiles` in Production has `user_id`, `email`, `internal_role`, and `email_verified`; the enqueue query's selected columns exist. This is a read-only schema match, not evidence that a live QC submission is safe to execute.
+- The current event key embeds a wall-clock timestamp. Keep a follow-up idempotency review open: use a stable persisted submission/event identifier where available, and prove duplicate request/retry behavior rather than relying only on a title status transition.
+
+### Existing PR disposition
+- #491 (seven-file QC and multipart cleanup) is based on `feat/bridge-server-authoritative-multipart-20261106`, not `main`; it is not a safe direct merge into #759. Its server-side QC readiness helper and its caller must be ported/rebased as a coherent change after checking all dependencies. Its multipart cleanup is storage-mutating behavior and requires isolated tests; no real storage operation is authorized here.
+- #746 (Studio schedule, membership, statements and financial activity), #712 (Super Admin governance/control centre) and #751 (Buyer operations workspace) each target `main` and remain Draft. They are mergeable at GitHub metadata level, but this is not a code-review or test pass. Their changed-file sets overlap shared route/shell/route-tree surfaces; integrate selectively after conflict and authorization review, not by blind merge.
+- #746 carries pending migration files in `docs/pending-migrations`; those are not applied migrations.
+- The current #759 branch still does not contain the functional Studio/Super Admin/Buyer dashboard implementations from those PRs. Their existence must not be described as integrated.
+
+### Production RBAC read-only audit
+Target: **PRODUCTION DB** `mlmgugivsyoxzdgwkbpu`.
+Action: inspect schema, migration ledger, RLS policies, grants and Supabase security advisors.
+Access: **READ-ONLY**.
+Risk: **High** for any unreviewed write because the database is live.
+
+- The production migration ledger contains the outbox migration `20261114135443_bridge_notification_outbox_20261114` and later Studio, DIT, private-storage, identity-helper, Loop publication and title metadata migrations.
+- All inspected public tables have RLS enabled. The advisor reports 27 RLS-enabled tables with no policies; this may be intentional for server-only tables when client grants are absent, so it must be reconciled table-by-table against effective grants and server access paths.
+- Relevant grants inspected: `bridge_profiles` and `bridge_buyer_title_access` expose SELECT to authenticated; the outbox, organizations, memberships and investor assignments show service_role grants, with no anon/authenticated table grants in the inspected grant rows.
+- The advisor reports `public.bridge_is_title_owner(text)` as SECURITY DEFINER and executable by authenticated. It is referenced by existing RLS policies, so revoking or replacing it without migrating every dependent policy and testing would risk breaking title/asset operations. No change was made.
+- Leaked-password protection is disabled. This is an Auth configuration hardening item, not a reason to mutate SQL grants or rewrite role policies.
+- No Production grants, policies, functions, Auth settings, migrations, data or environment variables were changed.
+
+### Remaining acceptance gates
+1. Port the seven-file readiness helper and finished-film metadata/rightsholder checks into the server-authoritative QC transition, then test missing, stale, mismatched and unverified assets.
+2. Implement an internal-only outbox dispatcher with bounded retries, lease recovery, dead-letter/terminal failure, provider idempotency and audit trail. Keep sending disabled until a separate operational approval and provider configuration review.
+3. Port and reconcile #746, #712 and #751 selectively; test all role/action combinations and negative cross-user/cross-organization access.
+4. Reconcile the Testing DB ledger/schema/grants read-only, then request a separate narrowly scoped write approval only if drift requires it.
+5. Verify authenticated Bridge Preview and confirm its database URL/key target before any end-to-end test.
+
+No merge, production write, production environment change, storage mutation, live email or payment operation was performed. Production remains HOLD / NOT CERTIFIED / NO-GO.
