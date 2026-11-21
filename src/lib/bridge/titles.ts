@@ -38,6 +38,9 @@ type TitleRow = {
   credits: Array<{ role: string; name: string }>;
   created_at: string | Date;
   updated_at: string | Date;
+  creator_submission_status?: "DRAFT" | "SUBMITTED";
+  creator_submitted_at?: string | Date | null;
+  deleted_at?: string | Date | null;
 };
 
 function asIso(v: string | Date | null | undefined): string {
@@ -69,6 +72,8 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     credits: r.credits,
     createdAt: asIso(r.created_at),
     updatedAt: asIso(r.updated_at),
+    creatorSubmissionStatus: r.creator_submission_status ?? "DRAFT",
+    creatorSubmittedAt: r.creator_submitted_at ? asIso(r.creator_submitted_at) : null,
   };
 }
 
@@ -87,9 +92,9 @@ async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
 
 async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   if (!(await hasTitleMergeColumn(sql))) {
-    return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
+    return sql<TitleRow>`select * from bridge_titles where deleted_at is null order by updated_at desc limit 200`;
   }
-  return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
+  return sql<TitleRow>`select * from bridge_titles where deleted_at is null and merged_into_title_id is null order by updated_at desc limit 200`;
 }
 
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
@@ -99,6 +104,7 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
     return mergeColumnAvailable
       ? sql<TitleRow>`select * from bridge_titles
           where owner_user_id = ${userId}
+            and deleted_at is null
             and submission_type is distinct from 'story_concept'
             and merged_into_title_id is null
           order by updated_at desc limit 200`
@@ -110,7 +116,8 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   return mergeColumnAvailable
     ? sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.submission_type is distinct from 'story_concept'
+        where t.deleted_at is null
+          and t.submission_type is distinct from 'story_concept'
           and t.merged_into_title_id is null
           and (
             t.owner_user_id = ${userId}
@@ -129,7 +136,8 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
       `
     : sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.submission_type is distinct from 'story_concept'
+        where t.deleted_at is null
+          and t.submission_type is distinct from 'story_concept'
           and (
             t.owner_user_id = ${userId}
             or (
@@ -169,6 +177,7 @@ export async function loadTitle(id: string): Promise<BridgeTitle | null> {
   const rows = await sql<TitleRow>`
     select t.* from bridge_titles t
     where t.id = ${id}
+      and t.deleted_at is null
     limit 1
   `;
   return rows[0] ? mapTitle(rows[0]) : null;
