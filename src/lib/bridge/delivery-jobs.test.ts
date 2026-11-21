@@ -73,3 +73,29 @@ test("final delivery readiness checks current-asset QC, independent Legal, valid
   assert.match(readiness, /g\.packaging_status='COMPLETE'/);
   assert.match(readiness, /g\.delivery_status='READY'/);
 });
+
+test("missing Delivery Desk table errors are sanitized and expose a retryable reference", async () => {
+  const db = new PGlite();
+  try {
+    await assert.rejects(
+      db.query("select * from bridge_delivery_jobs"),
+      (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && error.code === "42P01"),
+    );
+    assert.match(source, /diagnostic\?\.code === "42P01"/);
+    assert.match(source, /Vendor Jobs schema is unavailable/);
+    assert.match(source, /Reference: \$\{reference\}/);
+  } finally {
+    await db.close();
+  }
+});
+
+test("vendor completion verifies a private PDF object, exact byte size and SHA-256", () => {
+  const start = source.indexOf("export const completeBridgeDeliveryJob");
+  const end = source.indexOf("async function getFinalDeliveryReadiness", start);
+  const completion = source.slice(start, end);
+  assert.match(completion, /bridge-private\/vendor-delivery-receipts/);
+  assert.match(completion, /verifyObject\(data\.receiptObjectKey, "application\/pdf"\)/);
+  assert.match(completion, /verifyObjectSha256/);
+  assert.match(completion, /receipt_verified_at=now\(\)/);
+  assert.match(completion, /receipt_verified_by=\$\{actor\.userId\}/);
+});
