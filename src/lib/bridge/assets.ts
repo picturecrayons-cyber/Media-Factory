@@ -17,17 +17,18 @@ import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
-async function hasVerifiedAudit(assetId: string): Promise<boolean> {
+async function getVerifiedAuditEtag(assetId: string): Promise<string | null> {
   const sql = await getSql();
-  const rows = await sql<{ present: boolean }>`
-    select exists (
-      select 1 from bridge_audit_logs
-      where action = 'asset.upload_verified'
-        and entity_type = 'bridge_asset'
-        and entity_id = ${assetId}
-    ) as present
+  const rows = await sql<{ checksum: string | null }>`
+    select metadata->>'checksum' as checksum
+    from bridge_audit_logs
+    where action = 'asset.upload_verified'
+      and entity_type = 'bridge_asset'
+      and entity_id = ${assetId}
+    order by created_at desc
+    limit 1
   `;
-  return Boolean(rows[0]?.present);
+  return rows[0]?.checksum ?? null;
 }
 
 async function verifyStoredObject(key: string, contentType: string | null) {
@@ -135,7 +136,7 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
     if (asset.byte_size != null) {
       const title = await loadTitle(asset.title_id);
       if (!title) throw new Error("Title not found");
-      await assertPersistedAssetVerified(asset, title, await hasVerifiedAudit(asset.id), verifyStoredObject);
+      await assertPersistedAssetVerified(asset, title, await getVerifiedAuditEtag(asset.id), verifyStoredObject);
       return { assetId: asset.id, alreadyVerified: true as const };
     }
     const { beginMultipartUpload } = await import("./oci-object-storage.server");
@@ -162,7 +163,7 @@ export const commitAssetMultipart = createServerFn({ method: "POST" })
     if (asset.byte_size != null) {
       const title = await loadTitle(asset.title_id);
       if (!title) throw new Error("Title not found");
-      await assertPersistedAssetVerified(asset, title, await hasVerifiedAudit(asset.id), verifyStoredObject);
+      await assertPersistedAssetVerified(asset, title, await getVerifiedAuditEtag(asset.id), verifyStoredObject);
       return { committed: true };
     }
     const { commitMultipartUpload } = await import("./oci-object-storage.server");
@@ -213,15 +214,16 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     if (asset.byte_size != null) {
-      const verifiedAudit = await sql<{ present: boolean }>`
-        select exists (
-          select 1 from bridge_audit_logs
-          where action = 'asset.upload_verified'
-            and entity_type = 'bridge_asset'
-            and entity_id = ${asset.id}
-        ) as present
+      const verifiedAudit = await sql<{ checksum: string | null }>`
+        select metadata->>'checksum' as checksum
+        from bridge_audit_logs
+        where action = 'asset.upload_verified'
+          and entity_type = 'bridge_asset'
+          and entity_id = ${asset.id}
+        order by created_at desc
+        limit 1
       `;
-      await assertPersistedAssetVerified(asset, title, Boolean(verifiedAudit[0]?.present), verifyObject);
+      await assertPersistedAssetVerified(asset, title, verifiedAudit[0]?.checksum ?? null, verifyObject);
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
     }
     const object = await verifyObject(asset.s3_key, asset.content_type);
@@ -361,16 +363,19 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       s3_key: string;
       content_type: string | null;
       byte_size: number | null;
-      verified_audit: boolean;
+      verified_etag: string | null;
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at,
-        exists (
-          select 1 from bridge_audit_logs audit
+        (
+          select audit.metadata->>'checksum'
+          from bridge_audit_logs audit
           where audit.action = 'asset.upload_verified'
             and audit.entity_type = 'bridge_asset'
             and audit.entity_id = bridge_assets.id
-        ) as verified_audit
+          order by audit.created_at desc
+          limit 1
+        ) as verified_etag
       from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
     `;
     return {
@@ -382,7 +387,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
             await assertPersistedAssetVerified(
               r,
               title,
-              r.verified_audit,
+              r.verified_etag,
               verifyStoredObject,
             );
             verified = true;
