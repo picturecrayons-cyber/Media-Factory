@@ -118,22 +118,39 @@ export const listCreatorDocuments = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     assertCreatorOrStudio(actor);
     const sql = await getSql();
-    const rows = await sql<{
-      id: string; document_type: string; file_name: string; content_type: string;
-      byte_size: number | null; status: string; verified_at: string | Date | null;
-      created_at: string | Date;
-    }>`
-      select id,document_type,file_name,content_type,byte_size,status,verified_at,created_at
-      from bridge_creator_documents
-      where status <> 'REVOKED'
-        and (
-          (owner_account_type='independent_creator' and owner_user_id=${actor.userId})
-          or (owner_account_type='studio' and owner_organization_id=${actor.organizationId ?? null}
-              and ${actor.accountType}='studio' and ${actor.organizationId ?? null} is not null)
-        )
-      order by created_at desc limit 200
-    `;
-    return { documents: rows };
+    try {
+      const rows = await sql<{
+        id: string; document_type: string; file_name: string; content_type: string;
+        byte_size: number | null; status: string; verified_at: string | Date | null;
+        created_at: string | Date;
+      }>`
+        select id,document_type,file_name,content_type,byte_size,status,verified_at,created_at
+        from bridge_creator_documents
+        where status <> 'REVOKED'
+          and (
+            (owner_account_type='independent_creator' and owner_user_id=${actor.userId})
+            or (owner_account_type='studio' and owner_organization_id=${actor.organizationId ?? null}
+                and ${actor.accountType}='studio' and ${actor.organizationId ?? null} is not null
+                and exists (
+                  select 1 from bridge_organization_memberships m
+                  join bridge_organizations o on o.id=m.organization_id
+                  where m.organization_id=bridge_creator_documents.owner_organization_id
+                    and m.user_id=${actor.userId} and m.status='active' and o.status='active'
+                ))
+          )
+        order by created_at desc limit 200
+      `;
+      return { documents: rows };
+    } catch (error) {
+      const reference = randomBytes(6).toString("hex");
+      const diagnostic = error as { code?: string; name?: string };
+      console.error("[bridge-document-vault] list failed", {
+        reference,
+        errorName: diagnostic?.name ?? "UnknownError",
+        databaseCode: diagnostic?.code ?? "unavailable",
+      });
+      throw new Error(`Document Vault is temporarily unavailable. Retry the request. Reference: ${reference}`);
+    }
   });
 
 export const linkCreatorDocumentToTitle = createServerFn({ method: "POST" })
