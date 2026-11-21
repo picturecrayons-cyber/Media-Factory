@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
-import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
@@ -43,47 +42,36 @@ function Studio() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Studio workspace</p>
                 <h2 className="mt-1 font-display text-2xl font-semibold sm:text-3xl">{actor.organizationName || actor.displayName}</h2>
-                <p className="mt-1 max-w-2xl text-sm text-muted">Find buyers for finished films, connect stories with producers and investors, and manage production services and storage.</p>
+                <p className="mt-1 max-w-2xl text-sm text-muted">Choose a task and continue. You only see the Studio tools available to your account.</p>
               </div>
-              <Link to="/account" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">Studio account</Link>
+            </section>
+
+            <section aria-label="Studio quick actions" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              <a href="#studio-titles" className="rounded-lg border border-line px-3 py-3 text-sm font-semibold hover:border-accent">My Titles</a>
+              <a href="#studio-submit-heading" className="rounded-lg border border-line px-3 py-3 text-sm font-semibold hover:border-accent">Add Finished Film / Story</a>
+              <a href="#studio-dit" className="rounded-lg border border-line px-3 py-3 text-sm font-semibold hover:border-accent">DIT Agent</a>
+              <a href="#studio-documents" className="rounded-lg border border-line px-3 py-3 text-sm font-semibold hover:border-accent">Document Vault</a>
+              <a href="#studio-members" className="rounded-lg border border-line px-3 py-3 text-sm font-semibold hover:border-accent">Members & Roles</a>
+              <a href="/deliveries" className="rounded-lg border border-line px-3 py-3 text-sm font-semibold hover:border-accent">Delivery Status</a>
+              <a href="#studio-storage" className="rounded-lg border border-line px-3 py-3 text-sm font-semibold hover:border-accent">Storage Space</a>
+              <Link to="/account" className="rounded-lg border border-line px-3 py-3 text-sm font-semibold hover:border-accent">Account</Link>
+              <a href="https://crayonsloop.in/" className="rounded-lg border border-line px-3 py-3 text-sm font-semibold hover:border-accent">Open Crayons Loop ↗</a>
             </section>
 
             <section aria-labelledby="studio-submit-heading" className="space-y-3">
               <div>
-                <h3 id="studio-submit-heading" className="font-display text-xl font-semibold">Find opportunities through Bridge</h3>
-                <p className="mt-1 text-sm text-muted">Both submission paths are important: finished films seek buyers; stories and concepts seek producers or investors.</p>
+                <h3 id="studio-submit-heading" className="font-display text-lg font-semibold">Add a title</h3>
+                <p className="mt-1 text-sm text-muted">Choose one direct submission path. QC, rights and licensing approvals remain separate.</p>
               </div>
               <NewSubmissionPanel />
             </section>
 
-            <section aria-labelledby="studio-services-heading" className="space-y-3">
-              <div>
-                <h3 id="studio-services-heading" className="font-display text-xl font-semibold">Studio services</h3>
-                <p className="mt-1 text-sm text-muted">Open the service you need. Access to titles, files and organization records remains server-authorized.</p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <ServiceCard title="Studio Titles" description="Manage finished films and story concepts." href="#studio-titles" />
-                <ServiceCard title="Production & DIT" description="Coordinate production operations and media handover." href="#studio-operations" />
-                <ServiceCard title="DIT Agent" description="Register camera cards, verify checksums and record sign-off." href="#studio-dit" />
-                <ServiceCard title="Production Schedule" description="Plan production and delivery milestones." href="#studio-schedule" status="Coming soon — shared schedule is not connected." />
-                <ServiceCard title="Document Vault" description="Keep private ownership, rights and agreement documents." href="#studio-documents" />
-                <ServiceCard title="QC & Rights" description="Follow quality checks and rights-review progress." href="#studio-titles" />
-                <ServiceCard title="Deliveries" description="Open approved delivery packages." href="/deliveries" />
-                <ServiceCard title="Members & Roles" description="View the verified studio roster." href="#studio-members" />
-                <ServiceCard title="Storage Space" description="Plan media storage, backups and additional capacity." href="#studio-storage" status="Storage plans and billing are being prepared; no charge is enabled here yet." />
-                <ServiceCard title="Statements & Insights" description="Review verified licensing, settlements and studio activity." href="#studio-business" status="Coming soon — verified financial and analytics data is not connected." />
-                <ServiceCard title="Help & Support" description="Get help with Studio onboarding and workflows." href="#studio-help" />
-                <ServiceCard title="Crayons Loop" description="Open the consumer streaming platform." href="https://crayonsloop.in/" />
-              </div>
-            </section>
-
-            <section id="studio-titles" className="scroll-mt-20 space-y-4">
+            <section id="studio-titles"            <section id="studio-titles" className="scroll-mt-20 space-y-4">
               <div>
                 <h3 className="font-display text-xl font-semibold">Studio titles</h3>
                 <p className="mt-1 text-sm text-muted">Finished films and story concepts are listed separately. Submission does not bypass QC, rights or licensing approval.</p>
               </div>
               <TitleList empty="No finished films are currently returned for this studio account." />
-              <MyStoryConcepts />
             </section>
 
             <section id="studio-storage" className="scroll-mt-20 rounded-xl border border-line p-4 sm:p-5">
@@ -117,21 +105,9 @@ function Studio() {
               <DitAgentDesk actor={actor} />
             </section>
 
-            <section id="studio-operations" className="scroll-mt-20 space-y-3">
-              <div>
-                <h3 className="font-display text-xl font-semibold">Production & DIT operations</h3>
-                <p className="mt-1 text-sm text-muted">Production services are shown with their actual connection status; no synthetic projects or financial values are displayed.</p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {studioModules.map(([name, description, status, href]) => (
-                  <article key={name} id={name === "Schedule" ? "studio-schedule" : name === "Statements" ? "studio-business" : undefined} className="rounded-xl border border-line p-4">
-                    <h4 className="font-semibold">{name}</h4>
-                    <p className="mt-1 text-sm">{description}</p>
-                    <p className="mt-3 text-xs text-muted">{status}</p>
-                    <a href={href} className="mt-3 inline-block text-xs font-semibold underline underline-offset-2">Open section</a>
-                  </article>
-                ))}
-              </div>
+            <section id="studio-operations" className="scroll-mt-20 rounded-xl border border-line p-4">
+              <h3 className="font-semibold">Production services</h3>
+              <p className="mt-1 text-sm text-muted">Production tracking, shared schedule, statements and insights are not connected yet. They will appear as direct actions when their real workflows are ready.</p>
             </section>
 
             <section id="studio-help" className="scroll-mt-20 rounded-xl border border-line p-4">
