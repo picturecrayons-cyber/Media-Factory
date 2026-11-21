@@ -732,7 +732,7 @@ try {
       (select convalidated from pg_constraint where conrelid = 'public.bridge_titles'::regclass and conname = 'bridge_titles_creator_submission_status_chk') as submission_status_check_validated,
       (select convalidated from pg_constraint where conrelid = 'public.bridge_titles'::regclass and conname = 'bridge_titles_deleted_by_fkey') as deleted_by_fk_validated,
       to_regclass('public.bridge_titles_active_creator_owner_idx') is not null as active_owner_index,
-      (select position('deleted_at IS NULL' in upper(coalesce(pg_get_expr(p.polqual, p.polrelid), ''))) > 0
+      (select position('DELETED_AT IS NULL' in upper(coalesce(pg_get_expr(p.polqual, p.polrelid), ''))) > 0
        from pg_policy p
        where p.polrelid = 'public.bridge_titles'::regclass
          and p.polname = 'bridge_titles_owner_or_buyer_select') as archived_title_rls_filter
