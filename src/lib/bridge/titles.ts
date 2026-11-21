@@ -281,6 +281,9 @@ export const createTitle = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
+    if (!actor.internalRole && actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("An active verified Studio organization membership is required to create a Studio title.");
+    }
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
     const sql = await getSql();
