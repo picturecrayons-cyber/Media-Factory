@@ -279,3 +279,36 @@ The previous approval is treated as authorization for source-side audit and safe
 - Automated tests/typecheck/local disposable replay on this turn: NOT RUN.
 - No source code was changed in this follow-up. Only this audit report was updated.
 - No hosted Testing migration, Production migration, payment, merge, or deployment was performed.
+
+
+## Read-only Testing schema confirmation and canonical TVOD contract — 2026-11-21
+
+Read-only Supabase inspection of Testing project `jbymleftneggcgutlcqu` confirmed the exact live schema and routine contracts. This supersedes any earlier ambiguity about user/title ID types and RPC arity.
+
+- `loop_payment_events.event_id` is UNIQUE; fields include event_name, razorpay_payment_id, nullable UUID user_id, status and JSONB payload.
+- `loop_user_tvod_entitlements.user_id` is UUID; `title_id` is TEXT; `payment_transaction_id` is TEXT and UNIQUE. There is also UNIQUE(user_id,title_id,access_type).
+- `loop_titles.id` is TEXT; pricing is `price_paise BIGINT`; listing/publishing flags are `is_listed` / `is_published`; status values include uppercase APPROVED/PUBLISHED.
+- `bridge_loop_publications` uses TEXT title identifiers, destination CRAYONS_LOOP, uppercase AUTHORIZED status, approved_at, revoked_at, publication windows, territories, languages and exploitation_models.
+- Both payment events and entitlements have RLS enabled and a deny_browser_access policy for anon/authenticated.
+- Exact function signatures:
+  - `loop_fulfill_captured_rental(text,text,uuid,text,timestamptz,timestamptz)`
+  - `loop_refund_captured_rental(text,text)`
+  - `loop_rental_fulfillment_ready()`
+- Fulfillment enforces exactly 48 hours, publication/TVOD eligibility and payment-level idempotency. Refund handles refund-before-capture. Function privileges show EXECUTE for service_role and postgres only.
+
+### Canonical contract decision
+
+Use the existing `loop_payment_events` as the only payment event ledger and `loop_user_tvod_entitlements` as the only entitlement source. Persist pending Razorpay order details in the existing payment ledger's JSONB payload, then verify order/user/title/amount/currency before invoking the six-argument fulfillment RPC. Use UUID for user_id and TEXT for title_id. Use the two-argument refund RPC. Price from `loop_titles.price_paise`. Do not create `loop_tvod_orders` or `loop_tvod_payment_events`; do not add `bridge_loop_consumer_pricing`; do not cast title IDs to UUID. Remove SVOD/Loop Pass and legacy `loop_entitlements` authorization from the consumer path.
+
+Detailed contract: `docs/audits/loop-tvod-canonical-contract-2026-11-21.md` in this branch.
+
+### Current action status
+
+- Testing schema, RLS, policies, RPC signatures and grants read-only inspection: PASS.
+- Canonical database contract defined: PASS.
+- Application checkout/webhook/catalog source correction: NOT IMPLEMENTED.
+- Disposable local replay: NOT RUN (no local PostgreSQL/Supabase runtime is available through the connected GitHub/Supabase tools).
+- Hosted Testing mutation: NOT RUN.
+- Production mutation/deployment: NOT RUN; Production remains HOLD.
+
+No database rows or schema were changed by this inspection.
