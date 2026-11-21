@@ -1,11 +1,45 @@
 import type { Sql } from "@/lib/db";
 import type { BridgeTitle, TitleStatus } from "./types";
-import { hasVerifiedMasterAndArtwork } from "./asset-roles.ts";
+import { bridgeEnv } from "./env";
+
+const REQUIRED_QC_FILES = [
+  { label: "main film", kinds: ["master"] },
+  { label: "trailer", kinds: ["screener"] },
+  { label: "vertical poster", kinds: ["poster_vertical", "poster"] },
+  { label: "horizontal artwork", kinds: ["poster_horizontal"] },
+  { label: "thumbnail", kinds: ["thumbnail"] },
+  { label: "subtitles", kinds: ["subtitle"] },
+  { label: "censor/legal certificate", kinds: ["censor_certificate"] },
+] as const;
+
+type QcAsset = {
+  id: string;
+  kind: string;
+  s3_key: string;
+  byte_size: number | null;
+  checksum_sha256: string | null;
+  verified_object_key: string | null;
+  storage_provider: string | null;
+  storage_bucket: string | null;
+  storage_namespace: string | null;
+  storage_region: string | null;
+  storage_endpoint: string | null;
+  storage_verified_at: string | Date | null;
+};
+
+function storageVerified(asset: QcAsset): boolean {
+  return Number(asset.byte_size ?? 0) > 0 &&
+    Boolean(asset.verified_object_key) &&
+    Boolean(asset.storage_provider && asset.storage_bucket && asset.storage_namespace &&
+      asset.storage_region && asset.storage_endpoint && asset.storage_verified_at) &&
+    Boolean(asset.checksum_sha256 && /^[a-f0-9]{64}$/.test(asset.checksum_sha256));
+}
 
 /**
  * Executes the real Submit-for-QC database path. Authentication and permission
- * checks stay in the server handler; asset validation and all lifecycle writes
- * remain here so the same transaction can be exercised by PostgreSQL tests.
+ * checks stay in the server handler. The title and asset rows are locked before
+ * validating the immutable seven-file package and metadata, preventing a
+ * concurrent upload replacement from racing the lifecycle transition.
  */
 export async function submitTitleForQc(
   sql: Sql,
@@ -14,49 +48,108 @@ export async function submitTitleForQc(
   note?: string,
 ): Promise<{ title: Pick<BridgeTitle, "id" | "status"> & { status: TitleStatus } }> {
   if (title.status !== "PREPARING") throw new Error("Title is not ready for QC submission");
-  const assets = await sql<{ kind: string; s3_key: string }>`
-    select kind, s3_key
-    from bridge_assets
-    where title_id = ${title.id} and coalesce(byte_size, 0) > 0
-  `;
-  if (!hasVerifiedMasterAndArtwork(assets, title.masterKey, title.posterKey)) {
-    throw new Error("Verified master and artwork required before QC");
-  }
 
   await sql.transaction(async (tx) => {
-    const [locked] = await tx<{ status: string }>`
-      select status from bridge_titles where id = ${title.id} for update
+    const [locked] = await tx<{
+      status: string;
+      name: string;
+      submission_type: string | null;
+      content_type: string | null;
+      original_language: string | null;
+      country_of_origin: string | null;
+      release_date: string | Date | null;
+      synopsis: string | null;
+      runtime_minutes: number | null;
+      year: number | null;
+      master_language: string | null;
+    }>`
+      select status, name, submission_type, content_type, original_language,
+        country_of_origin, release_date, synopsis, runtime_minutes, year, master_language
+      from bridge_titles where id = ${title.id} for update
     `;
     if (!locked || locked.status !== title.status) {
       throw new Error("Title changed; refresh before retrying");
     }
-    await tx`
-      update bridge_titles set status = 'QC_REVIEW', updated_at = now()
-      where id = ${title.id}
-    `;
-    await tx`
-      insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
-      values (${title.id}, ${title.status}, 'QC_REVIEW', ${actorUserId}, ${note ?? null})
-    `;
-    await tx`
-      insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
-      values (
-        ${actorUserId}, 'title.advance', 'bridge_title', ${title.id},
-        ${JSON.stringify({ from: title.status, to: "QC_REVIEW" })}
-      )
-    `;
 
-    // QC submission and its internal notification queue entry are one commit.
-    // Do not silently accept a submission when the notification schema is absent.
+    const assets = await tx<QcAsset>`
+      select id, kind, s3_key, byte_size, checksum_sha256, verified_object_key,
+        storage_provider, storage_bucket, storage_namespace, storage_region,
+        storage_endpoint, storage_verified_at
+      from bridge_assets
+      where title_id = ${title.id}
+      order by id
+      for update
+    `;
+    const missing = REQUIRED_QC_FILES.filter((required) =>
+      !assets.some((asset) =>
+        required.kinds.some((kind) => kind === asset.kind) &&
+        storageVerified(asset) &&
+        (required.label !== "main film" || asset.s3_key === title.masterKey) &&
+        (required.label !== "vertical poster" || asset.s3_key === title.posterKey)
+      )
+    );
+    if (missing.length) {
+      throw new Error(
+        `QC blocked: all 7 mandatory files must have immutable storage verification and SHA-256 (missing or unverified: ${missing.map((item) => item.label).join(", ")})`,
+      );
+    }
+
+    const metadataMissing = [
+      !locked.name?.trim() ? "title name" : null,
+      !locked.content_type?.trim() ? "content type" : null,
+      !locked.original_language?.trim() ? "original language" : null,
+      !locked.country_of_origin?.trim() ? "country of origin" : null,
+      !locked.release_date ? "release date" : null,
+      !locked.synopsis?.trim() ? "synopsis" : null,
+      !(Number(locked.runtime_minutes) > 0) ? "runtime" : null,
+      !(Number(locked.year) >= 1888 && Number(locked.year) <= new Date().getFullYear() + 2) ? "release year" : null,
+      !locked.master_language?.trim() ? "master language" : null,
+    ].filter((item): item is string => Boolean(item));
+    if (metadataMissing.length) {
+      throw new Error(`QC blocked: finished-film metadata incomplete (${metadataMissing.join(", ")})`);
+    }
+    if (locked.submission_type && locked.submission_type !== "finished_film") {
+      throw new Error("QC blocked: this submission is not classified as a finished film");
+    }
+
+    const rights = await tx<{
+      authority_type: string | null;
+      authorization_evidence_type: string | null;
+      authorization_confirmed: boolean;
+      evidence: Array<{ type?: string; rightsBasis?: string; authorizationConfirmed?: boolean }>;
+    }>`
+      select i.authority_type, i.authorization_evidence_type, i.authorization_confirmed, g.evidence
+      from bridge_title_submission_intake i
+      join bridge_rights_grants g on g.title_id = i.title_id
+      where i.title_id = ${title.id} and g.status in ('DRAFT','VALID')
+      order by g.created_at desc limit 1
+    `;
+    const rightsRow = rights[0];
+    const allowedAuthority = new Set([
+      "RIGHTS_OWNER", "LICENSEE_WITH_ONWARD_RIGHTS", "DISTRIBUTOR_SALES_AGENT", "PRODUCER",
+    ]);
+    const attestation = rightsRow?.evidence?.some((item) =>
+      item.type === "AUTHORIZATION_ATTESTATION" &&
+      Boolean(item.rightsBasis) &&
+      item.authorizationConfirmed === true
+    );
+    if (
+      !rightsRow ||
+      !allowedAuthority.has(rightsRow.authority_type ?? "") ||
+      !rightsRow.authorization_evidence_type ||
+      rightsRow.authorization_confirmed !== true ||
+      !attestation
+    ) {
+      throw new Error("QC blocked: rights-holder classification and authorization evidence are incomplete");
+    }
+
     const schema = await tx<{ outbox: string | null }>`
-      select to_regclass('bridge_notification_outbox')::text as outbox
+      select to_regclass('public.bridge_notification_outbox')::text as outbox
     `;
     if (!schema[0]?.outbox) {
       throw new Error("QC notification outbox is not installed in this environment");
     }
-    const [titleRecord] = await tx<{ name: string }>`
-      select name from bridge_titles where id = ${title.id} limit 1
-    `;
+
     const reviewers = await tx<{ user_id: string; email: string }>`
       select user_id, email
       from bridge_profiles
@@ -69,10 +162,33 @@ export async function submitTitleForQc(
     if (reviewers.length === 0) {
       throw new Error("No verified QC reviewer is configured; submission was not accepted");
     }
-    const eventKey = `bridge-qc-submitted:${title.id}:${new Date().toISOString()}`;
-    const titleName = titleRecord?.name ?? title.id;
+
+    await tx`
+      update bridge_titles set status = 'QC_REVIEW', updated_at = now()
+      where id = ${title.id}
+    `;
+    const [event] = await tx<{ id: number }>`
+      insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
+      values (${title.id}, ${title.status}, 'QC_REVIEW', ${actorUserId}, ${note ?? null})
+      returning id
+    `;
+    if (!event?.id) throw new Error("QC lifecycle event could not be persisted");
+
+    await tx`
+      insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+      values (
+        ${actorUserId}, 'title.advance', 'bridge_title', ${title.id},
+        ${JSON.stringify({ from: title.status, to: "QC_REVIEW", submissionEventId: event.id })}
+      )
+    `;
+
+    // Stable idempotency key: tied to the persisted lifecycle event, not wall-clock time.
+    const eventKey = `bridge-qc-submitted:${event.id}`;
+    const baseUrl = bridgeEnv.appUrl();
+    if (!baseUrl) throw new Error("Bridge application URL is not configured; QC notification was not queued");
+    const titleName = locked.name || title.id;
     const subject = `QC review requested: ${titleName}`;
-    const textBody = `A title has been submitted for QC review in Crayons Bridge. Title: ${titleName}. Title reference: ${title.id}. Open the internal QC desk: https://www.crayonspictures.in/internal?desk=qc`;
+    const textBody = `A title has been submitted for QC review in Crayons Bridge. Title: ${titleName}. Title reference: ${title.id}. Open the internal QC desk: ${baseUrl}/internal?desk=qc`;
     for (const reviewer of reviewers) {
       await tx`
         insert into bridge_notification_outbox (
