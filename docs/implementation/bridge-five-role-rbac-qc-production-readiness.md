@@ -189,3 +189,13 @@ PR #759 remains Draft, open and unmerged. Vercel work is Preview-only. No Produc
 - The current branch deploys to Vercel project `media-factory` as Preview; the separate `bridge` project has no deployment for this commit.
 - Vercel environment inventory contains no branch-scoped Preview binding for `feat/bridge-five-role-rbac-qc-production-readiness`. The branch-specific Testing DB variables on other branches do not apply here. Do not run authenticated Preview tests or submit titles until the current branch is explicitly bound to Testing DB and that target is verified.
 - Exact-head CI and the Scope A disposable PostgreSQL workflow are still running on the current head; do not report PASS until complete.
+
+
+### Super Admin read-only finance and investor views
+- Selectively ported #712's `/finance` and `/investor-governance` screens plus server-side Super Admin-only read queries.
+- Finance view reads `bridge_payments`, `bridge_title_settlements`, `bridge_financial_ledger` and `bridge_service_invoices`; it explicitly distinguishes recorded payment/settlement rows from bank reconciliation and does not call Razorpay or mutate payments/invoices/ledger.
+- Investor governance view reads existing `bridge_title_investors` and linked profile display names; it does not create assignments, change participation, approve returns or trigger payouts.
+- Production schema inventory confirmed these referenced tables/columns exist. Read-only regression tests from #712 were ported.
+- Super Admin dashboard now links to Finance oversight and Investor mapping. Its QC queue links directly to the submitted title review page.
+- **Not ported:** #712 role assignment writes, organization invitations, support cases and Loop merchandising because they require additional migration/RBAC and mutation review. #746 Studio schedule/membership/statements remains unported pending its schema migration review.
+- **Not implemented:** Super Admin write actions to grant/revoke Buyer title access or assign Investor records. The new Investor page is a read-only inventory; do not confuse it with an assignment control. These require a separate reviewed action contract and negative authorization tests.
