@@ -430,8 +430,10 @@ export const updateTitle = createServerFn({ method: "POST" })
       synopsis: z.string().max(4000).optional(),
       language: z.string().min(2).max(40).optional(),
       masterLanguage: z.enum(MASTER_LANGUAGES).nullable().optional(),
-      year: z.number().int().min(1895).max(2100).nullable().optional(),
+      year: z.number().int().min(1888).max(new Date().getFullYear() + 2).nullable().optional(),
       runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
+      countryOfOrigin: z.string().trim().min(2).max(80).nullable().optional(),
+      releaseDate: z.string().max(40).nullable().optional(),
       licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
       contentType: z.string().min(1).max(80).optional(),
     }),
@@ -460,6 +462,9 @@ export const updateTitle = createServerFn({ method: "POST" })
         synopsis = ${data.synopsis ?? title.synopsis},
         language = ${data.language ?? title.language},
         master_language = ${data.masterLanguage === undefined ? title.masterLanguage ?? null : data.masterLanguage},
+        original_language = ${data.language ?? title.language},
+        country_of_origin = ${data.countryOfOrigin === undefined ? title.countryOfOrigin : data.countryOfOrigin},
+        release_date = ${data.releaseDate === undefined ? title.releaseDate : data.releaseDate},
         year = ${data.year === undefined ? title.year : data.year},
         runtime_minutes = ${data.runtimeMinutes === undefined ? title.runtimeMinutes : data.runtimeMinutes},
         licensing_fee_paise = ${data.licensingFeePaise ?? title.licensingFeePaise},
@@ -588,6 +593,8 @@ export const advanceTitle = createServerFn({ method: "POST" })
       id: z.string().min(8),
       to: z.enum(TITLE_STATUSES),
       note: z.string().max(500).optional(),
+      legalConsentAccepted: z.boolean().optional(),
+      legalConsentVersion: z.string().max(40).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -615,7 +622,10 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (expected !== data.to) throw new Error("Illegal title transition");
     const sql = await getSql();
     if (data.to === "QC_REVIEW") {
-      return submitTitleForQc(sql, title, actor.userId, data.note);
+      if (data.legalConsentAccepted !== true || data.legalConsentVersion !== "bridge-title-rights-v1") {
+        throw new Error("Review the current title submission declaration and confirm before submitting");
+      }
+      return submitTitleForQc(sql, title, actor.userId, data.note, data.legalConsentVersion);
     }
     return sql.transaction(async (tx) => {
       const [locked] = await tx<{
