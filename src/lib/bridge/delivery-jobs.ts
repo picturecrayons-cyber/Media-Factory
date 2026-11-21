@@ -8,7 +8,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle, hasPermission } from "./rbac";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
-import { verifyObjectSha256 } from "./oci-object-storage.server";
+import { verifyObject, verifyObjectSha256 } from "./oci-object-storage.server";
 import {
   canRequestVendorJob,
   deliveryFinalGate,
@@ -205,7 +205,7 @@ export const completeBridgeDeliveryJob = createServerFn({ method: "POST" })
     jobId: z.string().uuid(),
     receiptObjectKey: z.string().min(1).max(1024),
     receiptSha256: z.string().regex(/^[a-fA-F0-9]{64}$/),
-    receiptByteSize: z.number().int().positive().max(2_147_483_647),
+    receiptByteSize: z.number().int().positive().max(50 * 1024 * 1024),
   }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
@@ -214,6 +214,8 @@ export const completeBridgeDeliveryJob = createServerFn({ method: "POST" })
     if (!isValidSha256Receipt(data.receiptSha256) || !isValidVendorReceiptKey(data.receiptObjectKey, data.jobId)) {
       throw new Error("Vendor receipt evidence reference is invalid");
     }
+    const metadata = await verifyObject(data.receiptObjectKey, "application/pdf");
+    if (metadata.byteSize !== data.receiptByteSize) throw new Error("Vendor receipt byte size does not match the private object");
     const verified = await verifyObjectSha256(data.receiptObjectKey, data.receiptSha256, data.receiptByteSize);
     if (!verified.verified) throw new Error("Vendor receipt evidence could not be verified");
     const sql = await getSql();
