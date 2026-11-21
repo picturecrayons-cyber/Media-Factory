@@ -142,3 +142,34 @@ Target: **PRODUCTION DB** `mlmgugivsyoxzdgwkbpu` and **STAGING / Testing DB** `j
 - Dispatcher implementation, bounded retries/lease recovery/provider idempotency, and selective functional port of #746/#712/#751 remain **NOT VERIFIED / NOT IMPLEMENTED** on this head. Existing `mail.server.ts` SMTP helper is not a bounded outbox dispatcher. Sending remains disabled pending a separately reviewed provider/idempotency design.
 - Seven-file multipart cleanup from #491 is deliberately not ported in this increment: it performs real OCI abort and manifest deletion operations. Keep it isolated until its tests and concurrency behavior are independently reviewed.
 - PR #759 remains Draft, open and unmerged. No Production SQL, grant, policy, Auth setting, environment variable, storage object, customer email, payment, merge or deployment promotion was performed.
+
+
+## Owner submission, legal consent and review queue increment — 21 November 2026
+
+Target environments:
+- **PRODUCTION DB** `mlmgugivsyoxzdgwkbpu` — Action: inspect title/asset/legal/outbox/revenue schema and rows. Access: **READ-ONLY**. Risk: **High** for any mutation.
+- **STAGING / Testing DB** `jbymleftneggcgutlcqu` — Action: inspect migration/schema presence. Access: **READ-ONLY**. Risk: **Medium**.
+
+### Implemented in PR #759 (code only; no DB migration applied)
+- Owner title page now displays a compact completion panel for missing release year, runtime, country, release date, original language and synopsis. It does not ask the owner to re-enter fields already present.
+- The existing legal Terms page now includes a versioned Title Submission & Rights Declaration (`bridge-title-rights-v1`). The QC submit action requires the authenticated Creator/Studio submitter to open and accept the declaration; server-side validation rejects a missing or stale consent version.
+- A new server-only migration creates `bridge_title_submission_consents`, recording title, submission event, submitter account and accepted version/timestamp. RLS is enabled and browser roles receive no direct table privileges.
+- Submission checks the owner identity or active membership in the owning Studio; a generic internal Viewer or Buyer cannot submit/accept for the owner.
+- A pending `bridge_qc_cases` record, lifecycle event, audit entry, consent record and per-reviewer outbox notifications are written in the same transaction.
+- The internal operations desk now exposes a New Title Submissions queue for titles in `QC_REVIEW`. QC decision remains independent of submission.
+
+### Production schema reconciliation that changed the implementation
+- **PRODUCTION DB** contains `bridge_asset_versions` with SHA-256, byte size, processing state and JSON technical metadata. `bridge_assets` itself does **not** contain the checksum/provenance columns assumed by an earlier branch draft. The QC submission query has been corrected to read verification evidence from the canonical asset-version table rather than selecting nonexistent `bridge_assets` columns.
+- For `Pranayam 1947`, the inspected Production database has zero `bridge_asset_versions` rows and zero `bridge_dit_storage_objects` rows. The visible `bridge_assets` records include duplicate/stale rows and do not prove SHA-256 integrity. Therefore the seven-file UI count is not sufficient evidence for QC. The server gate will fail closed until each current asset has a PASSED asset-version record with matching byte size, SHA-256 and OCI provenance in `technical_metadata`.
+- The `bridge_title_submission_consents` table is absent from both Production and Testing DB. The migration is committed to this PR only and has not been applied to either database.
+- The Production QC notification outbox exists; Testing DB outbox table is absent. No dispatcher was started and no email was sent.
+- The reported `loop_tvod_payment_events` runtime error remains unresolved. The current branch's Bridge revenue query uses the existing `loop_payment_events` relation; the error source was not located in this branch or the read-only schema inspection. Do not mark revenue fixed until the exact runtime caller is traced.
+
+### Remaining NOT VERIFIED / NOT IMPLEMENTED
+1. Add trusted SHA-256 creation and OCI provenance persistence to the asset-confirmation path, with safe re-verification for legacy assets. Do not use ETag as SHA-256.
+2. Test the new legal-consent migration in isolated CI and then on STAGING only after a separate STAGING WRITE approval. Do not apply it to Production as part of this PR.
+3. Implement an outbox worker with bounded retries, stale-lease recovery, terminal failure handling and a provider that supports true idempotency. Current SMTP transport has no provider idempotency guarantee; deterministic Message-ID alone is not sufficient. Sending remains disabled.
+4. Continue selective integration of #746, #712 and #751 after schema and RBAC review. No blind merges.
+5. Complete five-role negative tests and authenticated cross-organization Preview tests.
+
+PR #759 remains Draft, open and unmerged. Vercel work is Preview-only. No Production SQL, migration, grant, RLS, Auth, environment, storage, payment, customer-email, merge or promotion operation was performed. Production remains **HOLD / NOT CERTIFIED / NO-GO**.
