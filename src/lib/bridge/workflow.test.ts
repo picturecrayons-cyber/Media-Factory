@@ -469,3 +469,16 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
     await f.db.close();
   }
 });
+
+
+test("title revenue reads the canonical TVOD payment ledger only", () => {
+  const source = readFileSync(new URL("./workflow.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export const getTitleRevenue");
+  const end = source.indexOf("export const recordSettlementEvidence", start);
+  assert.ok(start >= 0 && end > start, "revenue handler source is present");
+  const revenueHandler = source.slice(start, end);
+  assert.match(revenueHandler, /from loop_payment_events e/);
+  assert.doesNotMatch(revenueHandler, /loop_tvod_payment_events/);
+  assert.match(revenueHandler, /delivery\.read_finance/);
+  assert.match(revenueHandler, /finance\.read/);
+});
