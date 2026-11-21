@@ -93,7 +93,7 @@ test("vendor completion verifies a private PDF object, exact byte size and SHA-2
   const start = source.indexOf("export const completeBridgeDeliveryJob");
   const end = source.indexOf("async function getFinalDeliveryReadiness", start);
   const completion = source.slice(start, end);
-  assert.match(completion, /bridge-private\/vendor-delivery-receipts/);
+  assert.match(completion, /isValidVendorReceiptKey/);
   assert.match(completion, /verifyObject\(data\.receiptObjectKey, "application\/pdf"\)/);
   assert.match(completion, /verifyObjectSha256/);
   assert.match(completion, /receipt_verified_at=now\(\)/);
