@@ -58,3 +58,33 @@ Status: HOLD / NOT CERTIFIED / NO-GO.
 For every gate record PASS / FAIL / BLOCKED / NOT VERIFIED, commit SHA, exact CI run, test evidence, environment and target, Action / Access / Risk, and residual limitations.
 
 QC submission must never imply QC approval, rights approval, licensing, buyer entitlement or Crayons Loop publication. Bridge authorizes; Loop delivers. App-inu pani kittaruthu.
+
+
+## Reconciliation update — 21 November 2026
+
+The current `main` branch already contains the following foundations, so this implementation must extend them rather than replace them:
+
+- Five requested dashboard identities map to four external account types (`independent_creator`, `studio`, `buyer`, `investor`) plus the verified internal `super_admin` role. Internal staff roles (`admin`, `qc_reviewer`, `legal_reviewer`, `finance`, `viewer`, and DIT) remain separate from account entitlements.
+- Existing route foundations: `/creator`, `/studio`, `/buyer`, `/investor`, `/dashboard`; server-resolved `workspaceHome` and route gates are already present.
+- Existing title operations: `WorkflowDesk` exposes Prepare, Business, Distribution and Revenue; server functions already gate lifecycle, rights, licensing, delivery and finance actions.
+- Existing QC core: `submitTitleForQc` verifies the current master and artwork, locks the title, changes PREPARING → QC_REVIEW, and writes title-event/audit records transactionally. QC review/approval is a separate action and must remain separate.
+- Existing investor dashboard reads only rows assigned to the authenticated investor. Buyer catalogue/payment/entitlement code is already separate from Creator/Studio title ownership.
+
+### Existing PRs to reconcile (do not duplicate or blindly merge)
+
+- Creator/Studio dashboard consolidation: #520, #590, #629; Studio operations increment #746.
+- Super Admin control-centre/governance: #712, #731; existing Founder Centre simplification #725.
+- Buyer operations: #751; Super Admin read-only Buyer inspection #710 and access fix #690.
+- Asset authorization/preview: #304; seven-file QC readiness #491; portal boundaries #492.
+- QC evidence and metadata gates: #424, #540; Admin certification workflow #675; title workspace/review controls #679.
+- Internal role approval boundaries: #551 and #525. DIT least-privilege work #557.
+- Studio/Creator evidence vault: #723.
+
+These PRs are candidates for code/diff reconciliation. Their open/Draft status is not evidence of integration, test success, or runtime certification. The current branch does not cherry-pick them.
+
+### QC submission notification increment on this branch
+
+- After current asset verification and a locked PREPARING → QC_REVIEW transition, the same transaction now requires the notification outbox table and at least one email-verified `qc_reviewer`.
+- A deduplicated pending outbox row is inserted per reviewer; if the outbox schema or a verified reviewer is missing, the transaction fails and the lifecycle/audit changes roll back.
+- This change queues internal QC email notifications only. It does not send customer email or invoke SMTP. Outbox dispatch/retry operations, exact Testing migration reconciliation, and end-to-end Preview delivery remain separate NOT VERIFIED gates.
+- An isolated PostgreSQL/PGlite regression assertion checks that the submission queues the notification. Exact-head CI has not yet reported a result for the latest commit.
