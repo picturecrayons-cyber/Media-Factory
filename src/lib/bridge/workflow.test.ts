@@ -99,6 +99,11 @@ async function fixture() {
       storage_namespace text,storage_region text,storage_endpoint text,storage_verified_at timestamptz
     );
     create table bridge_title_events(id serial primary key,title_id text,from_status text,to_status text,actor_user_id text,note text);
+    create table bridge_asset_versions(
+      id uuid primary key default gen_random_uuid(),title_id text,asset_type text,asset_group text,
+      version integer,language text,s3_key text,checksum_sha256 text,byte_size bigint,
+      technical_metadata jsonb not null default '{}',processing_state text,created_by text,created_at timestamptz default now()
+    );
     create table bridge_title_submission_intake(
       title_id text primary key,authority_type text,authorization_evidence_type text,
       authorization_confirmed boolean not null default false
@@ -406,6 +411,20 @@ test("Submit for QC advances PREPARING and queues a deduplicated internal QC not
         ('qc-thumbnail','qc-submit-title','thumbnail','sealed/qc-thumbnail',256,repeat('e',64),'sealed/qc-thumbnail','oci','bucket','namespace','ap-south-1','https://objectstorage.ap-south-1.oraclecloud.com',now()),
         ('qc-subtitle','qc-submit-title','subtitle','sealed/qc-subtitle',128,repeat('f',64),'sealed/qc-subtitle','oci','bucket','namespace','ap-south-1','https://objectstorage.ap-south-1.oraclecloud.com',now()),
         ('qc-certificate','qc-submit-title','censor_certificate','sealed/qc-certificate',128,repeat('a',64),'sealed/qc-certificate','oci','bucket','namespace','ap-south-1','https://objectstorage.ap-south-1.oraclecloud.com',now())
+    `);
+    await f.sql.query(`
+      insert into bridge_asset_versions(title_id,asset_type,asset_group,version,s3_key,checksum_sha256,byte_size,technical_metadata,processing_state,created_by)
+      select title_id,kind,
+        case when kind='master' then 'VIDEO' when kind='screener' then 'PROMO'
+          when kind in ('poster_vertical','poster_horizontal','thumbnail') then 'ARTWORK'
+          when kind='subtitle' then 'SUBTITLE' else 'DOCUMENT' end,
+        1,s3_key,repeat('a',64),byte_size,
+        jsonb_build_object('verifiedObjectKey',s3_key,'storageProvider','OCI','storageBucket','bucket',
+          'storageNamespace','namespace','storageRegion','ap-south-1',
+          'storageEndpoint','https://objectstorage.ap-south-1.oraclecloud.com',
+          'storageVerifiedAt',now()),
+        'PASSED','owner'
+      from bridge_assets where title_id='qc-submit-title'
     `);
     const title = {
       id: "qc-submit-title",
