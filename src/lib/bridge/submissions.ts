@@ -272,9 +272,9 @@ export const submitCreatorTitleToBridge = createServerFn({ method: "POST" })
           (select count(*)::int from bridge_rights_grants
             where title_id = ${locked.id}
               and status = 'DRAFT'
-              and jsonb_typeof(territories) = 'array' and jsonb_array_length(territories) > 0
-              and jsonb_typeof(languages) = 'array' and jsonb_array_length(languages) > 0
-              and jsonb_typeof(media) = 'array' and jsonb_array_length(media) > 0
+              and case when jsonb_typeof(territories) = 'array' then jsonb_array_length(territories) > 0 else false end
+              and case when jsonb_typeof(languages) = 'array' then jsonb_array_length(languages) > 0 else false end
+              and case when jsonb_typeof(media) = 'array' then jsonb_array_length(media) > 0 else false end
               and window_start is not null and window_end > now()) as valid_grant_count,
           (select count(*)::int from bridge_title_submission_intake
             where title_id = ${locked.id}
