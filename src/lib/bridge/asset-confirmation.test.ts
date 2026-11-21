@@ -164,10 +164,11 @@ test("persisted asset verification rejects byte-size-only and malformed state", 
   const base = { id: "asset-1", kind: "master", s3_key: "master.mov.verified/asset-1", byte_size: 120, content_type: "video/quicktime" };
   const title = { masterKey: base.s3_key, posterKey: null };
   const verify = async () => ({ byteSize: 120, etag: "etag-1" });
-  await assert.rejects(() => assertPersistedAssetVerified({ ...base, s3_key: "master.mov" }, title, true, verify), /immutable verified object/);
-  await assert.rejects(() => assertPersistedAssetVerified(base, { ...title, masterKey: "other" }, true, verify), /master reference/);
-  await assert.rejects(() => assertPersistedAssetVerified(base, title, false, verify), /audit record/);
-  await assert.rejects(() => assertPersistedAssetVerified({ ...base, byte_size: null }, title, true, verify), /persisted byte size/);
-  await assert.rejects(() => assertPersistedAssetVerified(base, title, true, async () => ({ byteSize: 119, etag: "etag-1" })), /metadata/);
-  await assert.doesNotReject(() => assertPersistedAssetVerified(base, title, true, verify));
+  await assert.rejects(() => assertPersistedAssetVerified({ ...base, s3_key: "master.mov" }, title, "etag-1", verify), /immutable verified object/);
+  await assert.rejects(() => assertPersistedAssetVerified(base, { ...title, masterKey: "other" }, "etag-1", verify), /master reference/);
+  await assert.rejects(() => assertPersistedAssetVerified(base, title, null, verify), /audit record/);
+  await assert.rejects(() => assertPersistedAssetVerified({ ...base, byte_size: null }, title, "etag-1", verify), /persisted byte size/);
+  await assert.rejects(() => assertPersistedAssetVerified(base, title, "etag-1", async () => ({ byteSize: 119, etag: "etag-1" })), /metadata/);
+  await assert.rejects(() => assertPersistedAssetVerified(base, title, "etag-old", async () => ({ byteSize: 120, etag: "etag-new" })), /ETag and byte size/);
+  await assert.doesNotReject(() => assertPersistedAssetVerified(base, title, "etag-1", verify));
 });
