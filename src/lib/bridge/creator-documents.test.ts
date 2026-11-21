@@ -64,7 +64,7 @@ test("story concepts stay out of finished-film lists and title workspaces", () =
   assert.match(titlesSource, /submission_type is distinct from 'story_concept'/);
   assert.match(titlesSource, /isStoryConceptTitle\(sql, id\)\) return null/);
   assert.match(conceptApi, /export const getMyStoryConcept/);
-  assert.match(conceptList, /to="\\/story-concept\\/\\$id"/);
-  assert.doesNotMatch(conceptList, /to="\\/title\\/\\$id"/);
+  assert.ok(conceptList.includes('to="/story-concept/$id"'));
+  assert.ok(!conceptList.includes('to="/title/$id"'));
   assert.doesNotMatch(conceptRoute, /listTitleAssets|requestAssetUpload|ProductionAssetsPanel/);
 });
