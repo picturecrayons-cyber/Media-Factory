@@ -32,7 +32,7 @@ type TitleRow = {
   poster_key: string | null;
   master_key: string | null;
   content_type: string;
-  loop_distribution_preference: "NOT_DECIDED" | "CONSIDER_LOOP" | "NOT_FOR_LOOP";
+  loop_distribution_preference?: "NOT_DECIDED" | "CONSIDER_LOOP" | "NOT_FOR_LOOP";
   country_of_origin: string | null;
   release_date: string | Date | null;
   credits: Array<{ role: string; name: string }>;
