@@ -7,6 +7,9 @@ create table if not exists public.bridge_title_submission_consents (
   actor_user_id text not null references public.bridge_profiles(user_id) on delete restrict,
   actor_account_type text not null check (actor_account_type in ('independent_creator','studio')),
   consent_version text not null,
+  original_language text,
+  master_language text,
+  language_mismatch_confirmed boolean not null default true,
   accepted_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   unique (submission_event_id)
