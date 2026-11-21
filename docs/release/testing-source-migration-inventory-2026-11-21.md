@@ -224,3 +224,42 @@ All remaining Testing rows are unmatched by normalized name and remain unresolve
 - Remaining Testing rows unresolved by name: 63.
 - SQL-equivalent mappings certified: 0.
 - Do not repair or rewrite the hosted migration ledger based on these candidates.
+
+## READ-ONLY Testing catalog and TVOD candidate audit — 2026-11-21
+
+Testing project `jbymleftneggcgutlcqu` was queried read-only for columns, policies, and the full definitions/security attributes of the TVOD functions. No hosted changes were made.
+
+### Confirmed current Testing schema
+
+- `public.loop_titles.id`: text; publication flags are `is_listed` and `is_published`; price field is `price_paise`. The candidate migration instead references `listed`, `published`, and `tvod_rental_price`.
+- `public.loop_user_tvod_entitlements.user_id`: uuid; `title_id`: text. The candidate migration's `CREATE TABLE IF NOT EXISTS` definition proposes both as UUID, which will not alter the already-existing table. Its later `::uuid` cast of the text title identifier is not a safe compatibility assumption.
+- `public.loop_payment_events` exists with UUID `user_id`, text event/payment identifiers, and the canonical existing payment event ledger. Candidate also creates a parallel `loop_tvod_payment_events` ledger. This risks splitting deduplication/refund state across two ledgers unless explicitly reconciled.
+- Existing `public.loop_fulfill_captured_rental` signature is `(p_payment_id text, p_order_id text, p_user_id uuid, p_title_id text, p_purchased_at timestamptz, p_expires_at timestamptz)`. Candidate replaces a different two-text-argument signature `(p_order_id text,p_payment_id text)`. Call sites and grants must be audited before any replacement.
+- Existing `public.loop_refund_captured_rental` signature is `(p_payment_id text,p_refund_id text)`; candidate introduces a three-argument signature and drops a different three-argument overload. This does not safely replace the existing two-argument function.
+- Existing `public.has_active_loop_tvod_entitlement(text)` is SECURITY DEFINER, stable, and uses `search_path=public,auth,pg_temp`; it checks authenticated user entitlement state. It must be separately reviewed and preserved, not silently rewritten.
+- Current `loop_titles`, `loop_payment_events`, and `loop_user_tvod_entitlements` have a browser-deny policy for anon/authenticated. The candidate's new policies/grants need role-level effective-access tests; policy names alone are insufficient.
+- `bridge_creator_documents` already exists with text document IDs, owner user/org fields, storage key, status, verification and revocation timestamps. `bridge_sublicense_authorizations` also exists in Testing with the expected FK to creator documents. Do not recreate or replace either table.
+- `bridge_production_assets` already exists with UUID row IDs, text title IDs, owner/upload metadata, tags and file metadata. Four authenticated owner policies are present (SELECT/INSERT/UPDATE/DELETE). Preserve their semantics and test effective privileges, including helper-function execution rights.
+- `bridge_dit_storage_objects` exists with UUID session IDs, primary/recovery copy type, object evidence, SHA-256 and verified-state checks. Preserve the DIT evidence constraints.
+
+### TVOD candidate disposition
+
+`supabase/migrations/20261118130000_loop_tvod_payment_fulfillment.sql` is **NOT COMPATIBLE AS WRITTEN** with the current Testing catalog. Confirmed incompatible references include title publication flags/price column, entitlement identifier typing, and fulfillment/refund function signatures. It also proposes a parallel TVOD payment-event ledger despite an existing canonical ledger.
+
+No repair migration has been authored or applied. A safe repair proposal must first preserve the existing public function contracts or explicitly coordinate every call site, retain the canonical payment ledger, bind order capture to trusted verified payment state, use the existing text title ID and UUID auth user ID correctly, and test replay/refund/revocation/expiry and concurrency. Pricing and Bridge publication authorization must be checked against the actual Testing columns and constraints rather than the candidate's assumed names.
+
+### Preservation disposition
+
+- Creator Vault table: present; no schema/data changes.
+- Sublicensing table: present; no schema/data changes.
+- Production Assets table and four owner policies: present; no schema/data changes.
+- DIT storage object evidence table: present; no schema/data changes.
+- Effective role/grant and row-level behavioral regression suite: NOT VERIFIED; requires disposable PostgreSQL/Supabase replay.
+
+### Evidence classification
+
+- Testing catalog read: PASS (READ-ONLY snapshot only).
+- TVOD candidate compatibility: FAIL (candidate is not directly compatible as written).
+- Vault/Sublicensing/Production Assets preservation: PASS for observed table/policy presence; behavioral non-regression NOT VERIFIED.
+- Full source-to-Testing SQL semantic mapping: BLOCKED (Testing migration SQL bodies/hash manifest unavailable).
+- Disposable replay: BLOCKED / NOT VERIFIED (Docker and Supabase CLI unavailable in execution environment; prior Actions run supplied no jobs/logs).
