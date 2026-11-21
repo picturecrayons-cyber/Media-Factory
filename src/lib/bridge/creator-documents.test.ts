@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sameOwner, isSupportedCreatorDocumentMimeType, hasPdfMagicBytes, canDownloadCreatorDocument } from "./creator-document-policy.ts";
+import { sameOwner, isSupportedCreatorDocumentMimeType, hasPdfMagicBytes, canDownloadCreatorDocument, canManageStudioDocuments } from "./creator-document-policy.ts";
 
 test("Creator document vault is isolated to the owning Creator account", () => {
   const document = {
@@ -42,4 +42,14 @@ test("document downloads require ownership, linked-title review scope, or Super 
   assert.equal(canDownloadCreatorDocument({ ownerAccess: false, linkedTitleAccess: true, isSuperAdmin: false }), true);
   assert.equal(canDownloadCreatorDocument({ ownerAccess: false, linkedTitleAccess: false, isSuperAdmin: true }), true);
   assert.equal(canDownloadCreatorDocument({ ownerAccess: false, linkedTitleAccess: false, isSuperAdmin: false }), false);
+});
+
+test("Studio reusable document vault requires owner or admin membership", () => {
+  assert.equal(canManageStudioDocuments("owner"), true);
+  assert.equal(canManageStudioDocuments("admin"), true);
+  assert.equal(canManageStudioDocuments("member"), false);
+  assert.equal(canManageStudioDocuments("producer"), false);
+  assert.equal(canManageStudioDocuments("dit"), false);
+  assert.equal(canManageStudioDocuments(null), false);
+  assert.equal(canManageStudioDocuments(undefined), false);
 });
