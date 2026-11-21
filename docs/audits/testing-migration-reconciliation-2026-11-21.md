@@ -173,3 +173,39 @@ This is the least additive design because it reuses the actual Testing entitleme
 | Production migration / deployment | HOLD |
 
 **Decision:** Do not apply any migration yet. This report is an audit artifact and repair proposal only; it is not a release certification.
+
+
+## Follow-up checkout and webhook source audit — 2026-11-21
+
+This addendum inspects the repository default-branch source files through GitHub file retrieval. It is a separate observation from the earlier audited PR #767 SHA; do not treat the two source snapshots as interchangeable.
+
+### Findings from the retrieved default-branch files
+
+1. `supabase/functions/razorpay-webhook/index.ts` contains signature verification and durable `bridge_webhook_events` idempotency, but its `payment.captured` path resolves and processes Bridge `bridge_payments`. The retrieved file contains no LOOP order lookup, no call to `loop_fulfill_captured_rental`, and no refund-to-LOOP RPC path. Therefore the earlier claim that this webhook calls the newer order-based LOOP RPC is not corroborated by this default-branch file.
+2. `src/routes/api/razorpay/webhook.ts` delegates to `ingestRazorpayWebhook` in `src/lib/bridge/payments.ts`. The retrieved `ingestRazorpayWebhook` implementation verifies the signature, persists/deduplicates `bridge_webhook_events`, and calls `grantFromCapturedPayment` for captures. That function only looks up `bridge_payments` and grants Bridge licensing entitlements. No LOOP fulfillment or refund routing is present in the retrieved implementation.
+3. The retrieved `src/lib/loop/catalog.ts` is not aligned with a TVOD-only consumer contract: it still defines SVOD rails and a “Loop Pass” rail; reads `tvod_rental_price` and `tvod_purchase_price`; and checks TVOD access through `loop_entitlements` using `loop_title_id`. The Testing DB evidence in this report instead identifies `loop_user_tvod_entitlements` with `title_id text`. This is an application/database contract mismatch that needs explicit source reconciliation.
+4. The same catalog file reads `loop_subscriptions` and allows SVOD subscription playback. That conflicts with the product decision that LOOP is TVOD-only. This is source evidence, not proof of Production behavior.
+5. The retrieved `supabase/migrations/20261002171708_loop_release_safety.sql` defines a six-argument fulfillment RPC and two-argument refund RPC against `loop_payment_events` and `loop_user_tvod_entitlements`, matching the observed Testing RPC family at a high level. It is not proof that all migration-chain effects or current default-branch callers are aligned.
+
+### Revised gate assessment
+
+| Gate | Result |
+|---|---|
+| Checkout/order source aligned to Testing TVOD schema | FAIL — retrieved catalog still references legacy entitlement/pricing and SVOD structures |
+| Default-branch webhook routes LOOP captures/refunds | FAIL — retrieved handlers only process Bridge `bridge_payments` |
+| Single canonical LOOP TVOD ledger across source and Testing | BLOCKED — source snapshots describe differing models; needs one selected contract |
+| TVOD-only consumer source contract | FAIL — retrieved catalog retains SVOD/Loop Pass paths |
+| Repair SQL / migration | NOT IMPLEMENTED |
+| Tests / local replay | NOT RUN |
+| Hosted Testing / Production changes | NOT RUN / HOLD |
+
+### Required source-side correction before DDL
+
+- Select the current intended source branch/SHA as the canonical implementation baseline and reconcile it with the PR #767 source snapshot; do not mix findings across refs.
+- Trace every LOOP checkout entry point, order-creation function, payment verification callback, webhook capture/refund branch, entitlement read, and playback authorization call site.
+- Make the LOOP consumer contract TVOD-only and use the existing Testing identity model consistently (`user_id uuid`, `title_id text`) unless a separately reviewed migration proves a different canonical model is required.
+- Ensure order creation persists a durable, unique order-to-user/title/amount/currency mapping before payment can be completed; the webhook must validate capture/order/amount/currency and invoke the existing service-role-only six-argument fulfillment RPC exactly once.
+- Ensure refund events resolve the matching payment and invoke the existing two-argument refund RPC; unknown mappings fail closed and remain reconcilable.
+- Remove or explicitly retire legacy SVOD/Loop Pass and `loop_entitlements` read paths only after all callers are migrated and regression-tested. No subscription, entitlement, or payment data should be deleted as part of this source correction.
+- Only after code changes are reviewed should a forward-only migration be drafted, if any schema addition is still necessary. No hosted DB change is authorized by this audit.
+
