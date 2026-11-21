@@ -95,11 +95,13 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       throw new Error("A verified active Studio organization membership is required before creating a Studio submission.");
     }
 
-    const destinations = [...new Set(data.buyerChannels.map((value) => BUYER_DESTINATION_MAP[value]).filter((value): value is string => Boolean(value)))];
-    const media = [...new Set(data.exploitation.map((value) => EXPLOITATION_MEDIA_MAP[value]).filter((value): value is string => Boolean(value)))];
-    if (destinations.length !== data.buyerChannels.length || media.length !== data.exploitation.length) {
+    const mappedDestinations = data.buyerChannels.map((value) => BUYER_DESTINATION_MAP[value]);
+    const mappedMedia = data.exploitation.map((value) => EXPLOITATION_MEDIA_MAP[value]);
+    if (mappedDestinations.some((value) => !value) || mappedMedia.some((value) => !value)) {
       throw new Error("Select only supported Bridge distribution destinations and exploitation rights.");
     }
+    const destinations = [...new Set(mappedDestinations as string[])];
+    const media = [...new Set(mappedMedia as string[])];
 
     const id = randomBytes(16).toString("hex");
     const slug = `${data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "title"}-${id.slice(0, 6)}`;
