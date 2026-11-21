@@ -668,6 +668,10 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (data.to === "LICENSED") {
       throw new Error("LICENSED is granted only after a captured Razorpay payment");
     }
+    if (!actor.internalRole && title.status === "DRAFT" && data.to === "UPLOADING" &&
+        title.creatorSubmissionStatus !== "SUBMITTED") {
+      throw new Error("Submit this finished-film draft to Bridge before starting ingest.");
+    }
     if (["RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to))
       throw new Error("Use the recorded QC or legal review action");
     assertTransition(title.status, data.to);
