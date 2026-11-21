@@ -62,12 +62,30 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
     return sql.transaction(async (tx) => {
-      const activeTitle = await tx<{ status: string; deleted_at: string | Date | null }>`
-        select status, deleted_at from bridge_titles
-        where id = ${title.id} for update
+      const activeTitle = await tx<{
+        status: string; deleted_at: string | Date | null; owner_user_id: string;
+        owner_account_type: string; owner_organization_id: string | null;
+      }>`
+        select status, deleted_at, owner_user_id, owner_account_type, owner_organization_id
+        from bridge_titles where id = ${title.id} for update
       `;
-      if (!activeTitle[0] || activeTitle[0].deleted_at || !UPLOADABLE.has(activeTitle[0].status)) {
+      const current = activeTitle[0];
+      if (!current || current.deleted_at || !UPLOADABLE.has(current.status) ||
+          current.owner_user_id !== title.ownerUserId ||
+          current.owner_account_type !== title.ownerAccountType ||
+          (current.owner_organization_id ?? null) !== (title.ownerOrganizationId ?? null)) {
         throw new Error("Uploads are closed for this title");
+      }
+      if (actor.accountType === "studio" && current.owner_organization_id && current.owner_user_id !== actor.userId) {
+        const membership = await tx<{ allowed: boolean }>`
+          select exists (
+            select 1 from bridge_organization_memberships
+            where organization_id = ${current.owner_organization_id}::uuid
+              and user_id = ${actor.userId}
+              and status = 'active'
+          ) as allowed
+        `;
+        if (!membership[0]?.allowed) throw new Error("Active Studio membership is required to upload to this title.");
       }
       const signed = await signUpload({
         key,
