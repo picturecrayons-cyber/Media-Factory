@@ -92,7 +92,7 @@ test("Creator title RLS requires active Studio organization membership", () => {
   assert.match(replaySource, /studio_membership_rls_filter/);
 });
 
-test("Production asset RLS is owner-only and removes the public definer helper", () => {
+test("Production asset RLS is owner-only and moves the definer helper out of public", () => {
   assert.match(creatorLifecycleMigration, /bridge_production_assets_owner_select/);
   assert.match(creatorLifecycleMigration, /create or replace function private\.bridge_is_title_owner/);
   assert.match(creatorLifecycleMigration, /create or replace function private\.bridge_has_buyer_title_access/);
@@ -101,7 +101,7 @@ test("Production asset RLS is owner-only and removes the public definer helper",
   assert.match(creatorLifecycleMigration, /set search_path = ''/);
   assert.match(creatorLifecycleMigration, /bridge_organization_memberships m/);
   assert.match(creatorLifecycleMigration, /m\.status = 'active'/);
-  assert.match(creatorLifecycleMigration, /drop function if exists public\.bridge_is_title_owner\(text\)/);
+  assert.match(creatorLifecycleMigration, /alter function public\.bridge_is_title_owner\(text\) set schema private/);
   assert.match(replaySource, /production_asset_rls_scoped/);
   assert.match(replaySource, /definer_helper_removed/);
 });
