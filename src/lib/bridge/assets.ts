@@ -59,25 +59,34 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       kind: data.kind,
       filename: data.filename,
     });
-    const signed = await signUpload({
-      key,
-      contentType: data.contentType,
-      expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
-    });
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
-    await sql`
-      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
-      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
-    `;
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "asset.upload_signed",
-      entityType: "bridge_asset",
-      entityId: id,
-      metadata: { titleId: title.id, kind: data.kind },
+    return sql.transaction(async (tx) => {
+      const activeTitle = await tx<{ status: string; deleted_at: string | Date | null }>`
+        select status, deleted_at from bridge_titles
+        where id = ${title.id} for update
+      `;
+      if (!activeTitle[0] || activeTitle[0].deleted_at || !UPLOADABLE.has(activeTitle[0].status)) {
+        throw new Error("Uploads are closed for this title");
+      }
+      const signed = await signUpload({
+        key,
+        contentType: data.contentType,
+        expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
+      });
+      await tx`
+        insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
+        values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "asset.upload_signed",
+        entityType: "bridge_asset",
+        entityId: id,
+        metadata: { titleId: title.id, kind: data.kind },
+      }, tx);
+      return { assetId: id, ...signed };
     });
-    return { assetId: id, ...signed };
   });
 
 async function openUploadAsset(userId: string, assetId: string) {
