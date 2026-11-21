@@ -54,6 +54,8 @@ export type BridgeTitle = {
   posterKey: string | null;
   masterKey: string | null;
   contentType: string;
+  /** Canonical submission lane; absent only on legacy rows pending reconciliation. */
+  submissionType?: string | null;
   countryOfOrigin: string | null;
   releaseDate: string | null;
   credits: Array<{ role: string; name: string }>;
