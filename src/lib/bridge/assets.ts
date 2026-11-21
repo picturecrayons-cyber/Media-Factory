@@ -76,7 +76,8 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
           (current.owner_organization_id ?? null) !== (title.ownerOrganizationId ?? null)) {
         throw new Error("Uploads are closed for this title");
       }
-      if (actor.accountType === "studio" && current.owner_organization_id && current.owner_user_id !== actor.userId) {
+      if (actor.accountType === "studio") {
+        if (!current.owner_organization_id) throw new Error("Studio title organization scope is missing; Bridge staff must reconcile it.");
         const membership = await tx<{ allowed: boolean }>`
           select exists (
             select 1 from bridge_organization_memberships
