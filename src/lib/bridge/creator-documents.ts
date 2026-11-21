@@ -250,8 +250,8 @@ export const requestCreatorDocumentDownload = createServerFn({ method: "POST" })
     const doc = rows[0];
     if (!doc || doc.status !== "VERIFIED") throw new Error("Document not found");
     const ownerAccess = sameOwner(actor, doc);
-    const reviewerCanReadLinkedEvidence =
-      actor.internalRole === "legal_reviewer" && hasPermission(actor, "title.rights_review");
+    // No reviewer-assignment relation exists in the current schema. Do not turn
+    // the broad rights_review permission into cross-title document download access.
     const titleAccess = await sql<{ allowed: boolean }>`
       select exists (
         select 1 from bridge_title_document_links l
@@ -261,7 +261,6 @@ export const requestCreatorDocumentDownload = createServerFn({ method: "POST" })
             t.owner_user_id=${actor.userId}
             or (t.owner_account_type='studio' and t.owner_organization_id=${actor.organizationId ?? null}
                 and ${actor.accountType}='studio' and ${actor.organizationId ?? null} is not null)
-            or ${reviewerCanReadLinkedEvidence}
           )
       ) as allowed
     `;
