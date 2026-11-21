@@ -7,6 +7,8 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
+const TITLE_LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English", "Other"];
+
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
@@ -71,6 +73,7 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
   const [synopsis, setSynopsis] = useState("");
   const [language, setLanguage] = useState("Malayalam");
   const [contentType, setContentType] = useState("Film");
+  const [loopDistributionPreference, setLoopDistributionPreference] = useState<"NOT_DECIDED" | "CONSIDER_LOOP" | "NOT_FOR_LOOP">("NOT_DECIDED");
   const [country, setCountry] = useState("India");
   const [releaseDate, setReleaseDate] = useState("");
   const [runtimeMinutes, setRuntimeMinutes] = useState("");
@@ -91,6 +94,7 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
           runtimeMinutes: runtimeMinutes ? Number(runtimeMinutes) : undefined,
           licensingFeePaise: fee ? Math.round(Number(fee) * 100) : undefined,
           contentType: contentType || undefined,
+          loopDistributionPreference,
           countryOfOrigin: country || undefined,
           releaseDate: releaseDate || undefined,
           director: director || undefined,
@@ -119,12 +123,13 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
   return (
     <form onSubmit={onSubmit} className="grid gap-3 rounded-xl border border-line bg-surface p-4 sm:grid-cols-2">
       <label className="text-sm sm:col-span-2">Title<input required value={name} onChange={(e) => setName(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
-      <label className="text-sm">Language<input value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
-      <label className="text-sm">Loop lane
+      <label className="text-sm">Original language<select value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">{TITLE_LANGUAGES.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+      <label className="text-sm">Content type
         <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">
           {BRIDGE_LOOP_LANES.map((lane) => <option key={lane.id} value={lane.loopType}>{lane.label}</option>)}
         </select>
       </label>
+      <label className="text-sm">Loop distribution preference<select value={loopDistributionPreference} onChange={(e) => setLoopDistributionPreference(e.target.value as typeof loopDistributionPreference)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"><option value="NOT_DECIDED">Not decided yet</option><option value="CONSIDER_LOOP">Consider for Crayons Loop</option><option value="NOT_FOR_LOOP">Do not consider for Loop</option></select><span className="mt-1 block text-xs text-muted">This is a preference only. Loop publication requires separate Bridge approval.</span></label>
       {!concise && <>
         <label className="text-sm">Malayalam title<input value={nameMl} onChange={(e) => setNameMl(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
         <label className="text-sm">Year<input inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>

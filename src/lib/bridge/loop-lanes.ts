@@ -15,3 +15,16 @@ export function loopStageType(raw: string | null | undefined): BridgeLoopLane {
   if (value.includes("short")) return "Short";
   return "Film";
 }
+
+/** Map the submission form labels to the established Bridge database values. */
+export function storedBridgeContentType(raw: string): "FEATURE" | "SERIES" | "SHORT" | "DOCUMENTARY" | "OTHER" {
+  switch (raw) {
+    case "Film": return "FEATURE";
+    case "Series": return "SERIES";
+    case "Short": return "SHORT";
+    case "Documentary": return "DOCUMENTARY";
+    case "Vertical drama":
+    case "Other": return "OTHER";
+    default: throw new Error("Unsupported Bridge content type");
+  }
+}

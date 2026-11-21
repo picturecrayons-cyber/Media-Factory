@@ -58,7 +58,7 @@ function LaneStore({ titleId, stored, locked }: { titleId: string; stored: strin
   });
   return (
     <label className="mt-4 block text-sm">
-      Stored for Loop preview
+      Content type
       <select
         value={value}
         disabled={locked || save.isPending}
@@ -74,7 +74,7 @@ function LaneStore({ titleId, stored, locked }: { titleId: string; stored: strin
         ))}
       </select>
       <span className="mt-1 block text-xs text-muted">
-        {locked ? "Locked after prepare. Staff can still correct it before publish." : "Saved on the Bridge title. Loop shows it only after TVOD publish."}
+        {locked ? "Locked after prepare. Authorized staff can still correct the title format." : "Describes the work format only; it does not select or authorize Loop distribution."}
         {save.isError ? ` ${save.error instanceof Error ? save.error.message : "Could not save."}` : ""}
       </span>
     </label>
@@ -257,7 +257,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="Original title" value={title.nameMl || "—"} />
             <Metric label="Content type" value={loopStageType(title.contentType)} />
-            <Metric label="Language" value={title.language || "—"} />
+            <Metric label="Original language" value={title.language || "—"} />
+            <Metric label="Loop distribution preference" value={title.loopDistributionPreference === "CONSIDER_LOOP" ? "Consider for Crayons Loop" : title.loopDistributionPreference === "NOT_FOR_LOOP" ? "Do not consider for Loop" : "Not decided yet"} />
             <Metric label="Year" value={title.year ? String(title.year) : "—"} />
             <Metric label="Runtime" value={title.runtimeMinutes ? `${title.runtimeMinutes} min` : "—"} />
             <Metric label="Country" value={title.countryOfOrigin || "—"} />
