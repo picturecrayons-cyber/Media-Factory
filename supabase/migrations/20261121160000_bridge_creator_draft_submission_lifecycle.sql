@@ -88,6 +88,28 @@ $function$;
 revoke all on function private.bridge_is_title_owner(text) from public, anon;
 grant execute on function private.bridge_is_title_owner(text) to authenticated, service_role;
 
+create or replace function private.bridge_has_buyer_title_access(p_title_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+set row_security = off
+as $function$
+  select (select auth.uid()) is not null
+    and exists (
+      select 1
+      from public.bridge_buyer_title_access a
+      where a.title_id = p_title_id
+        and a.buyer_user_id = private.bridge_current_user_id()
+        and a.revoked_at is null
+        and (a.expires_at is null or a.expires_at > now())
+    );
+$function$;
+
+revoke all on function private.bridge_has_buyer_title_access(text) from public, anon;
+grant execute on function private.bridge_has_buyer_title_access(text) to authenticated, service_role;
+
 create or replace function private.bridge_can_read_title(p_title_id text)
 returns boolean
 language sql
@@ -144,7 +166,13 @@ create policy "bridge_titles_owner_or_buyer_select"
 on public.bridge_titles
 for select
 to authenticated
-using (private.bridge_can_read_title(bridge_titles.id));
+using (
+  deleted_at is null
+  and (
+    private.bridge_is_title_owner(bridge_titles.id)
+    or private.bridge_has_buyer_title_access(bridge_titles.id)
+  )
+);
 
 -- Production assets are Creator/Studio-owner only, never buyer-visible.
 drop policy if exists bridge_production_assets_owner_select on public.bridge_production_assets;
