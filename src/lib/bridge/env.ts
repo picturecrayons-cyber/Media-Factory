@@ -35,7 +35,13 @@ export const bridgeEnv = {
   hostingerIncomingMailbox: () => read("HOSTINGER_INCOMING_MAILBOX") || "abijithasokan@crayonspictures.com",
   mailFrom: () => read("MAIL_FROM") || "abijithasokan@crayonspictures.com",
   appUrl: () => resolveBridgeConfiguredOrigin(read("APP_URL"), read("SITE_URL")),
-  databaseUrl: () => read("DATABASE_URL") || read("POSTGRES_URL"),
+  // Keep integration diagnostics aligned with the server DB resolver in db.ts.
+  // Preview must still receive a dedicated staging-only URL; never use production credentials here.
+  databaseUrl: () =>
+    read("DATABASE_URL") ||
+    read("POSTGRES_URL") ||
+    read("SUPABASE_DB_URL") ||
+    read("SUPABASE_DATABASE_URL"),
 };
 
 export function integrationStatus() {
