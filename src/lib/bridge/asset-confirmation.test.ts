@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { persistVerifiedAsset } from "./asset-confirmation.ts";
+import { assertPersistedAssetVerified } from "./asset-verification.ts";
 
 test("only a verified upload sets the master reference, once, with an audit event", async () => {
   const db = new PGlite();
@@ -172,4 +173,17 @@ test("idempotent confirmation validates the sealed object, title reference and a
   assert.match(guard, /title\.masterKey !== asset\.s3_key/);
   assert.match(guard, /asset\.upload_verified/);
   assert.match(guard, /return \{ assetId: asset\.id, byteSize: Number\(asset\.byte_size\), verified: true \}/);
+});
+
+
+test("persisted asset verification rejects byte-size-only and malformed state", async () => {
+  const base = { id: "asset-1", kind: "master", s3_key: "master.mov.verified/asset-1", byte_size: 120, content_type: "video/quicktime" };
+  const title = { masterKey: base.s3_key, posterKey: null };
+  const verify = async () => ({ byteSize: 120, etag: "etag-1" });
+  await assert.rejects(() => assertPersistedAssetVerified({ ...base, s3_key: "master.mov" }, title, true, verify), /immutable verified object/);
+  await assert.rejects(() => assertPersistedAssetVerified(base, { ...title, masterKey: "other" }, true, verify), /master reference/);
+  await assert.rejects(() => assertPersistedAssetVerified(base, title, false, verify), /audit record/);
+  await assert.rejects(() => assertPersistedAssetVerified({ ...base, byte_size: null }, title, true, verify), /persisted byte size/);
+  await assert.rejects(() => assertPersistedAssetVerified(base, title, true, async () => ({ byteSize: 119, etag: "etag-1" })), /metadata/);
+  await assert.doesNotReject(() => assertPersistedAssetVerified(base, title, true, verify));
 });
