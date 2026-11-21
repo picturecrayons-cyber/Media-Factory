@@ -8,6 +8,7 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import { listTitles } from "@/lib/bridge/titles";
+import type { BridgeActor } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -26,7 +27,7 @@ function Creator() {
   );
 }
 
-function CreatorDashboard({ actor }: { actor: { userId: string; organizationId?: string | null } }) {
+function CreatorDashboard({ actor }: { actor: BridgeActor }) {
   const titlesQ = useQuery({
     queryKey: ["bridge-titles", actor.userId, actor.organizationId],
     queryFn: () => listTitles(),
@@ -90,7 +91,7 @@ function CreatorDashboard({ actor }: { actor: { userId: string; organizationId?:
             <p className="mt-1 text-sm text-muted">Only records returned by the authenticated, server-scoped account query are shown.</p>
           </div>
         </div>
-        <TitleList empty="No finished-film submissions yet. Use the submission options above to get started." />
+        <TitleList actor={actor} empty="No finished-film submissions yet. Use the submission options above to get started." />
         <div className="border-t border-line pt-4">
           <MyStoryConcepts />
         </div>
