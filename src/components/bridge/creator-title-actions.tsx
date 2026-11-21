@@ -43,7 +43,8 @@ export function CreatorDraftDeleteButton({ title, actor }: { title: BridgeTitle;
 }
 
 const TERRITORIES = ["IN", "GCC", "US", "CA", "GB", "AU", "Worldwide"];
-const EXPLOITATION = ["OTT / Streaming", "SVOD", "TVOD", "AVOD", "FAST", "Broadcast / TV", "Theatrical", "Educational", "Airline / Ancillary", "Festival / Screening"];
+const DESTINATIONS = ["Crayons Loop", "External OTT", "Broadcast / TV", "TVOD / EST", "FAST", "Festival / Educational", "Buyer delivery"];
+const EXPLOITATION = ["SVOD", "TVOD", "AVOD", "FAST", "BROADCAST", "THEATRICAL", "AIRLINE", "EDUCATIONAL", "FESTIVAL"];
 
 function defaultEndDate() {
   const end = new Date();
@@ -89,6 +90,7 @@ export function CreatorTitleActions({ title, actor }: { title: BridgeTitle; acto
         year: Number(year),
         runtimeMinutes: Number(runtime),
         territories,
+        buyerChannels,
         rightsLanguages: rightsLanguages.split(",").map((v) => v.trim()).filter(Boolean),
         exploitation,
         windowStart: new Date(`${windowStart}T00:00:00.000Z`).toISOString(),
@@ -201,6 +203,13 @@ export function CreatorTitleActions({ title, actor }: { title: BridgeTitle; acto
           </div>
 
           <fieldset className="space-y-2">
+            <legend className="text-sm font-semibold">Authorized distribution destinations</legend>
+            <div className="flex flex-wrap gap-3">{DESTINATIONS.map((item) => (
+              <label key={item} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={buyerChannels.includes(item)} onChange={() => toggle(item, buyerChannels, setBuyerChannels)} />{item}</label>
+            ))}</div>
+          </fieldset>
+
+          <fieldset className="space-y-2">
             <legend className="text-sm font-semibold">Exploitation rights</legend>
             <div className="flex flex-wrap gap-3">{EXPLOITATION.map((item) => (
               <label key={item} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={exploitation.includes(item)} onChange={() => toggle(item, exploitation, setExploitation)} />{item}</label>
@@ -212,7 +221,7 @@ export function CreatorTitleActions({ title, actor }: { title: BridgeTitle; acto
             <span>I confirm that I have the authority to submit these rights details and will provide supporting signed evidence for Legal verification.</span>
           </label>
           {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
-          <button type="submit" disabled={submit.isPending || !authorizationConfirmed || territories.length === 0 || exploitation.length === 0 || !rightsLanguages.trim() || !windowStart || !windowEnd} className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50">
+          <button type="submit" disabled={submit.isPending || !authorizationConfirmed || territories.length === 0 || buyerChannels.length === 0 || exploitation.length === 0 || !rightsLanguages.trim() || !windowStart || !windowEnd} className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50">
             {submit.isPending ? "Submitting…" : "Confirm & Submit to Bridge"}
           </button>
         </form>
