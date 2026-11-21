@@ -6,7 +6,7 @@ import { getSql, type Sql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
-import { canReadTitle, canOperateOnTitle, hasPermission } from "./rbac";
+import { canReadTitle, canOperateOnTitle } from "./rbac";
 import { writeAudit } from "./audit";
 import { sameOwner, canDownloadCreatorDocument, canManageStudioDocuments } from "./creator-document-policy";
 
