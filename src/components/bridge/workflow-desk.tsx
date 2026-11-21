@@ -100,8 +100,31 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     (groups[reference] ??= []).push(grant);
     return groups;
   }, {});
-  const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
+  const valid = grants.find((g) =>
+    g.status === "VALID" &&
+    new Date(g.window_start) <= new Date() &&
+    new Date(g.window_end) > new Date()
+  );
+  const canAdminPublish =
+    (actor.internalRole === "admin" || actor.internalRole === "super_admin") &&
+    hasPermission(actor, "loop.publish");
   const pub = publication.data?.publication;
+  const publishToLoop = () => {
+    if (!valid) return Promise.reject(new Error("Blocked: approved, active Loop license required."));
+    return authorizeLoopPublication({
+      data: {
+        bridgeTitleId: title.id,
+        destination: "CRAYONS_LOOP",
+        territories: valid.territories,
+        languages: valid.languages,
+        exploitationModels: ["TVOD"],
+        accessTier: "TVOD",
+        windowStart: valid.window_start,
+        windowEnd: valid.window_end,
+        commercialTerms: valid.evidence[0]?.commercialTerms,
+      },
+    });
+  };
   const button = (label: string, run: () => Promise<unknown>, disabled = false) => (
     <button
       type="button"
@@ -141,6 +164,26 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           </button>
         ))}
       </nav>
+      {canAdminPublish ? (
+        <section className="space-y-2 rounded-xl border border-line bg-elevated p-4" aria-label="Crayons Loop publishing">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold">Crayons Loop distribution</h3>
+            <span className="text-xs text-muted">
+              {valid ? "Approved license window active" : "Rights / license approval pending"}
+            </span>
+          </div>
+          <p className="text-sm text-muted">
+            Publish this title's approved metadata, artwork and media reference to the shared Loop catalog.
+            Publication does not itself authorize consumer playback.
+          </p>
+          {button("Publish to Crayons Loop", publishToLoop, !valid || publication.isPending)}
+          {!valid ? (
+            <p className="text-xs" role="status">
+              Blocked: an approved, currently active Loop license is required. No publication has been created.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
       {error ? (
         <p role="alert" className="text-sm text-red-500">
           {error}
@@ -428,23 +471,6 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 Publish copies the approved title metadata, artwork and media reference into the
                 shared Loop catalog. Catalog publication alone does not prove consumer playback.
               </p>
-              {valid && hasPermission(actor, "loop.publish")
-                ? button("Publish approved license to Loop", () =>
-                    authorizeLoopPublication({
-                      data: {
-                        bridgeTitleId: title.id,
-                        destination: "CRAYONS_LOOP",
-                        territories: valid.territories,
-                        languages: valid.languages,
-                        exploitationModels: ["TVOD"],
-                        accessTier: "TVOD",
-                        windowStart: valid.window_start,
-                        windowEnd: valid.window_end,
-                        commercialTerms: valid.evidence[0]?.commercialTerms,
-                      },
-                    }),
-                  )
-                : null}
               {!valid ? <p>Blocked: approved, unexpired Loop license required.</p> : null}
               {pub && hasPermission(actor, "loop.revoke") ? (
                 <div className="flex gap-2">
