@@ -18,6 +18,12 @@ The existing replay fixture records the following baseline contract:
 - assignment, receipt URL, admin sign-off, timestamps
 - RLS enabled and an authenticated internal-only policy using `private.bridge_is_internal()`
 
+## Studio ownership reconciliation finding
+
+The preceding read-only title audit found eight Studio-owned records: six have `owner_organization_id IS NULL`, while two have an organization mapping. All eight have the Studio owner user recorded. The six unscoped rows therefore remain visible to their recorded owner through the owner-user path, but they are not shared to other Studio members through organization scope.
+
+No verified per-title evidence currently proves which of the six null mappings should be assigned to which organization. Do not infer ownership from the organization display name, and do not backfill these six rows. The branch adds regression coverage for owner-only access to unscoped titles and exact active-organization matching for shared titles.
+
 ## Migration-history constraint
 
 Do **not** rewrite the already-recorded ownership migration to add the table: changing an applied migration is not a safe forward-only repair. Do not add an earlier timestamped migration without first reconciling remote migration history; it may be out of order relative to the already-applied ownership migration.
