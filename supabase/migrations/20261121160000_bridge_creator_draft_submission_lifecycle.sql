@@ -47,6 +47,8 @@ create index if not exists bridge_titles_active_creator_owner_idx
 -- Reuse the existing private, non-PostgREST RLS helpers. Identity-link and
 -- membership tables intentionally have no client grants, so the helper owner
 -- performs the narrow lookup with an empty search_path and row_security off.
+create schema if not exists private;
+grant usage on schema private to authenticated, service_role;
 alter function public.bridge_is_title_owner(text) set schema private;
 
 create or replace function private.bridge_is_title_owner(p_title_id text)
