@@ -3,7 +3,7 @@
 create table if not exists public.bridge_title_submission_consents (
   id uuid primary key default gen_random_uuid(),
   title_id text not null references public.bridge_titles(id) on delete restrict,
-  submission_event_id bigint not null references public.bridge_title_events(id) on delete restrict,
+  submission_event_id integer not null references public.bridge_title_events(id) on delete restrict,
   actor_user_id text not null references public.bridge_profiles(user_id) on delete restrict,
   actor_account_type text not null check (actor_account_type in ('independent_creator','studio')),
   consent_version text not null,
