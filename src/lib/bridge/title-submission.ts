@@ -16,6 +16,7 @@ type QcAsset = {
   id: string;
   kind: string;
   s3_key: string;
+  asset_version_id: string | null;
   byte_size: number | null;
   checksum_sha256: string | null;
   version_byte_size: number | null;
@@ -97,11 +98,12 @@ export async function submitTitleForQc(
     }
     const assets = await tx<QcAsset>`
       select a.id, a.kind, a.s3_key, a.byte_size,
+        v.id as asset_version_id,
         v.checksum_sha256, v.byte_size as version_byte_size,
         v.processing_state, v.technical_metadata
       from bridge_assets a
       left join lateral (
-        select checksum_sha256, byte_size, processing_state, technical_metadata
+        select id, checksum_sha256, byte_size, processing_state, technical_metadata
         from bridge_asset_versions
         where title_id = a.title_id and s3_key = a.s3_key
         order by version desc, created_at desc
@@ -194,6 +196,17 @@ export async function submitTitleForQc(
       throw new Error("No verified QC reviewer is configured; submission was not accepted");
     }
 
+    const masterVersion = assets.find((asset) =>
+      asset.kind === "master" && asset.s3_key === title.masterKey && storageVerified(asset)
+    )?.asset_version_id ?? null;
+    await tx`
+      insert into bridge_qc_cases (title_id, asset_version_id, status, automated_findings, reviewer_findings)
+      values (
+        ${title.id}, ${masterVersion}, 'PENDING',
+        ${JSON.stringify([{ check: "seven_file_integrity", result: "PASSED" }])}::jsonb,
+        '[]'::jsonb
+      )
+    `;
     await tx`
       update bridge_titles set status = 'QC_REVIEW', updated_at = now()
       where id = ${title.id}
