@@ -40,6 +40,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           </Link>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <StatusChip status={t.status} />
+            {t.creatorSubmissionStatus === "SUBMITTED" ? <span className="rounded-full border border-accent/30 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-accent">Submitted to Bridge</span> : null}
             <Link
               to="/title/$id"
               params={{ id: t.id }}
