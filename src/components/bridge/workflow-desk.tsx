@@ -28,6 +28,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [settlementAmount, setSettlementAmount] = useState("");
   const [note, setNote] = useState("");
   const [legalConsentAccepted, setLegalConsentAccepted] = useState(false);
+  const [masterLanguageConfirmed, setMasterLanguageConfirmed] = useState(false);
+  const languageMismatch = Boolean(title.language && title.masterLanguage &&
+    title.language.toLowerCase() !== title.masterLanguage.toLowerCase());
   const [error, setError] = useState("");
   const qc = useQueryClient();
   const workflow = useQuery({
@@ -170,6 +173,13 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   <span>I have reviewed the <a href="/legal/title-submission" target="_blank" rel="noreferrer" className="underline">Title Submission & Rights Declaration</a>. I confirm I am authorized to submit this title and the information and rights evidence are accurate.</span>
                 </label>
               ) : null}
+              {title.status === "PREPARING" && languageMismatch &&
+              !actor.internalRole && canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") ? (
+                <label className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                  <input type="checkbox" checked={masterLanguageConfirmed} onChange={(event) => setMasterLanguageConfirmed(event.target.checked)} className="mt-1" />
+                  <span>The title language is {title.language}, while the uploaded master is {title.masterLanguage}. I confirm this is the intended language/version for this title.</span>
+                </label>
+              ) : null}
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
               ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
                 ? button(
@@ -190,6 +200,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 : "QC_REVIEW",
                           legalConsentAccepted: title.status === "PREPARING" ? legalConsentAccepted : undefined,
                           legalConsentVersion: title.status === "PREPARING" ? "bridge-title-rights-v1" : undefined,
+                          languageMismatchConfirmed: !languageMismatch || masterLanguageConfirmed,
                         },
                       }),
                     title.status === "PREPARING" && !actor.internalRole && !legalConsentAccepted,
