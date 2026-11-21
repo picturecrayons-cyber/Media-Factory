@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isStudioFinishedFilm } from "./studio-title-classification.ts";
+import { isStudioFinishedFilm, canStudioAccessTitle } from "./studio-title-classification.ts";
 
 test("Studio Finished Films includes only authoritative finished_film submissions", () => {
   assert.equal(isStudioFinishedFilm("finished_film"), true);
@@ -21,4 +21,29 @@ test("one story_concept title cannot be classified into the Finished Films resul
   assert.deepEqual(finished.map((row) => row.id), ["film-1", "film-2"]);
   assert.deepEqual(concepts.map((row) => row.id), ["concept-1"]);
   assert.equal(finished.some((film) => concepts.some((concept) => concept.id === film.id)), false);
+});
+
+test("legacy titles without organization mapping remain owner-only until evidence-backed reconciliation", () => {
+  const unscopedTitle = {
+    titleOwnerUserId: "studio-owner",
+    titleOwnerOrganizationId: null,
+    actorOrganizationId: "org-streamvista",
+    activeOrganizationMembership: true,
+  };
+  assert.equal(canStudioAccessTitle({ ...unscopedTitle, actorUserId: "studio-owner" }), true);
+  assert.equal(canStudioAccessTitle({ ...unscopedTitle, actorUserId: "other-member" }), false);
+});
+
+test("Studio sharing requires exact organization match and active membership", () => {
+  const base = {
+    titleOwnerUserId: "studio-owner",
+    titleOwnerOrganizationId: "org-a",
+    actorUserId: "studio-member",
+    actorOrganizationId: "org-a",
+    activeOrganizationMembership: true,
+  };
+  assert.equal(canStudioAccessTitle(base), true);
+  assert.equal(canStudioAccessTitle({ ...base, actorOrganizationId: "org-b" }), false);
+  assert.equal(canStudioAccessTitle({ ...base, activeOrganizationMembership: false }), false);
+  assert.equal(canStudioAccessTitle({ ...base, actorOrganizationId: null }), false);
 });
