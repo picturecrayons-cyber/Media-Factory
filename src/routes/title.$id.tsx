@@ -363,7 +363,7 @@ function OwnerMetadataCompletion({ title }: { title: BridgeTitle }) {
 function OwnerRightsDeclaration({ title }: { title: BridgeTitle }) {
   const qc = useQueryClient();
   const [authorityType, setAuthorityType] = useState("RIGHTS_OWNER");
-  const [evidenceType, setEvidenceType] = useState("OWNERSHIP_DOCUMENT");
+  const [evidenceType, setEvidenceType] = useState("CHAIN_OF_TITLE");
   const [evidenceReference, setEvidenceReference] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
@@ -371,7 +371,7 @@ function OwnerRightsDeclaration({ title }: { title: BridgeTitle }) {
     mutationFn: () => saveTitleSubmissionAuthority({ data: {
       titleId: title.id,
       authorityType: authorityType as "RIGHTS_OWNER" | "PRODUCER" | "LICENSEE_WITH_ONWARD_RIGHTS" | "DISTRIBUTOR_SALES_AGENT",
-      evidenceType: evidenceType as "OWNERSHIP_DOCUMENT" | "DISTRIBUTION_AGREEMENT" | "LICENSE_AGREEMENT" | "POWER_OF_ATTORNEY" | "OTHER",
+      evidenceType: evidenceType as "RIGHTS_AGREEMENT" | "CHAIN_OF_TITLE" | "AUTHORIZATION_LETTER" | "DISTRIBUTION_AGREEMENT" | "OTHER",
       evidenceReference,
       authorizationConfirmed: true,
     }}),
@@ -397,10 +397,10 @@ function OwnerRightsDeclaration({ title }: { title: BridgeTitle }) {
         </label>
         <label className="grid gap-1 text-sm">Evidence type
           <select value={evidenceType} onChange={e=>setEvidenceType(e.target.value)} className="h-11 rounded-lg border border-line-strong bg-elevated px-3">
-            <option value="OWNERSHIP_DOCUMENT">Ownership / chain-of-title document</option>
+            <option value="CHAIN_OF_TITLE">Ownership / chain-of-title document</option>
             <option value="DISTRIBUTION_AGREEMENT">Distribution agreement</option>
-            <option value="LICENSE_AGREEMENT">License agreement</option>
-            <option value="POWER_OF_ATTORNEY">Authorization / power of attorney</option>
+            <option value="RIGHTS_AGREEMENT">Rights / license agreement</option>
+            <option value="AUTHORIZATION_LETTER">Authorization letter / power of attorney</option>
             <option value="OTHER">Other supporting document</option>
           </select>
         </label>
