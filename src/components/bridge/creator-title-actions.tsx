@@ -47,12 +47,6 @@ const TERRITORIES = ["IN", "GCC", "US", "CA", "GB", "AU", "Worldwide"];
 const DESTINATIONS = ["Crayons Loop", "External OTT", "Broadcast / TV", "TVOD / EST", "FAST", "Festival / Educational", "Buyer delivery"];
 const EXPLOITATION = ["SVOD", "TVOD", "AVOD", "FAST", "BROADCAST", "THEATRICAL", "AIRLINE", "EDUCATIONAL", "FESTIVAL"];
 
-function defaultEndDate() {
-  const end = new Date();
-  end.setFullYear(end.getFullYear() + 5);
-  return end.toISOString().slice(0, 10);
-}
-
 export function CreatorTitleActions({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -64,15 +58,15 @@ export function CreatorTitleActions({ title, actor }: { title: BridgeTitle; acto
   const [country, setCountry] = useState(title.countryOfOrigin || "");
   const [year, setYear] = useState(title.year ? String(title.year) : "");
   const [runtime, setRuntime] = useState(title.runtimeMinutes ? String(title.runtimeMinutes) : "");
-  const [territories, setTerritories] = useState<string[]>(["IN"]);
-  const [buyerChannels, setBuyerChannels] = useState<string[]>(["Crayons Loop"]);
-  const [rightsLanguages, setRightsLanguages] = useState(title.language || "Malayalam");
-  const [exploitation, setExploitation] = useState<string[]>(["SVOD"]);
-  const [windowStart, setWindowStart] = useState(new Date().toISOString().slice(0, 10));
-  const [windowEnd, setWindowEnd] = useState(defaultEndDate());
-  const [exclusivity, setExclusivity] = useState<"EXCLUSIVE" | "NON_EXCLUSIVE">("NON_EXCLUSIVE");
-  const [authorityType, setAuthorityType] = useState("RIGHTS_OWNER");
-  const [evidenceType, setEvidenceType] = useState("RIGHTS_AGREEMENT");
+  const [territories, setTerritories] = useState<string[]>([]);
+  const [buyerChannels, setBuyerChannels] = useState<string[]>([]);
+  const [rightsLanguages, setRightsLanguages] = useState("");
+  const [exploitation, setExploitation] = useState<string[]>([]);
+  const [windowStart, setWindowStart] = useState("");
+  const [windowEnd, setWindowEnd] = useState("");
+  const [exclusivity, setExclusivity] = useState<"EXCLUSIVE" | "NON_EXCLUSIVE" | "">("");
+  const [authorityType, setAuthorityType] = useState("");
+  const [evidenceType, setEvidenceType] = useState("");
   const [authorizationConfirmed, setAuthorizationConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,7 +91,7 @@ export function CreatorTitleActions({ title, actor }: { title: BridgeTitle; acto
         exploitation,
         windowStart: new Date(`${windowStart}T00:00:00.000Z`).toISOString(),
         windowEnd: new Date(`${windowEnd}T23:59:59.000Z`).toISOString(),
-        exclusivity,
+        exclusivity: exclusivity as "EXCLUSIVE" | "NON_EXCLUSIVE",
         authorityType: authorityType as "RIGHTS_OWNER" | "PRODUCER" | "AUTHORIZED_REPRESENTATIVE" | "DISTRIBUTOR_SALES_AGENT" | "LICENSEE_WITH_ONWARD_RIGHTS" | "OTHER",
         authorizationEvidenceType: evidenceType as "RIGHTS_AGREEMENT" | "CHAIN_OF_TITLE" | "AUTHORIZATION_LETTER" | "DISTRIBUTION_AGREEMENT" | "OTHER",
         authorizationConfirmed: true,
@@ -184,7 +178,7 @@ export function CreatorTitleActions({ title, actor }: { title: BridgeTitle; acto
               <input required value={rightsLanguages} onChange={(e) => setRightsLanguages(e.target.value)} placeholder="Malayalam, English" className="rounded-lg border border-line bg-elevated p-2" />
             </label>
             <label className="grid gap-1 text-sm">Exclusivity
-              <select value={exclusivity} onChange={(e) => setExclusivity(e.target.value as typeof exclusivity)} className="rounded-lg border border-line bg-elevated p-2"><option value="NON_EXCLUSIVE">Non-exclusive</option><option value="EXCLUSIVE">Exclusive</option></select>
+              <select required value={exclusivity} onChange={(e) => setExclusivity(e.target.value as typeof exclusivity)} className="rounded-lg border border-line bg-elevated p-2"><option value="">Choose exclusivity</option><option value="NON_EXCLUSIVE">Non-exclusive</option><option value="EXCLUSIVE">Exclusive</option></select>
             </label>
             <label className="grid gap-1 text-sm">Rights start
               <input required type="date" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} className="rounded-lg border border-line bg-elevated p-2" />
@@ -193,13 +187,13 @@ export function CreatorTitleActions({ title, actor }: { title: BridgeTitle; acto
               <input required type="date" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} className="rounded-lg border border-line bg-elevated p-2" />
             </label>
             <label className="grid gap-1 text-sm">Authority
-              <select value={authorityType} onChange={(e) => setAuthorityType(e.target.value)} className="rounded-lg border border-line bg-elevated p-2">
-                <option value="RIGHTS_OWNER">Rights owner</option><option value="PRODUCER">Producer</option><option value="AUTHORIZED_REPRESENTATIVE">Authorized representative</option><option value="DISTRIBUTOR_SALES_AGENT">Distributor / sales agent</option><option value="LICENSEE_WITH_ONWARD_RIGHTS">Licensee with onward rights</option><option value="OTHER">Other</option>
+              <select required value={authorityType} onChange={(e) => setAuthorityType(e.target.value)} className="rounded-lg border border-line bg-elevated p-2">
+                <option value="">Choose authority</option><option value="RIGHTS_OWNER">Rights owner</option><option value="PRODUCER">Producer</option><option value="AUTHORIZED_REPRESENTATIVE">Authorized representative</option><option value="DISTRIBUTOR_SALES_AGENT">Distributor / sales agent</option><option value="LICENSEE_WITH_ONWARD_RIGHTS">Licensee with onward rights</option><option value="OTHER">Other</option>
               </select>
             </label>
             <label className="grid gap-1 text-sm">Authorization evidence type
-              <select value={evidenceType} onChange={(e) => setEvidenceType(e.target.value)} className="rounded-lg border border-line bg-elevated p-2">
-                <option value="RIGHTS_AGREEMENT">Rights agreement</option><option value="CHAIN_OF_TITLE">Chain of title</option><option value="AUTHORIZATION_LETTER">Authorization letter</option><option value="DISTRIBUTION_AGREEMENT">Distribution agreement</option><option value="OTHER">Other</option>
+              <select required value={evidenceType} onChange={(e) => setEvidenceType(e.target.value)} className="rounded-lg border border-line bg-elevated p-2">
+                <option value="">Choose evidence type</option><option value="RIGHTS_AGREEMENT">Rights agreement</option><option value="CHAIN_OF_TITLE">Chain of title</option><option value="AUTHORIZATION_LETTER">Authorization letter</option><option value="DISTRIBUTION_AGREEMENT">Distribution agreement</option><option value="OTHER">Other</option>
               </select>
             </label>
           </div>
@@ -223,7 +217,7 @@ export function CreatorTitleActions({ title, actor }: { title: BridgeTitle; acto
             <span>I confirm that I have the authority to submit these rights details and will provide supporting signed evidence for Legal verification.</span>
           </label>
           {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
-          <button type="submit" disabled={submit.isPending || !authorizationConfirmed || territories.length === 0 || buyerChannels.length === 0 || exploitation.length === 0 || !rightsLanguages.trim() || !windowStart || !windowEnd} className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50">
+          <button type="submit" disabled={submit.isPending || !authorizationConfirmed || territories.length === 0 || buyerChannels.length === 0 || exploitation.length === 0 || !rightsLanguages.trim() || !windowStart || !windowEnd || !exclusivity || !authorityType || !evidenceType} className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50">
             {submit.isPending ? "Submitting…" : "Confirm & Submit to Bridge"}
           </button>
         </form>
