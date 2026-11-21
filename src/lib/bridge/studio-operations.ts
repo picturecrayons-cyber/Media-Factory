@@ -96,7 +96,7 @@ export const listStudioOperations = createServerFn({ method: "GET" })
       ) l on true
       left join bridge_title_gate_certifications g on g.title_id = t.id
       where t.submission_type = 'finished_film'
-        and t.merged_into_title_id is null
+        and coalesce(to_jsonb(t)->>'merged_into_title_id', '') = ''
         and (
           t.owner_user_id = ${actor.userId}
           or (
