@@ -121,7 +121,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
         <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
           {jobs.map((job: {
             id: string; type: string; state: string; titleId: string; note: string;
-            assignedVendor: string | null; receiptUrl: string | null; signedOff: boolean;
+            assignedVendor: string | null; receiptUrl: string | null; receiptVerified: boolean; receiptSha256: string | null; receiptByteSize: number | null; signedOff: boolean;
             createdAt: string;
           }) => (
             <li key={job.id} className="space-y-3 p-4 text-sm">
