@@ -117,8 +117,8 @@ export const listCreatorDocuments = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertCreatorOrStudio(actor);
-    const sql = await getSql();
     try {
+      const sql = await getSql();
       const rows = await sql<{
         id: string; document_type: string; file_name: string; content_type: string;
         byte_size: number | null; status: string; verified_at: string | Date | null;
