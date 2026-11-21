@@ -57,7 +57,7 @@ function RightsReadySubmission() {
 
   const language = originalLanguage === "Other" ? otherLanguage.trim() : originalLanguage;
   const rightsWindowValid = Boolean(windowStart && windowEnd && new Date(windowEnd) > new Date(windowStart));
-  const externalScreenerValid = screenerMode !== "SECURE_EXTERNAL" || /^https?:\\/\\//i.test(screenerUrl);
+  const externalScreenerValid = screenerMode !== "SECURE_EXTERNAL" || screenerUrl.startsWith("https://") || screenerUrl.startsWith("http://");
   const stepValid = [
     Boolean(name.trim() && language.length >= 2 && country && Number(year) >= 1895 && Number(year) <= 2100 && Number(runtime) >= 1 && Number(runtime) <= 600 && synopsis.trim()),
     rightsLanguages.length > 0 && territories.length > 0 && exploitation.length > 0 && rightsWindowValid,
