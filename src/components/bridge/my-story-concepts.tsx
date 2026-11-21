@@ -29,7 +29,14 @@ export function MyStoryConcepts() {
   if (query.isError) return null;
 
   const concepts = query.data?.concepts ?? [];
-  if (!concepts.length) return null;
+  if (!concepts.length) {
+    return (
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Story concepts</h2>
+        <p className="text-sm text-muted">No story concepts submitted yet.</p>
+      </section>
+    );
+  }
 
   return (
     <section>
