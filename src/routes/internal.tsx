@@ -63,6 +63,31 @@ function InternalBody({
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
 
+      {/* Owner submissions awaiting technical QC */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="font-display text-2xl font-semibold text-fg">New title submissions</h2>
+          <p className="text-xs text-muted">Submitted by verified Creator and Studio accounts · QC review is a separate decision</p>
+        </div>
+        <ul className="divide-y divide-line rounded-2xl border border-line bg-surface">
+          {titles.filter((t) => t.status === "QC_REVIEW").length ? (
+            titles.filter((t) => t.status === "QC_REVIEW").map((t) => (
+              <li key={t.id}>
+                <Link to="/title/$id" params={{ id: t.id }} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-elevated/50">
+                  <div>
+                    <span className="font-medium text-fg">{t.name}</span>
+                    <p className="mt-1 text-xs text-muted">Owner submission · {t.language} · {t.id}</p>
+                  </div>
+                  <StatusChip status="QC_REVIEW" />
+                </Link>
+              </li>
+            ))
+          ) : (
+            <li className="px-5 py-6 text-sm text-muted">No new submissions are waiting for QC.</li>
+          )}
+        </ul>
+      </section>
+
       {/* 3. Catalog Queue */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">

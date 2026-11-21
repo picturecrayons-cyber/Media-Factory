@@ -430,8 +430,10 @@ export const updateTitle = createServerFn({ method: "POST" })
       synopsis: z.string().max(4000).optional(),
       language: z.string().min(2).max(40).optional(),
       masterLanguage: z.enum(MASTER_LANGUAGES).nullable().optional(),
-      year: z.number().int().min(1895).max(2100).nullable().optional(),
+      year: z.number().int().min(1888).max(new Date().getFullYear() + 2).nullable().optional(),
       runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
+      countryOfOrigin: z.string().trim().min(2).max(80).nullable().optional(),
+      releaseDate: z.string().max(40).nullable().optional(),
       licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
       contentType: z.string().min(1).max(80).optional(),
     }),
@@ -460,6 +462,9 @@ export const updateTitle = createServerFn({ method: "POST" })
         synopsis = ${data.synopsis ?? title.synopsis},
         language = ${data.language ?? title.language},
         master_language = ${data.masterLanguage === undefined ? title.masterLanguage ?? null : data.masterLanguage},
+        original_language = ${data.language ?? title.language},
+        country_of_origin = ${data.countryOfOrigin === undefined ? title.countryOfOrigin : data.countryOfOrigin},
+        release_date = ${data.releaseDate === undefined ? title.releaseDate : data.releaseDate},
         year = ${data.year === undefined ? title.year : data.year},
         runtime_minutes = ${data.runtimeMinutes === undefined ? title.runtimeMinutes : data.runtimeMinutes},
         licensing_fee_paise = ${data.licensingFeePaise ?? title.licensingFeePaise},
@@ -475,6 +480,81 @@ export const updateTitle = createServerFn({ method: "POST" })
     });
     const next = await loadTitle(title.id);
     return { title: next };
+  });
+
+
+export const saveTitleSubmissionAuthority = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8),
+    authorityType: z.enum(["RIGHTS_OWNER", "PRODUCER", "LICENSEE_WITH_ONWARD_RIGHTS", "DISTRIBUTOR_SALES_AGENT"]),
+    evidenceType: z.enum(["RIGHTS_AGREEMENT", "CHAIN_OF_TITLE", "AUTHORIZATION_LETTER", "DISTRIBUTION_AGREEMENT", "OTHER"]),
+    evidenceReference: z.string().trim().min(3).max(500),
+    authorizationConfirmed: z.literal(true),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const title = await loadTitle(data.titleId);
+    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType) ||
+        !canMutateTitle(actor, title, "title.update_own", "title.license")) {
+      throw new Error("Only the title owner or an authorized Studio editor can submit rights evidence");
+    }
+    if (!["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)) {
+      throw new Error("Rights declaration is locked after title submission");
+    }
+    const sql = await getSql();
+    await sql.transaction(async (tx) => {
+      await tx`
+        insert into bridge_title_submission_intake
+          (title_id, authority_type, authorization_evidence_type, authorization_confirmed, updated_at)
+        values
+          (${title.id}, ${data.authorityType}, ${data.evidenceType}, true, now())
+        on conflict (title_id) do update set
+          authority_type = excluded.authority_type,
+          authorization_evidence_type = excluded.authorization_evidence_type,
+          authorization_confirmed = true,
+          updated_at = now()
+      `;
+      const existing = await tx<{ id: string }>`
+        select id from bridge_rights_grants
+        where title_id = ${title.id} and status = 'DRAFT'
+        order by created_at desc limit 1 for update
+      `;
+      const attestation = {
+        type: "AUTHORIZATION_ATTESTATION",
+        rightsBasis: data.authorityType,
+        authorizationConfirmed: true,
+        evidenceType: data.evidenceType,
+        evidenceReference: data.evidenceReference,
+        submittedBy: actor.userId,
+      };
+      if (existing[0]) {
+        await tx`
+          update bridge_rights_grants
+          set evidence = (
+            select coalesce(jsonb_agg(item), '[]'::jsonb)
+            from jsonb_array_elements(evidence) as entries(item)
+            where coalesce(item->>'type', '') <> 'AUTHORIZATION_ATTESTATION'
+          ) || ${JSON.stringify([attestation])}::jsonb
+          where id = ${existing[0].id}::uuid
+        `;
+      } else {
+        await tx`
+          insert into bridge_rights_grants (title_id, evidence, status, created_by)
+          values (${title.id}, ${JSON.stringify([attestation])}::jsonb, 'DRAFT', ${actor.userId})
+        `;
+      }
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.submission_authority_recorded",
+        entityType: "bridge_title",
+        entityId: title.id,
+        metadata: { authorityType: data.authorityType, evidenceType: data.evidenceType },
+      }, tx);
+    });
+    return { saved: true };
   });
 
 async function assertLicensingReady(titleId: string) {
@@ -588,6 +668,9 @@ export const advanceTitle = createServerFn({ method: "POST" })
       id: z.string().min(8),
       to: z.enum(TITLE_STATUSES),
       note: z.string().max(500).optional(),
+      legalConsentAccepted: z.boolean().optional(),
+      legalConsentVersion: z.string().max(40).optional(),
+      languageMismatchConfirmed: z.boolean().optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -615,7 +698,18 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (expected !== data.to) throw new Error("Illegal title transition");
     const sql = await getSql();
     if (data.to === "QC_REVIEW") {
-      return submitTitleForQc(sql, title, actor.userId, data.note);
+      if (data.legalConsentAccepted !== true || data.legalConsentVersion !== "bridge-title-rights-v1") {
+        throw new Error("Review the current title submission declaration and confirm before submitting");
+      }
+      const languageMismatch = Boolean(title.language && title.masterLanguage &&
+        title.language.toLowerCase() !== title.masterLanguage.toLowerCase());
+      if (languageMismatch && data.languageMismatchConfirmed !== true) {
+        throw new Error("Confirm that the master language is intentionally different from the title's original language");
+      }
+      return submitTitleForQc(
+        sql, title, actor.userId, data.note, data.legalConsentVersion,
+        data.languageMismatchConfirmed === true || !languageMismatch,
+      );
     }
     return sql.transaction(async (tx) => {
       const [locked] = await tx<{
