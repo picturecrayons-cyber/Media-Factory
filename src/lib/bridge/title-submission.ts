@@ -46,12 +46,15 @@ export async function submitTitleForQc(
   title: Pick<BridgeTitle, "id" | "status" | "masterKey" | "posterKey">,
   actorUserId: string,
   note?: string,
+  consentVersion?: string,
 ): Promise<{ title: Pick<BridgeTitle, "id" | "status"> & { status: TitleStatus } }> {
   if (title.status !== "PREPARING") throw new Error("Title is not ready for QC submission");
 
   await sql.transaction(async (tx) => {
     const [locked] = await tx<{
       status: string;
+      owner_user_id: string;
+      owner_organization_id: string | null;
       name: string;
       submission_type: string | null;
       content_type: string | null;
@@ -63,7 +66,7 @@ export async function submitTitleForQc(
       year: number | null;
       master_language: string | null;
     }>`
-      select status, name, submission_type, content_type, original_language,
+      select status, owner_user_id, owner_organization_id, name, submission_type, content_type, original_language,
         country_of_origin, release_date, synopsis, runtime_minutes, year, master_language
       from bridge_titles where id = ${title.id} for update
     `;
@@ -71,6 +74,21 @@ export async function submitTitleForQc(
       throw new Error("Title changed; refresh before retrying");
     }
 
+    if (consentVersion !== "bridge-title-rights-v1") {
+      throw new Error("Current title submission declaration acceptance is required");
+    }
+    const [submitter] = await tx<{
+      user_id: string; account_type: string; internal_role: string | null; organization_id: string | null;
+    }>`select user_id, account_type, internal_role, organization_id from bridge_profiles where user_id = ${actorUserId} for share`;
+    if (!submitter || submitter.internal_role || !["independent_creator", "studio"].includes(submitter.account_type)) {
+      throw new Error("Only the verified Creator or Studio submitting account can accept the title declaration");
+    }
+    const ownerAllowed = locked.owner_user_id === actorUserId;
+    const studioMember = submitter.account_type === "studio" && locked.owner_organization_id !== null &&
+      submitter.organization_id === locked.owner_organization_id;
+    if (!ownerAllowed && !studioMember) {
+      throw new Error("Only the title owner or a member of the owning Studio can submit this title");
+    }
     const assets = await tx<QcAsset>`
       select id, kind, s3_key, byte_size, checksum_sha256, verified_object_key,
         storage_provider, storage_bucket, storage_namespace, storage_region,
@@ -182,6 +200,12 @@ export async function submitTitleForQc(
       )
     `;
 
+    await tx`
+      insert into bridge_title_submission_consents
+        (title_id, submission_event_id, actor_user_id, actor_account_type, consent_version, accepted_at)
+      values
+        (${title.id}, ${event.id}, ${actorUserId}, ${submitter.account_type}, ${consentVersion}, now())
+    `;
     // Stable idempotency key: tied to the persisted lifecycle event, not wall-clock time.
     const eventKey = `bridge-qc-submitted:${event.id}`;
     const baseUrl = bridgeEnv.appUrl();
