@@ -232,7 +232,8 @@ export const submitCreatorTitleToBridge = createServerFn({ method: "POST" })
     }
 
     const sql = await getSql();
-    if (actor.accountType === "studio" && title.ownerOrganizationId) {
+    if (actor.accountType === "studio") {
+      if (!title.ownerOrganizationId) throw new Error("Studio title organization scope is missing; Bridge staff must reconcile it.");
       const memberships = await sql<{ allowed: boolean }>`
         select exists (
           select 1 from bridge_organization_memberships
@@ -241,9 +242,7 @@ export const submitCreatorTitleToBridge = createServerFn({ method: "POST" })
             and status = 'active'
         ) as allowed
       `;
-      if (!memberships[0]?.allowed && title.ownerUserId !== actor.userId) {
-        throw new Error("Active Studio membership is required to submit this title.");
-      }
+      if (!memberships[0]?.allowed) throw new Error("Active Studio membership is required to submit this title.");
     }
 
     return sql.transaction(async (tx) => {
@@ -266,7 +265,8 @@ export const submitCreatorTitleToBridge = createServerFn({ method: "POST" })
           (locked.owner_organization_id ?? null) !== (title.ownerOrganizationId ?? null)) {
         throw new Error("Title not found");
       }
-      if (actor.accountType === "studio" && locked.owner_organization_id && locked.owner_user_id !== actor.userId) {
+      if (actor.accountType === "studio") {
+        if (!locked.owner_organization_id) throw new Error("Studio title organization scope is missing; Bridge staff must reconcile it.");
         const activeMembership = await tx<{ allowed: boolean }>`
           select exists (
             select 1 from bridge_organization_memberships
