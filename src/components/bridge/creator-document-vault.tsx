@@ -7,6 +7,7 @@ import {
   listTitleDocumentEvidence,
   requestCreatorDocumentDownload,
   requestCreatorDocumentUpload,
+  revokeCreatorDocument,
 } from "@/lib/bridge/creator-documents";
 import { listTitles } from "@/lib/bridge/titles";
 
@@ -103,6 +104,24 @@ export function CreatorDocumentVault() {
         queryClient.invalidateQueries({ queryKey: ["bridge-title-document-evidence", selectedTitle] }),
         queryClient.invalidateQueries({ queryKey: ["title-document-evidence", selectedTitle] }),
         queryClient.invalidateQueries({ queryKey: ["title-workflow", selectedTitle] }),
+      ]);
+    },
+    onError: (error) => {
+      setErrorText(message(error));
+      setNotice("");
+    },
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: (documentId: string) => revokeCreatorDocument({
+      data: { documentId, note: "Owner-requested document revocation" },
+    }),
+    onSuccess: async () => {
+      setNotice("Document access revoked. The stored object was not deleted.");
+      setErrorText("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["bridge-creator-documents"] }),
+        queryClient.invalidateQueries({ queryKey: ["bridge-title-document-evidence"] }),
       ]);
     },
     onError: (error) => {
@@ -220,7 +239,10 @@ export function CreatorDocumentVault() {
               <p className="truncate text-sm font-medium">{doc.file_name}</p>
               <p className="mt-1 text-xs text-muted">{doc.document_type.replaceAll("_", " ")} · {doc.status} · {doc.byte_size ? `${(Number(doc.byte_size) / (1024 * 1024)).toFixed(2)} MB` : "size unavailable"}</p>
             </div>
-            {doc.status === "VERIFIED" ? <button type="button" onClick={() => void download(doc.id)} className="text-sm font-semibold text-accent hover:underline">Secure download</button> : null}
+            <div className="flex items-center gap-3">
+              {doc.status === "VERIFIED" ? <button type="button" onClick={() => void download(doc.id)} className="text-sm font-semibold text-accent hover:underline">Secure download</button> : null}
+              <button type="button" disabled={revokeMutation.isPending} onClick={() => revokeMutation.mutate(doc.id)} className="text-sm font-semibold text-red-600 hover:underline disabled:opacity-50">Revoke</button>
+            </div>
           </div>
         ))}
       </div>
