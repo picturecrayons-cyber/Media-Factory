@@ -131,12 +131,7 @@ export const listCreatorDocuments = createServerFn({ method: "GET" })
             (owner_account_type='independent_creator' and owner_user_id=${actor.userId})
             or (owner_account_type='studio' and owner_organization_id=${actor.organizationId ?? null}
                 and ${actor.accountType}='studio' and ${actor.organizationId ?? null} is not null
-                and exists (
-                  select 1 from bridge_organization_memberships m
-                  join bridge_organizations o on o.id=m.organization_id
-                  where m.organization_id=bridge_creator_documents.owner_organization_id
-                    and m.user_id=${actor.userId} and m.status='active' and o.status='active'
-                ))
+)
           )
         order by created_at desc limit 200
       `;
