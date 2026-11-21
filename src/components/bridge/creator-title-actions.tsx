@@ -7,6 +7,41 @@ import { canOperateOnTitle } from "@/lib/bridge/rbac";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { BridgeTitle } from "@/lib/bridge/types";
 
+export function CreatorDraftDeleteButton({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
+  const qc = useQueryClient();
+  const [confirm, setConfirm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const allowed = !actor.internalRole &&
+    ["independent_creator", "studio"].includes(actor.accountType) &&
+    canOperateOnTitle(actor, title, "title.update_own", null);
+  const mutation = useMutation({
+    mutationFn: () => deleteTitle({ data: { id: title.id, confirmation: "DELETE DRAFT" } }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+      setConfirm(false);
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Could not archive draft"),
+  });
+  if (!allowed || title.status !== "DRAFT" || title.creatorSubmissionStatus === "SUBMITTED") return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {confirm ? (
+        <>
+          <button type="button" onClick={() => mutation.mutate()} disabled={mutation.isPending} className="rounded-lg border border-amber-600 px-3 py-2 text-xs font-semibold text-amber-700 disabled:opacity-50">
+            {mutation.isPending ? "Archiving…" : "Confirm Delete"}
+          </button>
+          <button type="button" onClick={() => { setConfirm(false); setError(null); }} className="rounded-lg border border-line px-3 py-2 text-xs">Cancel</button>
+        </>
+      ) : (
+        <button type="button" onClick={() => setConfirm(true)} className="rounded-lg border border-amber-500/50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-500/10">
+          Delete Draft
+        </button>
+      )}
+      {error ? <span role="alert" className="w-full text-xs text-red-600">{error}</span> : null}
+    </div>
+  );
+}
+
 const TERRITORIES = ["IN", "GCC", "US", "CA", "GB", "AU", "Worldwide"];
 const EXPLOITATION = ["OTT / Streaming", "SVOD", "TVOD", "AVOD", "FAST", "Broadcast / TV", "Theatrical", "Educational", "Airline / Ancillary", "Festival / Screening"];
 
