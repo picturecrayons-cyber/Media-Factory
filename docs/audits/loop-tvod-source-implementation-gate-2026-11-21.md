@@ -150,3 +150,16 @@ The approved Testing project `jbymleftneggcgutlcqu` was re-inspected read-only. 
 - Do not deploy the webhook: it is absent from the Testing Edge Function inventory.
 - Source repair remains BLOCKED until the canonical schema owner chooses and documents the authoritative title identifier, order persistence contract, and webhook fulfillment API, then reconciles the Testing-only migration lineage with the protected-main migration chain.
 - No hosted Testing or Production writes were performed; no migration, webhook, environment, secret, payment, or deployment was changed.
+
+
+### Additional protected-main lineage check
+
+A source-side GitHub check against protected `main` (SHA `1253362e2bb19b9fbe513dd50be1e115a0dfc3c6`) confirms:
+
+- `20260925214917_loop_canonical_runtime_baseline.sql` declares `loop_titles.id UUID`, `loop_user_tvod_entitlements.title_id UUID`, and `bridge_loop_publications.loop_title_id UUID`.
+- `20261002171708_loop_release_safety.sql` declares `loop_fulfill_captured_rental(..., p_title_id UUID, ...)`, and reads the older `listed` / `published` catalog columns.
+- The live Testing project instead has TEXT title IDs and `is_listed` / `is_published`, plus the Testing-specific migration ledger entry `20261110183454 loop_runtime_tables_and_atomic_tvod_fulfillment_staging`.
+- This confirms the divergence is not merely an API typo: the Testing project has a distinct schema lineage from the protected-main source baseline. The Testing project is not evidence that protected-main UUID identifiers should be changed to TEXT.
+- It still does **not** prove the current Production database's exact schema or migration state; no Production DB was queried in this scope.
+
+Decision refined: protected-main source lineage is the authoritative **repository contract** for implementation work; Testing is a deliberately separate test project whose schema must be reconciled in an isolated test migration/replay path, not used to rewrite production source types by guess. Before any hosted Testing migration, the Testing-only lineage must be reconciled to the source baseline and tested on a disposable local database. This is not permission to write to hosted Testing or Production.
