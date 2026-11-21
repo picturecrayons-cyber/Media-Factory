@@ -97,62 +97,64 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   return sql<TitleRow>`select * from bridge_titles where deleted_at is null and merged_into_title_id is null order by updated_at desc limit 200`;
 }
 
-async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
+async function listOwned(
+  sql: Sql,
+  userId: string,
+  organizationId: string | null | undefined,
+  accountType: "independent_creator" | "studio",
+): Promise<TitleRow[]> {
   const orgId = organizationId || null;
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
-  if (!orgId) {
+  if (accountType === "studio") {
+    if (!orgId) return [];
     return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles
-          where owner_user_id = ${userId}
-            and deleted_at is null
-            and submission_type is distinct from 'story_concept'
-            and merged_into_title_id is null
-          order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles
-          where owner_user_id = ${userId}
-            and deleted_at is null
-            and submission_type is distinct from 'story_concept'
-          order by updated_at desc limit 200`;
+      ? sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.deleted_at is null
+            and t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and t.submission_type is distinct from 'story_concept'
+            and t.merged_into_title_id is null
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          order by t.updated_at desc limit 200
+        `
+      : sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.deleted_at is null
+            and t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and t.submission_type is distinct from 'story_concept'
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          order by t.updated_at desc limit 200
+        `;
   }
   return mergeColumnAvailable
     ? sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.deleted_at is null
-          and t.submission_type is distinct from 'story_concept'
-          and t.merged_into_title_id is null
-          and (
-            t.owner_user_id = ${userId}
-            or (
-              t.owner_account_type = 'studio'
-              and t.owner_organization_id = ${orgId}
-              and exists (
-                select 1 from bridge_organization_memberships m
-                where m.organization_id = ${orgId}
-                  and m.user_id = ${userId}
-                  and m.status = 'active'
-              )
-            )
-          )
-        order by t.updated_at desc limit 200
+        select * from bridge_titles
+        where owner_user_id = ${userId}
+          and owner_account_type = 'independent_creator'
+          and deleted_at is null
+          and submission_type is distinct from 'story_concept'
+          and merged_into_title_id is null
+        order by updated_at desc limit 200
       `
     : sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.deleted_at is null
-          and t.submission_type is distinct from 'story_concept'
-          and (
-            t.owner_user_id = ${userId}
-            or (
-              t.owner_account_type = 'studio'
-              and t.owner_organization_id = ${orgId}
-              and exists (
-                select 1 from bridge_organization_memberships m
-                where m.organization_id = ${orgId}
-                  and m.user_id = ${userId}
-                  and m.status = 'active'
-              )
-            )
-          )
-        order by t.updated_at desc limit 200
+        select * from bridge_titles
+        where owner_user_id = ${userId}
+          and owner_account_type = 'independent_creator'
+          and deleted_at is null
+          and submission_type is distinct from 'story_concept'
+        order by updated_at desc limit 200
       `;
 }
 
@@ -440,7 +442,7 @@ export const listTitles = createServerFn({ method: "GET" })
       }
     } else {
       assertPermission(actor, "title.read_own");
-      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
+      rows = await listOwned(sql, actor.userId, actor.organizationId, actor.accountType as "independent_creator" | "studio");
     }
     return { titles: rows.flatMap((row) => {
       try {
