@@ -169,6 +169,9 @@ const creatorBridgeSubmissionSchema = z.object({
   if (new Date(data.windowEnd) <= new Date(data.windowStart)) {
     ctx.addIssue({ code: "custom", path: ["windowEnd"], message: "Rights end must be after rights start" });
   }
+  if (new Date(data.windowEnd) <= new Date()) {
+    ctx.addIssue({ code: "custom", path: ["windowEnd"], message: "Rights window must remain active at submission time" });
+  }
 });
 
 export const submitCreatorTitleToBridge = createServerFn({ method: "POST" })
