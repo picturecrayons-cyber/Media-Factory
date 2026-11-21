@@ -18,20 +18,20 @@ type QcAsset = {
   s3_key: string;
   byte_size: number | null;
   checksum_sha256: string | null;
-  verified_object_key: string | null;
-  storage_provider: string | null;
-  storage_bucket: string | null;
-  storage_namespace: string | null;
-  storage_region: string | null;
-  storage_endpoint: string | null;
-  storage_verified_at: string | Date | null;
+  version_byte_size: number | null;
+  processing_state: string | null;
+  technical_metadata: Record<string, unknown> | null;
 };
 
 function storageVerified(asset: QcAsset): boolean {
+  const evidence = asset.technical_metadata ?? {};
   return Number(asset.byte_size ?? 0) > 0 &&
-    Boolean(asset.verified_object_key) &&
-    Boolean(asset.storage_provider && asset.storage_bucket && asset.storage_namespace &&
-      asset.storage_region && asset.storage_endpoint && asset.storage_verified_at) &&
+    Number(asset.version_byte_size ?? 0) === Number(asset.byte_size ?? 0) &&
+    asset.processing_state === "PASSED" &&
+    evidence.verifiedObjectKey === asset.s3_key &&
+    evidence.storageProvider === "OCI" &&
+    Boolean(evidence.storageBucket && evidence.storageNamespace &&
+      evidence.storageRegion && evidence.storageEndpoint && evidence.storageVerifiedAt) &&
     Boolean(asset.checksum_sha256 && /^[a-f0-9]{64}$/.test(asset.checksum_sha256));
 }
 
@@ -96,13 +96,20 @@ export async function submitTitleForQc(
       throw new Error("Only the title owner or an active member of the owning Studio can submit this title");
     }
     const assets = await tx<QcAsset>`
-      select id, kind, s3_key, byte_size, checksum_sha256, verified_object_key,
-        storage_provider, storage_bucket, storage_namespace, storage_region,
-        storage_endpoint, storage_verified_at
-      from bridge_assets
-      where title_id = ${title.id}
-      order by id
-      for update
+      select a.id, a.kind, a.s3_key, a.byte_size,
+        v.checksum_sha256, v.byte_size as version_byte_size,
+        v.processing_state, v.technical_metadata
+      from bridge_assets a
+      left join lateral (
+        select checksum_sha256, byte_size, processing_state, technical_metadata
+        from bridge_asset_versions
+        where title_id = a.title_id and s3_key = a.s3_key
+        order by version desc, created_at desc
+        limit 1
+      ) v on true
+      where a.title_id = ${title.id}
+      order by a.id
+      for update of a
     `;
     const missing = REQUIRED_QC_FILES.filter((required) =>
       !assets.some((asset) =>
