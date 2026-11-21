@@ -12,6 +12,7 @@ const submissionSchema = z.object({
   name: z.string().trim().min(1).max(160),
   synopsis: z.string().trim().min(1).max(4000),
   contentType: z.enum(["FEATURE", "SERIES", "SHORT", "DOCUMENTARY", "OTHER"]),
+  loopDistributionPreference: z.enum(["NOT_DECIDED", "CONSIDER_LOOP", "NOT_FOR_LOOP"]).default("NOT_DECIDED"),
   originalLanguage: z.string().trim().min(2).max(40),
   countryOfOrigin: z.string().trim().min(2).max(80),
   releaseYear: z.number().int().min(1895).max(2100),
@@ -70,11 +71,11 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       insert into bridge_titles (
         id, slug, name, original_title, owner_user_id, owner_account_type, status,
         synopsis, long_synopsis, language, original_language, year, runtime_minutes,
-        content_type, country_of_origin, release_date
+        content_type, loop_distribution_preference, country_of_origin, release_date
       ) values (
         ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType}, 'DRAFT',
         ${data.synopsis}, ${data.synopsis}, ${data.originalLanguage}, ${data.originalLanguage},
-        ${data.releaseYear}, ${data.runtimeMinutes}, ${data.contentType}, ${data.countryOfOrigin},
+        ${data.releaseYear}, ${data.runtimeMinutes}, ${data.contentType}, ${data.loopDistributionPreference}, ${data.countryOfOrigin},
         make_date(${data.releaseYear}, 1, 1)
       )
     `;
@@ -130,6 +131,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
         rightsGrantId: rightsRows[0]?.id ?? null,
         screenerMode: data.screenerMode,
         buyerChannels: data.buyerChannels,
+        loopDistributionPreference: data.loopDistributionPreference,
       },
     });
 
