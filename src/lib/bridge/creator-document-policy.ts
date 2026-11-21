@@ -31,3 +31,8 @@ export function canDownloadCreatorDocument(input: {
 }) {
   return input.ownerAccess || input.linkedTitleAccess || input.isSuperAdmin;
 }
+
+/** Studio reusable legal documents are a management capability, not a general membership capability. */
+export function canManageStudioDocuments(membershipRole: string | null | undefined) {
+  return membershipRole === "owner" || membershipRole === "admin";
+}
