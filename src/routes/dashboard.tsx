@@ -57,7 +57,7 @@ const ADMIN_MODULES = [
 ] as const;
 
 const ACTION_GUIDANCE: Record<string, string> = {
-  QC_REVIEW: "QC review is pending",
+  QC_REVIEW: "New owner submission · QC review is pending",
   RIGHTS_REVIEW: "Rights review is pending",
   LICENSING_READY: "Licensing decision is pending",
 };
@@ -162,10 +162,11 @@ function DashboardBody() {
                   </p>
                 </div>
                 <Link
-                  to="/workspace"
+                  to="/title/$id"
+                  params={{ id: title.id }}
                   className="shrink-0 text-sm font-semibold text-accent hover:underline"
                 >
-                  Review in workspace →
+                  Review submission →
                 </Link>
               </li>
             ))}
