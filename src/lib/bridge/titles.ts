@@ -488,7 +488,7 @@ export const saveTitleSubmissionAuthority = createServerFn({ method: "POST" })
   .validator(z.object({
     titleId: z.string().min(8),
     authorityType: z.enum(["RIGHTS_OWNER", "PRODUCER", "LICENSEE_WITH_ONWARD_RIGHTS", "DISTRIBUTOR_SALES_AGENT"]),
-    evidenceType: z.enum(["OWNERSHIP_DOCUMENT", "DISTRIBUTION_AGREEMENT", "LICENSE_AGREEMENT", "POWER_OF_ATTORNEY", "OTHER"]),
+    evidenceType: z.enum(["RIGHTS_AGREEMENT", "CHAIN_OF_TITLE", "AUTHORIZATION_LETTER", "DISTRIBUTION_AGREEMENT", "OTHER"]),
     evidenceReference: z.string().trim().min(3).max(500),
     authorizationConfirmed: z.literal(true),
   }))
