@@ -67,6 +67,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
   );
   const [titleId, setTitleId] = useState(preferred);
   const [details, setDetails] = useState<RightsDetails>(EMPTY);
+  const [savedDetails, setSavedDetails] = useState<RightsDetails>(EMPTY);
   const [notice, setNotice] = useState("");
   const [viewingDocumentId, setViewingDocumentId] = useState<string | null>(null);
   const [busyType, setBusyType] = useState<string | null>(null);
@@ -94,15 +95,19 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
   }, [preferred, titleId]);
   useEffect(() => {
     if (draftQ.data?.submission?.details) {
-      setDetails({ ...EMPTY, ...(draftQ.data.submission.details as Partial<RightsDetails>) });
+      const restored = { ...EMPTY, ...(draftQ.data.submission.details as Partial<RightsDetails>) };
+      setDetails(restored);
+      setSavedDetails(restored);
     } else {
       setDetails(EMPTY);
+      setSavedDetails(EMPTY);
     }
   }, [titleId, draftQ.data]);
 
   const saveMutation = useMutation({
     mutationFn: () => saveTitleOwnerRightsDraft({ data: { titleId, details } }),
     onSuccess: async () => {
+      setSavedDetails(details);
       setNotice("Draft saved. No legal or publication approval was granted.");
       await queryClient.invalidateQueries({ queryKey: ["creator-rights-draft", titleId] });
     },
@@ -297,7 +302,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
         </fieldset>
         {!locked ? (
           <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" onClick={() => setDetails({ ...EMPTY, ...(draftQ.data?.submission?.details as Partial<RightsDetails> | undefined) })} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">Undo unsaved edits</button>
+            <button type="button" onClick={() => setDetails(savedDetails)} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">Undo unsaved edits</button>
             <button type="button" disabled={saveMutation.isPending || !titleId} onClick={() => saveMutation.mutate()} className="rounded-full border border-line-strong px-4 py-2 text-sm font-semibold disabled:opacity-50">{saveMutation.isPending ? "Saving…" : "Save draft"}</button>
             <button type="button" disabled={submitMutation.isPending || !details.ownerDeclaration || !titleId} onClick={() => submitMutation.mutate()} className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg disabled:opacity-50">{submitMutation.isPending ? "Submitting…" : "Submit to Legal Review"}</button>
           </div>
