@@ -12,40 +12,28 @@ function navigationFor(actor: BridgeActor): NavItem[] {
       { to: "/internal", label: "Operations" },
       { to: "/workspace", label: "Titles" },
     ];
-
     if (actor.internalRole === "admin" || actor.internalRole === "super_admin") {
-      items.push(
-        { to: "/admin", label: "Admin" },
-        { to: "/admin-cms", label: "Website CMS" },
-      );
+      items.push({ to: "/admin", label: "Admin" });
     }
-
     if (actor.internalRole === "super_admin") {
       items.unshift({ to: "/dashboard", label: "Founder Centre" });
       items.push({ to: "/cms", label: "Loop Gateway" });
     }
-
     return [...items, { to: "/account", label: "Account" }];
   }
 
   const accountNavigation: Record<BridgeActor["accountType"], NavItem[]> = {
     independent_creator: [
-      { to: "/creator", label: "Creator Home" },
-      { to: "/workspace", label: "My Titles" },
-      { to: "/deliveries", label: "Updates & Deliveries" },
-    ],
-    studio: [
-      { to: "/studio", label: "Studio Home" },
+      { to: "/creator", label: "Home" },
       { to: "/workspace", label: "Titles" },
       { to: "/deliveries", label: "Deliveries" },
     ],
+    studio: [],
     buyer: [{ to: "/buyer", label: "Buyer Desk" }],
     investor: [{ to: "/investor", label: "Portfolio" }],
   };
-
   return [...accountNavigation[actor.accountType], { to: "/account", label: "Account" }];
 }
-
 function NavLink({ item }: { item: NavItem }) {
   return (
     <Link
