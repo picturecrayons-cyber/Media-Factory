@@ -6,9 +6,13 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", showSubmissionFilters = false }: { empty: string; query?: string; showSubmissionFilters?: boolean }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const [sourceFilter, setSourceFilter] = useState<"all" | "independent_creator" | "studio">("all");
+  const titles = (titlesQ.data?.titles ?? []).filter((t) =>
+    (sourceFilter === "all" || t.ownerAccountType === sourceFilter) &&
+    (!query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase())),
+  );
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
@@ -18,8 +22,21 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
       </div>
     );
   }
-  if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
+  if (!titles.length && !showSubmissionFilters) return <p className="text-sm text-muted">{empty}</p>;
   return (
+    <>
+      {showSubmissionFilters ? (
+        <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Filter title submissions">
+          {([{ id: "all", label: "All titles" }, { id: "independent_creator", label: "Creator submissions" }, { id: "studio", label: "Studio submissions" }] as const).map((item) => (
+            <button key={item.id} type="button" aria-pressed={sourceFilter === item.id} onClick={() => setSourceFilter(item.id)} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${sourceFilter === item.id ? "border-accent bg-accent-soft text-accent" : "border-line text-muted"}`}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {!titles.length ? <p className="text-sm text-muted">{empty}</p> : null}
+      {titles.length ? (
+
     <ul className="divide-y divide-line rounded-sm border border-line">
       {titles.map((t) => (
         <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -42,6 +59,8 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
         </li>
       ))}
     </ul>
+      ) : null}
+    </>
   );
 }
 
