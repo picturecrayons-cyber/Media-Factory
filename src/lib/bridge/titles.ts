@@ -115,6 +115,7 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
               )
             )
           )
+        )
         order by t.updated_at desc limit 200
       `
     : sql<TitleRow>`
