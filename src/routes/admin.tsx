@@ -8,6 +8,7 @@ import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
+import { FounderServiceQueue } from "@/components/bridge/products-services-catalogue";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
