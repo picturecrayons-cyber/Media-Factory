@@ -238,8 +238,6 @@ export interface FileRoutesByFullPath {
   '/account': typeof AccountRoute
   '/admin': typeof AdminRouteWithChildren
   '/admin/buyers': typeof AdminBuyersRoute
-  '/admin/buyers': typeof AdminBuyersRoute
-  '/admin/buyers': typeof AdminBuyersRoute
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
@@ -275,6 +273,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRouteWithChildren
+  '/admin/buyers': typeof AdminBuyersRoute
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
@@ -311,6 +310,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRouteWithChildren
+  '/admin/buyers': typeof AdminBuyersRoute
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
@@ -349,8 +349,6 @@ export interface FileRouteTypes {
     | '/account'
     | '/admin'
     | '/admin/buyers'
-    | '/admin/buyers'
-    | '/admin/buyers'
     | '/admin-cms'
     | '/app'
     | '/buyer'
@@ -386,6 +384,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/admin'
+    | '/admin/buyers'
     | '/admin-cms'
     | '/app'
     | '/buyer'
