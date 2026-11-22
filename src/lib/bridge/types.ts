@@ -97,6 +97,7 @@ export const PERMISSIONS = [
   "service.request_create",
   "service.request_read",
   "service.request_manage",
+  "service.quote_accept",
   "entitlement.read_own",
   "finance.read",
   "finance.configure",
