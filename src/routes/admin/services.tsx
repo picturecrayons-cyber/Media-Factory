@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
+import { ServiceRequestQueue } from "@/components/bridge/service-centre";
 
 export const Route = createFileRoute("/admin/services")({ component: ServicesWorkspace });
 
@@ -13,8 +14,9 @@ function ServicesWorkspace() {
             <header>
               <p className="text-xs font-semibold uppercase tracking-wider text-accent">Business operations</p>
               <h2 className="mt-1 font-display text-3xl font-semibold">Services & Operations</h2>
-              <p className="mt-2 text-sm text-muted">Service and production workflows remain in their existing workspaces. This page is a distinct entry point, not a duplicate control panel.</p>
+              <p className="mt-2 text-sm text-muted">Review Creator and Studio service requests here. Quotes, verified payment, provider assignment and delivery are tracked separately from title review and licensing.</p>
             </header>
+            <ServiceRequestQueue />
             <section className="grid gap-3 sm:grid-cols-2">
               <WorkspaceLink to="/internal" title="Distribution & Operations" detail="Existing Loop destination, delivery and operator workflows." />
               <WorkspaceLink to="/admin/workstations" title="Production Control" detail="Existing QC, rights, assets, buyer gates and delivery workstation." />
