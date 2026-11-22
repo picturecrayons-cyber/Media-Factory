@@ -12,7 +12,7 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
-import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { assertBuyerPublishable, buyerHasExplicitTitleAccess, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
 
 type TitleRow = {
@@ -412,19 +412,35 @@ export const listTitles = createServerFn({ method: "GET" })
       rows = await listCatalog(sql);
     } else if (actor.accountType === "buyer") {
       assertPermission(actor, "title.read_catalog");
-      if (await hasTitleMergeColumn(sql)) {
+      const accessSchema = await sql<{ available: boolean }>`select to_regclass('public.bridge_buyer_title_access') is not null as available`;
+      // No buyer-specific access schema means no catalogue access: fail closed.
+      if (accessSchema[0]?.available && await hasTitleMergeColumn(sql)) {
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
           where t.merged_into_title_id is null
             and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
+            and exists (
+              select 1 from bridge_buyer_title_access ba
+              where ba.title_id = t.id
+                and ba.buyer_user_id = ${actor.userId}
+                and ba.revoked_at is null
+                and (ba.expires_at is null or ba.expires_at > now())
+            )
           order by t.updated_at desc limit 200
         `;
-      } else {
+      } else if (accessSchema[0]?.available) {
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
           where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
+            and exists (
+              select 1 from bridge_buyer_title_access ba
+              where ba.title_id = t.id
+                and ba.buyer_user_id = ${actor.userId}
+                and ba.revoked_at is null
+                and (ba.expires_at is null or ba.expires_at > now())
+            )
           order by t.updated_at desc limit 200
         `;
       }
@@ -453,8 +469,8 @@ export const getTitle = createServerFn({ method: "GET" })
     const sql = await getSql();
     const buyerView = actor.accountType === "buyer" && !actor.internalRole;
     if (buyerView) {
-      // A published status alone is not enough: re-check every publication gate
-      // on direct listing access, not only when the catalogue is queried.
+      // Require a live, explicit grant to this Buyer before checking publication gates.
+      if (!(await buyerHasExplicitTitleAccess(title.id, actor.userId))) throw new Error("Not found");
       await assertBuyerPublishable(title.id);
     } else if (actor.accountType === "investor" && !actor.internalRole) {
       const assigned = await sql<{ id: string }>
