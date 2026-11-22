@@ -64,6 +64,20 @@ export const LEGAL_DOCUMENTS: Record<string, LegalDocument> = {
       { heading: "No substitute for statutory process", paragraphs: ["This B2B workflow does not replace any notice, counter-notice, court process or statutory remedy available under Indian law. It is not the public-facing takedown procedure for Crayons Loop."] },
     ],
   },
+  "dmca": {
+    title: "DMCA, Copyright Notice & Takedown",
+    summary: "How to submit copyright notices, counter-responses and urgent content-access complaints concerning Bridge materials.",
+    version: "1.0 — draft for legal review",
+    effective: "Publication date to be confirmed",
+    sections: [
+      { heading: "Scope and legal framework", paragraphs: ["This page provides a contact and review process for copyright and content complaints relating to Crayons Bridge, a business-to-business content workflow. The United States DMCA (17 U.S.C. § 512) applies only where legally relevant; this page does not claim that every Bridge user or transaction is governed by US law. Indian copyright law and other applicable laws remain relevant according to the facts and jurisdiction. This page is not legal advice and does not replace a statutory notice, court order or rights-holder agreement."] },
+      { heading: "Submitting a notice", bullets: ["Identify the copyrighted work and the claimant or authorized representative.", "Identify the specific Bridge title, asset, file reference or location and describe the material complained of.", "Explain the ownership or authorization basis and why the use is alleged to be unauthorized.", "Provide reliable contact details, supporting evidence and a good-faith statement.", "Where a formal statutory notice is intended, include the declarations and particulars required by the applicable law and jurisdiction."] },
+      { heading: "Counter-response", paragraphs: ["An affected uploader or account holder may send a reasoned response identifying the material, explaining the basis for its submission or authorization, and attaching relevant licences, assignments or other evidence. A counter-response does not automatically restore access or determine legal ownership."] },
+      { heading: "Review, restriction and restoration", paragraphs: ["The Company may acknowledge a complaint, seek clarification, preserve relevant records, notify affected parties where appropriate and refer the matter for legal review. Temporary restriction, continued restriction or restoration will be considered against the evidence, applicable agreement, platform security and law. Decisions should be recorded with an audit trail. A complaint alone is not proof of infringement."] },
+      { heading: "Where to send notices", paragraphs: ["Send Bridge copyright and takedown correspondence to abijithasokan@crayonspictures.com with the subject “Crayons Bridge — Copyright / DMCA Notice”. Do not send passwords, one-time codes or payment-card information. This contact route and the Company's designated legal representative must be confirmed before publication."] },
+      { heading: "Crayons Loop is separate", paragraphs: ["This page covers the Bridge B2B workspace only. It is not the consumer-facing Crayons Loop notice-and-takedown process. Loop-specific reporting, statutory contact details and response procedures must be published on Crayons Loop separately."] },
+    ],
+  },
   "grievance": {
     title: "Grievance & Legal Contact",
     summary: "How to route privacy, account, rights, licensing and legal notices to the Company.",
