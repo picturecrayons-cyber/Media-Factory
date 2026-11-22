@@ -68,6 +68,37 @@ async function assertEvidenceEditable(titleId: string, userId: string, status: s
   }
 }
 
+export const getTitleOwnerEvidenceViewUrl = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8), documentId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    const { actor, title } = await requireTitleOwner(context.userId, data.titleId);
+    const sql = await getSql();
+    const rows = await sql<{ storage_key: string; status: string }>`
+      select d.storage_key, d.status
+      from bridge_title_document_links l
+      join bridge_creator_documents d on d.id = l.document_id
+      where l.title_id = ${title.id}
+        and d.id = ${data.documentId}
+        and d.owner_user_id = ${actor.userId}
+        and d.owner_account_type = ${actor.accountType}
+        and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+        and d.status = 'VERIFIED'
+      limit 1
+    `;
+    if (!rows.length) throw new Error("Verified document not found for this title");
+    const { signDownload } = await import("./oci-object-storage.server");
+    const signed = await signDownload({ key: rows[0].storage_key, expiresIn: 90 });
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "owner.evidence_preview_requested",
+      entityType: "bridge_creator_document",
+      entityId: data.documentId,
+      metadata: { titleId: title.id },
+    });
+    return { url: signed.url, expiresIn: 90 };
+  });
+
 export const listTitleOwnerEvidence = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
