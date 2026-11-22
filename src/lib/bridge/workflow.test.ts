@@ -420,7 +420,7 @@ test("license author cannot approve their own agreement", async () => {
 });
 
 
-test("Submit for QC advances PREPARING with the referenced vertical poster and writes lifecycle plus audit only", async () => {
+test("Submit to Bridge requires complete verified package and writes lifecycle plus audit only", async () => {
   const f = await fixture();
   try {
     await f.sql.query(`
@@ -431,7 +431,9 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
       insert into bridge_assets values
         ('qc-master','qc-submit-title','master','sealed/qc-master',4096),
         ('qc-old-poster','qc-submit-title','poster','older/unreferenced-poster',512),
-        ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster',1024)
+        ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster',1024),
+        ('qc-horizontal','qc-submit-title','poster_horizontal','sealed/qc-horizontal',768),
+        ('qc-thumbnail','qc-submit-title','thumbnail','sealed/qc-thumbnail',256)
     `);
     const title = {
       id: "qc-submit-title",
