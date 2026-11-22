@@ -9,6 +9,7 @@ import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 import { listTitles } from "@/lib/bridge/titles";
+import { ProductsServicesCatalogue } from "@/components/bridge/products-services-catalogue";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -18,6 +19,7 @@ const IN_PROGRESS = new Set(["UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVI
 const SECTIONS = [
   ["Overview", "#overview"],
   ["My Titles", "#my-titles"],
+  ["Products & Services", "#products-services"],
   ["Add New Title", "#add-title"],
   ["Metadata & Credits", "#metadata"],
   ["Rights & Ownership", "#rights"],
@@ -208,6 +210,8 @@ function CreatorDashboard({
           <MyStoryConcepts userId={actor.userId} />
         </div>
       </section>
+
+      <ProductsServicesCatalogue audience="Creator" />
 
       <section id="metadata" className="scroll-mt-20 grid gap-4 md:grid-cols-2">
         <InfoPanel
