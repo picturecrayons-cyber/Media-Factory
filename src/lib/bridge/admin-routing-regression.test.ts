@@ -97,3 +97,12 @@ test("Open Titles permits authorised internal catalog readers without weakening 
   assert.match(rbac, /if \(actor\.internalRole\) return hasPermission\(actor, "title\.read_catalog"\)/);
   assert.match(rbac, /actor\.internalRole === "super_admin"/);
 });
+
+
+test("signup-selected account type is shown once and not re-selected during onboarding", () => {
+  const onboarding = read("../../routes/onboarding.tsx");
+  assert.match(onboarding, /\{signupAccountType \? \(/);
+  assert.match(onboarding, /Selected account type/);
+  assert.match(onboarding, /Already selected during sign-up/);
+  assert.match(onboarding, /\) : \(\s*<label className="text-sm font-medium">Account type \*/);
+});
