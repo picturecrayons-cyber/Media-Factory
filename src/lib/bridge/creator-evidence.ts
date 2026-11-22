@@ -281,3 +281,18 @@ export const submitCreatorRightsPackage = createServerFn({ method: "POST" })
     });
     return { submitted: true, titleStatusUnchanged: true };
   });
+
+export const getCreatorRightsDraft = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    const { actor, title } = await requireCreatorOwner(context.userId, data.titleId);
+    const sql = await getSql();
+    const rows = await sql<{ details: unknown; submission_status: string; submitted_at: string | null }>`
+      select details, submission_status, submitted_at
+      from bridge_title_owner_submissions
+      where title_id = ${title.id} and owner_user_id = ${actor.userId}
+      limit 1
+    `;
+    return { submission: rows[0] ?? null };
+  });
