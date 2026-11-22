@@ -122,3 +122,26 @@ test("Buyer Management is Super Admin-only and reads Bridge Buyer profiles witho
   assert.match(shell, /to: "\/admin\/buyers", label: "Buyers"/);
   assert.doesNotMatch(buyers, /inviteInternalRole|update bridge_profiles|insert into bridge_profiles|delete from bridge_profiles/);
 });
+
+
+test("Super Admin primary tabs expose the main Bridge workspaces without changing RBAC", () => {
+  const shell = read("../../components/bridge/shell.tsx");
+  for (const path of ["/dashboard", "/admin", "/workspace", "/internal", "/admin/buyers", "/admin/team", "/admin/users", "/admin/services", "/admin-cms", "/cms", "/admin/audit", "/account"]) {
+    assert.ok(shell.includes(`to: "${path}"`), `missing Super Admin tab ${path}`);
+  }
+  assert.match(shell, /actor\.internalRole === "super_admin"/);
+});
+
+test("homepage and Buyer surfaces describe multiple independent Buyers, not Loop as the only market", () => {
+  const home = read("../../routes/index.tsx");
+  const defaults = read("./site-content.ts");
+  const buyer = read("../../routes/buyer.tsx");
+  const buyerRegister = read("../../routes/admin/buyers.tsx");
+  assert.match(home, /multiple independent Buyers/);
+  assert.match(home, /not the only destination or Buyer/);
+  assert.match(defaults, /multiple independent Buyers/);
+  assert.match(buyer, /Each Buyer account has/);
+  assert.match(buyerRegister, /LEGACY_BUYER_REGISTER/);
+  assert.match(buyerRegister, /Verify Buyer category/);
+  assert.match(buyerRegister, /ID 55/);
+});
