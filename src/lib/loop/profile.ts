@@ -226,13 +226,30 @@ export const isTitleInWatchlist = createServerFn({ method: "GET" })
   });
 
 /**
- * List consumer watchlist titles
+ * List the signed-in consumer's saved titles.
+ *
+ * Watchlist membership is read only for the verified user. Title metadata is
+ * fetched through the existing Bridge-authorized LOOP catalogue path so the
+ * consumer server function never bypasses loop_titles RLS or exposes revoked,
+ * unapproved, unpublished, or out-of-window titles.
  */
 export const getConsumerWatchlist = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const sql = await getSql();
-    const rows = await sql<{
+    const savedRows = await sql<{ loop_title_id: string; created_at: string | Date }>`
+      select loop_title_id, created_at
+      from loop_watchlists
+      where user_id = ${context.userId}
+      order by created_at desc
+    `;
+
+    if (savedRows.length === 0) {
+      return { items: [] };
+    }
+
+    const savedIds = savedRows.map((row) => row.loop_title_id);
+    const catalogRows = await sql<{
       id: string;
       bridge_title_id: string | null;
       slug: string;
@@ -247,24 +264,28 @@ export const getConsumerWatchlist = createServerFn({ method: "GET" })
       select
         l.id, l.bridge_title_id, l.slug, l.title, l.synopsis, l.poster_path,
         l.backdrop_path, l.maturity_rating, l.duration_minutes, l.access_tier
-      from loop_watchlist w
-      join loop_titles l on l.id = w.loop_title_id
-      where w.user_id = ${context.userId}
-      order by w.created_at desc
+      from public_loop_catalog() catalog
+      join loop_titles l on l.id::text = catalog.id
+      where l.id = any(${savedIds}::uuid[])
     `;
 
+    const catalogById = new Map(catalogRows.map((row) => [row.id, row]));
     return {
-      items: rows.map((r) => ({
-        id: r.id,
-        bridgeTitleId: r.bridge_title_id,
-        slug: r.slug,
-        title: r.title,
-        synopsis: r.synopsis,
-        posterPath: r.poster_path,
-        backdropPath: r.backdrop_path,
-        maturityRating: r.maturity_rating,
-        durationMinutes: r.duration_minutes,
-        accessTier: r.access_tier,
-      })),
+      items: savedRows.flatMap((saved) => {
+        const row = catalogById.get(saved.loop_title_id);
+        if (!row) return [];
+        return [{
+          id: row.id,
+          bridgeTitleId: row.bridge_title_id,
+          slug: row.slug,
+          title: row.title,
+          synopsis: row.synopsis,
+          posterPath: row.poster_path,
+          backdropPath: row.backdrop_path,
+          maturityRating: row.maturity_rating,
+          durationMinutes: row.duration_minutes,
+          accessTier: row.access_tier,
+        }];
+      }),
     };
   });
