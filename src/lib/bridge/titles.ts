@@ -14,6 +14,7 @@ import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
+import { canRemoveDraft, DRAFT_TITLE_REMOVAL_DISABLED_MESSAGE } from "./title-deletion-policy";
 
 type TitleRow = {
   id: string;
@@ -462,6 +463,81 @@ export const getTitle = createServerFn({ method: "GET" })
         createdAt: asIso(e.created_at),
       })),
     };
+  });
+
+export const removeDraftTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ id: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+
+    return sql.transaction(async (tx) => {
+      const [title] = await tx<{
+        id: string; status: string; owner_user_id: string;
+        owner_account_type: string; owner_organization_id: string | null;
+        archived_at: string | Date | null;
+      }>`
+        select id, status, owner_user_id, owner_account_type, owner_organization_id, archived_at
+        from bridge_titles where id = ${data.id} for update
+      `;
+      if (!title || title.archived_at) throw new Error("Draft not found");
+      const ownerAllowed = canMutateTitle(
+        actor,
+        {
+          ownerUserId: title.owner_user_id,
+          ownerAccountType: title.owner_account_type as AccountType,
+          ownerOrganizationId: title.owner_organization_id,
+        },
+        "title.update_own",
+        "title.license",
+      );
+      if (!ownerAllowed || title.status !== "DRAFT") {
+        throw new Error("Only your own DRAFT title can be removed");
+      }
+
+      const [facts] = await tx<{
+        has_assets: boolean; has_qc_case: boolean; has_legal_case: boolean;
+        has_rights_grant: boolean; has_payment: boolean; has_submission: boolean;
+        has_publication: boolean;
+      }>`
+        select
+          exists(select 1 from bridge_assets where title_id = ${data.id}) as has_assets,
+          exists(select 1 from bridge_qc_cases where title_id = ${data.id}) as has_qc_case,
+          exists(select 1 from bridge_legal_cases where title_id = ${data.id}) as has_legal_case,
+          exists(select 1 from bridge_rights_grants where title_id = ${data.id}) as has_rights_grant,
+          exists(select 1 from bridge_payments where title_id = ${data.id}) as has_payment,
+          exists(select 1 from bridge_title_owner_submissions where title_id = ${data.id}) as has_submission,
+          exists(select 1 from bridge_publications where bridge_title_id = ${data.id}) as has_publication
+      `;
+      if (!facts || !canRemoveDraft({
+        status: title.status,
+        hasAssets: facts.has_assets,
+        hasQcCase: facts.has_qc_case,
+        hasLegalCase: facts.has_legal_case,
+        hasRightsGrant: facts.has_rights_grant,
+        hasPayment: facts.has_payment,
+        hasSubmission: facts.has_submission || facts.has_publication,
+      })) {
+        throw new Error(DRAFT_TITLE_REMOVAL_DISABLED_MESSAGE);
+      }
+
+      await tx`
+        update bridge_titles
+        set archived_at = now(), archived_by = ${actor.userId},
+            archive_reason = 'OWNER_REMOVED_DRAFT', updated_at = now()
+        where id = ${data.id} and status = 'DRAFT' and archived_at is null
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.draft_archived",
+        entityType: "bridge_title",
+        entityId: data.id,
+        metadata: { reversible: true, archiveReason: "OWNER_REMOVED_DRAFT" },
+      }, tx);
+      return { archived: true, id: data.id };
+    });
   });
 
 export const updateTitle = createServerFn({ method: "POST" })
