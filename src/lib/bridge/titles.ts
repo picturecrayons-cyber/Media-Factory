@@ -32,6 +32,7 @@ type TitleRow = {
   poster_key: string | null;
   master_key: string | null;
   content_type: string;
+  submission_type?: "finished_film" | "story_concept" | null;
   country_of_origin: string | null;
   release_date: string | Date | null;
   credits: Array<{ role: string; name: string }>;
@@ -62,6 +63,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     posterKey: r.poster_key,
     masterKey: r.master_key,
     contentType: r.content_type,
+    submissionType: r.submission_type ?? "finished_film",
     countryOfOrigin: r.country_of_origin,
     releaseDate: r.release_date ? asIso(r.release_date) : null,
     credits: r.credits,
@@ -83,46 +85,98 @@ async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
   return Boolean(rows[0]?.exists);
 }
 
-async function listCatalog(sql: Sql): Promise<TitleRow[]> {
-  if (!(await hasTitleMergeColumn(sql))) {
-    return sql<TitleRow>`select * from bridge_titles where archived_at is null order by updated_at desc limit 200`;
-  }
-  return sql<TitleRow>`select * from bridge_titles where archived_at is null and merged_into_title_id is null order by updated_at desc limit 200`;
+async function hasArchiveColumn(sql: Sql): Promise<boolean> {
+  const rows = await sql<{ exists: boolean }>`
+    select exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'bridge_titles' and column_name = 'archived_at'
+    ) as exists
+  `;
+  return Boolean(rows[0]?.exists);
 }
 
-async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
+async function listCatalog(sql: Sql): Promise<TitleRow[]> {
+  const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+  const archiveColumnAvailable = await hasArchiveColumn(sql);
+  if (mergeColumnAvailable && archiveColumnAvailable) {
+    return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null and archived_at is null order by updated_at desc limit 200`;
+  }
+  if (mergeColumnAvailable) return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
+  if (archiveColumnAvailable) return sql<TitleRow>`select * from bridge_titles where archived_at is null order by updated_at desc limit 200`;
+  return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
+}
+
+async function listOwned(
+  sql: Sql,
+  userId: string,
+  accountType: AccountType,
+  organizationId: string | null | undefined,
+): Promise<TitleRow[]> {
   const orgId = organizationId || null;
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
-  if (!orgId) {
-    return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and archived_at is null and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and archived_at is null order by updated_at desc limit 200`;
-  }
-  return mergeColumnAvailable
-    ? sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.archived_at is null and t.merged_into_title_id is null
-          and (
-            t.owner_user_id = ${userId}
-            or (
-              t.owner_account_type = 'studio'
-              and t.owner_organization_id = ${orgId}
-              and exists (
-                select 1 from bridge_organization_memberships m
-                where m.organization_id = ${orgId}
-                  and m.user_id = ${userId}
-                  and m.status = 'active'
-              )
+  const archiveColumnAvailable = await hasArchiveColumn(sql);
+  const activeRowsOnly = (mergeColumnAvailable: boolean, archiveColumnAvailable: boolean) =>
+    mergeColumnAvailable && archiveColumnAvailable
+      ? "merged_and_active"
+      : mergeColumnAvailable
+        ? "merged_only"
+        : archiveColumnAvailable
+          ? "active_only"
+          : "all";
+
+  // Studio title visibility is organization-scoped. A Studio user must not
+  // pull in unassigned legacy/test rows merely because the user_id matches.
+  // Those records remain in the Super Admin catalog until ownership mapping is reviewed.
+  if (accountType === "studio") {
+    if (!orgId) return [];
+    switch (activeRowsOnly(mergeColumnAvailable, archiveColumnAvailable)) {
+      case "merged_and_active":
+        return sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and t.merged_into_title_id is null
+            and t.archived_at is null
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
             )
-          )
-        )
-        order by t.updated_at desc limit 200
-      `
-    : sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.archived_at is null and (t.owner_user_id = ${userId}
-          or (
-            t.owner_account_type = 'studio'
+          order by t.updated_at desc limit 200
+        `;
+      case "merged_only":
+        return sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and t.merged_into_title_id is null
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          order by t.updated_at desc limit 200
+        `;
+      case "active_only":
+        return sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and t.archived_at is null
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          order by t.updated_at desc limit 200
+        `;
+      default:
+        return sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_account_type = 'studio'
             and t.owner_organization_id = ${orgId}
             and exists (
               select 1 from bridge_organization_memberships m
@@ -130,9 +184,27 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
                 and m.user_id = ${userId}
                 and m.status = 'active'
             )
-          )
-        order by t.updated_at desc limit 200
-      `;
+          order by t.updated_at desc limit 200
+        `;
+    }
+  }
+
+  // Creator accounts can see only finished-film records they own; they do
+  // not inherit Studio records even when using the same login identity.
+  if (accountType === "independent_creator") {
+    const archiveClause = archiveColumnAvailable ? sql` archived_at is null and ` : sql``;
+    const mergeClause = mergeColumnAvailable ? sql` merged_into_title_id is null and ` : sql``;
+    return sql<TitleRow>`
+      select * from bridge_titles
+      where owner_user_id = ${userId}
+        and owner_account_type = 'independent_creator'
+        and ${mergeClause}
+        ${archiveClause}
+      order by updated_at desc limit 200
+    `;
+  }
+
+  return [];
 }
 
 function slugify(name: string, id: string): string {
@@ -738,18 +810,23 @@ export const archiveDraftTitle = createServerFn({ method: "POST" })
       if(!title) throw new Error("Title not found");
       if(["jananam-1947-pranayam-thudarunnu","jananam-1947-pranayam-thudarunnu-7"].includes(title.slug)) throw new Error("Protected title cannot be archived");
       if(title.status!=="DRAFT" || title.archived_at) throw new Error("Only an active DRAFT can be archived");
-      if(actor.internalRole!=="super_admin") {
-        if(actor.internalRole || !["independent_creator","studio"].includes(actor.accountType)) throw new Error("Owner or Super Admin access required");
-        const direct=title.owner_user_id===actor.userId;
-        const studio=title.owner_account_type==="studio" && title.owner_organization_id===actor.organizationId;
-        if(!direct && !studio) throw new Error("You cannot archive another owner's title");
-        if(studio) {
-          const membership=await tx<{active:boolean}>`
-            select exists(select 1 from bridge_organization_memberships
-              where organization_id=${title.owner_organization_id} and user_id=${actor.userId} and status='active') as active
-          `;
-          if(!membership[0]?.active) throw new Error("Active Studio membership required");
+      if (actor.internalRole) {
+        if (actor.internalRole !== "super_admin") throw new Error("Only Super Admin may manage another account's archived drafts");
+      } else if (actor.accountType === "independent_creator") {
+        if (title.owner_account_type !== "independent_creator" || title.owner_user_id !== actor.userId) {
+          throw new Error("Only the verified Creator owner can archive or restore this draft");
         }
+      } else if (actor.accountType === "studio") {
+        if (title.owner_account_type !== "studio" || !actor.organizationId || title.owner_organization_id !== actor.organizationId) {
+          throw new Error("The title does not belong to your verified Studio organization");
+        }
+        const membership = await tx<{ active: boolean }>`
+          select exists(select 1 from bridge_organization_memberships
+            where organization_id = ${title.owner_organization_id} and user_id = ${actor.userId} and status = 'active') as active
+        `;
+        if (!membership[0]?.active) throw new Error("Active Studio membership required");
+      } else {
+        throw new Error("Creator, Studio or Super Admin access required");
       }
       if(title.master_key || title.poster_key) throw new Error("Archive blocked: master or poster asset exists");
       const dependency=await tx<{blockers:string[]}>`select public.bridge_title_archive_dependency_blockers(${title.id}) as blockers`;
@@ -788,18 +865,23 @@ export const restoreArchivedDraftTitle = createServerFn({ method: "POST" })
       if(!title || !title.archived_at) throw new Error("Archived title not found");
       if(["jananam-1947-pranayam-thudarunnu","jananam-1947-pranayam-thudarunnu-7"].includes(title.slug)) throw new Error("Protected title cannot be restored");
       if(title.status!=="DRAFT" || title.previous_status!=="DRAFT") throw new Error("Only an archived DRAFT can be restored");
-      if(actor.internalRole!=="super_admin") {
-        if(actor.internalRole || !["independent_creator","studio"].includes(actor.accountType)) throw new Error("Owner or Super Admin access required");
-        const direct=title.owner_user_id===actor.userId;
-        const studio=title.owner_account_type==="studio" && title.owner_organization_id===actor.organizationId;
-        if(!direct && !studio) throw new Error("You cannot restore another owner's title");
-        if(studio) {
-          const membership=await tx<{active:boolean}>`
-            select exists(select 1 from bridge_organization_memberships
-              where organization_id=${title.owner_organization_id} and user_id=${actor.userId} and status='active') as active
-          `;
-          if(!membership[0]?.active) throw new Error("Active Studio membership required");
+      if (actor.internalRole) {
+        if (actor.internalRole !== "super_admin") throw new Error("Only Super Admin may manage another account's archived drafts");
+      } else if (actor.accountType === "independent_creator") {
+        if (title.owner_account_type !== "independent_creator" || title.owner_user_id !== actor.userId) {
+          throw new Error("Only the verified Creator owner can archive or restore this draft");
         }
+      } else if (actor.accountType === "studio") {
+        if (title.owner_account_type !== "studio" || !actor.organizationId || title.owner_organization_id !== actor.organizationId) {
+          throw new Error("The title does not belong to your verified Studio organization");
+        }
+        const membership = await tx<{ active: boolean }>`
+          select exists(select 1 from bridge_organization_memberships
+            where organization_id = ${title.owner_organization_id} and user_id = ${actor.userId} and status = 'active') as active
+        `;
+        if (!membership[0]?.active) throw new Error("Active Studio membership required");
+      } else {
+        throw new Error("Creator, Studio or Super Admin access required");
       }
       if(title.master_key || title.poster_key) throw new Error("Restore blocked: master or poster asset exists");
       const dependency=await tx<{blockers:string[]}>`select public.bridge_title_archive_dependency_blockers(${title.id}) as blockers`;
@@ -826,24 +908,54 @@ export const listArchivedDraftTitles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor=await requireVerifiedActor(context.userId);
-    const sql=await getSql();
-    if(actor.internalRole==="super_admin") {
-      const rows=await sql<{id:string;name:string;archived_at:string|Date;archive_reason:string|null}>`
-        select id,name,archived_at,archive_reason from bridge_titles
-        where archived_at is not null order by archived_at desc limit 200
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+
+    if (actor.internalRole === "super_admin") {
+      const rows = await sql<{ id: string; name: string; archived_at: string | Date; archive_reason: string | null }>`
+        select id, name, archived_at, archive_reason
+        from bridge_titles
+        where archived_at is not null and status = 'DRAFT'
+        order by archived_at desc
+        limit 200
       `;
-      return {titles:rows};
+      return { titles: rows };
     }
-    if(actor.internalRole || !["independent_creator","studio"].includes(actor.accountType)) throw new Error("Owner access required");
-    const rows=await sql<{id:string;name:string;archived_at:string|Date;archive_reason:string|null}>`
-      select id,name,archived_at,archive_reason from bridge_titles t
-      where t.archived_at is not null and (
-        t.owner_user_id=${actor.userId}
-        or (t.owner_account_type='studio' and t.owner_organization_id=${actor.organizationId}
-          and exists(select 1 from bridge_organization_memberships m
-            where m.organization_id=t.owner_organization_id and m.user_id=${actor.userId} and m.status='active'))
-      ) order by archived_at desc limit 200
-    `;
-    return {titles:rows};
+
+    if (actor.internalRole) throw new Error("Only Super Admin may view the global archive.");
+
+    if (actor.accountType === "independent_creator") {
+      const rows = await sql<{ id: string; name: string; archived_at: string | Date; archive_reason: string | null }>`
+        select id, name, archived_at, archive_reason
+        from bridge_titles
+        where archived_at is not null and status = 'DRAFT'
+          and owner_account_type = 'independent_creator'
+          and owner_user_id = ${actor.userId}
+        order by archived_at desc
+        limit 200
+      `;
+      return { titles: rows };
+    }
+
+    if (actor.accountType === "studio" && actor.organizationId) {
+      const rows = await sql<{ id: string; name: string; archived_at: string | Date; archive_reason: string | null }>`
+        select t.id, t.name, t.archived_at, t.archive_reason
+        from bridge_titles t
+        where t.archived_at is not null and t.status = 'DRAFT'
+          and t.owner_account_type = 'studio'
+          and t.owner_organization_id = ${actor.organizationId}
+          and exists (
+            select 1 from bridge_organization_memberships m
+            where m.organization_id = t.owner_organization_id
+              and m.user_id = ${actor.userId}
+              and m.status = 'active'
+          )
+        order by t.archived_at desc
+        limit 200
+      `;
+      return { titles: rows };
+    }
+
+    if (actor.accountType === "studio") return { titles: [] };
+    throw new Error("Creator or Studio account required.");
   });
