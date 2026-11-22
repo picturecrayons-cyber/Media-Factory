@@ -13,6 +13,7 @@ export const Route = createFileRoute("/studio")({ component: Studio });
 
 const workspaceLinks = [
   ["Titles", "#studio-titles", "Finished films and story concepts"],
+  ["Gallery", "#studio-gallery", "Approved artwork and verified images"],
   ["Production & DIT", "#studio-dit", "Camera-card intake and media handover"],
   ["Document Vault", "#studio-documents", "Private rights and ownership evidence"],
   ["Members", "#studio-members", "Studio membership and roles"],
