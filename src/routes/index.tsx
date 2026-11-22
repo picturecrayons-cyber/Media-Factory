@@ -1,10 +1,12 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession } from "@/lib/bridge/session";
+import { DEFAULT_BRIDGE_SITE_CONTENT, getPublicSiteContent } from "@/lib/bridge/site-content";
 
 
 export const Route = createFileRoute("/")({ component: Home });
@@ -44,6 +46,12 @@ const WORKFLOW_STEPS = [
 
 function Home() {
   const { user, isPending } = useCurrentUserState();
+  const siteContentQ = useQuery({
+    queryKey: ["bridge-public-site-content"],
+    queryFn: () => getPublicSiteContent(),
+    retry: 1,
+  });
+  const siteContent = siteContentQ.data ?? DEFAULT_BRIDGE_SITE_CONTENT;
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
     queryFn: () => getBridgeSession(),
@@ -92,11 +100,13 @@ function Home() {
                 <BrandMark className="text-3xl sm:text-4xl lg:text-5xl" />
               </div>
               <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
-                One bridge from content to market.
+                {siteContent.heroTitle}
               </h1>
               <p className="bridge-hero-subcopy mx-auto mt-4 max-w-2xl text-base leading-7 text-muted sm:text-lg">
-                Prepare. Protect. License. Deliver.
+                {siteContent.heroBody}
               </p>
+
+              <HeroCarousel slides={siteContent.carouselSlides ?? []} />
 
               <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
                 <Link to="/signup">
@@ -114,7 +124,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                From upload to delivery.
+                {siteContent.workflowHeading}
               </h2>
             </div>
 
@@ -146,7 +156,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                Built for the media business.
+                {siteContent.audienceHeading}
               </h2>
             </div>
 
@@ -262,7 +272,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                Ready to move your content forward?
+                {siteContent.finalCtaHeading}
               </h2>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <Link to="/signup">
@@ -309,5 +319,39 @@ function Home() {
         </div>
       </footer>
     </div>
+  );
+}
+
+
+function HeroCarousel({ slides }: { slides: Array<{ imageUrl: string; alt: string; caption: string }> }) {
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    if (slides.length < 2) return;
+    const timer = window.setInterval(() => setActive((current) => (current + 1) % slides.length), 6000);
+    return () => window.clearInterval(timer);
+  }, [slides.length]);
+
+  if (!slides.length) return null;
+  const current = slides[active] ?? slides[0]!;
+  return (
+    <section aria-label="Featured Crayons Bridge images" className="mx-auto mt-8 max-w-5xl overflow-hidden rounded-3xl border border-line bg-surface text-left shadow-sm">
+      <div className="relative aspect-[16/7] min-h-48 w-full bg-elevated">
+        <img key={current.imageUrl} src={current.imageUrl} alt={current.alt} className="h-full w-full object-cover" />
+        {slides.length > 1 ? (
+          <>
+            <button type="button" aria-label="Previous image" onClick={() => setActive((active - 1 + slides.length) % slides.length)} className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/60 text-xl text-white hover:bg-black/80">‹</button>
+            <button type="button" aria-label="Next image" onClick={() => setActive((active + 1) % slides.length)} className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/60 text-xl text-white hover:bg-black/80">›</button>
+          </>
+        ) : null}
+      </div>
+      {current.caption ? <div className="flex items-center justify-between gap-4 px-4 py-3"><p className="text-sm font-medium text-fg">{current.caption}</p><span className="shrink-0 text-xs text-muted">{active + 1} / {slides.length}</span></div> : slides.length > 1 ? <div className="px-4 py-2 text-right text-xs text-muted">{active + 1} / {slides.length}</div> : null}
+      {slides.length > 1 ? (
+        <div className="flex items-center justify-center gap-2 border-t border-line px-4 py-3" aria-label="Choose carousel image">
+          {slides.map((slide, index) => (
+            <button key={slide.imageUrl + index} type="button" aria-label={`Show image ${index + 1}`} aria-current={index === active ? "true" : undefined} onClick={() => setActive(index)} className={`h-2.5 rounded-full transition-all ${index === active ? "w-7 bg-accent" : "w-2.5 bg-line-strong hover:bg-muted"}`} />
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
