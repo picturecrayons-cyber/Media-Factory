@@ -9,7 +9,8 @@ import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
-import { assertPermission } from "./rbac";
+import { assertPermission, canMutateTitle } from "./rbac";
+import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import {
@@ -188,8 +189,11 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     try {
-      const rows = await sql<ConceptRow & { title_name: string }>`
-        select c.*, t.name as title_name
+      const rows = await sql<ConceptRow & { title_name: string; owner_submission_status: string; owner_submission_reason: string | null }>`
+        select c.*, t.name as title_name,
+          (select e.reason from bridge_owner_submission_events e
+           where e.title_id=c.title_id and e.action='REQUEST_CHANGES'
+           order by e.created_at desc limit 1) as owner_submission_reason
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
         where t.owner_user_id = ${actor.userId}
@@ -206,6 +210,8 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         concepts: rows.map((r) => ({
           ...mapConcept(r),
           titleName: r.title_name,
+          ownerSubmissionStatus: r.owner_submission_status,
+          ownerSubmissionReason: r.owner_submission_reason,
         })),
       };
     } catch (err) {
@@ -215,6 +221,53 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
       }
       throw err;
     }
+  });
+
+export const submitStoryConceptToSuperAdmin = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const title = await loadTitle(data.titleId);
+    if (!title || !canMutateTitle(actor, title, "title.update_own", "title.license")) {
+      throw new Error("Only the verified title owner or active Studio organization can submit this concept");
+    }
+    if (title.status !== "DRAFT") {
+      throw new Error("Story / Concept owner submission is available only while the title remains in DRAFT");
+    }
+    const sql = await getSql();
+    await sql.transaction(async (tx) => {
+      const rows = await tx<{ owner_submission_status: string }>`
+        select owner_submission_status
+        from bridge_story_concept_submissions
+        where title_id = ${title.id}
+        for update
+      `;
+      const current = rows[0]?.owner_submission_status;
+      if (!current || !["DRAFT", "NEEDS_CORRECTION"].includes(current)) {
+        throw new Error("This Story / Concept is already pending review or accepted into intake");
+      }
+      const action = current === "NEEDS_CORRECTION" ? "RESUBMITTED" : "SUBMITTED";
+      await tx`
+        update bridge_story_concept_submissions
+        set owner_submission_status = 'SUBMITTED', updated_at = now()
+        where title_id = ${title.id}
+      `;
+      await tx`
+        insert into bridge_owner_submission_events
+          (title_id, submission_kind, action, from_status, to_status, actor_user_id)
+        values (${title.id}, 'story_concept', ${action}, ${current}, 'SUBMITTED', ${actor.userId})
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: `story_concept.owner_submission_${action.toLowerCase()}`,
+        entityType: "bridge_title",
+        entityId: title.id,
+        metadata: { from: current, to: "SUBMITTED", titleStatus: title.status },
+      }, tx);
+    });
+    return { submitted: true as const };
   });
 
 export const listPendingStoryConcepts = createServerFn({ method: "GET" })
