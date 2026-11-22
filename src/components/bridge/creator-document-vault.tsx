@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { getBridgeSession } from "@/lib/bridge/session";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   confirmCreatorDocumentUpload,
@@ -28,6 +30,10 @@ function message(error: unknown) {
 
 export function CreatorDocumentVault() {
   const queryClient = useQueryClient();
+  const { user, isPending: userPending } = useCurrentUserState();
+  const sessionQ = useQuery({ queryKey: ["bridge-session", user?.id], queryFn: () => getBridgeSession(), enabled: !userPending && Boolean(user), retry: false });
+  const actor = sessionQ.data?.profile ?? null;
+  const scope = [actor?.userId ?? user?.id ?? "anonymous", actor?.accountType ?? "unresolved", actor?.organizationId ?? null];
   const [documentType, setDocumentType] = useState<DocumentType>("FINISHED_FILM_AGREEMENT");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedTitle, setSelectedTitle] = useState("");
@@ -36,18 +42,20 @@ export function CreatorDocumentVault() {
   const [errorText, setErrorText] = useState("");
 
   const documentsQ = useQuery({
-    queryKey: ["bridge-creator-documents"],
+    queryKey: ["bridge-creator-documents", ...scope],
     queryFn: () => listCreatorDocuments(),
     retry: 1,
+    enabled: Boolean(actor?.userId && actor.emailVerified),
   });
   const titlesQ = useQuery({
-    queryKey: ["bridge-titles-for-document-vault"],
+    queryKey: ["bridge-titles-for-document-vault", ...scope],
     queryFn: () => listTitles(),
     retry: 1,
+    enabled: Boolean(actor?.userId && actor.emailVerified),
   });
   const titles = useMemo(() => titlesQ.data?.titles ?? [], [titlesQ.data]);
   const evidenceQ = useQuery({
-    queryKey: ["bridge-title-document-evidence", selectedTitle],
+    queryKey: ["bridge-title-document-evidence", ...scope, selectedTitle],
     queryFn: () => listTitleDocumentEvidence({ data: { titleId: selectedTitle } }),
     enabled: Boolean(selectedTitle),
     retry: 1,
@@ -100,7 +108,7 @@ export function CreatorDocumentVault() {
       setNotice("Verified evidence linked to the selected title. Legal review remains separate.");
       setErrorText("");
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["bridge-title-document-evidence", selectedTitle] }),
+        queryClient.invalidateQueries({ queryKey: ["bridge-title-document-evidence", ...scope, selectedTitle] }),
         queryClient.invalidateQueries({ queryKey: ["title-document-evidence", selectedTitle] }),
         queryClient.invalidateQueries({ queryKey: ["title-workflow", selectedTitle] }),
       ]);
@@ -123,6 +131,9 @@ export function CreatorDocumentVault() {
       setErrorText(message(error));
     }
   }
+
+  if (userPending || sessionQ.isPending) return <p className="text-sm text-muted">Verifying account access…</p>;
+  if (sessionQ.isError || !actor?.emailVerified) return <p role="alert" className="text-sm text-muted">A verified Creator or Studio session is required to access private documents.</p>;
 
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6 space-y-5">
