@@ -8,7 +8,6 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 
-const EVIDENCE_BUCKET = "bridge-assets";
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
 const EVIDENCE_TYPES = [
   "FINISHED_FILM_AGREEMENT",
@@ -73,7 +72,6 @@ export const requestCreatorEvidenceUpload = createServerFn({ method: "POST" })
       key: storageKey,
       contentType: "application/pdf",
       expiresIn: 900,
-      bucket: EVIDENCE_BUCKET,
     });
     const sql = await getSql();
     await sql.transaction(async (tx) => {
@@ -132,11 +130,9 @@ export const confirmCreatorEvidenceUpload = createServerFn({ method: "POST" })
     if (!doc) throw new Error("Pending document upload not found");
     if (doc.status === "VERIFIED") return { verified: true };
     if (doc.status !== "PENDING_UPLOAD") throw new Error("This document upload is no longer active");
-    const { verifyObject } = await import("./oci-object-storage.server");
-    const object = await verifyObject(doc.storage_key, "application/pdf", EVIDENCE_BUCKET);
-    if (object.byteSize !== Number(doc.byte_size) || object.byteSize <= 0 || object.byteSize > MAX_PDF_BYTES) {
-      throw new Error("Uploaded PDF size does not match the selected file");
-    }
+    const { verifyPdfObject } = await import("./oci-object-storage.server");
+    const object = await verifyPdfObject(doc.storage_key, Number(doc.byte_size));
+    if (object.byteSize > MAX_PDF_BYTES) throw new Error("PDF exceeds the 20 MB limit");
     await sql.transaction(async (tx) => {
       await tx`
         update bridge_creator_documents
