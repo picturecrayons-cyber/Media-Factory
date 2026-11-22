@@ -291,9 +291,10 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           title={title}
           initial={ownerSubmissionQ.data?.submission?.details ?? null}
           submissionStatus={ownerSubmissionQ.data?.submission?.status ?? "DRAFT"}
+          submissionReason={ownerSubmissionQ.data?.submission?.reason ?? null}
           loading={ownerSubmissionQ.isPending}
           error={ownerSubmissionQ.error instanceof Error ? ownerSubmissionQ.error.message : null}
-          canEdit={canOperateOnTitle(actor, title, "title.update_own", "title.license") && ["DRAFT","UPLOADING","PREPARING"].includes(title.status)}
+          canEdit={canOperateOnTitle(actor, title, "title.update_own", "title.license") && ["DRAFT","UPLOADING","PREPARING"].includes(title.status) && ["DRAFT","NEEDS_CORRECTION"].includes(ownerSubmissionQ.data?.submission?.status ?? "DRAFT")}
           onSaved={() => ownerSubmissionQ.refetch()}
         />
       ) : activeTab === "Production" && !buyerView ? (
@@ -330,10 +331,10 @@ const EMPTY_OWNER_SUBMISSION: OwnerSubmissionValues = {
 
 function OwnerSubmissionPanel(props: {
   titleId: string; title: OwnerSubmissionTitle; initial: unknown;
-  submissionStatus: string; loading: boolean; error: string | null;
+  submissionStatus: string; submissionReason: string | null; loading: boolean; error: string | null;
   canEdit: boolean; onSaved: () => Promise<unknown> | unknown;
 }) {
-  const {titleId,title,initial,submissionStatus,loading,error,canEdit,onSaved}=props;
+  const {titleId,title,initial,submissionStatus,submissionReason,loading,error,canEdit,onSaved}=props;
   const [form,setForm]=useState<OwnerSubmissionValues>(()=>({
     ...EMPTY_OWNER_SUBMISSION,
     originalTitle:title.nameMl || title.name,
@@ -386,6 +387,9 @@ function OwnerSubmissionPanel(props: {
         <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{submissionStatus}</span>
       </header>
       {loading?<p className="text-sm text-muted">Loading saved owner details…</p>:null}
+      {submissionStatus === "NEEDS_CORRECTION" && submissionReason ? <p role="status" className="rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900">Super Admin requested changes: {submissionReason}</p> : null}
+      {submissionStatus === "SUBMITTED" ? <p className="rounded-lg border border-line p-3 text-sm">Submitted / Pending Review. Editing is locked while Super Admin reviews this package.</p> : null}
+      {submissionStatus === "ACCEPTED_INTAKE" ? <p className="rounded-lg border border-line p-3 text-sm">Accepted into intake. Technical QC, Rights & Legal and publication remain separate review gates.</p> : null}
       {error?<p role="alert" className="text-sm text-red-700">{error}</p>:null}
       <div className="space-y-3">
         <h3 className="font-semibold">Film identity & production</h3>
@@ -464,7 +468,7 @@ function OwnerSubmissionPanel(props: {
         </button>
         <button type="button" disabled={!canEdit||submit.isPending||save.isPending||loading} onClick={()=>submit.mutate()}
           className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50">
-          {submit.isPending?"Submitting…":"Submit details"}
+          {submit.isPending?"Submitting…":submissionStatus === "NEEDS_CORRECTION" ? "Resubmit to Super Admin" : "Submit to Super Admin"}
         </button>
       </div>
       {!canEdit?<p className="text-xs text-muted">Editing is locked after QC review begins. QC, Legal and publication remain separate gates.</p>:null}
