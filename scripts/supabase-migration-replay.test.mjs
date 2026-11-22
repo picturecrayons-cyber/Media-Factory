@@ -85,3 +85,10 @@ test("archive dependency scan validates required columns before dynamic SQL", ()
   assert.match(archiveMigration, /:missing/);
   assert.match(archiveMigration, /if cardinality\(blockers\) > 0 then\s+return blockers;/);
 });
+
+
+test("archive migration replaces the weaker lifecycle constraint with DRAFT-only state", () => {
+  assert.match(archiveMigration, /drop constraint if exists bridge_titles_archive_state_check/);
+  assert.match(archiveMigration, /previous_status = 'DRAFT'/);
+  assert.match(archiveMigration, /\) not valid;/);
+});
