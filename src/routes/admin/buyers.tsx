@@ -132,8 +132,9 @@ function organizationLabel(profile: {
   email: string;
   organizationName: string | null;
 }) {
+  if (BOOKMYSHOW_CONTACTS.has(profile.email.trim().toLowerCase())) return "BookMyShow";
   if (profile.organizationName?.trim()) return profile.organizationName.trim();
-  return BOOKMYSHOW_CONTACTS.has(profile.email.trim().toLowerCase()) ? "BookMyShow" : "";
+  return "";
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
