@@ -41,6 +41,13 @@ function InvestorBody({ userId }: { userId: string }) {
         <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Recorded capital</p><p className="mt-2 text-2xl font-semibold">₹{Math.round(totalCapital / 100).toLocaleString("en-IN")}</p></article>
       </section>
 
+      <section aria-labelledby="investor-gallery-heading" className="rounded-3xl border border-line bg-surface p-6">
+        <p className="text-xs font-semibold uppercase tracking-wider text-accent">Approved materials</p>
+        <h3 id="investor-gallery-heading" className="mt-1 font-display text-xl font-semibold">Investment Presentation Gallery</h3>
+        <p className="mt-2 text-sm leading-relaxed text-muted">Only investor-specific presentation assets explicitly assigned to this verified account may appear here. Title masters, buyer screeners and private production documents are not part of the investor gallery.</p>
+        <div className="mt-4 rounded-xl border border-dashed border-line p-4 text-sm text-muted">No investor presentation assets are currently assigned to this account. This gallery will remain empty until approved investor materials are provided through a separately authorized workflow.</div>
+      </section>
+
       <section className="rounded-3xl border border-line bg-surface p-6">
         <div className="flex items-end justify-between gap-3">
           <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Portfolio</p><h3 className="mt-1 font-display text-2xl font-semibold">Your investments</h3></div>
