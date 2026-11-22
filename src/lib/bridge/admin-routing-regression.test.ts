@@ -104,7 +104,7 @@ test("signup-selected account type is shown once and not re-selected during onbo
   assert.match(onboarding, /\{signupAccountType \? \(/);
   assert.match(onboarding, /Selected account type/);
   assert.match(onboarding, /Already selected during sign-up/);
-  assert.match(onboarding, /\) : \(\s*<label className="text-sm font-medium">Account type \*/);
+  assert.match(onboarding, /\) : \(\s*<select value=\{accountType\}/);
 });
 
 
