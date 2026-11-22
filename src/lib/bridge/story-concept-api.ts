@@ -230,7 +230,7 @@ export const submitStoryConceptToSuperAdmin = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
-    if (!title || !canMutateTitle(actor, title, "title.update_own", "title.license")) {
+    if (!title || actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType) || !canMutateTitle(actor, title, "title.update_own", "title.license")) {
       throw new Error("Only the verified title owner or active Studio organization can submit this concept");
     }
     if (title.status !== "DRAFT") {
@@ -287,7 +287,7 @@ export const updateStoryConceptOwnerDetails = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
-    if (!title || !canMutateTitle(actor, title, "title.update_own", "title.license")) {
+    if (!title || actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType) || !canMutateTitle(actor, title, "title.update_own", "title.license")) {
       throw new Error("Only the verified title owner or active Studio organization can edit this concept");
     }
     if (title.status !== "DRAFT") throw new Error("Story / Concept edits are locked after the title leaves DRAFT");
