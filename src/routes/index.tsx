@@ -117,10 +117,12 @@ function Home() {
                   </div>
                 </div>
                 <div ref={buyersTrackRef} role="region" aria-roledescription="carousel" aria-label="Buyer and distribution partners" className="mt-4 flex snap-x gap-3 overflow-x-auto scroll-smooth pb-2 text-left">
-                  <article className="flex min-w-[230px] snap-start items-center gap-4 rounded-2xl border border-line bg-surface px-5 py-4">
+                  <article className="flex min-w-[250px] snap-start items-center gap-4 rounded-2xl border border-line bg-surface px-5 py-4">
+                    <img src="https://crayonsloop.in/crayons-loop-logo.png" alt="Crayons Loop" loading="lazy" className="h-16 w-28 shrink-0 object-contain" />
                     <div>
-                      <p className="font-display text-2xl font-semibold tracking-tight text-fg">Crayons Loop</p>
-                      <p className="mt-1 text-xs text-muted">Consumer streaming destination · text reference only</p>
+                      <p className="font-display text-xl font-semibold tracking-tight text-fg">Crayons Loop</p>
+                      <p className="mt-1 text-xs text-muted">Consumer streaming destination</p>
+                      <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-accent underline">Visit Loop ↗</a>
                     </div>
                   </article>
                   <article className="flex min-w-[230px] snap-start items-center rounded-2xl border border-dashed border-line px-5 py-4">
