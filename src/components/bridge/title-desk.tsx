@@ -7,10 +7,10 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", ownerOnly = false }: { empty: string; query?: string; ownerOnly?: boolean }) {
   const titlesQ = useQuery({
-    queryKey: ["bridge-titles"],
-    queryFn: () => listTitles(),
+    queryKey: ownerOnly ? ["bridge-owner-titles"] : ["bridge-titles"],
+    queryFn: () => ownerOnly ? listTitleOwnerTitles() : listTitles(),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
