@@ -33,6 +33,10 @@ describe("draft archive policy", () => {
     }
   });
 
+  it("blocks archive when verified title documents are linked", () => {
+    assert.equal(canRemoveDraft({ ...cleanDraft, hasDocumentLinks: true }), false);
+  });
+
   it("keeps physical title deletion disabled", () => {
     assert.throws(() => rejectPermanentTitleDeletion(), {
       message: PERMANENT_TITLE_DELETION_DISABLED_MESSAGE,
