@@ -223,7 +223,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
         <p className="mt-1 text-xs text-muted">Upload the ownership proof and rights-transfer proof as two separate files under the ownership category.</p>
         <div className="mt-3 space-y-3">
           {UPLOADS.map((item) => (
-            <div key={item.type} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-bg p-3">
+            <div key={item.key} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-bg p-3">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">{item.label}</p>
                 <p className="mt-1 text-xs text-muted">{item.help}</p>
