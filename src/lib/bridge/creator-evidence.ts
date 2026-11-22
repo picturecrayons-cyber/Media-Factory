@@ -209,15 +209,15 @@ export const revokePendingCreatorEvidence = createServerFn({ method: "POST" })
   });
 
 const rightsDetailsSchema = z.object({
-  platforms: z.array(z.enum(["SVOD", "TVOD", "AVOD"])).min(1),
-  territory: z.string().min(2).max(300),
-  rightsStart: z.string().min(1).max(30),
-  rightsEnd: z.string().min(1).max(30),
-  rightsBasis: z.string().min(2).max(300),
-  signatoryName: z.string().min(2).max(160),
-  signatoryCapacity: z.string().min(2).max(160),
-  revenueShare: z.string().min(1).max(300),
-  paymentTerms: z.string().min(2).max(500),
+  platforms: z.array(z.enum(["SVOD", "TVOD", "AVOD"])),
+  territory: z.string().max(300),
+  rightsStart: z.string().max(30),
+  rightsEnd: z.string().max(30),
+  rightsBasis: z.string().max(300),
+  signatoryName: z.string().max(160),
+  signatoryCapacity: z.string().max(160),
+  revenueShare: z.string().max(300),
+  paymentTerms: z.string().max(500),
   ownerDeclaration: z.boolean(),
 });
 
@@ -265,6 +265,17 @@ export const submitCreatorRightsPackage = createServerFn({ method: "POST" })
     const { actor, title } = await requireCreatorOwner(context.userId, data.titleId);
     await assertEvidenceEditable(title.id, actor.userId, title.status);
     if (!data.details.ownerDeclaration) throw new Error("Confirm the Creator declaration before submitting.");
+    if (
+      data.details.platforms.length === 0 ||
+      !data.details.territory.trim() ||
+      !data.details.rightsStart ||
+      !data.details.rightsEnd ||
+      !data.details.rightsBasis.trim() ||
+      !data.details.signatoryName.trim() ||
+      !data.details.signatoryCapacity.trim() ||
+      !data.details.revenueShare.trim() ||
+      !data.details.paymentTerms.trim()
+    ) throw new Error("Complete all rights scope, signatory and commercial-term inputs before submitting.");
     const sql = await getSql();
     const required = await sql<{ document_type: string }>`
       select distinct d.document_type
