@@ -112,20 +112,31 @@ export const saveTitleOwnerSubmission = createServerFn({method:"POST"})
     const title=await ownerScope(actor,data.titleId);
     const sql=await getSql();
     const id=randomBytes(16).toString("hex");
-    await sql `
-      insert into bridge_title_owner_submissions
-        (id,title_id,owner_user_id,owner_organization_id,details,submission_status,updated_by)
-      values
-        (${id},${title.id},${title.ownerUserId},${title.ownerOrganizationId??null},${JSON.stringify(data.details)}::jsonb,'DRAFT',${actor.userId})
-      on conflict (title_id) do update set
-        details=excluded.details,
-        submission_status='DRAFT',
-        submitted_at=null,
-        submitted_by=null,
-        updated_by=excluded.updated_by,
-        updated_at=now()
-    `;
-    await writeAudit({actorUserId:actor.userId,action:"title.owner_submission_saved",entityType:"bridge_title",entityId:title.id});
+    await sql.transaction(async (tx) => {
+      const existing=await tx<{submission_status:string}>`
+        select submission_status from bridge_title_owner_submissions
+        where title_id=${title.id} for update
+      `;
+      const current=existing[0]?.submission_status;
+      if(current && !["DRAFT","NEEDS_CORRECTION"].includes(current)) {
+        throw new Error("Submission details are locked while pending review or after intake acceptance");
+      }
+      const nextStatus=current==="NEEDS_CORRECTION"?"NEEDS_CORRECTION":"DRAFT";
+      await tx `
+        insert into bridge_title_owner_submissions
+          (id,title_id,owner_user_id,owner_organization_id,details,submission_status,updated_by)
+        values
+          (${id},${title.id},${title.ownerUserId},${title.ownerOrganizationId??null},${JSON.stringify(data.details)}::jsonb,${nextStatus},${actor.userId})
+        on conflict (title_id) do update set
+          details=excluded.details,
+          submission_status=${nextStatus},
+          submitted_at=null,
+          submitted_by=null,
+          updated_by=excluded.updated_by,
+          updated_at=now()
+      `;
+      await writeAudit({actorUserId:actor.userId,action:"title.owner_submission_saved",entityType:"bridge_title",entityId:title.id,metadata:{submissionStatus:nextStatus}},tx);
+    });
     return {saved:true as const};
   });
 
