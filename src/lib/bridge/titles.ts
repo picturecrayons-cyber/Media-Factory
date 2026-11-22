@@ -719,3 +719,104 @@ export const listAuditLogs = createServerFn({ method: "GET" })
       })),
     };
   });
+
+
+export const archiveDraftTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8), reason: z.string().trim().min(3).max(2000) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    await sql.transaction(async (tx) => {
+      const rows = await tx<{ id:string; slug:string; status:string; owner_user_id:string; owner_account_type:string; owner_organization_id:string|null; archived_at:string|Date|null; master_key:string|null; poster_key:string|null }>`
+        select id,slug,status,owner_user_id,owner_account_type,owner_organization_id,archived_at,master_key,poster_key
+        from bridge_titles where id=${data.titleId} for update
+      `;
+      const title=rows[0];
+      if(!title) throw new Error("Title not found");
+      if(["jananam-1947-pranayam-thudarunnu","jananam-1947-pranayam-thudarunnu-7"].includes(title.slug)) throw new Error("Protected title cannot be archived");
+      if(title.status!=="DRAFT" || title.archived_at) throw new Error("Only an active DRAFT can be archived");
+      if(actor.internalRole!=="super_admin") {
+        if(actor.internalRole || !["independent_creator","studio"].includes(actor.accountType)) throw new Error("Owner or Super Admin access required");
+        const direct=title.owner_user_id===actor.userId;
+        const studio=title.owner_account_type==="studio" && title.owner_organization_id===actor.organizationId;
+        if(!direct && !studio) throw new Error("You cannot archive another owner's title");
+        if(studio) {
+          const membership=await tx<{active:boolean}>`
+            select exists(select 1 from bridge_organization_memberships
+              where organization_id=${title.owner_organization_id} and user_id=${actor.userId} and status='active') as active
+          `;
+          if(!membership[0]?.active) throw new Error("Active Studio membership required");
+        }
+      }
+      if(title.master_key || title.poster_key) throw new Error("Archive blocked: master or poster asset exists");
+      const dependency=await tx<{blockers:string[]}>`select public.bridge_title_archive_dependency_blockers(${title.id}) as blockers`;
+      const blockers=dependency[0]?.blockers ?? ["dependency inventory unavailable"];
+      if(blockers.length) throw new Error("Archive blocked by linked records or incomplete schema: "+blockers.join(", "));
+      const reason=data.reason.trim();
+      await tx`
+        update bridge_titles set archived_at=now(),archived_by=${actor.userId},
+          archive_reason=${reason},previous_status=status,updated_at=now()
+        where id=${title.id} and status='DRAFT' and archived_at is null
+      `;
+      await tx`
+        insert into bridge_title_archive_events(title_id,action,actor_user_id,actor_role,organization_id,previous_state,new_state,reason)
+        values(${title.id},'ARCHIVED',${actor.userId},${actor.internalRole ?? actor.accountType},
+          ${actor.organizationId ?? null},'{"status":"DRAFT","archived":false}'::jsonb,
+          ${JSON.stringify({status:"DRAFT",archived:true,reason})}::jsonb,${reason})
+      `;
+      await writeAudit({actorUserId:actor.userId,action:"title.archive",entityType:"bridge_title",entityId:title.id,metadata:{previousStatus:"DRAFT",reason,reversible:true}},tx);
+    });
+    return {archived:true as const};
+  });
+
+export const restoreArchivedDraftTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8), reason: z.string().trim().min(3).max(2000) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    const sql=await getSql();
+    await sql.transaction(async(tx)=>{
+      const rows=await tx<{id:string;slug:string;status:string;previous_status:string|null;owner_user_id:string;owner_account_type:string;owner_organization_id:string|null;archived_at:string|Date|null;master_key:string|null;poster_key:string|null}>`
+        select id,slug,status,previous_status,owner_user_id,owner_account_type,owner_organization_id,archived_at,master_key,poster_key
+        from bridge_titles where id=${data.titleId} for update
+      `;
+      const title=rows[0];
+      if(!title || !title.archived_at) throw new Error("Archived title not found");
+      if(["jananam-1947-pranayam-thudarunnu","jananam-1947-pranayam-thudarunnu-7"].includes(title.slug)) throw new Error("Protected title cannot be restored");
+      if(title.status!=="DRAFT" || title.previous_status!=="DRAFT") throw new Error("Only an archived DRAFT can be restored");
+      if(actor.internalRole!=="super_admin") {
+        if(actor.internalRole || !["independent_creator","studio"].includes(actor.accountType)) throw new Error("Owner or Super Admin access required");
+        const direct=title.owner_user_id===actor.userId;
+        const studio=title.owner_account_type==="studio" && title.owner_organization_id===actor.organizationId;
+        if(!direct && !studio) throw new Error("You cannot restore another owner's title");
+        if(studio) {
+          const membership=await tx<{active:boolean}>`
+            select exists(select 1 from bridge_organization_memberships
+              where organization_id=${title.owner_organization_id} and user_id=${actor.userId} and status='active') as active
+          `;
+          if(!membership[0]?.active) throw new Error("Active Studio membership required");
+        }
+      }
+      if(title.master_key || title.poster_key) throw new Error("Restore blocked: master or poster asset exists");
+      const dependency=await tx<{blockers:string[]}>`select public.bridge_title_archive_dependency_blockers(${title.id}) as blockers`;
+      const blockers=dependency[0]?.blockers ?? ["dependency inventory unavailable"];
+      if(blockers.length) throw new Error("Restore blocked by linked records or incomplete schema: "+blockers.join(", "));
+      const reason=data.reason.trim();
+      await tx`
+        update bridge_titles set archived_at=null,archived_by=null,archive_reason=null,
+          status=previous_status,previous_status=null,updated_at=now()
+        where id=${title.id} and archived_at is not null and previous_status='DRAFT'
+      `;
+      await tx`
+        insert into bridge_title_archive_events(title_id,action,actor_user_id,actor_role,organization_id,previous_state,new_state,reason)
+        values(${title.id},'RESTORED',${actor.userId},${actor.internalRole ?? actor.accountType},
+          ${actor.organizationId ?? null},'{"status":"DRAFT","archived":true}'::jsonb,
+          '{"status":"DRAFT","archived":false}'::jsonb,${reason})
+      `;
+      await writeAudit({actorUserId:actor.userId,action:"title.restore",entityType:"bridge_title",entityId:title.id,metadata:{previousStatus:"DRAFT",reason,reversible:true}},tx);
+    });
+    return {restored:true as const};
+  });
