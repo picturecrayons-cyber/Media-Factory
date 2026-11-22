@@ -518,12 +518,12 @@ test("service request migration enforces immutable history and server-synchroniz
       "insert into public.bridge_service_orders(id,quote_id,status) values ($1,$2,'PAYMENT_PENDING')",
       [orderId, quoteId],
     );
-    const awaiting = await db.query("select status,order_id from public.bridge_service_requests where id=$1", [requestId]);
+    const awaiting = await db.query<{ status: string; order_id: string }>("select status,order_id from public.bridge_service_requests where id=$1", [requestId]);
     assert.equal(awaiting.rows[0].status, "AWAITING_PAYMENT");
     assert.equal(awaiting.rows[0].order_id, orderId);
 
     await db.query("update public.bridge_service_orders set status='PAID' where id=$1", [orderId]);
-    const paid = await db.query("select status from public.bridge_service_requests where id=$1", [requestId]);
+    const paid = await db.query<{ status: string }>("select status from public.bridge_service_requests where id=$1", [requestId]);
     assert.equal(paid.rows[0].status, "PAID");
     await assert.rejects(
       db.query("update public.bridge_service_requests set status='COMPLETED' where id=$1", [requestId]),
