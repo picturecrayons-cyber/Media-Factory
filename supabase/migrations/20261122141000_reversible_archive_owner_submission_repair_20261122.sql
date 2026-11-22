@@ -76,7 +76,8 @@ create index if not exists bridge_title_archive_events_title_created_idx
 
 alter table public.bridge_title_archive_events enable row level security;
 revoke all on table public.bridge_title_archive_events from public, anon, authenticated;
-grant all on table public.bridge_title_archive_events to postgres, service_role;
+grant select, insert on table public.bridge_title_archive_events to service_role;
+grant usage, select on sequence public.bridge_title_archive_events_id_seq to service_role;
 
 create or replace function public.bridge_reject_title_archive_event_mutation()
 returns trigger language plpgsql set search_path=public,pg_temp as $$
