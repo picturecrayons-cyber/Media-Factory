@@ -49,6 +49,21 @@ test("sealing failure never advances loop_media_migration_queue to UPLOADED or V
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0010_bridge_prd_phase1.sql"), "utf8"));
+    await db.exec(`
+      alter table public.bridge_assets
+        add column if not exists sha256 text,
+        add column if not exists asset_version_id uuid,
+        add column if not exists checksum_sha256 text,
+        add column if not exists source_object_key text,
+        add column if not exists verified_object_key text,
+        add column if not exists storage_provider text,
+        add column if not exists storage_bucket text,
+        add column if not exists storage_namespace text,
+        add column if not exists storage_region text,
+        add column if not exists storage_endpoint text,
+        add column if not exists storage_verified_at timestamptz;
+    `);
 
     // Set up loop_media_migration_queue table as used in bridge
     await db.exec(`
@@ -143,7 +158,12 @@ test("atomic state transition: migration queue and title master/poster only adva
       kind: "screener",
       byteSize: 52428800,
       contentType: "video/mp4",
-      checksum: "sealed-etag-abc",
+      checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      etag: "test-etag",
+      storageBucket: "test-bucket",
+      storageNamespace: "test-namespace",
+      storageRegion: "ap-mumbai-1",
+      storageEndpoint: "https://objectstorage.ap-mumbai-1.oraclecloud.com",
       sourceKey: "bridge/owner-1/title-pass-test/screener/raw.mp4",
       sealedKey,
     });
@@ -197,11 +217,16 @@ test("atomic state transition: migration queue and title master/poster only adva
       kind: "screener",
       byteSize: 52428800,
       contentType: "video/mp4",
-      checksum: "sealed-etag-abc",
+      checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      etag: "test-etag",
+      storageBucket: "test-bucket",
+      storageNamespace: "test-namespace",
+      storageRegion: "ap-mumbai-1",
+      storageEndpoint: "https://objectstorage.ap-mumbai-1.oraclecloud.com",
       sourceKey: "bridge/owner-1/title-pass-test/screener/raw.mp4",
       sealedKey,
     });
-    assert.equal(secondAttempt, false);
+    assert.equal(secondAttempt, true);
   } finally {
     await db.close();
   }
@@ -210,7 +235,7 @@ test("atomic state transition: migration queue and title master/poster only adva
 
 test("duplicate upload confirmations derive the same sealed key from the asset row ID", () => {
   const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
-  assert.ok(assets.includes('const sealedKey = `${asset.s3_key}.verified/${asset.id}`;'));
+  assert.ok(assets.includes('const sealedKey = asset.verified_object_key || `${sourceKey}.verified/${asset.id}`;'));
   assert.doesNotMatch(assets, /randomUUID/);
 });
 
