@@ -80,7 +80,7 @@ function Studio() {
               <div className="rounded-sm border border-line p-4 sm:p-5">
                 <h4 className="font-semibold">Story concepts</h4>
                 <p className="mb-3 mt-1 text-sm text-muted">Concepts remain in their own review workflow and are not treated as finished films.</p>
-                <MyStoryConcepts />
+                <MyStoryConcepts userId={actor.userId} />
               </div>
             </section>
 
@@ -102,7 +102,7 @@ function Studio() {
                 <p className="mt-1 text-sm text-muted">Upload once, verify private storage, then link evidence to an eligible title. Uploading or linking a file does not approve rights or publish a title.</p>
               </div>
               <div className="rounded-sm border border-line p-4 sm:p-5">
-                <CreatorDocumentVault />
+                <CreatorDocumentVault userId={actor.userId} />
               </div>
             </section>
 
