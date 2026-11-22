@@ -82,7 +82,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
     // All records for a submission commit or roll back together. The declaration
     // and evidence type are intake metadata only; the actual private agreement
     // must still be uploaded and independently reviewed before Rights approval.
-    const rightsRows = await sql.transaction(async (tx) => {
+    await sql.transaction(async (tx) => {
       await tx`
         insert into bridge_titles (
           id, slug, name, original_title, owner_user_id, owner_account_type,
