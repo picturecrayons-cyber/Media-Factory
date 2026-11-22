@@ -12,6 +12,7 @@ export type DraftRemovalFacts = {
   hasRightsGrant: boolean;
   hasPayment: boolean;
   hasSubmission: boolean;
+  hasDocumentLinks?: boolean;
 };
 
 export function canRemoveDraft(facts: DraftRemovalFacts): boolean {
@@ -21,7 +22,8 @@ export function canRemoveDraft(facts: DraftRemovalFacts): boolean {
     !facts.hasLegalCase &&
     !facts.hasRightsGrant &&
     !facts.hasPayment &&
-    !facts.hasSubmission;
+    !facts.hasSubmission &&
+    !facts.hasDocumentLinks;
 }
 
 export function rejectPermanentTitleDeletion(): never {
