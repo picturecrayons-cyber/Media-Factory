@@ -279,6 +279,7 @@ const rightsDetailsSchema = z.object({
   signatoryCapacity: z.string().max(160),
   revenueShare: z.string().max(300),
   paymentTerms: z.string().max(500),
+  paymentMethod: z.string().max(200),
   ownerDeclaration: z.boolean(),
 });
 
@@ -340,7 +341,8 @@ export const submitTitleOwnerRightsPackage = createServerFn({ method: "POST" })
       !data.details.signatoryName.trim() ||
       !data.details.signatoryCapacity.trim() ||
       !data.details.revenueShare.trim() ||
-      !data.details.paymentTerms.trim()
+      !data.details.paymentTerms.trim() ||
+      !data.details.paymentMethod.trim()
     ) throw new Error("Complete all rights scope, signatory and commercial-term inputs before submitting.");
     const sql = await getSql();
     const required = await sql<{ document_type: string }>`
