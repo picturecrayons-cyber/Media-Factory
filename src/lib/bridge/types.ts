@@ -54,6 +54,8 @@ export type BridgeTitle = {
   posterKey: string | null;
   masterKey: string | null;
   contentType: string;
+  /** Separates Finished Film records from Story / Concept submissions. */
+  submissionType?: "finished_film" | "story_concept" | null;
   countryOfOrigin: string | null;
   releaseDate: string | null;
   credits: Array<{ role: string; name: string }>;
