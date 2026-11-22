@@ -4,7 +4,7 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
-import { requireVerifiedActor } from "./session";
+import { requireVerifiedActor, type BridgeActor } from "./session";
 import { loadTitle } from "./titles";
 import { canMutateTitle, canReadTitle } from "./rbac";
 import { writeAudit } from "./audit";
@@ -20,11 +20,11 @@ const detailsSchema = z.object({
   productionCompany: z.string().trim().max(200).optional(),
   completionDate: z.string().trim().max(40).optional(),
   masterVersion: z.string().trim().max(120).optional(),
-  resolution: z.enum(["SD","HD","2K","4K","6K","8K","OTHER"]).optional(),
+  resolution: z.union([z.enum(["SD","HD","2K","4K","6K","8K","OTHER"]),z.literal("")]).optional(),
   codec: z.string().trim().max(80).optional(),
   masterLanguage: z.string().trim().max(40).optional(),
   subtitleLanguages: z.array(z.string().trim().min(2).max(40)).max(20).optional(),
-  rightsBasis: z.enum(["OWNER","EXCLUSIVE_LICENSEE","AUTHORIZED_DISTRIBUTOR","PRODUCER_AUTHORITY"]).optional(),
+  rightsBasis: z.union([z.enum(["OWNER","EXCLUSIVE_LICENSEE","AUTHORIZED_DISTRIBUTOR","PRODUCER_AUTHORITY"]),z.literal("")]).optional(),
   territories: z.array(z.string().trim().min(2).max(80)).max(250).optional(),
   rightsLanguages: z.array(z.string().trim().min(2).max(40)).max(20).optional(),
   media: z.array(z.string().trim().min(2).max(40)).max(20).optional(),
@@ -72,7 +72,7 @@ function completeDetails(value: z.infer<typeof detailsSchema>) {
   }
 }
 
-async function ownerScope(actor: {userId:string; accountType:string; internalRole?:string|null; organizationId?:string|null}, titleId: string) {
+async function ownerScope(actor: BridgeActor, titleId: string) {
   const title = await loadTitle(titleId);
   if (!title) throw new Error("Title not found");
   if (actor.internalRole || !["independent_creator","studio"].includes(actor.accountType) || !canMutateTitle(actor, title, "title.update_own", "title.license")) {
@@ -101,7 +101,14 @@ export const getTitleOwnerSubmission = createServerFn({method:"GET"})
       from bridge_title_owner_submissions s where s.title_id=${title.id} limit 1
     `;
     const row=rows[0];
-    return {submission:row?{details:row.details, status:row.submission_status,updatedAt:row.updated_at,submittedAt:row.submitted_at,submittedBy:row.submitted_by,reason:row.latest_reason}:null};
+    return {submission:row?{
+      details:detailsSchema.parse(row.details),
+      status:row.submission_status,
+      updatedAt:row.updated_at ? new Date(row.updated_at).toISOString() : null,
+      submittedAt:row.submitted_at ? new Date(row.submitted_at).toISOString() : null,
+      submittedBy:row.submitted_by,
+      reason:row.latest_reason,
+    }:null};
   });
 
 export const saveTitleOwnerSubmission = createServerFn({method:"POST"})
