@@ -41,6 +41,14 @@ function InvestorBody({ userId }: { userId: string }) {
         <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Recorded capital</p><p className="mt-2 text-2xl font-semibold">₹{Math.round(totalCapital / 100).toLocaleString("en-IN")}</p></article>
       </section>
 
+      <section aria-labelledby="investor-payment-heading" className="rounded-3xl border border-line bg-surface p-6">
+        <p className="text-xs font-semibold uppercase tracking-wider text-accent">Payment readiness</p>
+        <h3 id="investor-payment-heading" className="mt-1 font-display text-xl font-semibold">Investment offer & payment</h3>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">Investor payments are separate from Buyer licensing payments. A Razorpay order may be created only against a specific Super Admin-approved investment offer, verified investor identity, disclosed amount and currency, and counsel-approved offer documents. Payment does not itself create equity, ownership, participation or a return guarantee.</p>
+        <div className="mt-4 rounded-xl border border-dashed border-line p-4 text-sm text-muted">Checkout is not enabled yet. No investment amount has been requested or charged. Request an approved offer and its legal documents before payment activation.</div>
+        <Link to="/contact" className="mt-4 inline-flex text-sm font-semibold text-accent underline">Request investment offer documents →</Link>
+      </section>
+
       <section aria-labelledby="investor-gallery-heading" className="rounded-3xl border border-line bg-surface p-6">
         <p className="text-xs font-semibold uppercase tracking-wider text-accent">Approved materials</p>
         <h3 id="investor-gallery-heading" className="mt-1 font-display text-xl font-semibold">Investment Presentation Gallery</h3>
