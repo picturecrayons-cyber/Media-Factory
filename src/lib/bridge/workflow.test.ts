@@ -104,8 +104,19 @@ async function fixture() {
       authorization_confirmed boolean not null default false
     );
     create table bridge_rights_grants(
-      id uuid primary key default gen_random_uuid(),title_id text,evidence jsonb not null default '[]',
-      status text not null default 'DRAFT',created_at timestamptz not null default now()
+      id uuid primary key default gen_random_uuid(),
+      title_id text,
+      grant_type text not null default 'DISTRIBUTION',
+      territories jsonb not null default '[]'::jsonb,
+      languages jsonb not null default '[]'::jsonb,
+      media jsonb not null default '[]'::jsonb,
+      window_start timestamptz,
+      window_end timestamptz,
+      exclusivity text,
+      evidence jsonb not null default '[]'::jsonb,
+      status text not null default 'DRAFT',
+      created_by text,
+      created_at timestamptz not null default now()
     );
     create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);
     create table bridge_profiles(
