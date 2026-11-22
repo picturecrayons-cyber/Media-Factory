@@ -58,7 +58,7 @@ function AdminBody({ actor }: { actor: any }) {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-accent">Crayons Pictures · Operations</p>
             <h2 className="mt-1 font-display text-2xl font-semibold">Good overview. Clear next steps.</h2>
-            <p className="mt-1 max-w-2xl text-sm text-muted">Review titles, complete QC and rights checks, and authorize delivery only when required gates pass.</p>
+            <p className="mt-1 max-w-2xl text-sm text-muted">Manage rights, licensing and distribution authorization across independent Buyers and approved destinations. Crayons Loop is one consumer streaming destination—not the entire Bridge market.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <a href="/admin/workstations" aria-label="Open workspace"><Button>Open workspace</Button></a>
