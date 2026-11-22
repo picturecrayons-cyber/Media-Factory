@@ -8,6 +8,10 @@ const replayScript = fileURLToPath(
   new URL("./supabase-migration-replay.mjs", import.meta.url),
 );
 const replaySource = readFileSync(replayScript, "utf8");
+const archiveMigration = readFileSync(
+  new URL("../supabase/migrations/20261122180000_bridge_archive_fail_closed_contract.sql", import.meta.url),
+  "utf8",
+);
 
 test("local replay restores Production Bridge RLS on every public Bridge table", () => {
   assert.match(replaySource, /substring\(c\.relname from 1 for 7\) = 'bridge_'/);
@@ -62,12 +66,22 @@ for (const [label, databaseUrl] of rejectedTargets) {
 }
 
 
-test("Testing-only archive migration is explicitly excluded from the Production ledger replay", () => {
+test("Non-Production archive migration is explicitly excluded from the Production ledger replay", () => {
   assert.match(replaySource, /const EXPECTED_PRODUCTION_MIGRATIONS = 70;/);
   assert.match(
     replaySource,
-    /const TESTING_ONLY_MIGRATIONS = new Set\(\[\s*"20261122180000_bridge_archive_fail_closed_contract\.sql"/,
+    /const NON_PRODUCTION_MIGRATIONS = new Set\(\[\s*"20261122180000_bridge_archive_fail_closed_contract\.sql"/,
   );
   assert.match(replaySource, /const names = allNames\.filter/);
   assert.match(replaySource, /manifestRows.size !== EXPECTED_PRODUCTION_MIGRATIONS/);
+});
+
+
+test("archive dependency scan validates required columns before dynamic SQL", () => {
+  assert.match(archiveMigration, /information_schema\.columns/);
+  assert.match(archiveMigration, /bridge_delivery_jobs','title_id/);
+  assert.match(archiveMigration, /bridge_loop_publications','bridge_title_id/);
+  assert.match(archiveMigration, /bridge_title_events','from_status/);
+  assert.match(archiveMigration, /:missing/);
+  assert.match(archiveMigration, /if cardinality\(blockers\) > 0 then\s+return blockers;/);
 });
