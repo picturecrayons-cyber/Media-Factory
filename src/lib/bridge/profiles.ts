@@ -542,6 +542,9 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "users.invite_internal");
+    if (data.role === "super_admin") {
+      throw new Error("Super Admin is a reserved owner-level assignment and cannot be granted by invitation");
+    }
     if (!canGrantInternalRole(actor, data.role)) {
       throw new Error("Role grant is not permitted");
     }
