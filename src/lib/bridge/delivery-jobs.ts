@@ -252,7 +252,9 @@ async function getFinalDeliveryReadiness(sql: Sql, titleId: string) {
     qc_ok: boolean;
     legal_ok: boolean;
     rights_ok: boolean;
+    ott_ready: boolean;
     packaging_complete: boolean;
+    curation_approved: boolean;
     delivery_ready: boolean;
   }>`
     select
@@ -303,7 +305,9 @@ async function getFinalDeliveryReadiness(sql: Sql, titleId: string) {
     qcPassedForCurrentAssets: row.qc_ok,
     legalApproved: row.legal_ok,
     rightsGrantValid: row.rights_ok,
+    ottPreparationReady: row.ott_ready,
     packagingComplete: row.packaging_complete,
+    curationApproved: row.curation_approved,
     finalDeliveryGateReady: row.delivery_ready,
   });
   return gate;
