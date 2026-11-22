@@ -168,7 +168,6 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
   const [synopsis, setSynopsis] = useState("");
   const [language, setLanguage] = useState("Malayalam");
   const [contentType, setContentType] = useState("Film");
-  const [loopDistributionPreference, setLoopDistributionPreference] = useState<"NOT_DECIDED" | "CONSIDER_LOOP" | "NOT_FOR_LOOP">("NOT_DECIDED");
   const [country, setCountry] = useState("India");
   const [releaseDate, setReleaseDate] = useState("");
   const [runtimeMinutes, setRuntimeMinutes] = useState("");
@@ -189,7 +188,6 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
         runtimeMinutes: runtimeMinutes ? Number(runtimeMinutes) : undefined,
         licensingFeePaise: fee ? Math.round(Number(fee) * 100) : undefined,
         contentType,
-        loopDistributionPreference,
         countryOfOrigin: country || undefined,
         releaseDate: releaseDate || undefined,
         director: director.trim() || undefined,
@@ -258,12 +256,6 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
             <label className="text-sm">Cast<textarea maxLength={4000} value={cast} onChange={(e) => setCast(e.target.value)} rows={2} placeholder="Separate names with commas" className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2 text-sm" /></label>
             <label className="text-sm sm:col-span-2">Synopsis<textarea maxLength={4000} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} rows={3} placeholder="Optional at draft creation; required before review submission" className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2 text-sm" /></label>
             <label className="text-sm">Licensing fee (INR)<input type="number" min={0} max={20000000} step="0.01" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="Optional" className={fieldClass} /></label>
-            <label className="text-sm sm:col-span-2">Loop distribution preference
-              <select value={loopDistributionPreference} onChange={(e) => setLoopDistributionPreference(e.target.value as typeof loopDistributionPreference)} className={fieldClass}>
-                <option value="NOT_DECIDED">Not decided yet</option><option value="CONSIDER_LOOP">Consider for Crayons Loop</option><option value="NOT_FOR_LOOP">Do not consider for Loop</option>
-              </select>
-              <span className="mt-1 block text-xs text-muted">Preference only. Does not publish or authorize distribution.</span>
-            </label>
           </div>
         ) : null}
       </div>
