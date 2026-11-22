@@ -33,6 +33,7 @@ function DashboardBody() {
     queryKey: ["bridge-dashboard-session"],
     queryFn: () => getDashboardSession(),
     retry: false,
+    staleTime: 30_000,
   });
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
