@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
-import { getTitleOwnerSubmission, saveTitleOwnerSubmission, submitTitleOwnerDetails } from "@/lib/bridge/title-owner-submissions";
+import { getTitleOwnerSubmission, saveTitleOwnerSubmission, submitTitleOwnerDetails, withdrawOwnerSubmission } from "@/lib/bridge/title-owner-submissions";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   abortAssetMultipart,
@@ -295,6 +295,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           loading={ownerSubmissionQ.isPending}
           error={ownerSubmissionQ.error instanceof Error ? ownerSubmissionQ.error.message : null}
           canEdit={!actor.internalRole && canOperateOnTitle(actor, title, "title.update_own", "title.license") && ["DRAFT","UPLOADING","PREPARING"].includes(title.status) && ["DRAFT","NEEDS_CORRECTION"].includes(ownerSubmissionQ.data?.submission?.status ?? "DRAFT")}
+          canWithdraw={!actor.internalRole && ["independent_creator","studio"].includes(actor.accountType) && canOperateOnTitle(actor, title, "title.update_own", "title.license")}
           onSaved={() => ownerSubmissionQ.refetch()}
         />
       ) : activeTab === "Production" && !buyerView ? (
@@ -333,9 +334,9 @@ const EMPTY_OWNER_SUBMISSION: OwnerSubmissionValues = {
 function OwnerSubmissionPanel(props: {
   titleId: string; title: OwnerSubmissionTitle; initial: unknown;
   submissionStatus: string; submissionReason: string | null; loading: boolean; error: string | null;
-  canEdit: boolean; onSaved: () => Promise<unknown> | unknown;
+  canEdit: boolean; canWithdraw: boolean; onSaved: () => Promise<unknown> | unknown;
 }) {
-  const {titleId,title,initial,submissionStatus,submissionReason,loading,error,canEdit,onSaved}=props;
+  const {titleId,title,initial,submissionStatus,submissionReason,loading,error,canEdit,canWithdraw,onSaved}=props;
   const [form,setForm]=useState<OwnerSubmissionValues>(()=>({
     ...EMPTY_OWNER_SUBMISSION,
     originalTitle:title.nameMl || title.name,
@@ -361,6 +362,12 @@ function OwnerSubmissionPanel(props: {
     mutationFn:()=>submitTitleOwnerDetails({data:{titleId}}),
     onSuccess:async()=>{setNotice("Owner details submitted. QC and Legal review remain separate.");setErrorText("");await onSaved();},
     onError:(e)=>{setErrorText(e instanceof Error?e.message:"Could not submit owner details.");setNotice("");}
+  });
+  const [withdrawReason,setWithdrawReason]=useState("");
+  const withdraw=useMutation({
+    mutationFn:()=>withdrawOwnerSubmission({data:{titleId,submissionKind:"finished_film",reason:withdrawReason}}),
+    onSuccess:async()=>{setNotice("Pending submission withdrawn. Its audit history has been retained.");setErrorText("");setWithdrawReason("");await onSaved();},
+    onError:(e)=>{setErrorText(e instanceof Error?e.message:"Could not withdraw submission.");setNotice("");}
   });
   const update=(key:keyof OwnerSubmissionValues,value:unknown)=>setForm(old=>({...old,[key]:value}) as OwnerSubmissionValues);
   const inputClass="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2 text-sm";
@@ -472,6 +479,24 @@ function OwnerSubmissionPanel(props: {
           {submit.isPending?"Submitting…":submissionStatus === "NEEDS_CORRECTION" ? "Resubmit to Super Admin" : "Submit to Super Admin"}
         </button>
       </div>
+
+      {canWithdraw && submissionStatus === "SUBMITTED" ? (
+        <div className="rounded-xl border border-line p-4 space-y-3">
+          <div>
+            <h3 className="font-semibold">Withdraw pending submission</h3>
+            <p className="mt-1 text-xs text-muted">Only a pending submission can be withdrawn. Its audit history is retained; no hard deletion occurs.</p>
+          </div>
+          <label className="block text-sm">Withdrawal reason
+            <textarea value={withdrawReason} onChange={e=>setWithdrawReason(e.target.value)} minLength={3} maxLength={2000} required rows={3}
+              className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2"
+              placeholder="Enter a reason (3–2000 characters)" />
+          </label>
+          <button type="button" disabled={withdraw.isPending||loading||withdrawReason.trim().length<3} onClick={()=>withdraw.mutate()}
+            className="rounded-full border border-line-strong px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
+            {withdraw.isPending ? "Withdrawing…" : "Withdraw Submission"}
+          </button>
+        </div>
+      ) : null}
       {!canEdit?<p className="text-xs text-muted">Editing is locked after QC review begins. QC, Legal and publication remain separate gates.</p>:null}
     </section>
   );
