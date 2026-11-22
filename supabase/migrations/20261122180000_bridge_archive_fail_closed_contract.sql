@@ -7,23 +7,19 @@ alter table public.bridge_titles
   add column if not exists archive_reason text,
   add column if not exists previous_status text;
 
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid='public.bridge_titles'::regclass
-      and conname='bridge_titles_archive_state_check'
-  ) then
-    alter table public.bridge_titles
-      add constraint bridge_titles_archive_state_check
-      check (
-        (archived_at is null and archived_by is null and archive_reason is null and previous_status is null)
-        or (archived_at is not null and archived_by is not null
-            and length(btrim(archive_reason)) between 3 and 2000
-            and previous_status = 'DRAFT')
-      ) not valid;
-  end if;
-end $$;
+-- Replace the earlier weaker archive-state check from the lifecycle repair.
+-- NOT VALID avoids rewriting legacy rows while enforcing the strict DRAFT-only
+-- archive invariant on every new or updated row.
+alter table public.bridge_titles
+  drop constraint if exists bridge_titles_archive_state_check;
+alter table public.bridge_titles
+  add constraint bridge_titles_archive_state_check
+  check (
+    (archived_at is null and archived_by is null and archive_reason is null and previous_status is null)
+    or (archived_at is not null and archived_by is not null
+        and length(btrim(archive_reason)) between 3 and 2000
+        and previous_status = 'DRAFT')
+  ) not valid;
 
 create index if not exists bridge_titles_active_owner_updated_idx
   on public.bridge_titles(owner_user_id, updated_at desc)
