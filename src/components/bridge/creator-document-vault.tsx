@@ -107,7 +107,7 @@ export function CreatorDocumentVault() {
       setNotice("Verified evidence linked to the selected title. Legal review remains separate.");
       setErrorText("");
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["bridge-title-document-evidence", selectedTitle] }),
+        queryClient.invalidateQueries({ queryKey: ["bridge-title-document-evidence", ...scope, selectedTitle] }),
         queryClient.invalidateQueries({ queryKey: ["title-document-evidence", selectedTitle] }),
         queryClient.invalidateQueries({ queryKey: ["title-workflow", selectedTitle] }),
       ]);
@@ -130,6 +130,9 @@ export function CreatorDocumentVault() {
       setErrorText(message(error));
     }
   }
+
+  if (userPending || sessionQ.isPending) return <p className="text-sm text-muted">Verifying account access…</p>;
+  if (sessionQ.isError || !actor?.emailVerified) return <p role="alert" className="text-sm text-muted">A verified Creator or Studio session is required to access private documents.</p>;
 
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6 space-y-5">
