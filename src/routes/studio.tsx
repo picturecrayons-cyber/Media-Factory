@@ -7,6 +7,7 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
+import type { BridgeActor } from "@/lib/bridge/session";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
@@ -21,7 +22,7 @@ function Studio() {
   );
 }
 
-function StudioDashboard({ actor }: { actor: Parameters<React.ComponentProps<typeof DitAgentDesk>["actor"]>[0] }) {
+function StudioDashboard({ actor }: { actor: BridgeActor }) {
   const [section, setSection] = useState<StudioSection>("titles");
   const tabs: { id: StudioSection; label: string }[] = [
     { id: "titles", label: "Titles" },
