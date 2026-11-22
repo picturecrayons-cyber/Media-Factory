@@ -29,7 +29,6 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   const qc = useQueryClient();
   const [search, setSearch] = useState(query);
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [kindFilter, setKindFilter] = useState("FILM");
   const archiveDraft = useMutation({
     mutationFn: (id: string) => removeDraftTitle({ data: { id } }),
     onSuccess: () => {
