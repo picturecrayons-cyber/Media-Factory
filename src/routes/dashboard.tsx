@@ -68,7 +68,7 @@ function DashboardBody() {
       <header className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Crayons Pictures · Super Admin</p>
         <h2 className="font-display text-3xl font-semibold tracking-tight">Founder Centre</h2>
-        <p className="max-w-2xl text-sm text-muted">A clear daily overview. Open a workspace only when a decision or task needs attention.</p>
+        
       </header>
 
       <section aria-label="Executive overview" className="grid grid-cols-2 gap-3 xl:grid-cols-3">
@@ -115,18 +115,18 @@ function DashboardBody() {
       <section aria-labelledby="workspaces-heading" className="space-y-3">
         <div>
           <h3 id="workspaces-heading" className="font-semibold">Workspaces</h3>
-          <p className="mt-0.5 text-xs text-muted">Each area opens its existing operational workspace. Permissions and approval gates remain unchanged.</p>
+          
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Workspace title="Title Library" detail="Titles, Creator and Studio submissions, assets and metadata." to="/workspace" />
-          <Workspace title="QC & Approvals" detail="Open the operational desk directly on its QC review queue." to="/admin/workstations?tab=QC" />
-          <Workspace title="Rights & Licensing" detail="Open the operational desk directly on its rights review queue." to="/admin/workstations?tab=Rights" />
-          <Workspace title="Buyer Management" detail="Verified Buyer profiles, organization grouping and Buyer dashboard access." to="/admin/buyers" />
-          <Workspace title="Vendor Services" detail="Service catalogue, pricing, orders and fulfilment controls." to="/admin/services" />
-          <Workspace title="People & Organizations" detail="Named Creator, Studio, Buyer, Investor and internal account registers." to="/admin/users" />
-          <WorkspaceNotice title="Finance & Reconciliation" detail="Finance records and settlement workflows require a dedicated verified workspace. This area is not marked complete or release-certified." status="Implementation gate pending" />
-          <Workspace title="Website CMS" detail="Public Bridge website copy and homepage media." to="/admin-cms" />
-          <Workspace title="Audit & Security" detail="Persisted audit events and security review." to="/admin/audit" />
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <Workspace title="Title Library" to="/workspace" />
+          <Workspace title="QC & Approvals" to="/admin/workstations?tab=QC" />
+          <Workspace title="Rights & Licensing" to="/admin/workstations?tab=Rights" />
+          <Workspace title="Buyer Management" to="/admin/buyers" />
+          <Workspace title="Vendor Services" to="/admin/services" />
+          <Workspace title="People & Organizations" to="/admin/users" />
+          <WorkspaceNotice title="Finance & Reconciliation" status="Implementation gate pending" />
+          <Workspace title="Website CMS" to="/admin-cms" />
+          <Workspace title="Audit & Security" to="/admin/audit" />
         </div>
       </section>
 
@@ -149,24 +149,23 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function WorkspaceNotice({ title, detail, status }: { title: string; detail: string; status: string }) {
   return (
-    <div className="flex min-h-32 flex-col justify-between rounded-xl border border-dashed border-line bg-surface p-4">
+    <div className="flex min-h-12 items-center justify-between gap-3 rounded-lg border border-dashed border-line bg-surface px-4 py-3">
       <div>
         <h4 className="font-semibold">{title}</h4>
-        <p className="mt-1 text-xs leading-relaxed text-muted">{detail}</p>
       </div>
       <span className="mt-4 text-xs font-medium text-muted">{status}</span>
     </div>
   );
 }
 
-function Workspace({ title, detail, to }: { title: string; detail: string; to: string }) {
+function Workspace({ title, to }: { title: string; to: string }) {
   return (
-    <Link to={to as any} className="group flex min-h-32 flex-col justify-between rounded-xl border border-line bg-surface p-4 transition-colors hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+    <Link to={to as any} className="group flex min-h-12 items-center justify-between gap-3 rounded-lg border border-line bg-surface px-4 py-3 transition-colors hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
       <div>
         <h4 className="font-semibold">{title}</h4>
         <p className="mt-1 text-xs leading-relaxed text-muted">{detail}</p>
       </div>
-      <span className="mt-4 text-xs font-semibold text-accent">Open workspace →</span>
+      <span className="text-xs font-semibold text-accent">Open →</span>
     </Link>
   );
 }
