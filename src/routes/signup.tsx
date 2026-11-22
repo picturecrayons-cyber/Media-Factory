@@ -164,11 +164,6 @@ function Signup() {
             </div>
           ) : null}
 
-          <label className="flex items-start gap-3 text-xs leading-5 text-muted">
-            <input type="checkbox" required checked={legalAcknowledged} onChange={(event) => setLegalAcknowledged(event.target.checked)} className="mt-1 accent-current" />
-            <span>I acknowledge the current Crayons Bridge B2B Terms of Use and Privacy Policy (version 1.0 draft). <Link to="/terms" className="font-semibold text-accent underline">Terms</Link> · <Link to="/privacy" className="font-semibold text-accent underline">Privacy</Link>. These documents remain subject to final legal review.</span>
-          </label>
-
           {error ? (
             <div
               role="alert"
@@ -327,6 +322,11 @@ function Signup() {
               placeholder="Re-enter password"
               className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5 text-sm text-fg placeholder:text-faint transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
+          </label>
+
+          <label className="flex items-start gap-3 text-xs leading-5 text-muted">
+            <input type="checkbox" required checked={legalAcknowledged} onChange={(event) => setLegalAcknowledged(event.target.checked)} className="mt-1 accent-current" />
+            <span>I acknowledge the current Crayons Bridge B2B Terms of Use and Privacy Policy (version 1.0 draft). <Link to="/terms" className="font-semibold text-accent underline">Terms</Link> · <Link to="/privacy" className="font-semibold text-accent underline">Privacy</Link>. These documents remain subject to final legal review.</span>
           </label>
 
           {error ? (
