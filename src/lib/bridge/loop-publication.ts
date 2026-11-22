@@ -4,7 +4,8 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { loopStageType } from "@/lib/bridge/loop-lanes";
-import { assertPermission } from "./rbac";
+import { assertPermission, canReadTitle } from "./rbac";
+import { loadTitle } from "./titles";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
@@ -667,7 +668,10 @@ export const getLoopPublication = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "title.read_catalog");
+    const title = await loadTitle(data.bridgeTitleId);
+    if (!title || !canReadTitle(actor, title) || (!actor.internalRole && actor.accountType === "buyer")) {
+      throw new Error("Not found");
+    }
     const sql = await getSql();
 
     const rows = await sql<PublicationRow>`
