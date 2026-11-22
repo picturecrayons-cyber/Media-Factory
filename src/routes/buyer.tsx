@@ -54,7 +54,9 @@ function Buyer() {
       {(actor) => (
         <BridgeShell actor={actor} title="Buyer dashboard">
           <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
-            Discover licensing-ready titles, open a listing, then license only after captured payment.
+            Your individual Buyer workspace for discovering Bridge-authorized titles, reviewing
+            commercial terms and managing your own captured-payment licenses. Each Buyer account has
+            its own login, permissions and entitlement history.
           </p>
           <BuyerBody userId={actor.userId} />
         </BridgeShell>
