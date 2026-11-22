@@ -290,8 +290,8 @@ export const createBridgeServiceRequestQuote = createServerFn({ method: "POST" }
         ],
       );
       await tx.query(
-        "insert into public.bridge_service_quote_lines(quote_id,service_code,classification,pricing_method,unit_label,quantity,unit_price_paise,line_total_paise,cost_basis_paise,estimated_margin_paise,evidence,pricing_snapshot) values($1,$2,'BILLABLE','CUSTOM_QUOTE','service',1,$3,$3,0,0,$4::jsonb,$5::jsonb)",
-        [quote[0].id, catalog[0].code, data.subtotalPaise, JSON.stringify({ serviceRequestId: request.id, description: data.description }), JSON.stringify({ manualQuote: true, taxRateId: taxRows[0].id })],
+        "insert into public.bridge_service_quote_lines(quote_id,service_code,classification,pricing_method,unit_label,quantity,unit_price_paise,line_total_paise,cost_basis_paise,estimated_margin_paise,evidence,pricing_snapshot) values($1,$2,$6,'CUSTOM_QUOTE','service',1,$3,$3,0,0,$4::jsonb,$5::jsonb)",
+        [quote[0].id, catalog[0].code, data.subtotalPaise, JSON.stringify({ serviceRequestId: request.id, description: data.description }), JSON.stringify({ manualQuote: true, taxRateId: taxRows[0].id }), catalog[0].classification],
       );
       await tx.query(
         "update public.bridge_service_requests set status='QUOTE_READY',quote_id=$1,updated_at=now() where id=$2",
@@ -356,7 +356,15 @@ export const transitionBridgeServiceRequest = createServerFn({ method: "POST" })
         return { id: request.id, status: data.toStatus };
       }
       if (data.toStatus === "CANCELLED" && request.order_id) {
-        await tx.query("update public.bridge_service_orders set status='CANCELLED',updated_at=now() where id=$1 and status='PAYMENT_PENDING'", [request.order_id]);
+        if (request.quote_id) {
+          await tx.query("update public.bridge_service_quotes set status='CANCELLED',updated_at=now() where id=$1 and status in ('QUOTED','ACCEPTED')", [request.quote_id]);
+        }
+        const cancelled = await tx.query<{ id: string }>(
+          "update public.bridge_service_orders set status='CANCELLED',updated_at=now() where id=$1 and status='PAYMENT_PENDING' returning id",
+          [request.order_id],
+        );
+        if (!cancelled[0]) throw new Error("Only an unpaid pending service order can be cancelled");
+        return { id: request.id, status: "CANCELLED" as const };
       }
       if (data.toStatus === "CANCELLED" && request.quote_id) {
         await tx.query("update public.bridge_service_quotes set status='CANCELLED',updated_at=now() where id=$1 and status='QUOTED'", [request.quote_id]);
