@@ -28,7 +28,7 @@ function Creator() {
 
 function CreatorDashboard({ actor }: { actor: { userId: string; organizationId?: string | null } }) {
   const titlesQ = useQuery({
-    queryKey: ["bridge-titles", actor.userId, actor.organizationId],
+    queryKey: ["bridge-titles", actor.userId, actor.accountType, actor.organizationId],
     queryFn: () => listTitles(),
     retry: 1,
   });
