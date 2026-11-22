@@ -5,6 +5,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { getDashboardSession } from "@/lib/bridge/session";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
+import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -78,6 +79,13 @@ function DashboardBody() {
         <Metric label="Commercial deals" value={metricValue(commercialDeals)} />
         <Metric label="Bridge profiles" value={profileMetricValue(profiles.length)} />
         <Metric label="Named organizations" value={profileMetricValue(organizations.size)} />
+      </section>
+
+      <section aria-labelledby="founder-gallery-heading" className="rounded-xl border border-line bg-surface p-5">
+        <p className="text-xs font-semibold uppercase tracking-wider text-accent">Portfolio oversight</p>
+        <h3 id="founder-gallery-heading" className="mt-1 font-display text-xl font-semibold">Super Admin Asset Gallery</h3>
+        <p className="mt-1 mb-4 text-sm text-muted">Verified artwork previews across the internal title library. Private masters and legal evidence remain behind their dedicated permissions.</p>
+        <TitleAssetGallery userId={session.data.profile.userId} scopeLabel="Super Admin" />
       </section>
 
       <section className="overflow-hidden rounded-xl border border-line bg-surface" aria-labelledby="attention-heading">
