@@ -312,6 +312,7 @@ function Home() {
             className="flex flex-wrap items-center gap-5 text-xs text-muted"
           >
             <Link to="/legal" className="hover:text-fg transition-colors">Legal &amp; Compliance</Link>
+            <Link to="/legal/dmca" className="hover:text-fg transition-colors">Copyright / DMCA</Link>
             <Link to="/privacy" className="hover:text-fg transition-colors">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-fg transition-colors">B2B Terms</Link>
             <Link to="/contact" className="hover:text-fg transition-colors">Contact</Link>
