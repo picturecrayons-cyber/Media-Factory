@@ -48,6 +48,8 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "title.advance_upload",
     "service.quote_create",
     "service.order_create",
+    "service.request_create",
+    "service.request_read",
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
