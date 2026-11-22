@@ -152,8 +152,9 @@ const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
   qc_reviewer: [],
   legal_reviewer: [],
   finance: [],
-  admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
-  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin", "super_admin"],
+  admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance"],
+  // The designated Super Admin may grant operational roles, but cannot mint another Super Admin invite.
+  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
 };
 
 export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {
