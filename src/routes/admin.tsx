@@ -7,6 +7,7 @@ import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
+import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -104,6 +105,13 @@ function AdminBody({ actor }: { actor: any }) {
               </Link>
             </>
           ) : null}
+        </section>
+
+        <section aria-labelledby="admin-gallery-heading" className="rounded-2xl border border-line bg-surface p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-accent">Asset review</p>
+          <h3 id="admin-gallery-heading" className="mt-1 font-display text-xl font-semibold">Admin / Super Admin Gallery</h3>
+          <p className="mt-1 mb-4 text-sm text-muted">Server-authorized artwork previews for titles this internal account can read. Private masters and legal documents are not rendered here.</p>
+          <TitleAssetGallery userId={actor.userId} scopeLabel="internal review" />
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4">
