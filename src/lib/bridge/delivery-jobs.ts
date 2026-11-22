@@ -33,7 +33,8 @@ export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const actor = await actorFor(context.userId);
     const sql = await getSql();
-    const internal = Boolean(actor.internalRole && (actor.internalRole === "admin" || actor.internalRole === "super_admin"));
+    const internal = actor.internalRole === "super_admin";
+    if (actor.internalRole && !internal) throw new Error("Vendor job administration is restricted to Super Admin");
     if (!internal && !actor.organizationId && !["independent_creator", "studio"].includes(actor.accountType)) {
       throw new Error("Delivery workspace access required");
     }
@@ -99,12 +100,11 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Title not found");
-    const canManage = Boolean(actor.internalRole && hasDeliveryPermission(actor));
-    if (!canManage && (!canReadTitle(actor, title) || actor.internalRole)) {
-      throw new Error("You can request delivery services only for titles you are authorized to access");
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType) || !hasPermission(actor, "service.order_create")) {
+      throw new Error("Only Creator or Studio accounts can request vendor services");
     }
-    if (!canManage && !["independent_creator", "studio"].includes(actor.accountType)) {
-      throw new Error("Delivery requests are not enabled for this account type");
+    if (!canReadTitle(actor, title)) {
+      throw new Error("You can request services only for a title owned by your Creator account or Studio organization");
     }
     const id = randomUUID();
     const sql = await getSql();
@@ -119,16 +119,13 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
     return { id, status: "requested" as const };
   });
 
-function hasDeliveryPermission(actor: Awaited<ReturnType<typeof actorFor>>) {
-  try { assertPermission(actor, "title.deliver"); return true; } catch { return false; }
-}
 
 export const assignBridgeDeliveryJob = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ jobId: z.string().uuid(), vendor: z.string().trim().min(2).max(160) }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    assertPermission(actor, "title.deliver");
+    assertPermission(actor, "delivery.assign_vendor");
     const sql = await getSql();
     const rows = await sql<{ id: string }>`
       update bridge_delivery_jobs set status='in_progress', assigned_vendor=${data.vendor}, updated_at=now()
@@ -144,7 +141,7 @@ export const completeBridgeDeliveryJob = createServerFn({ method: "POST" })
   .validator(z.object({ jobId: z.string().uuid(), receiptUrl: z.string().url().max(2048) }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    assertPermission(actor, "title.deliver");
+    assertPermission(actor, "delivery.record_receipt");
     const url = new URL(data.receiptUrl);
     if (url.protocol !== "https:") throw new Error("Delivery receipt must use HTTPS");
     const sql = await getSql();
@@ -162,7 +159,7 @@ export const approveBridgeDeliveryJob = createServerFn({ method: "POST" })
   .validator(z.object({ jobId: z.string().uuid(), note: z.string().trim().min(8).max(1000) }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    assertPermission(actor, "loop.publish");
+    assertPermission(actor, "delivery.sign_off");
     const sql = await getSql();
     const rows = await sql<{ id: string; title_id: string }>`
       update bridge_delivery_jobs set status='approved', admin_sign_off=true, updated_at=now()
