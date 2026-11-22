@@ -196,7 +196,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
 
       <div className="rounded-xl border border-line p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-semibold">Required evidence uploads</h3>
+          <h3 className="font-semibold">Document Manager</h3>
           <span className="text-xs text-muted">PDF only · max 20 MB each</span>
         </div>
         <p className="mt-1 text-xs text-muted">Upload the ownership proof and rights-transfer proof as two separate files under the ownership category.</p>
@@ -216,6 +216,10 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
               </label>
             </div>
           ))}
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted">Documents can be viewed only through a time-limited private link.</span>
+          <span className="text-xs text-muted">{docs.filter((doc) => doc.status === "VERIFIED").length} verified · {docs.filter((doc) => doc.status === "PENDING_UPLOAD").length} pending · {docs.filter((doc) => doc.status === "REVOKED").length} undone</span>
         </div>
         {docs.length > 0 ? (
           <div className="mt-4 space-y-2">
