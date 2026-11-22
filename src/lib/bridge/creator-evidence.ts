@@ -252,9 +252,11 @@ export const saveTitleOwnerRightsDraft = createServerFn({ method: "POST" })
     await assertEvidenceEditable(title.id, actor.userId, title.status);
     const sql = await getSql();
     const existing = await sql<{ submission_status: string }>`
-      select submission_status from bridge_title_owner_submissions where title_id = ${title.id} and owner_user_id = ${actor.userId}
-        and owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
-        and owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null} limit 1
+      select submission_status from bridge_title_owner_submissions
+    where title_id = ${title.id}
+      and owner_user_id = ${actor.userId}
+      and owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+    limit 1
     `;
     if (existing[0] && existing[0].submission_status === "SUBMITTED") {
       throw new Error("This rights package is submitted. Legal must return it for correction before the Creator can edit it.");
@@ -344,7 +346,7 @@ export const submitTitleOwnerRightsPackage = createServerFn({ method: "POST" })
         id, title_id, owner_user_id, owner_organization_id, details,
         submission_status, submitted_at, submitted_by, updated_by
       ) values (
-        ${randomBytes(16).toString("hex")}, ${title.id}, ${actor.userId}, null,
+        ${randomBytes(16).toString("hex")}, ${title.id}, ${actor.userId}, ${actor.accountType === "studio" ? actor.organizationId : null},
         ${JSON.stringify(data.details)}::jsonb, 'SUBMITTED', now(), ${actor.userId}, ${actor.userId}
       )
       on conflict (title_id) do update set
@@ -352,6 +354,7 @@ export const submitTitleOwnerRightsPackage = createServerFn({ method: "POST" })
         submitted_at = now(), submitted_by = excluded.submitted_by,
         updated_by = excluded.updated_by, updated_at = now()
       where bridge_title_owner_submissions.owner_user_id = excluded.owner_user_id
+        and bridge_title_owner_submissions.owner_organization_id is not distinct from excluded.owner_organization_id
         and bridge_title_owner_submissions.submission_status in ('DRAFT', 'NEEDS_CORRECTION')
       returning id
     `;
