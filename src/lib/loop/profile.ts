@@ -255,18 +255,18 @@ export const getConsumerWatchlist = createServerFn({ method: "GET" })
       slug: string;
       title: string;
       synopsis: string;
-      poster_path: string | null;
-      backdrop_path: string | null;
+      poster_available: boolean;
+      backdrop_available: boolean;
       maturity_rating: string;
       duration_minutes: number | null;
       access_tier: string;
     }>`
       select
-        l.id, l.bridge_title_id, l.slug, l.title, l.synopsis, l.poster_path,
-        l.backdrop_path, l.maturity_rating, l.duration_minutes, l.access_tier
+        catalog.id, catalog.bridge_title_id, catalog.slug, catalog.title,
+        catalog.synopsis, catalog.poster_available, catalog.backdrop_available,
+        catalog.maturity_rating, catalog.duration_minutes, catalog.access_tier
       from public_loop_catalog() catalog
-      join loop_titles l on l.id::text = catalog.id
-      where l.id = any(${savedIds}::uuid[])
+      where catalog.id = any(${savedIds}::text[])
     `;
 
     const catalogById = new Map(catalogRows.map((row) => [row.id, row]));
