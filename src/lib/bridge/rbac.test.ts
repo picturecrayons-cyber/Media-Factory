@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 import { PERMISSIONS } from "./types.ts";
-import { canTransitionServiceRequest, assertServiceRequestTransition } from "./service-request-workflow.ts";
+import { canTransitionServiceRequest, assertServiceRequestTransition, serviceQuoteAcceptanceInput } from "./service-request-workflow.ts";
 
 const actor = (
   userId: string,
@@ -329,4 +329,12 @@ describe("Service request state machine", () => {
     assert.throws(() => assertServiceRequestTransition("COMPLETED", "REVIEW"), /Invalid service request transition/);
     assert.throws(() => assertServiceRequestTransition("CANCELLED", "UNDER_REVIEW"), /Invalid service request transition/);
   });
+});
+
+
+it("quote acceptance rejects client-supplied amount and currency overrides", () => {
+  const quoteId = "11111111-1111-4111-8111-111111111111";
+  assert.equal(serviceQuoteAcceptanceInput.safeParse({ quoteId }).success, true);
+  assert.equal(serviceQuoteAcceptanceInput.safeParse({ quoteId, totalPaise: 1 }).success, false);
+  assert.equal(serviceQuoteAcceptanceInput.safeParse({ quoteId, currency: "USD" }).success, false);
 });
