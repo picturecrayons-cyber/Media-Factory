@@ -291,9 +291,10 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           title={title}
           initial={ownerSubmissionQ.data?.submission?.details ?? null}
           submissionStatus={ownerSubmissionQ.data?.submission?.status ?? "DRAFT"}
+          submissionReason={ownerSubmissionQ.data?.submission?.reason ?? null}
           loading={ownerSubmissionQ.isPending}
           error={ownerSubmissionQ.error instanceof Error ? ownerSubmissionQ.error.message : null}
-          canEdit={canOperateOnTitle(actor, title, "title.update_own", "title.license") && ["DRAFT","UPLOADING","PREPARING"].includes(title.status)}
+          canEdit={!actor.internalRole && canOperateOnTitle(actor, title, "title.update_own", "title.license") && ["DRAFT","UPLOADING","PREPARING"].includes(title.status) && ["DRAFT","NEEDS_CORRECTION"].includes(ownerSubmissionQ.data?.submission?.status ?? "DRAFT")}
           onSaved={() => ownerSubmissionQ.refetch()}
         />
       ) : activeTab === "Production" && !buyerView ? (
@@ -308,17 +309,18 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 }
 
 type OwnerSubmissionTitle = {
+  status: string;
   name: string;
   nameMl: string | null;
   credits: Array<{ role: string; name: string }>;
 };
 type OwnerSubmissionValues = {
   originalTitle: string; productionCompany: string; completionDate: string;
-  masterVersion: string; resolution: string; codec: string; masterLanguage: string;
-  subtitleLanguages: string[]; rightsBasis: string; territories: string[];
+  masterVersion: string; resolution: "SD" | "HD" | "2K" | "4K" | "6K" | "8K" | "OTHER" | ""; codec: string; masterLanguage: string;
+  subtitleLanguages: string[]; rightsBasis: "OWNER" | "EXCLUSIVE_LICENSEE" | "AUTHORIZED_DISTRIBUTOR" | "PRODUCER_AUTHORITY" | ""; territories: string[];
   rightsLanguages: string[]; media: string[]; rightsStartDate: string;
-  rightsEndDate: string; exclusivity: string; contactName: string;
-  contactEmail: string; contactPhone: string; credits: Array<{role:string;name:string}>;
+  rightsEndDate: string; exclusivity: "EXCLUSIVE" | "NON_EXCLUSIVE"; contactName: string;
+  contactEmail: string; contactPhone: string; credits: Array<{role:"Director"|"Producer"|"Writer"|"Cinematographer"|"Editor"|"Music"|"Cast"|"Other";name:string}>;
 };
 const EMPTY_OWNER_SUBMISSION: OwnerSubmissionValues = {
   originalTitle:"", productionCompany:"", completionDate:"", masterVersion:"",
@@ -330,21 +332,21 @@ const EMPTY_OWNER_SUBMISSION: OwnerSubmissionValues = {
 
 function OwnerSubmissionPanel(props: {
   titleId: string; title: OwnerSubmissionTitle; initial: unknown;
-  submissionStatus: string; loading: boolean; error: string | null;
+  submissionStatus: string; submissionReason: string | null; loading: boolean; error: string | null;
   canEdit: boolean; onSaved: () => Promise<unknown> | unknown;
 }) {
-  const {titleId,title,initial,submissionStatus,loading,error,canEdit,onSaved}=props;
+  const {titleId,title,initial,submissionStatus,submissionReason,loading,error,canEdit,onSaved}=props;
   const [form,setForm]=useState<OwnerSubmissionValues>(()=>({
     ...EMPTY_OWNER_SUBMISSION,
     originalTitle:title.nameMl || title.name,
-    credits:title.credits?.map(c=>({role:c.role,name:c.name})) ?? [],
+    credits:title.credits?.map(c=>({role:c.role as OwnerSubmissionValues["credits"][number]["role"],name:c.name})) ?? [],
     ...(initial && typeof initial==="object" ? initial as Partial<OwnerSubmissionValues> : {})
   }));
   useEffect(() => {
     setForm({
       ...EMPTY_OWNER_SUBMISSION,
       originalTitle: title.nameMl || title.name,
-      credits: title.credits?.map(c=>({role:c.role,name:c.name})) ?? [],
+      credits: title.credits?.map(c=>({role:c.role as OwnerSubmissionValues["credits"][number]["role"],name:c.name})) ?? [],
       ...(initial && typeof initial==="object" ? initial as Partial<OwnerSubmissionValues> : {})
     });
   }, [initial, title.name, title.nameMl, title.credits]);
@@ -360,7 +362,7 @@ function OwnerSubmissionPanel(props: {
     onSuccess:async()=>{setNotice("Owner details submitted. QC and Legal review remain separate.");setErrorText("");await onSaved();},
     onError:(e)=>{setErrorText(e instanceof Error?e.message:"Could not submit owner details.");setNotice("");}
   });
-  const update=(key:keyof OwnerSubmissionValues,value:unknown)=>setForm(old=>({...old,[key]:value}));
+  const update=(key:keyof OwnerSubmissionValues,value:unknown)=>setForm(old=>({...old,[key]:value}) as OwnerSubmissionValues);
   const inputClass="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2 text-sm";
   const textField=(label:string,key:keyof OwnerSubmissionValues,type="text",required=false)=>(
     <label className="block text-sm">{label}{required?<span className="text-red-600"> *</span>:null}
@@ -386,6 +388,9 @@ function OwnerSubmissionPanel(props: {
         <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{submissionStatus}</span>
       </header>
       {loading?<p className="text-sm text-muted">Loading saved owner details…</p>:null}
+      {submissionStatus === "NEEDS_CORRECTION" && submissionReason ? <p role="status" className="rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900">Super Admin requested changes: {submissionReason}</p> : null}
+      {submissionStatus === "SUBMITTED" ? <p className="rounded-lg border border-line p-3 text-sm">Submitted / Pending Review. Editing is locked while Super Admin reviews this package.</p> : null}
+      {submissionStatus === "ACCEPTED_INTAKE" ? <p className="rounded-lg border border-line p-3 text-sm">{title.status === "QC_REVIEW" ? "Accepted into intake and queued for Technical QC. QC result, Rights & Legal and publication remain separate gates." : "Accepted into intake. Technical QC queue entry will follow when the title is prepared and its master and artwork are verified."}</p> : null}
       {error?<p role="alert" className="text-sm text-red-700">{error}</p>:null}
       <div className="space-y-3">
         <h3 className="font-semibold">Film identity & production</h3>
@@ -464,7 +469,7 @@ function OwnerSubmissionPanel(props: {
         </button>
         <button type="button" disabled={!canEdit||submit.isPending||save.isPending||loading} onClick={()=>submit.mutate()}
           className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50">
-          {submit.isPending?"Submitting…":"Submit details"}
+          {submit.isPending?"Submitting…":submissionStatus === "NEEDS_CORRECTION" ? "Resubmit to Super Admin" : "Submit to Super Admin"}
         </button>
       </div>
       {!canEdit?<p className="text-xs text-muted">Editing is locked after QC review begins. QC, Legal and publication remain separate gates.</p>:null}
