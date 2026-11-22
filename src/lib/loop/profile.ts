@@ -187,15 +187,15 @@ export const toggleWatchlist = createServerFn({ method: "POST" })
   .validator(z.object({ loopTitleId: z.string().min(1) }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const existing = await sql<{ loop_title_id: string }>`
-      select loop_title_id from loop_watchlist
+    const existing = await sql<{ title_id: string }>`
+      select title_id from loop_watchlists
       where user_id = ${context.userId} and title_id = ${data.loopTitleId}
       limit 1
     `;
 
     if (existing.length > 0) {
       await sql`
-        delete from loop_watchlist
+        delete from loop_watchlists
         where user_id = ${context.userId} and title_id = ${data.loopTitleId}
       `;
       return { inWatchlist: false };
@@ -217,8 +217,8 @@ export const isTitleInWatchlist = createServerFn({ method: "GET" })
   .validator(z.object({ loopTitleId: z.string().min(1) }))
   .handler(async ({ context, data }): Promise<boolean> => {
     const sql = await getSql();
-    const existing = await sql<{ loop_title_id: string }>`
-      select loop_title_id from loop_watchlist
+    const existing = await sql<{ title_id: string }>`
+      select title_id from loop_watchlists
       where user_id = ${context.userId} and title_id = ${data.loopTitleId}
       limit 1
     `;
