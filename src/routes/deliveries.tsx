@@ -40,9 +40,13 @@ function Deliveries() {
 
 function VendorJobs({ actor }: { actor: Actor }) {
   const queryClient = useQueryClient();
-  const canRequest = hasPermission(actor, "title.deliver") || hasPermission(actor, "title.create");
-  const canManage = hasPermission(actor, "title.deliver");
-  const canApprove = hasPermission(actor, "loop.publish");
+  const canRequest = !actor.internalRole && ["independent_creator", "studio"].includes(actor.accountType) && hasPermission(actor, "service.order_create");
+  const canAssign = hasPermission(actor, "delivery.assign_vendor");
+  const canRecordReceipt = hasPermission(actor, "delivery.record_receipt");
+  const canManage = canAssign || canRecordReceipt;
+  const canApprove = hasPermission(actor, "delivery.sign_off");
+  const titlesQuery = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const availableTitles = titlesQuery.data?.titles ?? [];
   const [type, setType] = useState<VendorJobType>("human_qc");
   const [titleId, setTitleId] = useState("");
   const [note, setNote] = useState("");
@@ -84,16 +88,19 @@ function VendorJobs({ actor }: { actor: Actor }) {
             </select>
           </label>
           <label className="space-y-1 text-xs text-muted">
-            <span>Title ID</span>
-            <input
+            <span>Film / title</span>
+            <select
               id="vendor-job-title-id"
               name="titleId"
-              aria-label="Title ID"
+              aria-label="Film or title"
               className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
-              placeholder="Title id"
               value={titleId}
               onChange={(e) => setTitleId(e.target.value)}
-            />
+              disabled={titlesQuery.isPending || availableTitles.length === 0}
+            >
+              <option value="">Select an authorized title</option>
+              {availableTitles.map((title) => <option key={title.id} value={title.id}>{title.name}</option>)}
+            </select>
           </label>
           <label className="space-y-1 text-xs text-muted">
             <span>Instructions</span>
@@ -107,12 +114,12 @@ function VendorJobs({ actor }: { actor: Actor }) {
             />
           </label>
           <button type="button" className="self-end rounded-lg border border-line px-3 py-2 text-sm disabled:opacity-50"
-            disabled={request.isPending || !titleId.trim()} onClick={() => request.mutate({ titleId: titleId.trim(), type, note: note.trim() })}>
+            disabled={request.isPending || !titleId.trim() || titlesQuery.isPending} onClick={() => request.mutate({ titleId: titleId.trim(), type, note: note.trim() })}>
             {request.isPending ? "Saving…" : "Request"}
           </button>
         </div>
       ) : (
-        <p className="mt-3 text-sm text-muted">You can view delivery jobs. New requests require an authorized Creator, Studio or delivery operator account.</p>
+        <p className="mt-3 text-sm text-muted">{canManage || canApprove ? "Super Admin control desk: assign vendors, record receipts and sign off completed jobs." : "Vendor job administration is restricted to Super Admin. Creator and Studio accounts can request services for their own authorized titles."}</p>
       )}
       {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
       {jobsQuery.isError ? <p className="mt-3 text-sm text-red-600" role="alert">Delivery records could not be loaded.</p> : null}
@@ -136,7 +143,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
               </div>
               {job.receiptUrl ? <a href={job.receiptUrl} target="_blank" rel="noreferrer" className="text-xs text-accent underline">Open delivery receipt</a> : null}
               {(canManage && job.state === "requested") || (canManage && job.state === "in_progress") || (canApprove && job.state === "completed") ? (
-                <DeliveryJobActions job={job} canManage={canManage} canApprove={canApprove} onUpdated={refresh} />
+                <DeliveryJobActions job={job} canAssign={canAssign} canRecordReceipt={canRecordReceipt} canApprove={canApprove} onUpdated={refresh} />
               ) : null}
             </li>
           ))}
@@ -148,10 +155,11 @@ function VendorJobs({ actor }: { actor: Actor }) {
 }
 
 function DeliveryJobActions({
-  job, canManage, canApprove, onUpdated,
+  job, canAssign, canRecordReceipt, canApprove, onUpdated,
 }: {
   job: { id: string; state: string };
-  canManage: boolean;
+  canAssign: boolean;
+  canRecordReceipt: boolean;
   canApprove: boolean;
   onUpdated: () => Promise<unknown>;
 }) {
@@ -176,14 +184,14 @@ function DeliveryJobActions({
   });
   return (
     <div className="flex flex-wrap items-end gap-2 rounded-lg bg-fg/5 p-3">
-      {canManage && job.state === "requested" ? <>
+      {canAssign && job.state === "requested" ? <>
         <label className="min-w-[180px] flex-1 space-y-1 text-xs text-muted">
           <span>Assign vendor</span>
           <input className="w-full rounded border border-line bg-transparent px-2 py-1.5 text-sm text-fg" value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="Vendor / service provider" />
         </label>
         <button type="button" disabled={assign.isPending || vendor.trim().length < 2} onClick={() => assign.mutate()} className="rounded border border-line px-3 py-2 text-xs disabled:opacity-50">Assign</button>
       </> : null}
-      {canManage && job.state === "in_progress" ? <>
+      {canRecordReceipt && job.state === "in_progress" ? <>
         <label className="min-w-[220px] flex-1 space-y-1 text-xs text-muted">
           <span>HTTPS delivery receipt URL</span>
           <input className="w-full rounded border border-line bg-transparent px-2 py-1.5 text-sm text-fg" value={receiptUrl} onChange={(e) => setReceiptUrl(e.target.value)} placeholder="https://…" />
