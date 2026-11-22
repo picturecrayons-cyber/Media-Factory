@@ -1,4 +1,5 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
 import { listTitles } from "@/lib/bridge/titles";
 
@@ -27,7 +28,7 @@ export function TitleAssetGallery({ userId, scopeLabel }: { userId: string; scop
       queryFn: async (): Promise<GalleryAsset[]> => {
         const result = await listTitleAssets({ data: { titleId: title.id } });
         const candidates = result.assets
-          .filter((asset) => IMAGE_KINDS.has(asset.kind) && asset.contentType?.toLowerCase().startsWith("image/"))
+          .filter((asset) => asset.verified && IMAGE_KINDS.has(asset.kind) && asset.contentType?.toLowerCase().startsWith("image/"))
           .slice(0, 4);
         const signed = await Promise.allSettled(
           candidates.map(async (asset) => {
@@ -73,8 +74,8 @@ export function TitleAssetGallery({ userId, scopeLabel }: { userId: string; scop
                 )}
               </div>
               <div className="space-y-2 p-4">
-                <h3 className="font-semibold">{title.name}</h3>
-                <p className="text-xs text-muted">{assets.length} verified image asset{assets.length === 1 ? "" : "s"} · title-scoped access</p>
+                <h3 className="font-semibold"><Link to="/title/$id" params={{ id: title.id }} className="hover:text-accent hover:underline">{title.name}</Link></h3>
+                <p className="text-xs text-muted">{title.status.replaceAll("_", " ")} · {assets.length} verified image asset{assets.length === 1 ? "" : "s"} · title-scoped access</p>
                 {assets.length ? <p className="text-[11px] text-muted">Latest asset: {new Date(assets[0]!.createdAt).toLocaleDateString("en-IN")}</p> : null}
               </div>
             </article>
