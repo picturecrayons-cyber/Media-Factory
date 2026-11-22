@@ -1,5 +1,5 @@
 /** QC asset-role compatibility for current vertical artwork and legacy poster uploads. */
-export type VerifiedAssetRef = { kind: string; s3_key: string };
+export type VerifiedAssetRef = { id: string; kind: string; s3_key: string };
 
 /**
  * Asset rows passed here must already be scoped to the title and filtered to
@@ -25,7 +25,7 @@ function pointsToVerifiedAsset(pointer: string, asset: VerifiedAssetRef): boolea
 }
 
 export function hasVerifiedMasterAndArtwork(
-  assets: readonly (VerifiedAssetRef & { id?: string })[],
+  assets: readonly VerifiedAssetRef[],
   masterKey: string | null,
   posterKey: string | null,
 ): boolean {
