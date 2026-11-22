@@ -12,6 +12,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission, canMutateTitle } from "./rbac";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
+import { editableOwnerSubmissionStatus, ownerSubmissionSubmitTransition } from "./owner-submission-state";
 import { assertNotDevUser } from "./guards";
 import {
   STORY_CONCEPT_ENABLED,
@@ -186,6 +187,7 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) throw new Error("Creator or Studio owner access required");
     const sql = await getSql();
 
     try {
@@ -245,26 +247,23 @@ export const submitStoryConceptToSuperAdmin = createServerFn({ method: "POST" })
         for update
       `;
       const current = rows[0]?.owner_submission_status;
-      if (!current || !["DRAFT", "NEEDS_CORRECTION"].includes(current)) {
-        throw new Error("This Story / Concept is already pending review or accepted into intake");
-      }
-      const action = current === "NEEDS_CORRECTION" ? "RESUBMITTED" : "SUBMITTED";
+      const transition = ownerSubmissionSubmitTransition(current ?? "");
       await tx`
         update bridge_story_concept_submissions
-        set owner_submission_status = 'SUBMITTED', updated_at = now()
+        set owner_submission_status = ${transition.toStatus}, updated_at = now()
         where title_id = ${title.id}
       `;
       await tx`
         insert into bridge_owner_submission_events
           (title_id, submission_kind, action, from_status, to_status, actor_user_id)
-        values (${title.id}, 'story_concept', ${action}, ${current}, 'SUBMITTED', ${actor.userId})
+        values (${title.id}, 'story_concept', ${transition.action}, ${transition.fromStatus}, ${transition.toStatus}, ${actor.userId})
       `;
       await writeAudit({
         actorUserId: actor.userId,
-        action: `story_concept.owner_submission_${action.toLowerCase()}`,
+        action: `story_concept.owner_submission_${transition.action.toLowerCase()}`,
         entityType: "bridge_title",
         entityId: title.id,
-        metadata: { from: current, to: "SUBMITTED", titleStatus: title.status },
+        metadata: { from: transition.fromStatus, to: transition.toStatus, titleStatus: title.status },
       }, tx);
     });
     return { submitted: true as const };
@@ -298,9 +297,8 @@ export const updateStoryConceptOwnerDetails = createServerFn({ method: "POST" })
         where title_id = ${title.id} for update
       `;
       const status = rows[0]?.owner_submission_status;
-      if (!status || !["DRAFT", "NEEDS_CORRECTION"].includes(status)) {
-        throw new Error("Concept edits are available only before submission or after changes are requested");
-      }
+      if (!status) throw new Error("Story / Concept submission not found");
+      editableOwnerSubmissionStatus(status);
       await tx`
         update bridge_titles set name = ${data.titleName}, synopsis = ${data.synopsis}, updated_at = now()
         where id = ${title.id}
