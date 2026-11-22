@@ -25,6 +25,7 @@ function Signup() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [accountType, setAccountType] = useState<AccountChoice>(initialChoice);
+  const [legalAcknowledged, setLegalAcknowledged] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -57,6 +58,7 @@ function Signup() {
         password,
         name: name.trim(),
         accountType,
+        legalAcknowledgement: legalAcknowledged ? { termsVersion: "1.0-draft", privacyVersion: "1.0-draft", acknowledgedAt: new Date().toISOString() } : undefined,
       });
 
       const signupState = classifySignupResult(result);
@@ -161,6 +163,11 @@ function Signup() {
               {resendStatus}
             </div>
           ) : null}
+
+          <label className="flex items-start gap-3 text-xs leading-5 text-muted">
+            <input type="checkbox" required checked={legalAcknowledged} onChange={(event) => setLegalAcknowledged(event.target.checked)} className="mt-1 accent-current" />
+            <span>I acknowledge the current Crayons Bridge B2B Terms of Use and Privacy Policy (version 1.0 draft). <Link to="/terms" className="font-semibold text-accent underline">Terms</Link> · <Link to="/privacy" className="font-semibold text-accent underline">Privacy</Link>. These documents remain subject to final legal review.</span>
+          </label>
 
           {error ? (
             <div
