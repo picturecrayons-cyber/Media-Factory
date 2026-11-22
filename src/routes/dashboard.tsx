@@ -124,7 +124,7 @@ function DashboardBody() {
           <Workspace title="Buyer Management" to="/admin/buyers" />
           <Workspace title="Vendor Services" to="/admin/services" />
           <Workspace title="People & Organizations" to="/admin/users" />
-          <WorkspaceNotice title="Finance & Reconciliation" status="Implementation gate pending" />
+          <WorkspaceNotice title="Finance & Reconciliation" detail="Awaiting verified finance workflow" status="Pending" />
           <Workspace title="Website CMS" to="/admin-cms" />
           <Workspace title="Audit & Security" to="/admin/audit" />
         </div>
@@ -153,7 +153,7 @@ function WorkspaceNotice({ title, detail, status }: { title: string; detail: str
       <div>
         <h4 className="font-semibold">{title}</h4>
       </div>
-      <span className="mt-4 text-xs font-medium text-muted">{status}</span>
+      <span className="text-xs font-medium text-muted">{status}</span>
     </div>
   );
 }
@@ -163,7 +163,6 @@ function Workspace({ title, to }: { title: string; to: string }) {
     <Link to={to as any} className="group flex min-h-12 items-center justify-between gap-3 rounded-lg border border-line bg-surface px-4 py-3 transition-colors hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
       <div>
         <h4 className="font-semibold">{title}</h4>
-        <p className="mt-1 text-xs leading-relaxed text-muted">{detail}</p>
       </div>
       <span className="text-xs font-semibold text-accent">Open →</span>
     </Link>
