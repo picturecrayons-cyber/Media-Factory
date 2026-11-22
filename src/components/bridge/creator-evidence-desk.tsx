@@ -15,6 +15,7 @@ import {
 } from "@/lib/bridge/creator-evidence";
 
 type OwnerTitle = { id: string; name: string; status: string };
+type EvidenceSlot = "ott" | "loa" | "ownership" | "transfer" | "authority" | "revenue";
 type EvidenceType =
   | "FINISHED_FILM_AGREEMENT"
   | "DISTRIBUTION_AGREEMENT"
@@ -50,7 +51,7 @@ const EMPTY: RightsDetails = {
   ownerDeclaration: false,
 };
 
-const UPLOADS: Array<{ key: string; type: EvidenceType; label: string; help: string }> = [
+const UPLOADS: Array<{ key: EvidenceSlot; type: EvidenceType; label: string; help: string }> = [
   { key: "ott", type: "FINISHED_FILM_AGREEMENT", label: "Signed OTT Rights Agreement", help: "Signed agreement covering the requested OTT rights" },
   { key: "loa", type: "DISTRIBUTION_AGREEMENT", label: "K.M. Mathew original signed LOA", help: "Original signed authorization / letter of authority" },
   { key: "ownership", type: "OWNERSHIP_CHAIN_OF_TITLE", label: "Film ownership proof", help: "Certificate, agreement or other primary ownership record" },
@@ -59,8 +60,21 @@ const UPLOADS: Array<{ key: string; type: EvidenceType; label: string; help: str
   { key: "revenue", type: "OTHER", label: "Signed revenue-sharing agreement", help: "Signed revenue-share agreement or addendum" },
 ];
 
-function hasVerifiedSlot(documents: Array<{ evidence_slot?: string; status: string }>, slot: string) {
+function hasVerifiedSlot(documents: Array<{ evidence_slot?: string; status: string }>, slot: EvidenceSlot) {
   return documents.some((doc) => doc.evidence_slot === slot && doc.status === "VERIFIED");
+}
+
+function parseRightsDetails(detailsJson?: string): Partial<RightsDetails> {
+  if (!detailsJson) return {};
+  try {
+    const value: unknown = JSON.parse(detailsJson);
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Partial<RightsDetails>;
+    }
+  } catch {
+    // Ignore malformed legacy draft data and show an empty editable form.
+  }
+  return {};
 }
 
 export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator", titleId: fixedTitleId }: { titles: OwnerTitle[]; ownerType?: "independent_creator" | "studio"; titleId?: string }) {
@@ -101,15 +115,15 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
     enabled: Boolean(titleId),
   });
   const docs = evidenceQ.data?.documents ?? [];
-  const submission = draftQ.data?.submission as { details?: Partial<RightsDetails>; submission_status?: string } | null | undefined;
+  const submission = draftQ.data?.submission as { detailsJson?: string; submission_status?: string } | null | undefined;
   const locked = submission?.submission_status === "SUBMITTED";
 
   useEffect(() => {
     if (preferred && !titleId) setTitleId(preferred);
   }, [preferred, titleId]);
   useEffect(() => {
-    if (draftQ.data?.submission?.details) {
-      const restored = { ...EMPTY, ...(draftQ.data.submission.details as Partial<RightsDetails>) };
+    if (draftQ.data?.submission?.detailsJson) {
+      const restored = { ...EMPTY, ...parseRightsDetails(draftQ.data.submission.detailsJson) };
       setDetails(restored);
       setSavedDetails(restored);
     } else {
