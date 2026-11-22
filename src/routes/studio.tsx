@@ -38,7 +38,7 @@ function Studio() {
 
 function StudioDashboard({ actor }: { actor: { userId: string; organizationId?: string | null; organizationName: string | null; displayName: string } }) {
   const titlesQ = useQuery({
-    queryKey: ["bridge-titles", actor.userId, actor.organizationId],
+    queryKey: ["bridge-titles", `${actor.userId}:${actor.organizationId ?? "none"}`],
     queryFn: () => listTitles(),
     retry: 1,
   });
@@ -74,7 +74,7 @@ function StudioDashboard({ actor }: { actor: { userId: string; organizationId?: 
                 <h3 className="font-display text-xl font-semibold">Finished films</h3>
                 <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
               </div>
-              <TitleList empty="No finished films are currently returned for this studio account." />
+              <TitleList scopeKey={`${actor.userId}:${actor.organizationId ?? "none"}`} empty="No finished films are currently returned for this studio account." />
               <MyStoryConcepts />
             </section>
 
