@@ -84,7 +84,7 @@ async function persistVerifiedAssetScoped(
         a.kind,
         a.asset_version_id,
         case
-          when a.kind = 'master' then coalesce(t.master_language, t.original_language, t.language)
+          when a.kind = 'master' then coalesce(t.original_language, t.language)
           when a.kind = 'subtitle' then coalesce(t.original_language, t.language)
           else null
         end as version_language
@@ -189,7 +189,38 @@ async function persistVerifiedAssetScoped(
        and v.processing_state = 'PASSED'
       where a.id = e.id
         and (a.asset_version_id is null or a.asset_version_id = v.id)
+        and (
+          a.asset_version_id is distinct from v.id
+          or a.byte_size is distinct from $1
+          or a.s3_key is distinct from $6
+          or a.checksum_sha256 is distinct from $9
+          or a.storage_verified_at is null
+        )
       returning a.id, a.title_id, a.kind, a.s3_key, v.id as asset_version_id
+    ),
+    already_verified as (
+      select a.id, a.title_id, a.kind, a.s3_key, v.id as asset_version_id
+      from eligible e
+      join candidate_version v
+        on v.title_id = e.title_id
+       and v.asset_type = e.kind
+       and v.s3_key = $6
+       and v.checksum_sha256 = $9
+       and v.byte_size = $1
+       and v.processing_state = 'PASSED'
+      join bridge_assets a
+        on a.id = e.id
+       and a.asset_version_id = v.id
+       and a.byte_size = $1
+       and a.s3_key = $6
+       and a.checksum_sha256 = $9
+    ),
+    persisted as (
+      select id, title_id, kind, s3_key, asset_version_id from verified
+      union all
+      select id, title_id, kind, s3_key, asset_version_id
+      from already_verified a
+      where not exists (select 1 from verified v where v.id = a.id)
     ),
     title_set as (
       update bridge_titles t
@@ -197,30 +228,37 @@ async function persistVerifiedAssetScoped(
         poster_key = case when v.kind in ('poster', 'poster_vertical') then v.s3_key else t.poster_key end,
         master_key = case when v.kind = 'master' then v.s3_key else t.master_key end,
         updated_at = now()
-      from verified v
+      from persisted v
       where t.id = v.title_id
       returning t.id
+    ),
+    audit as (
+      insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+      select $4, 'asset.upload_verified', 'bridge_asset', v.id,
+        jsonb_build_object(
+          'titleId', v.title_id,
+          'kind', v.kind,
+          'assetVersionId', v.asset_version_id,
+          'byteSize', $1,
+          'checksumSha256', $9,
+          'etag', $10,
+          'sourceObjectKey', $7,
+          'verifiedObjectKey', $6,
+          'storageProvider', 'OCI',
+          'storageBucket', $11,
+          'storageNamespace', $12,
+          'storageRegion', $13,
+          'storageEndpoint', $14
+        )
+      from verified v
+      join title_set t on t.id = v.title_id
+      returning entity_id
     )
-    insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
-    select $4, 'asset.upload_verified', 'bridge_asset', v.id,
-      jsonb_build_object(
-        'titleId', v.title_id,
-        'kind', v.kind,
-        'assetVersionId', v.asset_version_id,
-        'byteSize', $1,
-        'checksumSha256', $9,
-        'etag', $10,
-        'sourceObjectKey', $7,
-        'verifiedObjectKey', $6,
-        'storageProvider', 'OCI',
-        'storageBucket', $11,
-        'storageNamespace', $12,
-        'storageRegion', $13,
-        'storageEndpoint', $14
-      )
-    from verified v
-    join title_set t on t.id = v.title_id
-    returning entity_id
+    select entity_id from audit
+    union all
+    select a.id as entity_id
+    from already_verified a
+    where not exists (select 1 from verified v where v.id = a.id)
   `, [
     opts.byteSize,
     opts.contentType,
