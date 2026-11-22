@@ -7,30 +7,27 @@ import { cn } from "@/lib/cn";
 type NavItem = { to: string; label: string };
 
 function navigationFor(actor: BridgeActor): NavItem[] {
+  if (actor.internalRole === "super_admin") {
+    return [
+      { to: "/dashboard", label: "Founder Centre" },
+      { to: "/workspace", label: "Titles" },
+      { to: "/internal", label: "Operations" },
+      { to: "/account", label: "Account" },
+    ];
+  }
+
   if (actor.internalRole) {
     const items: NavItem[] = [
       { to: "/internal", label: "Operations" },
       { to: "/workspace", label: "Titles" },
     ];
-
-    if (actor.internalRole === "admin" || actor.internalRole === "super_admin") {
+    if (actor.internalRole === "admin") {
       items.push(
         { to: "/admin", label: "Admin" },
         { to: "/admin/team", label: "Team & Permissions" },
         { to: "/admin-cms", label: "Website CMS" },
       );
     }
-
-    if (actor.internalRole === "super_admin") {
-      items.unshift({ to: "/dashboard", label: "Founder Centre" });
-      items.push(
-        { to: "/admin/users", label: "Users & Access" },
-        { to: "/admin/audit", label: "Audit & Security" },
-        { to: "/admin/services", label: "Services" },
-        { to: "/cms", label: "Loop Gateway" },
-      );
-    }
-
     return [...items, { to: "/account", label: "Account" }];
   }
 
@@ -48,7 +45,6 @@ function navigationFor(actor: BridgeActor): NavItem[] {
     buyer: [{ to: "/buyer", label: "Buyer Desk" }],
     investor: [{ to: "/investor", label: "Portfolio" }],
   };
-
   return [...accountNavigation[actor.accountType], { to: "/account", label: "Account" }];
 }
 
@@ -66,11 +62,7 @@ function NavLink({ item }: { item: NavItem }) {
 
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <Link
-      to="/"
-      className={cn("inline-flex items-center shrink-0", className)}
-      aria-label="Crayons Bridge"
-    >
+    <Link to="/" className={cn("inline-flex items-center shrink-0", className)} aria-label="Crayons Bridge">
       <svg viewBox="0 0 168 48" role="img" aria-label="Crayons Bridge" className="bridge-logo block h-[42px] w-auto sm:h-[46px] lg:h-[48px]">
         <text x="0" y="16" fill="#6f6f6f" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="13" fontWeight="600" letterSpacing="0.5">crayons</text>
         <text x="0" y="40" fill="#007291" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="26" fontWeight="700" letterSpacing="-0.5">bridge</text>
@@ -80,22 +72,23 @@ export function BrandMark({ className }: { className?: string }) {
 }
 
 export function BridgeShell({ actor, title, children }: { actor: BridgeActor; title: string; children: ReactNode }) {
+  const navigation = navigationFor(actor);
   return (
     <div className="min-h-screen bg-bg text-fg">
-      <header className="sticky top-0 z-50 border-b border-line bg-surface/88 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1440px] items-center gap-6 px-4 py-3.5 sm:px-6 lg:px-8">
+      <header className="sticky top-0 z-50 border-b border-line bg-surface/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1440px] items-center gap-5 px-4 py-3 sm:px-6 lg:px-8">
           <BrandMark />
-          <nav aria-label="Primary navigation" className="hidden flex-1 items-center gap-1 overflow-x-auto md:flex">
-            {navigationFor(actor).map((item) => <NavLink key={item.to} item={item} />)}
+          <nav aria-label="Primary navigation" className="hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto md:flex">
+            {navigation.map((item) => <NavLink key={item.to} item={item} />)}
           </nav>
-          <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-semibold text-muted transition hover:text-fg lg:inline">Open Crayons Loop ↗</a>
-          <div className="ml-auto flex items-center gap-3">
+          <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-medium text-muted transition hover:text-fg lg:inline">Crayons Loop ↗</a>
+          <div className="ml-auto flex shrink-0 items-center gap-3">
             {actor.internalRole ? <span className="hidden rounded-full border border-line px-3 py-1 text-xs text-muted sm:inline">{actor.internalRole.replaceAll("_", " ")}</span> : null}
             <UserButton />
           </div>
         </div>
         <nav aria-label="Mobile primary navigation" className="flex gap-1 overflow-x-auto border-t border-line px-4 py-2 md:hidden">
-          {navigationFor(actor).map((item) => <NavLink key={item.to} item={item} />)}
+          {navigation.map((item) => <NavLink key={item.to} item={item} />)}
         </nav>
       </header>
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
