@@ -4,6 +4,28 @@ export type BuyerGateStatus = {
   qc: boolean; legal: boolean; ott: boolean; packaging: boolean; curation: boolean; delivery: boolean; publishable: boolean;
 };
 
+/**
+ * Buyer catalogue access is individual, not organization-wide by inference.
+ * Missing access schema fails closed: no Buyer title is exposed until the
+ * explicit, revocable grant table is available and a live grant exists.
+ */
+export async function buyerHasExplicitTitleAccess(titleId: string, buyerUserId: string): Promise<boolean> {
+  const sql = await getSql();
+  const schema = await sql<{ available: boolean }>`select to_regclass('public.bridge_buyer_title_access') is not null as available`;
+  if (!schema[0]?.available) return false;
+  const rows = await sql<{ allowed: boolean }>`
+    select exists (
+      select 1
+      from bridge_buyer_title_access
+      where title_id = ${titleId}
+        and buyer_user_id = ${buyerUserId}
+        and revoked_at is null
+        and (expires_at is null or expires_at > now())
+    ) as allowed
+  `;
+  return Boolean(rows[0]?.allowed);
+}
+
 export async function getBuyerGateStatus(titleId: string): Promise<BuyerGateStatus> {
   const sql = await getSql();
   const rows = await sql<BuyerGateStatus>`
