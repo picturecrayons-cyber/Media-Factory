@@ -56,9 +56,9 @@ export function ProductsServicesCatalogue({ audience }: { audience: "Creator" | 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4">
         <div>
           <p className="font-semibold">Need a service?</p>
-          <p className="mt-1 text-sm text-muted">Request a quote through the existing Vendor Services workflow. No fixed price or payment is implied.</p>
+          <p className="mt-1 text-sm text-muted">Submit a separate service request for Super Admin review. A quote and payment are never implied by browsing the catalogue.</p>
         </div>
-        <a href="/deliveries" className="inline-flex min-h-10 items-center rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg hover:opacity-90">Request a quote ↗</a>
+        <a href="#service-centre" className="inline-flex min-h-10 items-center rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg hover:opacity-90">Request a service ↗</a>
       </div>
     </section>
   );
