@@ -109,32 +109,75 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   const orgId = organizationId || null;
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
   const archiveColumnAvailable = await hasArchiveColumn(sql);
-  const where = [
-    mergeColumnAvailable ? "t.merged_into_title_id is null" : null,
-    archiveColumnAvailable ? "t.archived_at is null" : null,
-  ].filter(Boolean).join(" and ");
-  const activeSql = where ? `${where} and ` : "";
-  if (!orgId) {
+  if (mergeColumnAvailable && archiveColumnAvailable) {
+    if (!orgId) return sql<TitleRow>`
+      select * from bridge_titles
+      where owner_user_id = ${userId}
+        and merged_into_title_id is null and archived_at is null
+      order by updated_at desc limit 200
+    `;
     return sql<TitleRow>`
       select t.* from bridge_titles t
-      where ${sql.unsafe(activeSql)} t.owner_user_id = ${userId}
+      where t.merged_into_title_id is null and t.archived_at is null
+        and (
+          t.owner_user_id = ${userId}
+          or (
+            t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          )
+        )
       order by t.updated_at desc limit 200
     `;
   }
+  if (mergeColumnAvailable) {
+    if (!orgId) return sql<TitleRow>`
+      select * from bridge_titles
+      where owner_user_id = ${userId} and merged_into_title_id is null
+      order by updated_at desc limit 200
+    `;
+    return sql<TitleRow>`
+      select t.* from bridge_titles t
+      where t.merged_into_title_id is null
+        and (t.owner_user_id = ${userId} or (
+          t.owner_account_type = 'studio' and t.owner_organization_id = ${orgId}
+          and exists (select 1 from bridge_organization_memberships m
+            where m.organization_id = ${orgId} and m.user_id = ${userId} and m.status = 'active')
+        ))
+      order by t.updated_at desc limit 200
+    `;
+  }
+  if (archiveColumnAvailable) {
+    if (!orgId) return sql<TitleRow>`
+      select * from bridge_titles where owner_user_id = ${userId} and archived_at is null
+      order by updated_at desc limit 200
+    `;
+    return sql<TitleRow>`
+      select t.* from bridge_titles t
+      where t.archived_at is null
+        and (t.owner_user_id = ${userId} or (
+          t.owner_account_type = 'studio' and t.owner_organization_id = ${orgId}
+          and exists (select 1 from bridge_organization_memberships m
+            where m.organization_id = ${orgId} and m.user_id = ${userId} and m.status = 'active')
+        ))
+      order by t.updated_at desc limit 200
+    `;
+  }
+  if (!orgId) return sql<TitleRow>`
+    select * from bridge_titles where owner_user_id = ${userId}
+    order by updated_at desc limit 200
+  `;
   return sql<TitleRow>`
     select t.* from bridge_titles t
-    where ${sql.unsafe(activeSql)} (
-      t.owner_user_id = ${userId}
-      or (
-        t.owner_account_type = 'studio'
-        and t.owner_organization_id = ${orgId}
-        and exists (
-          select 1 from bridge_organization_memberships m
-          where m.organization_id = ${orgId}
-            and m.user_id = ${userId}
-            and m.status = 'active'
-        )
-      )
+    where t.owner_user_id = ${userId} or (
+      t.owner_account_type = 'studio' and t.owner_organization_id = ${orgId}
+      and exists (select 1 from bridge_organization_memberships m
+        where m.organization_id = ${orgId} and m.user_id = ${userId} and m.status = 'active')
     )
     order by t.updated_at desc limit 200
   `;
