@@ -76,9 +76,9 @@ jobs:
 
       - run: npm ci
 
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
         with:
-          version: latest
+          version: 3.2.0
 
       # Supabase CLI automatically applies files in supabase/migrations during
       # start. Hide the recovered ledger temporarily so the custom replay can
