@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles, removeDraftTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
+import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const qc = useQueryClient();
   const [search, setSearch] = useState(query);
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [kindFilter, setKindFilter] = useState("ALL");
+  const [kindFilter, setKindFilter] = useState("FILM");
   const archiveDraft = useMutation({
     mutationFn: (id: string) => removeDraftTitle({ data: { id } }),
     onSuccess: () => {
@@ -25,7 +26,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   const titles = allTitles.filter((t) => {
     const matchesText = !search || `${t.name} ${t.language} ${t.year ?? ""} ${t.contentType ?? ""}`.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "ALL" || t.status === statusFilter;
-    const matchesKind = kindFilter === "ALL" || (kindFilter === "FILM" ? ["Film", "FEATURE_FILM", "SHORT_FILM", "DOCUMENTARY"].includes(t.contentType ?? "") : t.contentType === "Story / Concept" || t.contentType === "STORY_CONCEPT");
+    const matchesKind = kindFilter === "ALL" || kindFilter === "FILM";
     return matchesText && matchesStatus && matchesKind;
   });
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
@@ -57,8 +58,9 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           <option value="CONCEPT">Story / Concept</option>
         </select>
       </div>
-      <p className="text-xs text-muted">{titles.length} of {allTitles.length} canonical records · Open a title to view its full Bridge workspace.</p>
-      {!titles.length ? <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">{allTitles.length ? "No titles match these filters." : empty}</p> : (
+      <p className="text-xs text-muted">{titles.length} of {allTitles.length} finished-film records · Open a title to view its full Bridge workspace.</p>
+      {kindFilter === "CONCEPT" ? <MyStoryConcepts /> : null}
+      {kindFilter === "CONCEPT" ? null : !titles.length ? <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">{allTitles.length ? "No titles match these filters." : empty}</p> : (
       <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
       {titles.map((t) => (
         <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
