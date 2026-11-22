@@ -121,7 +121,7 @@ export const requestTitleOwnerEvidenceUpload = createServerFn({ method: "POST" }
     });
     await writeAudit({
       actorUserId: actor.userId,
-      action: "creator.evidence_upload_requested",
+      action: "owner.evidence_upload_requested",
       entityType: "bridge_creator_document",
       entityId: id,
       metadata: { titleId: title.id, documentType: data.documentType, byteSize: data.byteSize },
@@ -182,7 +182,7 @@ export const confirmTitleOwnerEvidenceUpload = createServerFn({ method: "POST" }
       `;
       await writeAudit({
         actorUserId: actor.userId,
-        action: "creator.evidence_uploaded",
+        action: "owner.evidence_uploaded",
         entityType: "bridge_creator_document",
         entityId: doc!.id,
         metadata: { titleId: title.id, documentType: doc!.document_type, byteSize: object.byteSize },
@@ -223,7 +223,7 @@ export const revokePendingTitleOwnerEvidence = createServerFn({ method: "POST" }
     if (!changed.length) throw new Error("Only an unverified upload can be undone. Verified evidence is retained; upload a replacement to preserve the audit trail.");
     await writeAudit({
       actorUserId: actor.userId,
-      action: "creator.evidence_upload_undone",
+      action: "owner.evidence_upload_undone",
       entityType: "bridge_creator_document",
       entityId: data.documentId,
       metadata: { titleId: title.id },
@@ -278,7 +278,7 @@ export const saveTitleOwnerRightsDraft = createServerFn({ method: "POST" })
     `;
     await writeAudit({
       actorUserId: actor.userId,
-      action: "creator.rights_draft_saved",
+      action: "owner.rights_draft_saved",
       entityType: "bridge_title_owner_submission",
       entityId: title.id,
       metadata: { titleId: title.id },
@@ -361,7 +361,7 @@ export const submitTitleOwnerRightsPackage = createServerFn({ method: "POST" })
     if (!saved.length) throw new Error("The rights package is already submitted or is owned by another account.");
     await writeAudit({
       actorUserId: actor.userId,
-      action: "creator.rights_package_submitted",
+      action: "owner.rights_package_submitted",
       entityType: "bridge_title_owner_submission",
       entityId: title.id,
       metadata: { titleId: title.id, status: title.status, legalReviewRequired: true },
