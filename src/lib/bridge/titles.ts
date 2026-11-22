@@ -332,6 +332,46 @@ export const createTitle = createServerFn({ method: "POST" })
     return { title, submission: isPublicSubmission };
   });
 
+
+/**
+ * Owner dashboard data source. Unlike the internal catalogue list, this
+ * endpoint always returns only the authenticated Creator's own titles or
+ * the Studio titles belonging to the actor's active organization.
+ * A Super Admin whose profile is also the Creator owner may access only
+ * their own Creator-owned titles through this endpoint.
+ */
+export const listTitleOwnerTitles = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const creatorOwnerAdmin =
+      actor.internalRole === "super_admin" && actor.accountType === "independent_creator";
+    if (actor.internalRole && !creatorOwnerAdmin) throw new Error("Owner dashboard access denied");
+    if (!["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Creator or Studio account required");
+    }
+    if (actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("Active Studio organization scope is unavailable");
+    }
+    const sql = await getSql();
+    const rows = await listOwned(
+      sql,
+      actor.userId,
+      actor.accountType === "studio" ? actor.organizationId : null,
+    );
+    return {
+      titles: rows.flatMap((row) => {
+        try {
+          return [mapTitle(row)];
+        } catch (error) {
+          console.error("[bridge] skipped unreadable owner title", row?.id, error);
+          return [];
+        }
+      }),
+    };
+  });
+
 export const listTitles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
