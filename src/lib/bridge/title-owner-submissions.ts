@@ -299,7 +299,7 @@ export const reviewOwnerSubmission = createServerFn({method:"POST"})
         await tx`
           insert into bridge_owner_submission_events
             (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
-          values (${data.titleId},'story_concept',${data.decision},'SUBMITTED',${nextStatus},${actor.userId},${data.reason??null})
+          values (${data.titleId},'story_concept',${data.decision},'SUBMITTED',${nextStatus},${actor.userId},${reason})
         `;
       }
       await writeAudit({
