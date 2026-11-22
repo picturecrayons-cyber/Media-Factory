@@ -174,14 +174,15 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
 
   const platformsComplete = details.platforms.length > 0;
   const ownershipCount = countType(docs, "OWNERSHIP_CHAIN_OF_TITLE");
+  const ownershipDocuments = docs.filter((doc) => doc.document_type === "OWNERSHIP_CHAIN_OF_TITLE" && doc.status === "VERIFIED").length;
   const requirements = [
     ["Signed OTT Rights Agreement", countType(docs, "FINISHED_FILM_AGREEMENT") > 0],
     ["SVOD, TVOD and AVOD rights confirmation", platformsComplete],
     ["Worldwide territory confirmation", /worldwide|world wide|global/i.test(details.territory)],
     ["Rights duration and expiry", Boolean(details.rightsStart && details.rightsEnd)],
     ["K.M. Mathew original signed LOA", countType(docs, "DISTRIBUTION_AGREEMENT") > 0],
-    ["Film ownership proof", ownershipCount > 0],
-    ["New Darsan Creations rights-transfer proof", ownershipCount > 1],
+    ["Film ownership proof", ownershipDocuments >= 1],
+    ["New Darsan Creations rights-transfer proof", ownershipDocuments >= 2],
     ["Signatory authority proof", countType(docs, "AUTHOR_ASSIGNMENT") > 0],
     ["Signed revenue-sharing agreement", countType(docs, "OTHER") > 0],
     ["Revenue-share and payment terms", Boolean(details.revenueShare && details.paymentTerms)],
