@@ -12,20 +12,7 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0010_bridge_prd_phase1.sql"), "utf8"));
-    await db.exec(`
-      alter table public.bridge_assets
-        add column if not exists sha256 text,
-        add column if not exists asset_version_id uuid,
-        add column if not exists checksum_sha256 text,
-        add column if not exists source_object_key text,
-        add column if not exists verified_object_key text,
-        add column if not exists storage_provider text,
-        add column if not exists storage_bucket text,
-        add column if not exists storage_namespace text,
-        add column if not exists storage_region text,
-        add column if not exists storage_endpoint text,
-        add column if not exists storage_verified_at timestamptz;
-    `);
+    await db.exec(readFileSync(join(process.cwd(), "supabase/migrations/20261122120000_bridge_asset_storage_provenance_repair.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type)
       values ('title1234','title','Title','creator','independent_creator');
@@ -82,20 +69,7 @@ test("same-organization verified Studio member can confirm upload, other organiz
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0010_bridge_prd_phase1.sql"), "utf8"));
-    await db.exec(`
-      alter table public.bridge_assets
-        add column if not exists sha256 text,
-        add column if not exists asset_version_id uuid,
-        add column if not exists checksum_sha256 text,
-        add column if not exists source_object_key text,
-        add column if not exists verified_object_key text,
-        add column if not exists storage_provider text,
-        add column if not exists storage_bucket text,
-        add column if not exists storage_namespace text,
-        add column if not exists storage_region text,
-        add column if not exists storage_endpoint text,
-        add column if not exists storage_verified_at timestamptz;
-    `);
+    await db.exec(readFileSync(join(process.cwd(), "supabase/migrations/20261122120000_bridge_asset_storage_provenance_repair.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
     await db.exec(`
       insert into bridge_profiles (user_id,email,display_name,account_type,email_verified)
@@ -173,20 +147,7 @@ test("title owner can confirm an upload when organization tables are absent", as
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0010_bridge_prd_phase1.sql"), "utf8"));
-    await db.exec(`
-      alter table public.bridge_assets
-        add column if not exists sha256 text,
-        add column if not exists asset_version_id uuid,
-        add column if not exists checksum_sha256 text,
-        add column if not exists source_object_key text,
-        add column if not exists verified_object_key text,
-        add column if not exists storage_provider text,
-        add column if not exists storage_bucket text,
-        add column if not exists storage_namespace text,
-        add column if not exists storage_region text,
-        add column if not exists storage_endpoint text,
-        add column if not exists storage_verified_at timestamptz;
-    `);
+    await db.exec(readFileSync(join(process.cwd(), "supabase/migrations/20261122120000_bridge_asset_storage_provenance_repair.sql"), "utf8"));
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
       values ('title1234','title','Title','creator','independent_creator','PREPARING');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
