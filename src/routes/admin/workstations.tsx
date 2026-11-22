@@ -8,12 +8,12 @@ import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { hasPermission } from "@/lib/bridge/rbac";
 import type { BridgeActor } from "@/lib/bridge/session";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
-import { listOwnerSubmissionQueue } from "@/lib/bridge/title-owner-submissions";
+import { listOwnerSubmissionQueue, reviewOwnerSubmission } from "@/lib/bridge/title-owner-submissions";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "Owner Submissions", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "Incoming Owner Submissions", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -34,6 +34,13 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
   const ownerSubmissionsQ = useQuery({ queryKey: ["owner-submission-queue"], queryFn: () => listOwnerSubmissionQueue(), enabled: actor.internalRole === "super_admin" });
+  const ownerDecision = useMutation({
+    mutationFn: reviewOwnerSubmission,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["owner-submission-queue"] });
+      await qc.invalidateQueries({ queryKey: ["admin-workstations"] });
+    },
+  });
   const review = useMutation({
     mutationFn: reviewAdminTitle,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
@@ -114,38 +121,73 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
 }
 
 
-function OwnerSubmissionQueue({ submissions, loading, error }: { submissions: any[]; loading: boolean; error: string | null }) {
+function OwnerSubmissionQueue({ submissions, loading, error, decision }: { submissions: any[]; loading: boolean; error: string | null; decision: any }) {
+  const finished = submissions.filter((item) => item.submission_kind === "finished_film");
+  const concepts = submissions.filter((item) => item.submission_kind === "story_concept");
+  return (
+    <section className="space-y-6">
+      <SectionHeader title="Incoming Owner Submissions" description="Creator and Studio packages awaiting Super Admin intake decision. Acceptance does not approve QC, rights, legal or publication." />
+      {error ? <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">Could not load submissions: {error}</p> : null}
+      {loading ? <Empty text="Loading incoming submissions…" /> : null}
+      {!loading && !error && submissions.length === 0 ? <Empty text="No owner submissions are waiting for review." /> : null}
+      {!loading && !error ? <>
+        <SubmissionGroup title="Finished Films" submissions={finished} decision={decision} />
+        <SubmissionGroup title="Story / Concepts" submissions={concepts} decision={decision} />
+      </> : null}
+      {decision.isError ? <p role="alert" className="text-sm text-red-700">{decision.error instanceof Error ? decision.error.message : "Submission decision failed."}</p> : null}
+    </section>
+  );
+}
+
+function SubmissionGroup({ title, submissions, decision }: { title: string; submissions: any[]; decision: any }) {
   return (
     <section className="space-y-3">
-      <SectionHeader title="Owner Submissions" description="Packages submitted by title owners. This queue is separate from QC and Legal approval." />
-      {error ? <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">Could not load submissions: {error}</p> : null}
-      {loading ? <Empty text="Loading owner submissions…" /> : null}
-      {!loading && !error && submissions.length === 0 ? <Empty text="No owner submission packages are waiting." /> : null}
-      <div className="space-y-3">
-        {submissions.map((item: any) => (
-          <article key={item.title_id} className="rounded-2xl border border-line bg-surface p-4 space-y-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="font-semibold">{item.title_name}</h3>
-                <p className="mt-1 text-xs text-muted">{item.owner_display_name ?? item.owner_user_id} · {item.owner_email ?? "No email"} · {item.title_status}</p>
-              </div>
-              <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">OWNER SUBMITTED</span>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-              <p>Original title: {item.details?.originalTitle ?? "—"}</p>
-              <p>Production: {item.details?.productionCompany ?? "—"}</p>
-              <p>Master: {[item.details?.masterVersion,item.details?.resolution,item.details?.codec].filter(Boolean).join(" · ") || "—"}</p>
-              <p>Rights basis: {item.details?.rightsBasis ?? "—"}</p>
-              <p>Territories: {(item.details?.territories ?? []).join(", ") || "—"}</p>
-              <p>Rights window: {[item.details?.rightsStartDate,item.details?.rightsEndDate].filter(Boolean).join(" → ") || "—"}</p>
-              <p>Contact: {[item.details?.contactName,item.details?.contactEmail,item.details?.contactPhone].filter(Boolean).join(" · ") || "—"}</p>
-              <p>Submitted: {item.submitted_at ? new Date(item.submitted_at).toLocaleString() : "—"}</p>
-            </div>
-            <Link to="/title/$id" params={{ id: item.title_id }} className="inline-flex rounded-full border border-line px-4 py-2 text-xs font-semibold">Open title & review evidence</Link>
-          </article>
-        ))}
-      </div>
+      <div className="flex items-center justify-between"><h3 className="font-display text-xl font-semibold">{title}</h3><span className="text-xs text-muted">{submissions.length} pending</span></div>
+      {!submissions.length ? <Empty text={`No ${title.toLowerCase()} are awaiting intake.`} /> : submissions.map((item) => (
+        <OwnerSubmissionCard key={item.title_id} item={item} decision={decision} />
+      ))}
     </section>
+  );
+}
+
+function OwnerSubmissionCard({ item, decision }: { item: any; decision: any }) {
+  const [reason, setReason] = useState("");
+  const kind = item.submission_kind as "finished_film" | "story_concept";
+  return (
+    <article className="rounded-2xl border border-line bg-surface p-4 space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h4 className="font-semibold">{item.title_name}</h4>
+          <p className="mt-1 text-xs text-muted">{item.owner_display_name ?? item.owner_user_id} · {item.owner_email ?? "No email"} · {item.owner_organization_name ?? (item.owner_account_type === "studio" ? "Studio" : "Creator")}</p>
+        </div>
+        <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">PENDING SUBMISSION</span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+        <p>Title state: {item.title_status}</p>
+        <p>Submitted: {item.submitted_at ? new Date(item.submitted_at).toLocaleString() : "—"}</p>
+        <p>Document Vault links: {Number(item.document_count ?? 0)}</p>
+        {kind === "finished_film" ? <>
+          <p>Original title: {item.details?.originalTitle ?? "—"}</p>
+          <p>Production: {item.details?.productionCompany ?? "—"}</p>
+          <p>Master: {[item.details?.masterVersion,item.details?.resolution,item.details?.codec].filter(Boolean).join(" · ") || "—"}</p>
+          <p>Rights basis declared: {item.details?.rightsBasis ?? "—"}</p>
+        </> : <>
+          <p>Logline: {item.details?.logline ?? "—"}</p>
+          <p>Genre: {(item.details?.genre ?? []).join(", ") || "—"}</p>
+          <p>Target platforms: {(item.details?.targetPlatforms ?? []).join(", ") || "—"}</p>
+        </>}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link to="/title/$id" params={{ id: item.title_id }} className="inline-flex rounded-full border border-line px-4 py-2 text-xs font-semibold">Open title workspace</Link>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" disabled={decision.isPending} onClick={() => decision.mutate({ data: { titleId: item.title_id, submissionKind: kind, decision: "ACCEPTED_INTAKE" } })}>Accept into Intake / QC</Button>
+        </div>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+        <textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={2000} rows={2} placeholder="Required reason for requesting changes (visible to the owner)" className="w-full rounded-lg border border-line-strong bg-elevated px-3 py-2 text-sm" />
+        <Button size="sm" variant="outline" disabled={decision.isPending || reason.trim().length < 3} onClick={() => decision.mutate({ data: { titleId: item.title_id, submissionKind: kind, decision: "REQUEST_CHANGES", reason: reason.trim() } })}>Request Changes</Button>
+      </div>
+    </article>
   );
 }
 
