@@ -340,6 +340,14 @@ function OwnerSubmissionPanel(props: {
     credits:title.credits?.map(c=>({role:c.role,name:c.name})) ?? [],
     ...(initial && typeof initial==="object" ? initial as Partial<OwnerSubmissionValues> : {})
   }));
+  useEffect(() => {
+    setForm({
+      ...EMPTY_OWNER_SUBMISSION,
+      originalTitle: title.nameMl || title.name,
+      credits: title.credits?.map(c=>({role:c.role,name:c.name})) ?? [],
+      ...(initial && typeof initial==="object" ? initial as Partial<OwnerSubmissionValues> : {})
+    });
+  }, [initial, title.name, title.nameMl, title.credits]);
   const [notice,setNotice]=useState("");
   const [errorText,setErrorText]=useState("");
   const save=useMutation({
