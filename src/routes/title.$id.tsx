@@ -100,32 +100,32 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   const titleQ = useQuery({
     // The same title has a redacted Buyer DTO and a full internal DTO.
-    queryKey: ["bridge-title", id, actor.userId, actor.internalRole ?? actor.accountType],
+    queryKey: ["bridge-title", id, actor.userId, actor.internalRole ?? actor.accountType, actor.organizationId],
     queryFn: () => getTitle({ data: { id } }),
   });
   const assetsQ = useQuery({
-    queryKey: ["bridge-assets", id, actor.userId],
+    queryKey: ["bridge-assets", id, actor.userId, actor.accountType, actor.organizationId],
     queryFn: () => listTitleAssets({ data: { titleId: id } }),
     enabled: !buyerView,
   });
   const productionAssetsQ = useQuery({
-    queryKey: ["bridge-production-assets", id, actor.userId, actor.internalRole ?? actor.accountType],
+    queryKey: ["bridge-production-assets", id, actor.userId, actor.internalRole ?? actor.accountType, actor.organizationId],
     queryFn: () => listProductionAssets({ data: { titleId: id } }),
     enabled: !buyerView,
   });
   const pubQ = useQuery({
-    queryKey: ["loop-pub", id, actor.userId],
+    queryKey: ["loop-pub", id, actor.userId, actor.accountType, actor.organizationId],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }),
     enabled: !buyerView,
   });
 
   const reviewQ = useQuery({
-    queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType],
+    queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType, actor.organizationId],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
     enabled: !buyerView,
   });
   const ownerSubmissionQ = useQuery({
-    queryKey: ["title-owner-submission", id, actor.userId],
+    queryKey: ["title-owner-submission", id, actor.userId, actor.accountType, actor.organizationId],
     queryFn: () => getTitleOwnerSubmission({ data: { titleId: id } }),
     enabled: !buyerView,
   });
@@ -317,6 +317,12 @@ type OwnerSubmissionTitle = {
 };
 type OwnerSubmissionValues = {
   originalTitle: string; productionCompany: string; completionDate: string;
+  ownershipBasis: "COPYRIGHT_OWNER"|"PRODUCER"|"EXCLUSIVE_LICENSEE"|"AUTHORIZED_DISTRIBUTOR"|"OTHER"|"";
+  rightsholderNames: string[]; chainOfTitleConfirmed: boolean;
+  legalDisputes: "NONE_DECLARED"|"DISCLOSED"|"UNKNOWN"|""; legalNotes: string;
+  censorCertificateStatus: "AVAILABLE"|"PENDING"|"NOT_APPLICABLE"|""; censorCertificateNumber: string;
+  censorRating: string; censorCertificateDate: string;
+  audioFormat: string; frameRate: string; colorSpace: string; aspectRatio: string; audioChannels: string; technicalNotes: string;
   masterVersion: string; resolution: "SD" | "HD" | "2K" | "4K" | "6K" | "8K" | "OTHER" | ""; codec: string; masterLanguage: string;
   subtitleLanguages: string[]; rightsBasis: "OWNER" | "EXCLUSIVE_LICENSEE" | "AUTHORIZED_DISTRIBUTOR" | "PRODUCER_AUTHORITY" | ""; territories: string[];
   rightsLanguages: string[]; media: string[]; rightsStartDate: string;
@@ -324,7 +330,11 @@ type OwnerSubmissionValues = {
   contactEmail: string; contactPhone: string; credits: Array<{role:"Director"|"Producer"|"Writer"|"Cinematographer"|"Editor"|"Music"|"Cast"|"Other";name:string}>;
 };
 const EMPTY_OWNER_SUBMISSION: OwnerSubmissionValues = {
-  originalTitle:"", productionCompany:"", completionDate:"", masterVersion:"",
+  originalTitle:"", productionCompany:"", completionDate:"",
+  ownershipBasis:"", rightsholderNames:[], chainOfTitleConfirmed:false,
+  legalDisputes:"", legalNotes:"", censorCertificateStatus:"", censorCertificateNumber:"",
+  censorRating:"", censorCertificateDate:"", audioFormat:"", frameRate:"", colorSpace:"", aspectRatio:"", audioChannels:"", technicalNotes:"",
+  masterVersion:"",
   resolution:"", codec:"", masterLanguage:"Malayalam", subtitleLanguages:[],
   rightsBasis:"", territories:[], rightsLanguages:["Malayalam"], media:[],
   rightsStartDate:"", rightsEndDate:"", exclusivity:"NON_EXCLUSIVE",
@@ -377,14 +387,36 @@ function OwnerSubmissionPanel(props: {
         onChange={e=>update(key,e.target.value)}/>
     </label>
   );
-  const listField=(label:string,key:"territories"|"rightsLanguages"|"media"|"subtitleLanguages",required=false)=>(
+  const listField=(label:string,key:"territories"|"rightsLanguages"|"media"|"subtitleLanguages"|"rightsholderNames",required=false)=>(
     <label className="block text-sm">{label}{required?<span className="text-red-600"> *</span>:null}
-      <input className={inputClass} value={form[key].join(", ")} disabled={!canEdit}
+      <input className={inputClass} value={(form[key] ?? []).join(", ")} disabled={!canEdit}
         placeholder="Separate items with commas"
         onChange={e=>update(key,e.target.value.split(",").map(v=>v.trim()).filter(Boolean))}/>
     </label>
   );
   const addCredit=()=>update("credits",[...form.credits,{role:"Cast",name:""}]);
+  const emailValid=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail.trim());
+  const rightsDatesValid=Boolean(form.rightsStartDate && form.rightsEndDate && new Date(form.rightsEndDate)>new Date(form.rightsStartDate));
+  const missingFields:Array<[string,boolean]>=[
+    ["Original / English title",Boolean(form.originalTitle.trim())],
+    ["Production house",Boolean(form.productionCompany.trim())],
+    ["Master version",Boolean(form.masterVersion.trim())],
+    ["Resolution",Boolean(form.resolution)],
+    ["Codec",Boolean(form.codec.trim())],
+    ["Master language",Boolean(form.masterLanguage.trim())],
+    ["Rights basis",Boolean(form.rightsBasis)],
+    ["Territories",form.territories.length>0],
+    ["Rights languages",form.rightsLanguages.length>0],
+    ["Media rights",form.media.length>0],
+    ["Rights start date",Boolean(form.rightsStartDate)],
+    ["Rights end date",Boolean(form.rightsEndDate)],
+    ["Valid contact email",emailValid],
+    ["Contact name",Boolean(form.contactName.trim())],
+    ["Contact phone",Boolean(form.contactPhone.trim())],
+    ["Director credit",form.credits.some(c=>c.role==="Director" && c.name.trim())],
+    ["Producer credit",form.credits.some(c=>c.role==="Producer" && c.name.trim())],
+    ["Rights end date must follow start date",!form.rightsStartDate || !form.rightsEndDate || rightsDatesValid],
+  ].filter(([,complete])=>!complete);
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6 space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -395,6 +427,16 @@ function OwnerSubmissionPanel(props: {
         <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{submissionStatus}</span>
       </header>
       {loading?<p className="text-sm text-muted">Loading saved owner details…</p>:null}
+      <div aria-live="polite" className="rounded-xl border border-line bg-elevated/30 p-4">
+        {missingFields.length ? (
+          <>
+            <p className="text-sm font-semibold">{missingFields.length} required items still missing</p>
+            <ul className="mt-2 grid gap-1 text-sm text-muted sm:grid-cols-2">
+              {missingFields.map((field)=><li key={field}>• {field}</li>)}
+            </ul>
+          </>
+        ) : <p className="text-sm font-semibold">Required owner details are complete. You can submit this package to Super Admin.</p>}
+      </div>
       {submissionStatus === "NEEDS_CORRECTION" && submissionReason ? <p role="status" className="rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900">Super Admin requested changes: {submissionReason}</p> : null}
       {submissionStatus === "SUBMITTED" ? <p className="rounded-lg border border-line p-3 text-sm">Submitted / Pending Review. Editing is locked while Super Admin reviews this package.</p> : null}
       {submissionStatus === "ACCEPTED_INTAKE" ? <p className="rounded-lg border border-line p-3 text-sm">{title.status === "QC_REVIEW" ? "Accepted into intake and queued for Technical QC. QC result, Rights & Legal and publication remain separate gates." : "Accepted into intake. Technical QC queue entry will follow when the title is prepared and its master and artwork are verified."}</p> : null}
@@ -417,6 +459,55 @@ function OwnerSubmissionPanel(props: {
           {textField("Codec","codec","text",true)}
         </div>
         {listField("Subtitle languages","subtitleLanguages")}
+      </div>
+      <div className="space-y-3">
+        <h3 className="font-semibold">Technical delivery details</h3>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {textField("Audio format","audioFormat")}
+          {textField("Frame rate","frameRate")}
+          {textField("Color space","colorSpace")}
+          {textField("Aspect ratio","aspectRatio")}
+          {textField("Audio channels","audioChannels")}
+        </div>
+        <label className="block text-sm">Technical notes
+          <textarea className={inputClass} rows={2} value={form.technicalNotes} disabled={!canEdit} onChange={e=>update("technicalNotes",e.target.value)} />
+        </label>
+      </div>
+      <div className="space-y-3">
+        <h3 className="font-semibold">Ownership & legal declarations</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm">Ownership basis
+            <select className={inputClass} value={form.ownershipBasis} disabled={!canEdit} onChange={e=>update("ownershipBasis",e.target.value)}>
+              <option value="">Select if applicable</option>
+              {["COPYRIGHT_OWNER","PRODUCER","EXCLUSIVE_LICENSEE","AUTHORIZED_DISTRIBUTOR","OTHER"].map(v=><option key={v} value={v}>{v.replaceAll("_"," ")}</option>)}
+            </select>
+          </label>
+          <label className="block text-sm">Known legal disputes
+            <select className={inputClass} value={form.legalDisputes} disabled={!canEdit} onChange={e=>update("legalDisputes",e.target.value)}>
+              <option value="">Select if applicable</option><option value="NONE_DECLARED">None declared</option><option value="DISCLOSED">Disclosed</option><option value="UNKNOWN">Unknown / to be confirmed</option>
+            </select>
+          </label>
+        </div>
+        {listField("Rightsholder names","rightsholderNames")}
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={form.chainOfTitleConfirmed} disabled={!canEdit} onChange={e=>update("chainOfTitleConfirmed",e.target.checked)} className="mt-1" />
+          <span>I confirm that ownership / chain-of-title evidence is available for review. This is an owner declaration, not a Legal approval.</span>
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm">Censor certificate status
+            <select className={inputClass} value={form.censorCertificateStatus} disabled={!canEdit} onChange={e=>update("censorCertificateStatus",e.target.value)}>
+              <option value="">Select if applicable</option><option value="AVAILABLE">Available</option><option value="PENDING">Pending</option><option value="NOT_APPLICABLE">Not applicable</option>
+            </select>
+          </label>
+          {textField("Censor certificate number","censorCertificateNumber")}
+          {textField("Censor rating","censorRating")}
+          {textField("Certificate date","censorCertificateDate","date")}
+        </div>
+        <label className="block text-sm">Legal / ownership notes
+          <textarea className={inputClass} rows={3} value={form.legalNotes} disabled={!canEdit} onChange={e=>update("legalNotes",e.target.value)} />
+        </label>
+        <p className="text-xs text-muted">These are owner declarations and references only. They do not record Legal clearance, QC approval, Rights verification or publication authorization.</p>
+      </div>
       </div>
       <div className="space-y-3">
         <div className="flex items-center justify-between"><h3 className="font-semibold">Credits & cast</h3>
@@ -474,7 +565,7 @@ function OwnerSubmissionPanel(props: {
           className="rounded-full border border-line-strong px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
           {save.isPending?"Saving…":"Save draft"}
         </button>
-        <button type="button" disabled={!canEdit||submit.isPending||save.isPending||loading} onClick={()=>submit.mutate()}
+        <button type="button" disabled={!canEdit||submit.isPending||save.isPending||loading||missingFields.length>0} onClick={()=>submit.mutate()}
           className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50">
           {submit.isPending?"Submitting…":submissionStatus === "NEEDS_CORRECTION" ? "Resubmit to Super Admin" : "Submit to Super Admin"}
         </button>
