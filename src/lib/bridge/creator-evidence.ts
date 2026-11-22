@@ -17,6 +17,16 @@ const EVIDENCE_TYPES = [
   "OTHER",
 ] as const;
 
+const EVIDENCE_SLOT_TYPES = {
+  ott: "FINISHED_FILM_AGREEMENT",
+  loa: "DISTRIBUTION_AGREEMENT",
+  ownership: "OWNERSHIP_CHAIN_OF_TITLE",
+  transfer: "OWNERSHIP_CHAIN_OF_TITLE",
+  authority: "AUTHOR_ASSIGNMENT",
+  revenue: "OTHER",
+} as const;
+
+
 async function requireTitleOwner(userId: string, titleId: string) {
   assertNotDevUser(userId);
   const actor = await requireVerifiedActor(userId);
@@ -110,10 +120,10 @@ export const listTitleOwnerEvidence = createServerFn({ method: "GET" })
     const sql = await getSql();
     const rows = await sql<{
       id: string; document_type: string; file_name: string; content_type: string;
-      byte_size: number | null; status: string; created_at: string; verified_at: string | null;
+      byte_size: number | null; status: string; created_at: string; verified_at: string | null; evidence_slot: string;
     }>`
       select d.id, d.document_type, d.file_name, d.content_type, d.byte_size,
-        d.status, d.created_at, d.verified_at
+        d.status, d.created_at, d.verified_at, split_part(d.storage_key, '/', 4) as evidence_slot
       from bridge_title_document_links l
       join bridge_creator_documents d on d.id = l.document_id
       where l.title_id = ${data.titleId}
@@ -130,15 +140,17 @@ export const requestTitleOwnerEvidenceUpload = createServerFn({ method: "POST" }
   .validator(z.object({
     titleId: z.string().min(8),
     documentType: z.enum(EVIDENCE_TYPES),
+    evidenceSlot: z.enum(["ott", "loa", "ownership", "transfer", "authority", "revenue"]),
     fileName: z.string().min(1).max(120),
     byteSize: z.number().int().positive().max(MAX_PDF_BYTES),
   }))
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireTitleOwner(context.userId, data.titleId);
-    await assertEvidenceEditable(title.id, title.ownerUserId, actor.accountType === "studio" ? actor.organizationId ?? null : null, title.status);
+    await assertEvidenceEditable(title.id, title.ownerUserId, actor.accountType === "studio" ? title.ownerOrganizationId ?? null : null, title.status);
+    if (EVIDENCE_SLOT_TYPES[data.evidenceSlot] !== data.documentType) throw new Error("Evidence slot and document category do not match");
     const id = randomBytes(16).toString("hex");
     const safeName = data.fileName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-100) || "evidence.pdf";
-    const storageKey = `creator-evidence/${title.ownerUserId}/${title.id}/${id}.pdf`;
+    const storageKey = `creator-evidence/${title.ownerUserId}/${title.id}/${data.evidenceSlot}/${id}.pdf`;
     const { signUpload } = await import("./oci-object-storage.server");
     const signed = await signUpload({
       key: storageKey,
@@ -346,8 +358,8 @@ export const submitTitleOwnerRightsPackage = createServerFn({ method: "POST" })
       !data.details.paymentMethod.trim()
     ) throw new Error("Complete all rights scope, signatory and commercial-term inputs before submitting.");
     const sql = await getSql();
-    const required = await sql<{ document_type: string }>`
-      select distinct d.document_type
+    const evidenceSlots = await sql<{ evidence_slot: string }>`
+      select distinct split_part(d.storage_key, '/', 4) as evidence_slot
       from bridge_title_document_links l
       join bridge_creator_documents d on d.id = l.document_id
       where l.title_id = ${title.id}
@@ -356,30 +368,12 @@ export const submitTitleOwnerRightsPackage = createServerFn({ method: "POST" })
         and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
         and d.status = 'VERIFIED'
     `;
-    const present = new Set(required.map((r) => r.document_type));
-    const ownershipDocs = await sql<{ count: number }>`
-      select count(*)::int as count
-      from bridge_title_document_links l
-      join bridge_creator_documents d on d.id = l.document_id
-      where l.title_id = ${title.id}
-        and d.owner_user_id = ${title.ownerUserId}
-        and d.owner_account_type = ${actor.accountType}
-        and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
-        and d.document_type = 'OWNERSHIP_CHAIN_OF_TITLE'
-        and d.status = 'VERIFIED'
-    `;
-    if (Number(ownershipDocs[0]?.count ?? 0) < 2) {
-      throw new Error("Upload two separate ownership-chain PDFs: film ownership proof and New Darsan Creations rights-transfer proof.");
+    const presentSlots = new Set(evidenceSlots.map((item) => item.evidence_slot));
+    const requiredSlots = ["ott", "loa", "ownership", "transfer", "authority", "revenue"];
+    const missingSlots = requiredSlots.filter((slot) => !presentSlots.has(slot));
+    if (missingSlots.length) {
+      throw new Error(`Missing required legal evidence: ${missingSlots.join(", ")}. Upload and storage-verify each separate document before submitting.`);
     }
-    const mustHave = [
-      "FINISHED_FILM_AGREEMENT",
-      "DISTRIBUTION_AGREEMENT",
-      "OWNERSHIP_CHAIN_OF_TITLE",
-      "AUTHOR_ASSIGNMENT",
-      "OTHER",
-    ];
-    const missing = mustHave.filter((kind) => !present.has(kind));
-    if (missing.length) throw new Error("Upload and verify all five required evidence categories before submitting the legal package.");
     const datesValid = new Date(data.details.rightsStart).getTime() < new Date(data.details.rightsEnd).getTime();
     if (!datesValid) throw new Error("Rights start and end dates are invalid.");
     const saved = await sql<{ id: string }>`
