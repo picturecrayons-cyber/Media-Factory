@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { SignedOut } from "@/lib/auth/gates";
@@ -46,6 +46,7 @@ const WORKFLOW_STEPS = [
 
 function Home() {
   const { user, isPending } = useCurrentUserState();
+  const buyersTrackRef = useRef<HTMLDivElement>(null);
   const siteContentQ = useQuery({
     queryKey: ["bridge-public-site-content"],
     queryFn: () => getPublicSiteContent(),
@@ -108,8 +109,14 @@ function Home() {
               <HeroCarousel slides={siteContent.carouselSlides ?? []} />
 
               <section aria-labelledby="our-buyers-heading" className="mx-auto mt-10 max-w-5xl border-t border-line pt-7">
-                <h2 id="our-buyers-heading" className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Our Buyers</h2>
-                <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2 text-left">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 id="our-buyers-heading" className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Our Buyers</h2>
+                  <div className="flex gap-2">
+                    <button type="button" aria-label="Previous buyer slide" onClick={() => buyersTrackRef.current?.scrollBy({ left: -260, behavior: "smooth" })} className="grid h-8 w-8 place-items-center rounded-full border border-line text-sm text-muted hover:border-accent hover:text-fg">←</button>
+                    <button type="button" aria-label="Next buyer slide" onClick={() => buyersTrackRef.current?.scrollBy({ left: 260, behavior: "smooth" })} className="grid h-8 w-8 place-items-center rounded-full border border-line text-sm text-muted hover:border-accent hover:text-fg">→</button>
+                  </div>
+                </div>
+                <div ref={buyersTrackRef} role="region" aria-roledescription="carousel" aria-label="Buyer and distribution partners" className="mt-4 flex snap-x gap-3 overflow-x-auto scroll-smooth pb-2 text-left">
                   <article className="flex min-w-[230px] snap-start items-center gap-4 rounded-2xl border border-line bg-surface px-5 py-4">
                     <div>
                       <p className="font-display text-2xl font-semibold tracking-tight text-fg">Crayons Loop</p>
