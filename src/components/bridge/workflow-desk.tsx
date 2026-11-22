@@ -205,7 +205,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-3">
               <p>
                 {title.status === "PREPARING" || title.status === "UPLOADING" || title.status === "DRAFT"
-                  ? "Prepare the film package here. When the verified master and artwork are ready, Submit to Bridge sends it into the QC review queue. Business, Distribution and Revenue remain separate steps after intake."
+                  ? "Prepare the film package here. When the master, vertical poster, horizontal artwork and thumbnail are storage-verified, Submit to Bridge sends the package into the QC review queue. Business, Distribution and Revenue remain separate steps after intake."
                   : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
