@@ -152,7 +152,7 @@ async function requireStudioTitle(sql: Awaited<ReturnType<typeof getSql>>, title
         and submission_type = 'finished_film'
       limit 1
     `;
-  if (!rows[0]) throw new Error("Finished film was not found in the active Studio organization");
+  if (!rows[0]) throw new Error("Production title was not found in the active Studio organization");
   return rows[0];
 }
 
