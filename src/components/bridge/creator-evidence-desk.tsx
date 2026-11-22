@@ -264,6 +264,7 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
         </fieldset>
         {!locked ? (
           <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" onClick={() => setDetails({ ...EMPTY, ...(draftQ.data?.submission?.details as Partial<RightsDetails> | undefined) })} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">Undo unsaved edits</button>
             <button type="button" disabled={saveMutation.isPending || !titleId} onClick={() => saveMutation.mutate()} className="rounded-full border border-line-strong px-4 py-2 text-sm font-semibold disabled:opacity-50">{saveMutation.isPending ? "Saving…" : "Save draft"}</button>
             <button type="button" disabled={submitMutation.isPending || !details.ownerDeclaration || !titleId} onClick={() => submitMutation.mutate()} className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg disabled:opacity-50">{submitMutation.isPending ? "Submitting…" : "Submit to Legal Review"}</button>
           </div>
@@ -280,7 +281,7 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
             <li key={label} className="flex items-start gap-3 text-sm">
               <span className="mt-0.5 w-6 shrink-0 text-xs tabular-nums text-muted">{String(index + 1).padStart(2, "0")}</span>
               <span className="flex-1">{label}</span>
-              <span className={complete ? "text-xs font-semibold text-emerald-700" : "text-xs font-semibold text-muted"}>{complete ? "Evidence present" : index >= 10 ? "Reviewer approval pending" : "Pending"}</span>
+              <span className={complete ? "text-xs font-semibold text-emerald-700" : "text-xs font-semibold text-muted"}>{complete ? "Evidence present" : index >= 10 ? "Staff-controlled" : "Pending"}</span>
             </li>
           ))}
         </ol>
