@@ -4,10 +4,25 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { archiveDraftTitle, createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+  const qc = useQueryClient();
+  const [archiveTarget, setArchiveTarget] = useState<{id:string;name:string}|null>(null);
+  const [archiveReason, setArchiveReason] = useState("");
+  const archiveMut = useMutation({
+    mutationFn: () => {
+      if (!archiveTarget) throw new Error("Select a draft first");
+      return archiveDraftTitle({data:{titleId:archiveTarget.id,reason:archiveReason}});
+    },
+    onSuccess: () => {
+      toast.success("Draft archived. It can be restored by an authorized owner or Super Admin.");
+      setArchiveTarget(null); setArchiveReason("");
+      void qc.invalidateQueries({queryKey:["bridge-titles"]});
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Archive blocked"),
+  });
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
@@ -38,11 +53,30 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           </Link>
           <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-            
+            {t.status === "DRAFT" ? (
+              <Button type="button" variant="outline" size="sm" onClick={() => setArchiveTarget({id:t.id,name:t.name})}>
+                Archive
+              </Button>
+            ) : null}
           </div>
         </li>
       ))}
     </ul>
+    {archiveTarget ? (
+      <div role="dialog" aria-modal="true" aria-label="Confirm draft archive" className="mt-4 rounded-xl border border-line bg-surface p-4 space-y-3">
+        <h3 className="font-semibold">Archive draft: {archiveTarget.name}</h3>
+        <p className="text-sm text-muted">The server checks every linked record. Any asset, QC, legal, rights, payment, entitlement, delivery or unknown dependency blocks this action. No record is hard-deleted.</p>
+        <label className="block text-sm">Reason
+          <textarea value={archiveReason} onChange={(e)=>setArchiveReason(e.target.value)} minLength={3} maxLength={2000} required rows={3} className="mt-1 w-full rounded-lg border border-line bg-elevated p-3" />
+        </label>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={()=>{setArchiveTarget(null);setArchiveReason("");}}>Cancel</Button>
+          <Button type="button" disabled={archiveMut.isPending || archiveReason.trim().length<3} onClick={()=>archiveMut.mutate()}>
+            {archiveMut.isPending ? "Checking…" : "Confirm Archive"}
+          </Button>
+        </div>
+      </div>
+    ) : null}
   );
 }
 
