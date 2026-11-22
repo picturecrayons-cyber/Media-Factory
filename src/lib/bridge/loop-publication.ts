@@ -5,7 +5,6 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { loopStageType } from "@/lib/bridge/loop-lanes";
 import { assertPermission, canReadTitle } from "./rbac";
-import { loadTitle } from "./titles";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
@@ -668,11 +667,35 @@ export const getLoopPublication = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    const title = await loadTitle(data.bridgeTitleId);
-    if (!title || !canReadTitle(actor, title) || (!actor.internalRole && actor.accountType === "buyer")) {
+    const sql = await getSql();
+    const ownedRows = await sql<{
+      owner_user_id: string;
+      owner_account_type: string;
+      owner_organization_id: string | null;
+      status: string;
+    }>`
+      select owner_user_id, owner_account_type, owner_organization_id, status
+      from bridge_titles where id = ${data.bridgeTitleId} limit 1
+    `;
+    const owned = ownedRows[0];
+    if (!owned) throw new Error("Not found");
+    const canReadAsOwner =
+      !actor.internalRole &&
+      canReadTitle(actor, {
+        ownerUserId: owned.owner_user_id,
+        ownerAccountType: owned.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
+        ownerOrganizationId: owned.owner_organization_id,
+        status: owned.status as import("./types").TitleStatus,
+      });
+    const isSuperAdminCreatorOwner =
+      actor.internalRole === "super_admin" &&
+      actor.accountType === "independent_creator" &&
+      owned.owner_account_type === "independent_creator" &&
+      owned.owner_user_id === actor.userId;
+    if (!(canReadAsOwner || isSuperAdminCreatorOwner) ||
+      (!actor.internalRole && actor.accountType === "buyer")) {
       throw new Error("Not found");
     }
-    const sql = await getSql();
 
     const rows = await sql<PublicationRow>`
       select p.*, l.status as loop_status, l.listed, l.published, l.playback_path
