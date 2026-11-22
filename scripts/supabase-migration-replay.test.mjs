@@ -60,3 +60,14 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
 }
+
+
+test("Testing-only archive migration is explicitly excluded from the Production ledger replay", () => {
+  assert.match(replaySource, /const EXPECTED_PRODUCTION_MIGRATIONS = 70;/);
+  assert.match(
+    replaySource,
+    /const TESTING_ONLY_MIGRATIONS = new Set\(\[\s*"20261122180000_bridge_archive_fail_closed_contract\.sql"/,
+  );
+  assert.match(replaySource, /const names = allNames\.filter/);
+  assert.match(replaySource, /manifestRows.size !== EXPECTED_PRODUCTION_MIGRATIONS/);
+});
