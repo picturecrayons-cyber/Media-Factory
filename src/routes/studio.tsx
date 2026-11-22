@@ -9,12 +9,14 @@ import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 import { ProductsServicesCatalogue } from "@/components/bridge/products-services-catalogue";
+import { ServiceCentre } from "@/components/bridge/service-centre";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
 const workspaceLinks = [
   ["Titles", "#studio-titles", "Finished films and story concepts"],
   ["Products & Services", "#products-services", "Bridge offerings and service categories"],
+  ["Service Centre", "#service-centre", "Request services and track quotes, payments and delivery"],
   ["Gallery", "#studio-gallery", "Approved artwork and verified images"],
   ["Production & DIT", "#studio-dit", "Camera-card intake and media handover"],
   ["Document Vault", "#studio-documents", "Private rights and ownership evidence"],
@@ -92,6 +94,7 @@ function Studio() {
             </section>
 
             <ProductsServicesCatalogue audience="Studio" />
+            <ServiceCentre audience="Studio" userId={actor.userId} />
 
             <section id="studio-gallery" className="scroll-mt-24 space-y-3">
               <div><p className="text-xs font-semibold uppercase tracking-wider text-accent">Studio media</p><h3 className="mt-1 font-display text-xl font-semibold">Studio Gallery</h3><p className="mt-1 text-sm text-muted">Artwork and verified image assets from titles visible to this active Studio membership.</p></div>
