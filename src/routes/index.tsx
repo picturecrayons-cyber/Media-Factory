@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession } from "@/lib/bridge/session";
+import { BridgeLoopShowcase } from "@/components/bridge/bridge-loop-showcase";
 
 
 export const Route = createFileRoute("/")({ component: Home });
@@ -86,6 +87,7 @@ function Home() {
 
       <main>
         <section className="bridge-home-hero border-b border-line bg-white">
+          <div className="mx-auto max-w-7xl px-5 pt-10 sm:px-6 sm:pt-12"><BridgeLoopShowcase /></div>
           <div className="mx-auto max-w-7xl px-5 py-14 text-center sm:px-6 sm:py-16 lg:py-20">
             <div className="mx-auto max-w-5xl">
               <div className="mx-auto flex justify-center">
