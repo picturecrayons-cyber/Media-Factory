@@ -87,6 +87,11 @@ function AdminBody({ actor }: { actor: any }) {
           </Link>
           {actor.internalRole === "super_admin" ? (
             <>
+              <Link to="/admin/buyers" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+                <h3 className="font-semibold">Buyer Management</h3>
+                <p className="mt-1 text-sm text-muted">Review Bridge Buyer profiles, organization grouping and role-gated Buyer dashboards.</p>
+                <span className="mt-3 inline-block text-xs font-semibold text-accent">Manage Buyers →</span>
+              </Link>
               <Link to="/admin/users" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
                 <h3 className="font-semibold">Users & Access</h3>
                 <p className="mt-1 text-sm text-muted">Review verified Bridge profiles and internal access assignments.</p>
