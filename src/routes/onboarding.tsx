@@ -534,7 +534,7 @@ function Onboarding() {
         <div className="flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs leading-relaxed text-muted">© 2026 StreamVista OPC Pvt Ltd. Crayons Bridge is the media supply chain, rights and licensing control plane.</p>
           {accountType !== "buyer" ? (
-            <Button type="button" variant={showTitleIntake ? "outline" : "default"} disabled={busy} onClick={() => void onCreateWorkspaceOnly()} className="h-11 rounded-full px-6 font-semibold">
+            <Button type="button" variant={showTitleIntake ? "outline" : "primary"} disabled={busy} onClick={() => void onCreateWorkspaceOnly()} className="h-11 rounded-full px-6 font-semibold">
               {busy ? "Creating…" : "Create workspace"}
             </Button>
           ) : null}
