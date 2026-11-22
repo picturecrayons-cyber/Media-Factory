@@ -156,7 +156,7 @@ export function CreatorDocumentVault() {
             className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg disabled:opacity-50">
             {uploadMutation.isPending ? "Uploading and verifying…" : "Upload & verify"}
           </button>
-          <p className="text-xs text-muted">A document appears as reusable evidence only after private-storage verification succeeds.</p>
+          <p className="text-xs text-muted">Bridge authorizes the private upload, verifies the stored PDF server-side, and only then makes it available for linking. If the list fails, use Retry; upload success alone is not proof that the evidence list loaded.</p>
         </div>
 
         <div className="rounded-xl border border-line p-4 space-y-3">
@@ -201,7 +201,15 @@ export function CreatorDocumentVault() {
           <span className="text-xs text-muted">Only your Creator account or Studio organization documents</span>
         </div>
         {documentsQ.isPending ? <p className="text-sm text-muted">Loading documents…</p> : null}
-        {documentsQ.isError ? <p role="alert" className="text-sm text-muted">Documents could not be loaded. Refresh and retry.</p> : null}
+        {documentsQ.isError ? (
+          <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-muted">
+            <p>Documents could not be loaded.</p>
+            <button type="button" onClick={() => void documentsQ.refetch()} disabled={documentsQ.isFetching}
+              className="rounded-lg border border-line px-3 py-2 font-semibold disabled:opacity-50">
+              {documentsQ.isFetching ? "Retrying…" : "Retry"}
+            </button>
+          </div>
+        ) : null}
         {!documentsQ.isPending && !documentsQ.isError && !documentsQ.data?.documents.length
           ? <p className="rounded-lg border border-dashed border-line p-4 text-sm text-muted">No documents uploaded yet.</p>
           : null}
