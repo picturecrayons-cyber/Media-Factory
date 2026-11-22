@@ -73,6 +73,7 @@ const supportedFeatureMigrations = new Set([
   "20261118150000_bridge_exclusive_sublicensing_authority.sql",
   "20261123120000_bridge_homepage_carousel.sql",
   "20261123170000_bridge_legal_acceptances.sql",
+  "20261123190000_bridge_service_request_workflow.sql",
 ]);
 for (const name of featureNames) {
   if (!supportedFeatureMigrations.has(name)) {
