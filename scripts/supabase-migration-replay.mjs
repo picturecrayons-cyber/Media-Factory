@@ -69,7 +69,7 @@ if (new Set(allNames).size !== allNames.length) {
 }
 for (const name of NON_PRODUCTION_MIGRATIONS) {
   if (!allNames.includes(name)) {
-    throw new Error(`Declared Testing-only migration is missing: ${name}`);
+    throw new Error(`Declared Testing candidate migration is missing: ${name}`);
   }
 }
 const names = allNames.filter((name) => !NON_PRODUCTION_MIGRATIONS.has(name));
