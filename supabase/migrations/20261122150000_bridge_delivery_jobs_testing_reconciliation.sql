@@ -4,7 +4,7 @@
 
 create table if not exists public.bridge_delivery_jobs (
   id uuid primary key default gen_random_uuid(),
-  title_id text not null references public.bridge_titles(id) on delete cascade,
+  title_id text not null references public.bridge_titles(id) on delete restrict,
   job_type text not null
     constraint bridge_delivery_jobs_job_type_check
     check (job_type in ('dubbing','loudness','imf','dcp','human_qc','localization')),
@@ -36,8 +36,9 @@ comment on column public.bridge_delivery_jobs.request_note is
   'Requester-supplied delivery instructions; must not contain secrets or credentials.';
 
 alter table public.bridge_delivery_jobs enable row level security;
-revoke all on table public.bridge_delivery_jobs from public;
-grant all on table public.bridge_delivery_jobs to anon, authenticated, postgres, service_role;
+revoke all on table public.bridge_delivery_jobs from public, anon, authenticated;
+grant select, insert, update on table public.bridge_delivery_jobs to authenticated;
+grant all on table public.bridge_delivery_jobs to postgres, service_role;
 
 do $delivery_policy$
 begin
