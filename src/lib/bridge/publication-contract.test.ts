@@ -161,7 +161,8 @@ test("certified Loop publication advances a licensing-ready Bridge title to buye
   assert.equal((result as { status: string }).status, "AUTHORIZED");
   const advance = h.writes.find((write) => write.query.includes("update bridge_titles"));
   assert.ok(advance);
-  assert.ok(advance.values.includes("LIVE_FOR_BUYERS"));
+  assert.match(advance.query, /set status='LIVE_FOR_BUYERS'/);
+  assert.ok(advance.values.includes("title-1"));
   const event = h.writes.find((write) => write.query.includes("insert into bridge_title_events"));
   assert.ok(event);
   assert.match(event.query, /values\s*\(\s*\?,'LICENSING_READY','LIVE_FOR_BUYERS',\?/);
@@ -170,13 +171,13 @@ test("certified Loop publication advances a licensing-ready Bridge title to buye
 
 test("publication fails closed without explicitly approved TVOD pricing", async () => {
   const h = harness([grant], true, false, undefined, true, "LICENSED", false);
-  await assert.rejects(h.authorize({ context, data }), /Super Admin-approved TVOD consumer pricing/);
+  await assert.rejects(h.authorize({ context, data }), /Super Admin-approved TVOD rental pricing/);
   assert.equal(h.writes.length, 0);
 });
 
 test("publication requires a certified Loop destination package", async () => {
   const h = harness([grant], true, false, undefined, false);
-  await assert.rejects(h.authorize({ context, data }), /certified READY Crayons Loop destination package/);
+  await assert.rejects(h.authorize({ context, data }), /latest Crayons Loop destination package must be certified READY/);
   assert.equal(h.writes.length, 0);
 });
 
