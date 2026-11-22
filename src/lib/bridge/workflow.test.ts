@@ -471,3 +471,65 @@ test("Submit to Bridge requires complete verified package and writes lifecycle p
     await f.db.close();
   }
 });
+
+
+test("service request migration enforces immutable history and server-synchronized payment lifecycle", async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`
+      create role anon;
+      create role authenticated;
+      create role service_role;
+      create table public.bridge_profiles(user_id text primary key);
+      create table public.bridge_titles(id text primary key);
+      create table public.bridge_service_quotes(id uuid primary key);
+      create table public.bridge_service_orders(id uuid primary key, quote_id uuid references public.bridge_service_quotes(id), status text not null);
+    `);
+    const migration = readFileSync("supabase/migrations/20261123190000_bridge_service_request_workflow.sql", "utf8");
+    await db.exec(migration);
+    const requestId = randomUUID();
+    const quoteId = randomUUID();
+    await db.exec("insert into public.bridge_profiles(user_id) values ('owner')");
+    await db.exec("insert into public.bridge_titles(id) values ('service-title')");
+    await db.query("insert into public.bridge_service_quotes(id) values ($1)", [quoteId]);
+    await db.query(
+      "insert into public.bridge_service_requests(id,requester_user_id,requester_account_type,title_id,category,description,status,quote_id) values ($1,'owner','independent_creator','service-title','QC','Technical QC service requested','QUOTE_READY',$2)",
+      [requestId, quoteId],
+    );
+    await db.query(
+      "insert into public.bridge_service_request_events(id,request_id,from_status,to_status,note) values ($1,$2,'UNDER_REVIEW','QUOTE_READY','Quote ready')",
+      [randomUUID(), requestId],
+    );
+    await assert.rejects(
+      db.query("update public.bridge_service_request_events set note='tampered' where request_id=$1", [requestId]),
+      /immutable/,
+    );
+    await assert.rejects(
+      db.query("delete from public.bridge_service_request_events where request_id=$1", [requestId]),
+      /immutable/,
+    );
+    await assert.rejects(
+      db.query("update public.bridge_service_requests set status='PAID' where id=$1", [requestId]),
+      /Invalid service request transition/,
+    );
+
+    const orderId = randomUUID();
+    await db.query(
+      "insert into public.bridge_service_orders(id,quote_id,status) values ($1,$2,'PAYMENT_PENDING')",
+      [orderId, quoteId],
+    );
+    const awaiting = await db.query("select status,order_id from public.bridge_service_requests where id=$1", [requestId]);
+    assert.equal(awaiting.rows[0].status, "AWAITING_PAYMENT");
+    assert.equal(awaiting.rows[0].order_id, orderId);
+
+    await db.query("update public.bridge_service_orders set status='PAID' where id=$1", [orderId]);
+    const paid = await db.query("select status from public.bridge_service_requests where id=$1", [requestId]);
+    assert.equal(paid.rows[0].status, "PAID");
+    await assert.rejects(
+      db.query("update public.bridge_service_requests set status='COMPLETED' where id=$1", [requestId]),
+      /Invalid service request transition/,
+    );
+  } finally {
+    await db.close();
+  }
+});
