@@ -39,6 +39,8 @@ export function MyStoryConcepts() {
   });
 
   if (!STORY_CONCEPT_ENABLED) return null;
+  if (userPending || sessionQ.isPending) return <p className="text-sm text-muted">Verifying account access…</p>;
+  if (sessionQ.isError || !actor?.emailVerified) return null;
   if (query.isLoading) return <p className="text-sm text-muted">Loading concepts…</p>;
   if (query.isError) return null;
 
