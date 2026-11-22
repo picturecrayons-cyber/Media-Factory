@@ -738,6 +738,8 @@ export const archiveDraftTitle = createServerFn({ method: "POST" })
       if(!title) throw new Error("Title not found");
       if(["jananam-1947-pranayam-thudarunnu","jananam-1947-pranayam-thudarunnu-7"].includes(title.slug)) throw new Error("Protected title cannot be archived");
       if(title.status!=="DRAFT" || title.archived_at) throw new Error("Only an active DRAFT can be archived");
+      if (!actor.emailVerified) throw new Error("Email verification required");
+      if (actor.internalRole && actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
       if(actor.internalRole!=="super_admin") {
         if(actor.internalRole || !["independent_creator","studio"].includes(actor.accountType)) throw new Error("Owner or Super Admin access required");
         const direct=title.owner_user_id===actor.userId;
