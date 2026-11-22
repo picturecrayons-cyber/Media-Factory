@@ -4,11 +4,16 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { createTitle, deleteDraftTitle, listTitles } from "@/lib/bridge/titles";
 
-export function TitleList({ empty, query = "", showSubmissionFilters = false }: { empty: string; query?: string; showSubmissionFilters?: boolean }) {
+export function TitleList({ empty, query = "", showSubmissionFilters = false, allowDraftDelete = false }: { empty: string; query?: string; showSubmissionFilters?: boolean; allowDraftDelete?: boolean }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const [sourceFilter, setSourceFilter] = useState<"all" | "independent_creator" | "studio">("all");
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteDraftTitle({ data: { id, confirmation: "DELETE DRAFT" } }),
+    onSuccess: () => { toast.success("Draft title deleted."); void titlesQ.refetch(); },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Draft deletion blocked."),
+  });
   const titles = (titlesQ.data?.titles ?? []).filter((t) =>
     (sourceFilter === "all" || t.ownerAccountType === sourceFilter) &&
     (!query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase())),
@@ -54,7 +59,11 @@ export function TitleList({ empty, query = "", showSubmissionFilters = false }: 
           </Link>
           <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-            
+            {allowDraftDelete && t.status === "DRAFT" ? (
+              <Button type="button" size="sm" variant="outline" disabled={deleteMutation.isPending} onClick={() => {
+                if (window.confirm("Permanently delete this DRAFT title? This cannot be undone. Linked assets or records will block deletion.")) deleteMutation.mutate(t.id);
+              }}>Delete draft</Button>
+            ) : null}
           </div>
         </li>
       ))}
