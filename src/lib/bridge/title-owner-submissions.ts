@@ -8,7 +8,7 @@ import { requireVerifiedActor, type BridgeActor } from "./session";
 import { loadTitle } from "./titles";
 import { canMutateTitle, canReadTitle } from "./rbac";
 import { writeAudit } from "./audit";
-import { ownerSubmissionSubmitTransition } from "./owner-submission-state";
+import { ownerSubmissionSubmitTransition, ownerSubmissionReviewTransition, assertSubmissionDecisionReason } from "./owner-submission-state";
 import { submitTitleForQcInTransaction } from "./title-submission";
 
 const creditsSchema = z.array(z.object({
@@ -247,12 +247,8 @@ export const reviewOwnerSubmission = createServerFn({method:"POST"})
   .validator(z.object({
     titleId:z.string().min(8),
     submissionKind:z.enum(["finished_film","story_concept"]),
-    decision:z.enum(["ACCEPTED_INTAKE","REQUEST_CHANGES"]),
-    reason:z.string().trim().max(2000).optional(),
-  }).superRefine((value,ctx)=>{
-    if(value.decision==="REQUEST_CHANGES" && (!value.reason || value.reason.length<3)){
-      ctx.addIssue({code:"custom",path:["reason"],message:"A clear reason is required to request changes"});
-    }
+    decision:z.enum(["ACCEPTED_INTAKE","REQUEST_CHANGES","REJECTED"]),
+    reason:z.string().trim().min(3).max(2000),
   }))
   .handler(async ({context,data})=>{
     assertNotDevUser(context.userId);
@@ -261,7 +257,9 @@ export const reviewOwnerSubmission = createServerFn({method:"POST"})
     const title=await loadTitle(data.titleId);
     if(!title) throw new Error("Title not found");
     const sql=await getSql();
-    const nextStatus=data.decision==="ACCEPTED_INTAKE"?"ACCEPTED_INTAKE":"NEEDS_CORRECTION";
+    const transition=ownerSubmissionReviewTransition("SUBMITTED",data.decision);
+    const reason=assertSubmissionDecisionReason(data.reason);
+    const nextStatus=transition.toStatus;
     let qcQueued=title.status==="QC_REVIEW";
     await sql.transaction(async(tx)=>{
       if(data.submissionKind==="finished_film"){
@@ -285,7 +283,7 @@ export const reviewOwnerSubmission = createServerFn({method:"POST"})
         await tx`
           insert into bridge_owner_submission_events
             (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
-          values (${data.titleId},'finished_film',${data.decision},'SUBMITTED',${nextStatus},${actor.userId},${data.reason??null})
+          values (${data.titleId},'finished_film',${data.decision},'SUBMITTED',${nextStatus},${actor.userId},${reason})
         `;
       }else{
         const rows=await tx<{owner_submission_status:string}>`
@@ -306,13 +304,13 @@ export const reviewOwnerSubmission = createServerFn({method:"POST"})
       }
       await writeAudit({
         actorUserId:actor.userId,
-        action:data.decision==="ACCEPTED_INTAKE"?"title.owner_submission.accepted_intake":"title.owner_submission.request_changes",
+        action:data.decision==="ACCEPTED_INTAKE"?"title.owner_submission.accepted_intake":data.decision==="REJECTED"?"title.owner_submission.rejected":"title.owner_submission.request_changes",
         entityType:"bridge_title",entityId:data.titleId,
         metadata:{
           submissionKind:data.submissionKind,
           from:"SUBMITTED",
           to:nextStatus,
-          reason:data.reason??null,
+          reason,
           qcQueueEntered:qcQueued,
           qcApprovalGranted:false,
           rightsAndPublicationUnchanged:true,
