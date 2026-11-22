@@ -164,3 +164,29 @@ export const submitTitleOwnerDetails = createServerFn({method:"POST"})
     // rights review, legal approval, licensing and publication state.
     return {submitted:true as const,titleStatus:title.status};
   });
+
+/** Super Admin intake queue. Owner details are visible for review only; no gate is changed. */
+export const listOwnerSubmissionQueue = createServerFn({method:"GET"})
+  .middleware([authMiddleware])
+  .handler(async ({context}) => {
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
+    const sql=await getSql();
+    const rows=await sql<{
+      title_id:string; title_name:string; title_status:string; owner_user_id:string;
+      owner_email:string|null; owner_display_name:string|null; owner_organization_id:string|null;
+      details:unknown; submission_status:string; submitted_at:string|Date|null; updated_at:string|Date;
+    }>`
+      select s.title_id,t.name as title_name,t.status as title_status,
+        s.owner_user_id,p.email as owner_email,p.display_name as owner_display_name,
+        s.owner_organization_id,s.details,s.submission_status,s.submitted_at,s.updated_at
+      from bridge_title_owner_submissions s
+      join bridge_titles t on t.id=s.title_id
+      left join bridge_profiles p on p.user_id=s.owner_user_id
+      where s.submission_status='SUBMITTED'
+      order by s.submitted_at asc nulls last
+      limit 200
+    `;
+    return {submissions:rows};
+  });
