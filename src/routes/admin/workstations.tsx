@@ -80,7 +80,6 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
       ) : activeTab === "Owner Submissions" ? (
         <OwnerSubmissionQueue submissions={ownerSubmissionsQ.data?.submissions ?? []} loading={ownerSubmissionsQ.isPending} error={ownerSubmissionsQ.error instanceof Error ? ownerSubmissionsQ.error.message : null} />
       
-        <TitleQueue titles={data.titles} review={review} />
       ) : activeTab === "Concepts" ? (
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
