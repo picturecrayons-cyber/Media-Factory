@@ -229,7 +229,7 @@ function Onboarding() {
       return;
     }
     if (!displayName.trim()) {
-      setError("Enter your name to create your Creator workspace.");
+      setError(`Enter your name to create your ${ACCOUNT_LABELS[accountType]} workspace.`);
       return;
     }
     if (submitInFlight.current) return;
@@ -249,7 +249,7 @@ function Onboarding() {
         },
       });
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
-      void navigate({ to: accountType === "buyer" ? "/buyer" : "/creator", replace: true });
+      void navigate({ to: accountType === "buyer" ? "/buyer" : accountType === "studio" ? "/studio" : "/creator", replace: true });
     } catch (err) {
       setError(publicOnboardingError(err));
     } finally {
