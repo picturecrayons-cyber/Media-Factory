@@ -277,6 +277,9 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       if (inv.email.toLowerCase() !== email.toLowerCase()) {
         throw new Error("Invite email does not match this account");
       }
+      if (inv.internal_role === "super_admin") {
+        throw new Error("Super Admin invitations are disabled; owner-level assignment must be provisioned separately");
+      }
       internalRole = inv.internal_role;
       invitedBy = inv.invited_by;
       inviteId = inv.id;
