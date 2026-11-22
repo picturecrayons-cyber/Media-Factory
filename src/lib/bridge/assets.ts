@@ -20,7 +20,7 @@ const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARIN
 async function getVerifiedAuditEtag(assetId: string): Promise<string | null> {
   const sql = await getSql();
   const rows = await sql<{ checksum: string | null }>`
-    select metadata->>'checksum' as checksum
+    select metadata::jsonb->>'checksum' as checksum
     from bridge_audit_logs
     where action = 'asset.upload_verified'
       and entity_type = 'bridge_asset'
@@ -215,7 +215,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     if (asset.byte_size != null) {
       const verifiedAudit = await sql<{ checksum: string | null }>`
-        select metadata->>'checksum' as checksum
+        select metadata::jsonb->>'checksum' as checksum
         from bridge_audit_logs
         where action = 'asset.upload_verified'
           and entity_type = 'bridge_asset'
@@ -368,7 +368,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at,
         (
-          select audit.metadata->>'checksum'
+          select audit.metadata::jsonb->>'checksum'
           from bridge_audit_logs audit
           where audit.action = 'asset.upload_verified'
             and audit.entity_type = 'bridge_asset'
