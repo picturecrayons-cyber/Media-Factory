@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AdminAuditRouteImport } from './routes/admin/audit'
+import { Route as AdminBuyersRouteImport } from './routes/admin/buyers'
 import { Route as AdminServicesRouteImport } from './routes/admin/services'
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
 import { Route as AdminCmsRouteImport } from './routes/admin-cms'
@@ -60,6 +61,11 @@ const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminBuyersRoute = AdminBuyersRouteImport.update({
+  id: '/buyers',
+  path: '/buyers',
+  getParentRoute: () => AdminRoute,
 } as any)
 const AdminAuditRoute = AdminAuditRouteImport.update({
   id: '/audit',
@@ -231,6 +237,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRouteWithChildren
+  '/admin/buyers': typeof AdminBuyersRoute
+  '/admin/buyers': typeof AdminBuyersRoute
+  '/admin/buyers': typeof AdminBuyersRoute
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
@@ -339,6 +348,9 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/admin'
+    | '/admin/buyers'
+    | '/admin/buyers'
+    | '/admin/buyers'
     | '/admin-cms'
     | '/app'
     | '/buyer'
@@ -653,6 +665,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkspaceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/buyers': {
+      id: '/buyers'
+      path: '/buyers'
+      fullPath: '/admin/buyers'
+      preLoaderRoute: typeof AdminBuyersRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/audit': {
       id: '/audit'
       path: '/audit'
@@ -734,6 +753,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteChildren {
+  AdminBuyersRoute: typeof AdminBuyersRoute
   AdminAuditRoute: typeof AdminAuditRoute
   AdminServicesRoute: typeof AdminServicesRoute
   AdminUsersRoute: typeof AdminUsersRoute
@@ -741,6 +761,7 @@ interface AdminRouteChildren {
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminBuyersRoute: AdminBuyersRoute,
   AdminAuditRoute: AdminAuditRoute,
   AdminServicesRoute: AdminServicesRoute,
   AdminUsersRoute: AdminUsersRoute,
