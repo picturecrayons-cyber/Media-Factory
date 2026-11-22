@@ -16,13 +16,19 @@ function navigationFor(actor: BridgeActor): NavItem[] {
     if (actor.internalRole === "admin" || actor.internalRole === "super_admin") {
       items.push(
         { to: "/admin", label: "Admin" },
+        { to: "/admin/team", label: "Team & Permissions" },
         { to: "/admin-cms", label: "Website CMS" },
       );
     }
 
     if (actor.internalRole === "super_admin") {
       items.unshift({ to: "/dashboard", label: "Founder Centre" });
-      items.push({ to: "/cms", label: "Loop Gateway" });
+      items.push(
+        { to: "/admin/users", label: "Users & Access" },
+        { to: "/admin/audit", label: "Audit & Security" },
+        { to: "/admin/services", label: "Services" },
+        { to: "/cms", label: "Loop Gateway" },
+      );
     }
 
     return [...items, { to: "/account", label: "Account" }];
