@@ -61,13 +61,6 @@ function Account() {
                 </section>
               ) : null}
 
-              <div className="border-t border-line pt-6">
-                <Link to="/">
-                  <Button type="button" variant="outline" className="min-w-40">
-                    Back to Bridge
-                  </Button>
-                </Link>
-              </div>
             </div>
           </BridgeShell>
         );
