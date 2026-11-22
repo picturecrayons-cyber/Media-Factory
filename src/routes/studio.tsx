@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
@@ -11,7 +11,7 @@ import type { BridgeActor } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
-type StudioSection = "titles" | "production" | "documents" | "account";
+type StudioSection = "titles" | "production" | "documents";
 
 function Studio() {
   return (
@@ -31,7 +31,6 @@ function StudioDashboard({ actor }: { actor: BridgeActor }) {
     { id: "titles", label: "Titles" },
     { id: "production", label: "Production & DIT" },
     { id: "documents", label: "Documents" },
-    { id: "account", label: "Account" },
   ];
 
   return (
@@ -42,7 +41,6 @@ function StudioDashboard({ actor }: { actor: BridgeActor }) {
           <h2 className="mt-1 font-display text-2xl font-semibold sm:text-3xl">{actor.organizationName || actor.displayName}</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted">Manage Studio-owned titles, production media and verified documents.</p>
         </div>
-        <Link to="/account" className="rounded-full border border-line px-4 py-2 text-sm font-semibold hover:border-accent">Account & security ↗</Link>
       </header>
 
       <nav aria-label="Studio workspace sections" className="flex flex-wrap gap-2 border-b border-line pb-3">
@@ -85,20 +83,6 @@ function StudioDashboard({ actor }: { actor: BridgeActor }) {
             <p className="mt-1 text-sm text-muted">Upload verified agreements and ownership evidence, then link them to eligible title records. Uploading a document does not approve Legal or Rights.</p>
           </div>
           <CreatorDocumentVault />
-        </section>
-      ) : null}
-
-      {section === "account" ? (
-        <section className="max-w-2xl space-y-4 rounded-xl border border-line bg-surface p-5">
-          <div>
-            <h3 className="font-display text-xl font-semibold">Studio account</h3>
-            <p className="mt-1 text-sm text-muted">Verified organization identity and account access.</p>
-          </div>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div><dt className="text-xs text-muted">Organization</dt><dd className="mt-1 font-medium">{actor.organizationName || "Not available"}</dd></div>
-            <div><dt className="text-xs text-muted">Signed-in account</dt><dd className="mt-1 font-medium">{actor.displayName}</dd></div>
-          </dl>
-          <Link to="/account" className="inline-flex text-sm font-semibold text-accent hover:underline">Manage account & security ↗</Link>
         </section>
       ) : null}
 
