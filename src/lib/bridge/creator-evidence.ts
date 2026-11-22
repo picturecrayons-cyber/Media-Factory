@@ -76,16 +76,22 @@ export const requestCreatorEvidenceUpload = createServerFn({ method: "POST" })
       bucket: EVIDENCE_BUCKET,
     });
     const sql = await getSql();
-    await sql`
-      insert into bridge_creator_documents (
-        id, owner_user_id, owner_account_type, owner_organization_id,
-        document_type, file_name, content_type, byte_size, storage_key, status, created_by
-      ) values (
-        ${id}, ${actor.userId}, 'independent_creator', null,
-        ${data.documentType}, ${safeName}, 'application/pdf', ${data.byteSize},
-        ${storageKey}, 'PENDING_UPLOAD', ${actor.userId}
-      )
-    `;
+    await sql.transaction(async (tx) => {
+      await tx`
+        insert into bridge_creator_documents (
+          id, owner_user_id, owner_account_type, owner_organization_id,
+          document_type, file_name, content_type, byte_size, storage_key, status, created_by
+        ) values (
+          ${id}, ${actor.userId}, 'independent_creator', null,
+          ${data.documentType}, ${safeName}, 'application/pdf', ${data.byteSize},
+          ${storageKey}, 'PENDING_UPLOAD', ${actor.userId}
+        )
+      `;
+      await tx`
+        insert into bridge_title_document_links (id, title_id, document_id, evidence_type, linked_by)
+        values (${randomBytes(16).toString("hex")}, ${title.id}, ${id}, ${data.documentType}, ${actor.userId})
+      `;
+    });
     await writeAudit({
       actorUserId: actor.userId,
       action: "creator.evidence_upload_requested",
@@ -159,19 +165,28 @@ export const revokePendingCreatorEvidence = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireCreatorOwner(context.userId, data.titleId);
     const sql = await getSql();
-    const changed = await sql<{ id: string }>`
-      update bridge_creator_documents d
-      set status = 'REVOKED', revoked_at = now(), updated_at = now()
-      where d.id = ${data.documentId}
-        and d.owner_user_id = ${actor.userId}
-        and d.status = 'PENDING_UPLOAD'
-        and not exists (
-          select 1 from bridge_title_document_links l
-          where l.document_id = d.id and l.title_id = ${title.id}
-        )
-      returning d.id
-    `;
-    if (!changed.length) throw new Error("Only an unverified, unlinked upload can be undone. Verified evidence is retained; upload a replacement to preserve the audit trail.");
+    const changed = await sql.transaction(async (tx) => {
+      const rows = await tx<{ id: string }>`
+        update bridge_creator_documents
+        set status = 'REVOKED', revoked_at = now(), updated_at = now()
+        where id = ${data.documentId}
+          and owner_user_id = ${actor.userId}
+          and status = 'PENDING_UPLOAD'
+          and exists (
+            select 1 from bridge_title_document_links l
+            where l.document_id = bridge_creator_documents.id and l.title_id = ${title.id}
+          )
+        returning id
+      `;
+      if (rows.length) {
+        await tx`
+          delete from bridge_title_document_links
+          where title_id = ${title.id} and document_id = ${data.documentId}
+        `;
+      }
+      return rows;
+    });
+    if (!changed.length) throw new Error("Only an unverified upload can be undone. Verified evidence is retained; upload a replacement to preserve the audit trail.");
     await writeAudit({
       actorUserId: actor.userId,
       action: "creator.evidence_upload_undone",
