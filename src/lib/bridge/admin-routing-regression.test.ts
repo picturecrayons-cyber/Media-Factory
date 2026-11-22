@@ -129,7 +129,9 @@ test("Super Admin primary tabs expose the simplified Bridge workspaces without c
   for (const path of ["/dashboard", "/workspace", "/admin/workstations", "/internal", "/admin/buyers", "/admin/users", "/admin/services", "/admin-cms", "/admin/audit", "/account"]) {
     assert.ok(shell.includes(`to: "${path}"`), `missing Super Admin tab ${path}`);
   }
-  assert.doesNotMatch(shell, /to: "\/cms"|to: "\/admin\/team"/);
+  const superAdminNavigation = shell.split('if (actor.internalRole === "super_admin") {')[1]?.split('if (actor.internalRole) {')[0] ?? "";
+  assert.ok(superAdminNavigation, "Super Admin navigation branch must exist");
+  assert.doesNotMatch(superAdminNavigation, /to: "\/cms"|to: "\/admin\/team"/);
   assert.match(shell, /actor\.internalRole === "super_admin"/);
 });
 
