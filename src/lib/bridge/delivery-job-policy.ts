@@ -3,7 +3,9 @@ export type DeliveryReadiness = {
   qcPassedForCurrentAssets: boolean;
   legalApproved: boolean;
   rightsGrantValid: boolean;
+  ottPreparationReady: boolean;
   packagingComplete: boolean;
+  curationApproved: boolean;
   finalDeliveryGateReady: boolean;
   lifecycleReady: boolean;
 };
@@ -31,7 +33,9 @@ export function deliveryFinalGate(readiness: DeliveryReadiness): { ready: boolea
   if (!readiness.qcPassedForCurrentAssets) reasons.push("QC approval for the current master and artwork is required.");
   if (!readiness.legalApproved) reasons.push("Independent Legal approval is required.");
   if (!readiness.rightsGrantValid) reasons.push("A currently valid rights grant is required.");
+  if (!readiness.ottPreparationReady) reasons.push("OTT preparation must be READY.");
   if (!readiness.packagingComplete) reasons.push("Packaging must be certified COMPLETE.");
+  if (!readiness.curationApproved) reasons.push("Curation must be APPROVED.");
   if (!readiness.finalDeliveryGateReady) reasons.push("The final Bridge delivery gate must be READY.");
   return { ready: reasons.length === 0, reasons };
 }
