@@ -315,11 +315,11 @@ type OwnerSubmissionTitle = {
 };
 type OwnerSubmissionValues = {
   originalTitle: string; productionCompany: string; completionDate: string;
-  masterVersion: string; resolution: string; codec: string; masterLanguage: string;
-  subtitleLanguages: string[]; rightsBasis: string; territories: string[];
+  masterVersion: string; resolution: "SD" | "HD" | "2K" | "4K" | "6K" | "8K" | "OTHER" | ""; codec: string; masterLanguage: string;
+  subtitleLanguages: string[]; rightsBasis: "OWNER" | "EXCLUSIVE_LICENSEE" | "AUTHORIZED_DISTRIBUTOR" | "PRODUCER_AUTHORITY" | ""; territories: string[];
   rightsLanguages: string[]; media: string[]; rightsStartDate: string;
-  rightsEndDate: string; exclusivity: string; contactName: string;
-  contactEmail: string; contactPhone: string; credits: Array<{role:string;name:string}>;
+  rightsEndDate: string; exclusivity: "EXCLUSIVE" | "NON_EXCLUSIVE"; contactName: string;
+  contactEmail: string; contactPhone: string; credits: Array<{role:"Director"|"Producer"|"Writer"|"Cinematographer"|"Editor"|"Music"|"Cast"|"Other";name:string}>;
 };
 const EMPTY_OWNER_SUBMISSION: OwnerSubmissionValues = {
   originalTitle:"", productionCompany:"", completionDate:"", masterVersion:"",
@@ -338,7 +338,7 @@ function OwnerSubmissionPanel(props: {
   const [form,setForm]=useState<OwnerSubmissionValues>(()=>({
     ...EMPTY_OWNER_SUBMISSION,
     originalTitle:title.nameMl || title.name,
-    credits:title.credits?.map(c=>({role:c.role,name:c.name})) ?? [],
+    credits:title.credits?.map(c=>({role:c.role as OwnerSubmissionValues["credits"][number]["role"],name:c.name})) ?? [],
     ...(initial && typeof initial==="object" ? initial as Partial<OwnerSubmissionValues> : {})
   }));
   useEffect(() => {
@@ -361,7 +361,7 @@ function OwnerSubmissionPanel(props: {
     onSuccess:async()=>{setNotice("Owner details submitted. QC and Legal review remain separate.");setErrorText("");await onSaved();},
     onError:(e)=>{setErrorText(e instanceof Error?e.message:"Could not submit owner details.");setNotice("");}
   });
-  const update=(key:keyof OwnerSubmissionValues,value:unknown)=>setForm(old=>({...old,[key]:value}));
+  const update=(key:keyof OwnerSubmissionValues,value:unknown)=>setForm(old=>({...old,[key]:value}) as OwnerSubmissionValues);
   const inputClass="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2 text-sm";
   const textField=(label:string,key:keyof OwnerSubmissionValues,type="text",required=false)=>(
     <label className="block text-sm">{label}{required?<span className="text-red-600"> *</span>:null}
