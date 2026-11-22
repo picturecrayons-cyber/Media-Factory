@@ -294,7 +294,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           submissionReason={ownerSubmissionQ.data?.submission?.reason ?? null}
           loading={ownerSubmissionQ.isPending}
           error={ownerSubmissionQ.error instanceof Error ? ownerSubmissionQ.error.message : null}
-          canEdit={canOperateOnTitle(actor, title, "title.update_own", "title.license") && ["DRAFT","UPLOADING","PREPARING"].includes(title.status) && ["DRAFT","NEEDS_CORRECTION"].includes(ownerSubmissionQ.data?.submission?.status ?? "DRAFT")}
+          canEdit={!actor.internalRole && canOperateOnTitle(actor, title, "title.update_own", "title.license") && ["DRAFT","UPLOADING","PREPARING"].includes(title.status) && ["DRAFT","NEEDS_CORRECTION"].includes(ownerSubmissionQ.data?.submission?.status ?? "DRAFT")}
           onSaved={() => ownerSubmissionQ.refetch()}
         />
       ) : activeTab === "Production" && !buyerView ? (
