@@ -11,14 +11,14 @@ import { listTitles } from "@/lib/bridge/titles";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
-const LIVE = new Set(["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"]);
-const IN_PROGRESS = new Set(["UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVIEW"]);
+const IN_PROGRESS = new Set(["DRAFT", "UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"]);
+const COMPLETED = new Set(["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"]);
 
 function Creator() {
   return (
     <RequireBridge allow="creator">
       {(actor) => (
-        <BridgeShell actor={actor} title="Creator workspace">
+        <BridgeShell actor={actor} title="Creator Home">
           <CreatorDashboard actor={actor} />
         </BridgeShell>
       )}
@@ -34,117 +34,93 @@ function CreatorDashboard({ actor }: { actor: { userId: string; organizationId?:
   });
   const titles = titlesQ.data?.titles ?? [];
   const inProgress = titles.filter((title) => IN_PROGRESS.has(title.status));
-  const licensingReady = titles.filter((title) => title.status === "LICENSING_READY");
-  const live = titles.filter((title) => LIVE.has(title.status));
-  const recent = [...titles].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).slice(0, 4);
+  const completed = titles.filter((title) => COMPLETED.has(title.status));
+  const recent = [...titles].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).slice(0, 3);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-1 pb-16">
-      <header className="rounded-2xl border border-line bg-surface p-5 sm:p-7">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Crayons Bridge · Creator Desk</p>
-            <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Your Creator Workspace</h1>
-            <p className="mt-2 text-sm leading-relaxed text-muted">Submit a film or story and follow its review and authorized delivery status in one place.</p>
-          </div>
-          <Link to="/account" className="rounded-full border border-line-strong px-4 py-2 text-sm font-semibold hover:border-accent">Account & access</Link>
+    <div className="mx-auto max-w-6xl space-y-5 pb-16">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Creator workspace</p>
+          <h2 className="mt-1 font-display text-2xl font-semibold">Your submissions</h2>
+          <p className="mt-1 text-sm text-muted">Create a film or story and follow its review progress.</p>
         </div>
-        <div className="mt-5 grid gap-2 sm:grid-cols-3">
-          <a href="#submissions" className="rounded-xl bg-bg p-3 text-sm font-semibold hover:ring-1 hover:ring-accent">My submissions <span className="block text-xs font-normal text-muted">Films, stories and status</span></a>
-          <a href="#updates" className="rounded-xl bg-bg p-3 text-sm font-semibold hover:ring-1 hover:ring-accent">Review & delivery <span className="block text-xs font-normal text-muted">Corrections and delivery status</span></a>
-          <a href="#documents" className="rounded-xl bg-bg p-3 text-sm font-semibold hover:ring-1 hover:ring-accent">Documents <span className="block text-xs font-normal text-muted">Private rights evidence</span></a>
-        </div>
+        <Link to="/account" className="text-sm font-semibold text-accent hover:underline">Account</Link>
       </header>
 
-      <section aria-label="Submission summary" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {titlesQ.isPending ? <p className="text-sm text-muted">Loading your submissions…</p> : null}
-        {titlesQ.isError ? (
-          <div role="alert" className="col-span-full rounded-xl border border-line p-4 text-sm">
-            <p>Your submission summary is unavailable. No totals are shown until the account-scoped records load.</p>
-            <button type="button" onClick={() => void titlesQ.refetch()} className="mt-2 font-semibold text-accent underline">Retry</button>
-          </div>
-        ) : !titlesQ.isPending ? (
-          <>
-            <Metric label="My submissions" value={titles.length} />
-            <Metric label="In progress" value={inProgress.length} />
-            <Metric label="Licensing ready" value={licensingReady.length} />
-            <Metric label="Licensed / delivered" value={live.length} />
-          </>
-        ) : null}
-      </section>
+      {titlesQ.isError ? (
+        <div role="alert" className="rounded-lg border border-line p-3 text-sm">
+          <p>Your account-scoped submission summary is unavailable.</p>
+          <button type="button" onClick={() => void titlesQ.refetch()} className="mt-2 font-semibold text-accent underline">Retry</button>
+        </div>
+      ) : titlesQ.isPending ? (
+        <p className="text-sm text-muted">Loading your submissions…</p>
+      ) : (
+        <div className="flex flex-wrap gap-x-5 gap-y-2 border-y border-line py-3 text-sm">
+          <span><strong className="tabular-nums">{titles.length}</strong> submissions</span>
+          <span><strong className="tabular-nums">{inProgress.length}</strong> in progress</span>
+          <span><strong className="tabular-nums">{completed.length}</strong> licensed / delivered</span>
+        </div>
+      )}
 
-      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <div className="mb-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-accent">Start here</p>
-          <h2 className="mt-1 font-display text-2xl font-semibold">What would you like to submit?</h2>
-          <p className="mt-1 text-sm text-muted">Choose one path. You can add detailed metadata and rights evidence after the initial record is created.</p>
+      <section className="space-y-3">
+        <div>
+          <h3 className="font-semibold">Start a submission</h3>
+          <p className="text-sm text-muted">Choose Finished Film or Story / Concept.</p>
         </div>
         <NewSubmissionPanel />
       </section>
 
-      <section id="submissions" className="scroll-mt-20 space-y-4 rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-accent">Your catalogue</p>
-            <h2 className="mt-1 font-display text-2xl font-semibold">My Submissions</h2>
-            <p className="mt-1 text-sm text-muted">Only records returned by the authenticated, server-scoped account query are shown.</p>
-          </div>
-        </div>
-        <TitleList empty="No finished-film submissions yet. Use the submission options above to get started." />
-        <div className="border-t border-line pt-4">
-          <MyStoryConcepts />
-        </div>
-      </section>
-
-      <section id="updates" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <section id="submissions" className="space-y-3 border-t border-line pt-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-accent">Activity</p>
-            <h2 className="mt-1 font-display text-xl font-semibold">Latest submission activity</h2>
+            <h3 className="font-semibold">My titles</h3>
+            <p className="text-sm text-muted">Only your own authorized records are shown.</p>
           </div>
-          <Link to="/deliveries" className="text-sm font-semibold text-accent underline">Updates & deliveries</Link>
         </div>
-        {titlesQ.isPending ? <p className="mt-3 text-sm text-muted">Loading updates…</p> : null}
-        {titlesQ.isError ? <p className="mt-3 text-sm text-muted">Updates are unavailable while submissions cannot be loaded.</p> : null}
-        {!titlesQ.isPending && !titlesQ.isError && recent.length ? (
-          <ul className="mt-3 divide-y divide-line">
-            {recent.map((title) => (
-              <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                <div>
-                  <Link to="/title/$id" params={{ id: title.id }} className="font-medium hover:text-accent">{title.name}</Link>
-                  <p className="text-xs text-muted">Updated {formatDate(title.updatedAt)}</p>
-                </div>
-                <StatusChip status={title.status} />
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {!titlesQ.isPending && !titlesQ.isError && !recent.length ? <p className="mt-3 text-sm text-muted">No updates yet.</p> : null}
+        <TitleList empty="No finished-film submissions yet." />
+        <MyStoryConcepts />
       </section>
 
-      <section id="documents" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-4 sm:p-5">
+      <section id="updates" className="border-t border-line pt-4">
         <details>
-          <summary className="cursor-pointer list-none font-semibold">
-            <span className="flex items-center justify-between gap-3">Private Documents & Rights Evidence <span className="text-sm font-normal text-muted">Open vault ↓</span></span>
-            <span className="mt-1 block text-sm font-normal text-muted">Upload signed documents once and link verified evidence to titles you own.</span>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-2 text-sm font-semibold">
+            <span>Recent activity</span><span className="text-xs font-normal text-muted">Latest 3 updates</span>
           </summary>
-          <div className="mt-4 border-t border-line pt-4"><CreatorDocumentVault /></div>
+          {titlesQ.isPending || titlesQ.isError ? null : recent.length ? (
+            <ul className="mt-2 divide-y divide-line">
+              {recent.map((title) => (
+                <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <div>
+                    <Link to="/title/$id" params={{ id: title.id }} className="font-medium hover:text-accent">{title.name}</Link>
+                    <p className="text-xs text-muted">Updated {formatDate(title.updatedAt)}</p>
+                  </div>
+                  <StatusChip status={title.status} />
+                </li>
+              ))}
+            </ul>
+          ) : <p className="mt-2 text-sm text-muted">No recent updates.</p>}
+          <Link to="/deliveries" className="mt-3 inline-block text-sm font-semibold text-accent hover:underline">Updates & deliveries</Link>
         </details>
       </section>
 
-      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-xs text-muted">
-        <p>QC, Legal approval and publication remain separate authorized decisions. Buyer information is shown only when access is granted.</p>
-        <Link to="/account" className="font-semibold hover:text-fg">Manage account →</Link>
+      <section id="documents" className="border-t border-line pt-4">
+        <details>
+          <summary className="cursor-pointer text-sm font-semibold">Private document vault</summary>
+          <p className="mt-1 text-xs text-muted">Upload and link private rights documents.</p>
+          <div className="mt-4"><CreatorDocumentVault /></div>
+        </details>
+      </section>
+      <footer className="border-t border-line pt-4 text-xs text-muted">
+        QC, Legal approval, licensing and publication are separate authorized decisions.
       </footer>
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
-  return <article className="rounded-xl border border-line bg-surface p-4"><p className="text-xs text-muted">{label}</p><p className="mt-2 font-display text-2xl font-semibold tabular-nums">{value}</p></article>;
-}
-
 function formatDate(value: string) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "date unavailable" : date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return Number.isNaN(date.getTime())
+    ? "date unavailable"
+    : date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
