@@ -8,7 +8,7 @@ import { requireVerifiedActor, type BridgeActor } from "./session";
 import { loadTitle } from "./titles";
 import { canMutateTitle, canReadTitle } from "./rbac";
 import { writeAudit } from "./audit";
-import { ownerSubmissionSubmitTransition } from "./owner-submission-state";
+import { ownerSubmissionSubmitTransition, ownerSubmissionReviewTransition, ownerSubmissionWithdrawTransition, assertSubmissionDecisionReason } from "./owner-submission-state";
 import { submitTitleForQcInTransaction } from "./title-submission";
 
 const creditsSchema = z.array(z.object({
@@ -97,7 +97,7 @@ export const getTitleOwnerSubmission = createServerFn({method:"GET"})
     const rows=await sql<{details:unknown;submission_status:string;updated_at:string|Date|null;submitted_at:string|Date|null;submitted_by:string|null;latest_reason:string|null}> `
       select s.details,s.submission_status,s.updated_at,s.submitted_at,s.submitted_by,
         (select e.reason from bridge_owner_submission_events e
-         where e.title_id=s.title_id and e.action='REQUEST_CHANGES'
+         where e.title_id=s.title_id and e.action in ('REQUEST_CHANGES','REJECTED','WITHDRAWN','ARCHIVED')
          order by e.created_at desc limit 1) as latest_reason
       from bridge_title_owner_submissions s where s.title_id=${title.id} limit 1
     `;
@@ -247,77 +247,200 @@ export const reviewOwnerSubmission = createServerFn({method:"POST"})
   .validator(z.object({
     titleId:z.string().min(8),
     submissionKind:z.enum(["finished_film","story_concept"]),
-    decision:z.enum(["ACCEPTED_INTAKE","REQUEST_CHANGES"]),
-    reason:z.string().trim().max(2000).optional(),
-  }).superRefine((value,ctx)=>{
-    if(value.decision==="REQUEST_CHANGES" && (!value.reason || value.reason.length<3)){
-      ctx.addIssue({code:"custom",path:["reason"],message:"A clear reason is required to request changes"});
-    }
+    decision:z.enum(["ACCEPTED_INTAKE","REQUEST_CHANGES","REJECTED"]),
+    reason:z.string().trim().min(3).max(2000),
   }))
   .handler(async ({context,data})=>{
     assertNotDevUser(context.userId);
     const actor=await requireVerifiedActor(context.userId);
     if(actor.internalRole!=="super_admin") throw new Error("Super Admin access required");
-    const title=await loadTitle(data.titleId);
-    if(!title) throw new Error("Title not found");
     const sql=await getSql();
-    const nextStatus=data.decision==="ACCEPTED_INTAKE"?"ACCEPTED_INTAKE":"NEEDS_CORRECTION";
-    let qcQueued=title.status==="QC_REVIEW";
+    const reason=assertSubmissionDecisionReason(data.reason);
+    let qcQueued=false;
     await sql.transaction(async(tx)=>{
+      const titleRows=await tx<{id:string;status:string}> `
+        select id,status from bridge_titles where id=${data.titleId} for update
+      `;
+      const lockedTitle=titleRows[0];
+      if(!lockedTitle) throw new Error("Title not found");
+      const currentRows=data.submissionKind==="finished_film"
+        ? await tx<{status:string}>`
+            select submission_status as status from bridge_title_owner_submissions
+            where title_id=${data.titleId} for update
+          `
+        : await tx<{status:string}>`
+            select owner_submission_status as status from bridge_story_concept_submissions
+            where title_id=${data.titleId} for update
+          `;
+      const current=currentRows[0]?.status;
+      const transition=ownerSubmissionReviewTransition(current??"",data.decision);
+      const nextStatus=transition.toStatus;
       if(data.submissionKind==="finished_film"){
-        const rows=await tx<{submission_status:string}>`
-          select submission_status from bridge_title_owner_submissions
-          where title_id=${data.titleId} for update
-        `;
-        const current=rows[0]?.submission_status;
-        if(current!=="SUBMITTED") throw new Error("Submission is no longer pending review");
-        // Use the canonical QC submission checks. This enters the QC queue only;
-        // it does not create a QC result or approve rights/publication.
-        if(data.decision==="ACCEPTED_INTAKE" && title.status==="PREPARING"){
-          await submitTitleForQcInTransaction(tx,title,actor.userId,"Owner submission accepted into Technical QC queue");
+        if(data.decision==="ACCEPTED_INTAKE" && ["PREPARING","QC_REVIEW"].includes(lockedTitle.status)){
+          const title=await loadTitle(data.titleId);
+          if(!title) throw new Error("Title not found");
+          if (lockedTitle.status === "PREPARING") {
+            await submitTitleForQcInTransaction(tx,title,actor.userId,"Owner submission accepted into Technical QC queue");
+          }
           qcQueued=true;
         }
         await tx`
           update bridge_title_owner_submissions set submission_status=${nextStatus},
             updated_by=${actor.userId},updated_at=now()
-          where title_id=${data.titleId}
+          where title_id=${data.titleId} and submission_status='SUBMITTED'
         `;
-        await tx`
-          insert into bridge_owner_submission_events
-            (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
-          values (${data.titleId},'finished_film',${data.decision},'SUBMITTED',${nextStatus},${actor.userId},${data.reason??null})
-        `;
-      }else{
-        const rows=await tx<{owner_submission_status:string}>`
-          select owner_submission_status from bridge_story_concept_submissions
-          where title_id=${data.titleId} for update
-        `;
-        const current=rows[0]?.owner_submission_status;
-        if(current!=="SUBMITTED") throw new Error("Submission is no longer pending review");
+      } else {
         await tx`
           update bridge_story_concept_submissions set owner_submission_status=${nextStatus},updated_at=now()
-          where title_id=${data.titleId}
-        `;
-        await tx`
-          insert into bridge_owner_submission_events
-            (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
-          values (${data.titleId},'story_concept',${data.decision},'SUBMITTED',${nextStatus},${actor.userId},${data.reason??null})
+          where title_id=${data.titleId} and owner_submission_status='SUBMITTED'
         `;
       }
+      await tx`
+        insert into bridge_owner_submission_events
+          (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
+        values (${data.titleId},${data.submissionKind},${data.decision},'SUBMITTED',${nextStatus},${actor.userId},${reason})
+      `;
       await writeAudit({
         actorUserId:actor.userId,
-        action:data.decision==="ACCEPTED_INTAKE"?"title.owner_submission.accepted_intake":"title.owner_submission.request_changes",
+        action:data.decision==="ACCEPTED_INTAKE"?"title.owner_submission.accepted_intake":data.decision==="REJECTED"?"title.owner_submission.rejected":"title.owner_submission.request_changes",
         entityType:"bridge_title",entityId:data.titleId,
         metadata:{
-          submissionKind:data.submissionKind,
-          from:"SUBMITTED",
-          to:nextStatus,
-          reason:data.reason??null,
-          qcQueueEntered:qcQueued,
-          qcApprovalGranted:false,
-          rightsAndPublicationUnchanged:true,
+          submissionKind:data.submissionKind,from:"SUBMITTED",to:nextStatus,reason,
+          qcQueueEntered:qcQueued,qcApprovalGranted:false,rightsAndPublicationUnchanged:true,
         },
       },tx);
     });
-    return {updated:true as const,status:nextStatus,qcQueued};
+    return {updated:true as const,status:data.decision==="ACCEPTED_INTAKE"?"ACCEPTED_INTAKE":data.decision==="REJECTED"?"REJECTED":"NEEDS_CORRECTION",qcQueued};
   });
+
+/** Owner withdrawal is available only while this owner's submission is pending. */
+export const withdrawOwnerSubmission = createServerFn({method:"POST"})
+  .middleware([authMiddleware])
+  .validator(z.object({titleId:z.string().min(8),submissionKind:z.enum(["finished_film","story_concept"]),reason:z.string().trim().min(3).max(2000)}))
+  .handler(async ({context,data})=>{
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    const reason=assertSubmissionDecisionReason(data.reason);
+    const sql=await getSql();
+    await sql.transaction(async(tx)=>{
+      const titleRows=await tx<{id:string;owner_user_id:string;owner_account_type:string;owner_organization_id:string|null}> `
+        select id,owner_user_id,owner_account_type,owner_organization_id
+        from bridge_titles where id=${data.titleId} for update
+      `;
+      const title=titleRows[0];
+      if(!title) throw new Error("Title not found");
+      if(actor.internalRole || !["independent_creator","studio"].includes(actor.accountType)) {
+        throw new Error("Creator or Studio owner access required");
+      }
+      const ownsDirectly=title.owner_user_id===actor.userId;
+      const ownsThroughStudio=title.owner_account_type==="studio" && Boolean(title.owner_organization_id)
+        && title.owner_organization_id===actor.organizationId;
+      if(!ownsDirectly && !ownsThroughStudio) throw new Error("You cannot withdraw another owner's submission");
+      if (ownsThroughStudio) {
+        const membership = await tx<{ active: boolean }>`
+          select exists (
+            select 1 from bridge_organization_memberships
+            where organization_id=${title.owner_organization_id}
+              and user_id=${actor.userId}
+              and status='active'
+          ) as active
+        `;
+        if (!membership[0]?.active) throw new Error("Active Studio organization membership is required");
+      }
+      let current:string|undefined;
+      if(data.submissionKind==="finished_film") {
+        const rows=await tx<{status:string}> `
+          select submission_status as status from bridge_title_owner_submissions
+          where title_id=${data.titleId} for update
+        `;
+        current=rows[0]?.status;
+      } else {
+        const rows=await tx<{status:string}> `
+          select owner_submission_status as status from bridge_story_concept_submissions
+          where title_id=${data.titleId} for update
+        `;
+        current=rows[0]?.status;
+      }
+      const transition=ownerSubmissionWithdrawTransition(current??"");
+      if(data.submissionKind==="finished_film") {
+        await tx `
+          update bridge_title_owner_submissions set submission_status='WITHDRAWN',updated_by=${actor.userId},updated_at=now()
+          where title_id=${data.titleId} and submission_status='SUBMITTED'
+        `;
+      } else {
+        await tx `
+          update bridge_story_concept_submissions set owner_submission_status='WITHDRAWN',updated_at=now()
+          where title_id=${data.titleId} and owner_submission_status='SUBMITTED'
+        `;
+      }
+      await tx `
+        insert into bridge_owner_submission_events
+          (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
+        values (${data.titleId},${data.submissionKind},${transition.action},${transition.fromStatus},${transition.toStatus},${actor.userId},${reason})
+      `;
+      await writeAudit({
+        actorUserId:actor.userId,action:"title.owner_submission.withdrawn",entityType:"bridge_title",entityId:data.titleId,
+        metadata:{submissionKind:data.submissionKind,from:transition.fromStatus,to:transition.toStatus,reason,organizationId:actor.organizationId??null},
+      },tx);
+    });
+    return {withdrawn:true as const,status:"WITHDRAWN" as const};
+  });
+
+/** Super Admin may archive a submission record without deleting its history or title. */
+export const archiveOwnerSubmission = createServerFn({method:"POST"})
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId:z.string().min(8),
+    submissionKind:z.enum(["finished_film","story_concept"]),
+    reason:z.string().trim().min(3).max(2000),
+  }))
+  .handler(async ({context,data})=>{
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    if(actor.internalRole!=="super_admin") throw new Error("Super Admin access required");
+    const reason=assertSubmissionDecisionReason(data.reason);
+    const sql=await getSql();
+    await sql.transaction(async(tx)=>{
+      const titleRows=await tx<{id:string}> `
+        select id from bridge_titles where id=${data.titleId} for update
+      `;
+      if(!titleRows[0]) throw new Error("Title not found");
+      const currentRows=data.submissionKind==="finished_film"
+        ? await tx<{status:string}>`
+            select submission_status as status from bridge_title_owner_submissions
+            where title_id=${data.titleId} for update
+          `
+        : await tx<{status:string}>`
+            select owner_submission_status as status from bridge_story_concept_submissions
+            where title_id=${data.titleId} for update
+          `;
+      const current=currentRows[0]?.status;
+      if(!current || current==="ACCEPTED_INTAKE" || current==="ARCHIVED") {
+        throw new Error("Only an existing, non-accepted submission can be archived");
+      }
+      if(data.submissionKind==="finished_film") {
+        await tx`
+          update bridge_title_owner_submissions set submission_status='ARCHIVED',
+            updated_by=${actor.userId},updated_at=now()
+          where title_id=${data.titleId}
+        `;
+      } else {
+        await tx`
+          update bridge_story_concept_submissions set owner_submission_status='ARCHIVED',updated_at=now()
+          where title_id=${data.titleId}
+        `;
+      }
+      await tx`
+        insert into bridge_owner_submission_events
+          (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
+        values (${data.titleId},${data.submissionKind},'ARCHIVED',${current},'ARCHIVED',${actor.userId},${reason})
+      `;
+      await writeAudit({
+        actorUserId:actor.userId,action:"title.owner_submission.archived",
+        entityType:"bridge_title",entityId:data.titleId,
+        metadata:{submissionKind:data.submissionKind,from:current,to:"ARCHIVED",reason},
+      },tx);
+    });
+    return {archived:true as const,status:"ARCHIVED" as const};
+  });
+
