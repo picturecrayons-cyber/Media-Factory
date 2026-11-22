@@ -11,6 +11,16 @@ const BOOKMYSHOW_CONTACTS = new Set([
   "raj.goradia@bookmyshow.com",
 ]);
 
+const LEGACY_BUYER_REGISTER = [
+  { id: 53, name: "Amin Kapadia", email: "amin.kapadia@bookmyshow.com", organization: "BookMyShow", exportStatus: "Active", verification: "Pending app verification" },
+  { id: 74, name: "Raj Goradia", email: "raj.goradia@bookmyshow.com", organization: "BookMyShow", exportStatus: "Active", verification: "Pending app verification" },
+  { id: 96, name: "Rabindra Narayan", email: "RN@thegtcnetwork.com", organization: "Not verified", exportStatus: "Active", verification: "Verify Buyer category" },
+  { id: 114, name: "Prathapachandran", email: "md@inygo.in", organization: "Not verified", exportStatus: "Active", verification: "Pending app verification" },
+  { id: 141, name: "Amal Aricken", email: "amal@sainainfotainments.com", organization: "Not verified", exportStatus: "Active", verification: "Pending app verification" },
+  { id: 155, name: "Aparna N", email: "aparnand1412@gmail.com", organization: "Not verified", exportStatus: "Active", verification: "Pending app verification" },
+  { id: 157, name: "Ellen Philip", email: "ellen.saira@sunnetwork.in", organization: "Not verified", exportStatus: "Active", verification: "Pending app verification" },
+] as const;
+
 function BuyerManagement() {
   return (
     <RequireBridge allow="super_admin">
@@ -63,6 +73,42 @@ function BuyerDirectory() {
         <Metric label="Bridge Buyer profiles" value={String(profiles.length)} />
         <Metric label="Email verified" value={String(verifiedCount)} />
         <Metric label="Organization groups" value={String(organizationCount)} />
+      </section>
+
+      <section className="overflow-hidden rounded-xl border border-line bg-surface">
+        <div className="border-b border-line px-4 py-3">
+          <h3 className="font-semibold">Legacy Buyer verification register</h3>
+          <p className="mt-1 text-xs text-muted">Seven candidate accounts from the supplied legacy export. “Active” is the export snapshot only; none is treated as a verified live Bridge Buyer until the app account and Buyer category are checked.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] text-left text-sm">
+            <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
+              <tr>
+                <th className="px-4 py-3">Legacy ID</th>
+                <th className="px-4 py-3">Buyer</th>
+                <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Organization</th>
+                <th className="px-4 py-3">Export status</th>
+                <th className="px-4 py-3">Bridge verification</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {LEGACY_BUYER_REGISTER.map((candidate) => (
+                <tr key={candidate.id}>
+                  <td className="px-4 py-3 tabular-nums">{candidate.id}</td>
+                  <td className="px-4 py-3 font-medium">{candidate.name}</td>
+                  <td className="px-4 py-3">{candidate.email}</td>
+                  <td className="px-4 py-3">{candidate.organization}</td>
+                  <td className="px-4 py-3">{candidate.exportStatus}</td>
+                  <td className="px-4 py-3">{candidate.verification}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="border-t border-line px-4 py-3 text-xs text-muted">
+          ID 55 (Crayons Bridge / abijithasokan@crayonspictures.com) is intentionally excluded: it is a Studio account in the new app, not an external Buyer. BookMyShow is shown once with two individual contacts.
+        </p>
       </section>
 
       <section className="rounded-xl border border-line bg-surface p-4">
