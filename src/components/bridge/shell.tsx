@@ -10,9 +10,16 @@ function navigationFor(actor: BridgeActor): NavItem[] {
   if (actor.internalRole === "super_admin") {
     return [
       { to: "/dashboard", label: "Founder Centre" },
-      { to: "/admin/buyers", label: "Buyers" },
+      { to: "/admin", label: "Admin" },
       { to: "/workspace", label: "Titles" },
       { to: "/internal", label: "Operations" },
+      { to: "/admin/buyers", label: "Buyers" },
+      { to: "/admin/team", label: "Team & Permissions" },
+      { to: "/admin/users", label: "Users & Access" },
+      { to: "/admin/services", label: "Services" },
+      { to: "/admin-cms", label: "Website CMS" },
+      { to: "/cms", label: "Loop Gateway" },
+      { to: "/admin/audit", label: "Audit & Security" },
       { to: "/account", label: "Account" },
     ];
   }
