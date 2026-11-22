@@ -84,7 +84,7 @@ function Studio() {
               <div className="rounded-xl border border-line p-4 sm:p-5">
                 <h4 className="font-semibold">Finished films</h4>
                 <p className="mb-3 mt-1 text-sm text-muted">Only finished-film submissions authorized for this studio account appear here.</p>
-                <TitleList empty="No finished films are currently returned for this studio account." />
+                <TitleList empty="No finished films are currently returned for this studio account." allowDraftDelete />
               </div>
               <div className="rounded-xl border border-line p-4 sm:p-5">
                 <h4 className="font-semibold">Story concepts</h4>
