@@ -73,8 +73,14 @@ export const confirmCreatorDocumentUpload = createServerFn({ method: "POST" })
   .validator(z.object({ documentId: z.string().min(16) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
-    assertCreatorOrStudio(actor);
+    let actor;
+    try {
+      actor = await requireVerifiedActor(context.userId);
+      assertCreatorOrStudio(actor);
+    } catch (error) {
+      console.error("[bridge-document-vault] account authorization failed", error);
+      throw new Error("Document Vault account access could not be verified. Sign in again and retry.");
+    }
     const sql = await getSql();
     const rows = await sql<{
       id: string; owner_user_id: string; owner_account_type: string;
