@@ -7,8 +7,8 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { inviteInternalRole } from "@/lib/bridge/profiles";
-import { archiveDraftTitle, listArchivedDraftTitles, listAuditLogs, listTitles, restoreArchivedDraftTitle } from "@/lib/bridge/titles";
-import { archiveOwnerSubmission, listOwnerSubmissionQueue, reviewOwnerSubmission } from "@/lib/bridge/title-owner-submissions";
+import { listAuditLogs, listTitles } from "@/lib/bridge/titles";
+
 import {
   authorizeLoopPublication,
   listLoopPublicationReadiness,
@@ -57,7 +57,6 @@ function InternalBody({
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
-  const archivedQ = useQuery({queryKey:["bridge-archived-titles"],queryFn:()=>listArchivedDraftTitles(),enabled:canArchive});
   const titles = titlesQ.data?.titles ?? [];
   if (titlesQ.isError || logsQ.isError)
     return <p role="alert">Operations data could not be loaded. Refresh to retry.</p>;
