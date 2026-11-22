@@ -567,6 +567,7 @@ export const removeDraftTitle = createServerFn({ method: "POST" })
         hasRightsGrant: facts.has_rights_grant,
         hasPayment: facts.has_payment,
         hasSubmission: facts.has_submission,
+        hasDocumentLinks: facts.has_document_links,
       })) {
         throw new Error(DRAFT_TITLE_REMOVAL_DISABLED_MESSAGE);
       }
