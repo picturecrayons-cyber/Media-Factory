@@ -26,7 +26,7 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : "The request could not be completed.";
 }
 
-export function CreatorDocumentVault() {
+export function CreatorDocumentVault({ userId }: { userId: string }) {
   const queryClient = useQueryClient();
   const [documentType, setDocumentType] = useState<DocumentType>("FINISHED_FILM_AGREEMENT");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -36,18 +36,18 @@ export function CreatorDocumentVault() {
   const [errorText, setErrorText] = useState("");
 
   const documentsQ = useQuery({
-    queryKey: ["bridge-creator-documents"],
+    queryKey: ["bridge-creator-documents", userId],
     queryFn: () => listCreatorDocuments(),
     retry: 1,
   });
   const titlesQ = useQuery({
-    queryKey: ["bridge-titles-for-document-vault"],
+    queryKey: ["bridge-titles-for-document-vault", userId],
     queryFn: () => listTitles(),
     retry: 1,
   });
   const titles = useMemo(() => titlesQ.data?.titles ?? [], [titlesQ.data]);
   const evidenceQ = useQuery({
-    queryKey: ["bridge-title-document-evidence", selectedTitle],
+    queryKey: ["bridge-title-document-evidence", userId, selectedTitle],
     queryFn: () => listTitleDocumentEvidence({ data: { titleId: selectedTitle } }),
     enabled: Boolean(selectedTitle),
     retry: 1,
@@ -80,7 +80,7 @@ export function CreatorDocumentVault() {
       setSelectedFile(null);
       setNotice("Document uploaded and verified. It can now be linked to an eligible title.");
       setErrorText("");
-      await queryClient.invalidateQueries({ queryKey: ["bridge-creator-documents"] });
+      await queryClient.invalidateQueries({ queryKey: ["bridge-creator-documents", userId] });
     },
     onError: (error) => {
       setErrorText(message(error));
@@ -100,7 +100,7 @@ export function CreatorDocumentVault() {
       setNotice("Verified evidence linked to the selected title. Legal review remains separate.");
       setErrorText("");
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["bridge-title-document-evidence", selectedTitle] }),
+        queryClient.invalidateQueries({ queryKey: ["bridge-title-document-evidence", userId, selectedTitle] }),
         queryClient.invalidateQueries({ queryKey: ["title-document-evidence", selectedTitle] }),
         queryClient.invalidateQueries({ queryKey: ["title-workflow", selectedTitle] }),
       ]);
