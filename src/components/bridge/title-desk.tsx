@@ -39,11 +39,11 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
     onError: (error) => toast.error(error instanceof Error ? error.message : "Draft could not be archived"),
   });
   const allTitles = titlesQ.data?.titles ?? [];
-  const titles = allTitles.filter((t) => {
+  const finishedFilms = allTitles.filter((t) => t.submissionType !== "story_concept");
+  const visibleTitles = finishedFilms.filter((t) => {
     const matchesText = !search || `${t.name} ${t.language} ${t.year ?? ""} ${t.contentType ?? ""}`.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "ALL" || t.status === statusFilter;
-    const matchesKind = kindFilter === "ALL" || kindFilter === "FILM";
-    return matchesText && matchesStatus && matchesKind;
+    return matchesText && matchesStatus;
   });
   if (userPending || sessionQ.isPending || titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (sessionQ.isError || !actor) return <p role="alert" className="text-sm text-muted">Your account scope could not be verified. Refresh the workspace and try again.</p>;
@@ -57,7 +57,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   }
   return (
     <div className="space-y-3">
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px_180px]">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
         <input
           aria-label="Search title library"
           value={search}
@@ -69,44 +69,30 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           <option value="ALL">All statuses</option>
           {["DRAFT","UPLOADING","PREPARING","QC_REVIEW","RIGHTS_REVIEW","LICENSING_READY","LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].map((status) => <option key={status} value={status}>{status.replaceAll("_"," ")}</option>)}
         </select>
-        <select aria-label="Filter by title type" value={kindFilter} onChange={(event) => setKindFilter(event.target.value)} className="h-10 rounded-lg border border-line bg-bg px-3 text-sm">
-          <option value="ALL">All title types</option>
-          <option value="FILM">Finished films</option>
-          <option value="CONCEPT">Story / Concept</option>
-        </select>
       </div>
-      <p className="text-xs text-muted">{titles.length} of {allTitles.length} finished-film records · Open a title to view its full Bridge workspace.</p>
-      {kindFilter === "CONCEPT" ? <MyStoryConcepts /> : null}
-      {kindFilter === "CONCEPT" ? null : !titles.length ? <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">{allTitles.length ? "No titles match these filters." : empty}</p> : (
-      <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
-      {titles.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <Link
-            to="/title/$id"
-            params={{ id: t.id }}
-            className="min-w-0 flex-1 rounded-md py-1 hover:text-accent"
-          >
-            <p className="font-medium">{t.name}</p>
-            <p className="text-sm text-muted">
-              {t.contentType ? `${t.contentType} · ` : ""}
-              {t.language}
-              {t.year ? ` · ${t.year}` : ""}
-            </p>
-          </Link>
-          <div className="flex shrink-0 items-center gap-3">
-            <StatusChip status={t.status} />
-            {t.status === "DRAFT" ? (
-              <Button type="button" variant="outline" size="sm" disabled={archiveDraft.isPending}
-                onClick={() => {
-                  if (window.confirm("Archive this draft? It will be hidden from your active workspace and can be restored by Super Admin. Drafts with assets, rights or review records are blocked.")) archiveDraft.mutate(t.id);
-                }}>
-                {archiveDraft.isPending ? "Archiving…" : "Delete draft"}
-              </Button>
-            ) : null}
-          </div>
-        </li>
-      ))}
-      </ul>
+      <p className="text-xs text-muted">{visibleTitles.length} of {finishedFilms.length} finished films · Story / Concept submissions are listed separately.</p>
+      {!visibleTitles.length ? <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">{finishedFilms.length ? "No finished films match these filters." : empty}</p> : (
+        <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+          {visibleTitles.map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <Link to="/title/$id" params={{ id: t.id }} className="min-w-0 flex-1 rounded-md py-1 hover:text-accent">
+                <p className="font-medium">{t.name}</p>
+                <p className="text-sm text-muted">{t.contentType ? `${t.contentType} · ` : ""}{t.language}{t.year ? ` · ${t.year}` : ""}</p>
+              </Link>
+              <div className="flex shrink-0 items-center gap-3">
+                <StatusChip status={t.status} />
+                {t.status === "DRAFT" ? (
+                  <Button type="button" variant="outline" size="sm" disabled={archiveDraft.isPending}
+                    onClick={() => {
+                      if (window.confirm("Archive this draft? It will be hidden from your active workspace and can be restored by Super Admin. Drafts with assets, rights or review records are blocked.")) archiveDraft.mutate(t.id);
+                    }}>
+                    {archiveDraft.isPending ? "Archiving…" : "Delete draft"}
+                  </Button>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
