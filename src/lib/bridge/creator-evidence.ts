@@ -262,6 +262,7 @@ export const submitCreatorRightsPackage = createServerFn({ method: "POST" })
   .validator(z.object({ titleId: z.string().min(8), details: rightsDetailsSchema }))
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireCreatorOwner(context.userId, data.titleId);
+    await assertEvidenceEditable(title.id, actor.userId, title.status);
     const sql = await getSql();
     const required = await sql<{ document_type: string }>`
       select distinct d.document_type
