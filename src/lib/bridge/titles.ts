@@ -85,7 +85,7 @@ async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
 
 async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   if (!(await hasTitleMergeColumn(sql))) {
-    return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
+    return sql<TitleRow>`select * from bridge_titles where archived_at is null order by updated_at desc limit 200`;
   }
   return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
 }
@@ -101,7 +101,7 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   return mergeColumnAvailable
     ? sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.merged_into_title_id is null
+        where t.archived_at is null and t.merged_into_title_id is null
           and (
             t.owner_user_id = ${userId}
             or (
@@ -819,4 +819,18 @@ export const restoreArchivedDraftTitle = createServerFn({ method: "POST" })
       await writeAudit({actorUserId:actor.userId,action:"title.restore",entityType:"bridge_title",entityId:title.id,metadata:{previousStatus:"DRAFT",reason,reversible:true}},tx);
     });
     return {restored:true as const};
+  });
+
+export const listArchivedDraftTitles = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    if(actor.internalRole!=="super_admin") throw new Error("Super Admin access required");
+    const sql=await getSql();
+    const rows=await sql<{id:string;name:string;archived_at:string|Date;archive_reason:string|null}>`
+      select id,name,archived_at,archive_reason from bridge_titles
+      where archived_at is not null order by archived_at desc limit 200
+    `;
+    return {titles:rows};
   });
