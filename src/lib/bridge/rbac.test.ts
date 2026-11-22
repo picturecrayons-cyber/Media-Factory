@@ -68,6 +68,9 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(a, "title.update_own"), false);
     assert.equal(hasPermission(a, "title.advance_upload"), false);
     assert.equal(hasPermission(a, "asset.sign_upload"), false);
+    assert.equal(hasPermission(a, "delivery.assign_vendor"), false);
+    assert.equal(hasPermission(a, "delivery.record_receipt"), false);
+    assert.equal(hasPermission(a, "delivery.sign_off"), false);
     assert.equal(canReadTitle(a, { ownerUserId: "other-org-user", status: "DRAFT" }), true);
     assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
   });
