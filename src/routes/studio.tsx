@@ -10,94 +10,127 @@ import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
-const studioModules = [
-  ["Organization", "Studio profile and organization workspace.", "Organization data is shown only when the verified organization mapping is available."],
-  ["Members & Roles", "Manage approved studio members and access roles.", "Membership management is not enabled in this dashboard yet."],
-  ["Productions", "Track projects, production stages and title ownership.", "Production project tracking is not connected yet."],
-  ["QC & Rights", "Follow quality-control and rights-review progress.", "Use the status shown on each title; separate review approvals remain authoritative."],
-  ["Deliveries", "Track approved delivery packages.", "Open the current Deliveries workspace for available records."],
-  ["Schedule", "Coordinate production and delivery milestones.", "A shared studio schedule is not connected yet."],
-  ["Statements", "Review verified licensing and settlement records.", "Financial statements are not connected yet."],
-  ["Insights", "Review verified studio portfolio activity.", "Studio analytics are not connected yet."],
-  ["Help", "Get help with studio onboarding and production workflows.", "Use the existing Bridge support channel."],
+const workspaceLinks = [
+  ["Titles", "#studio-titles", "Finished films and story concepts"],
+  ["Production & DIT", "#studio-dit", "Camera-card intake and media handover"],
+  ["Document Vault", "#studio-documents", "Private rights and ownership evidence"],
+  ["Members", "#studio-members", "Studio membership and roles"],
+] as const;
+
+const otherModules = [
+  ["Organization", "Verified studio profile and organization details.", "Shown when the organization mapping is available."],
+  ["Productions", "Production projects, stages and title ownership.", "Production project tracking is not connected yet."],
+  ["QC & Rights", "Quality-control and rights-review progress.", "Review decisions remain authoritative on each title."],
+  ["Schedule", "Production and delivery milestones.", "Shared studio schedule is not connected yet."],
+  ["Statements", "Licensing and settlement records.", "Financial statements are not connected yet."],
+  ["Insights", "Studio portfolio activity.", "Analytics are not connected yet."],
+  ["Help", "Studio onboarding and production support.", "Use the existing Bridge support channel."],
 ] as const;
 
 function Studio() {
   return (
     <RequireBridge allow="studio">
       {(actor) => (
-        <BridgeShell actor={actor} title="Studio dashboard">
-          <div className="mx-auto max-w-5xl space-y-8 px-1 pb-16">
-            <section id="home" className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Studio workspace</p>
+        <BridgeShell actor={actor} title="Studio workspace">
+          <div className="mx-auto max-w-6xl space-y-7 px-1 pb-16">
+            <header id="home" className="flex flex-col gap-4 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Crayons Bridge / Studio</p>
                 <h2 className="mt-1 font-display text-2xl font-semibold sm:text-3xl">{actor.organizationName || actor.displayName}</h2>
-                <p className="mt-1 max-w-2xl text-sm text-muted">Manage studio-owned titles and coordinate organization, production and DIT work. Member access and title visibility remain server-authorized.</p>
+                <p className="mt-2 max-w-2xl text-sm text-muted">One workspace for title intake, production handover and private evidence. Access is checked by the server for every operation.</p>
               </div>
-              <Link to="/deliveries" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">View deliveries</Link>
-            </section>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Link to="/account" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold hover:border-accent">Account</Link>
+                <Link to="/deliveries" className="rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-white">View deliveries</Link>
+              </div>
+            </header>
 
-            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Studio workspace navigation">
-              <a href="#studio-titles" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Studio Titles</strong><p className="mt-1 text-sm text-muted">Finished films and story concepts</p></a>
-              <a href="#studio-operations" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Production & DIT</strong><p className="mt-1 text-sm text-muted">Production operations and media handover</p></a>
-              <Link to="/account" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Account</strong><p className="mt-1 text-sm text-muted">Studio account profile</p></Link>
-              <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
-              <a href="#studio-documents" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Document Vault</strong><p className="mt-1 text-sm text-muted">Reusable private rights and ownership documents</p></a>
-            </section>
+            <nav aria-label="Studio workspace sections" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {workspaceLinks.map(([label, href, description], index) => (
+                <a key={label} href={href} className="group rounded-sm border border-line bg-panel p-3 transition-colors hover:border-accent">
+                  <span className="flex items-center justify-between text-sm font-semibold">{String(index + 1).padStart(2, "0")} · {label}<span aria-hidden="true" className="text-muted group-hover:text-accent">↘</span></span>
+                  <span className="mt-1 block text-xs text-muted">{description}</span>
+                </a>
+              ))}
+            </nav>
 
-            <section className="space-y-4">
-              <div>
-                <h3 className="font-display text-xl font-semibold">Add a studio title</h3>
-                <p className="mt-1 text-sm text-muted">Finished films and story concepts remain separate. A title upload does not bypass QC, rights or licensing approvals.</p>
+            <section aria-labelledby="title-intake-heading" className="rounded-sm border border-line p-4 sm:p-5">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-accent">Start here</p>
+                  <h3 id="title-intake-heading" className="mt-1 font-display text-xl font-semibold">Create or submit a title</h3>
+                  <p className="mt-1 max-w-2xl text-sm text-muted">Choose the correct submission type. Finished films and story concepts stay separate; submission never bypasses QC, rights or licensing approval.</p>
+                </div>
               </div>
               <NewSubmissionPanel />
             </section>
 
-            <section id="studio-titles" className="space-y-4">
-              <div>
-                <h3 className="font-display text-xl font-semibold">Finished films</h3>
-                <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
+            <section id="studio-titles" className="scroll-mt-20 space-y-4">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-accent">Your catalogue</p>
+                  <h3 className="mt-1 font-display text-xl font-semibold">Studio titles</h3>
+                  <p className="mt-1 text-sm text-muted">Finished films are listed separately from concepts awaiting review.</p>
+                </div>
               </div>
-              <TitleList empty="No finished films are currently returned for this studio account." />
-              <MyStoryConcepts />
+              <div className="rounded-sm border border-line p-4 sm:p-5">
+                <h4 className="font-semibold">Finished films</h4>
+                <p className="mb-3 mt-1 text-sm text-muted">Only finished-film submissions authorized for this studio account appear here.</p>
+                <TitleList empty="No finished films are currently returned for this studio account." />
+              </div>
+              <div className="rounded-sm border border-line p-4 sm:p-5">
+                <h4 className="font-semibold">Story concepts</h4>
+                <p className="mb-3 mt-1 text-sm text-muted">Concepts remain in their own review workflow and are not treated as finished films.</p>
+                <MyStoryConcepts />
+              </div>
             </section>
 
-
-            <section id="studio-documents" className="scroll-mt-20">
-              <CreatorDocumentVault />
+            <section id="studio-dit" className="scroll-mt-20 space-y-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-accent">Production control</p>
+                <h3 className="mt-1 font-display text-xl font-semibold">Production & DIT</h3>
+                <p className="mt-1 text-sm text-muted">Register camera-card manifests, ingest originals and verify independent Primary and Recovery copies before sign-off. Server actions must enforce active Studio owner, admin, producer or DIT membership.</p>
+              </div>
+              <div className="rounded-sm border border-line p-4 sm:p-5">
+                <DitAgentDesk actor={actor} />
+              </div>
             </section>
 
-            <section id="studio-members" className="space-y-3">
+            <section id="studio-documents" className="scroll-mt-20 space-y-3">
               <div>
-                <h3 className="font-display text-xl font-semibold">Members & Roles</h3>
-                <p className="mt-1 text-sm text-muted">Read-only roster for verified Studio owners and administrators. Role changes and invitations remain disabled until separately approved.</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-accent">Legal evidence</p>
+                <h3 className="mt-1 font-display text-xl font-semibold">Private document vault</h3>
+                <p className="mt-1 text-sm text-muted">Upload once, verify private storage, then link evidence to an eligible title. Uploading or linking a file does not approve rights or publish a title.</p>
               </div>
-              <StudioMemberDesk />
+              <div className="rounded-sm border border-line p-4 sm:p-5">
+                <CreatorDocumentVault />
+              </div>
             </section>
 
-            <section id="studio-dit" className="space-y-3">
+            <section id="studio-members" className="scroll-mt-20 space-y-3">
               <div>
-                <h3 className="font-display text-xl font-semibold">Studio DIT Agent</h3>
-                <p className="mt-1 text-sm text-muted">Register source-card manifests, compare Primary and Recovery manifest evidence, and record operator sign-off. Server actions are restricted to active Studio owner, admin, producer or DIT memberships.</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-accent">Access control</p>
+                <h3 className="mt-1 font-display text-xl font-semibold">Members & roles</h3>
+                <p className="mt-1 text-sm text-muted">Membership and title visibility are server-authorized. Invitations and role changes remain unavailable until their workflow is implemented and verified.</p>
               </div>
-              <DitAgentDesk actor={actor} />
+              <div className="rounded-sm border border-line p-4 sm:p-5">
+                <StudioMemberDesk />
+              </div>
             </section>
 
-            <section id="studio-operations" className="space-y-3">
-              <div>
-                <h3 className="font-display text-xl font-semibold">Studio operations</h3>
-                <p className="mt-1 text-sm text-muted">The modules below define the intended Studio dashboard. Unimplemented data sources are explicitly marked; no synthetic members, productions or financial values are displayed.</p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {studioModules.map(([name, description, status]) => (
-                  <article key={name} className="rounded-sm border border-line p-4">
-                    <h4 className="font-semibold">{name}</h4>
+            <details id="studio-more" className="scroll-mt-20 rounded-sm border border-line p-4">
+              <summary className="cursor-pointer list-none font-semibold">Other studio services <span className="ml-2 text-xs font-normal text-muted">Availability and connection status</span></summary>
+              <p className="mt-2 text-sm text-muted">These services are kept out of the primary workflow until their data sources and permissions are ready. No placeholder metrics or synthetic records are shown.</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {otherModules.map(([name, description, status]) => (
+                  <article key={name} className="rounded-sm bg-subtle p-3">
+                    <h4 className="text-sm font-semibold">{name}</h4>
                     <p className="mt-1 text-sm">{description}</p>
-                    <p className="mt-3 text-xs text-muted">{status}</p>
+                    <p className="mt-2 text-xs text-muted">{status}</p>
                   </article>
                 ))}
               </div>
-            </section>
+            </details>
           </div>
         </BridgeShell>
       )}
