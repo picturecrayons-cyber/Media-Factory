@@ -71,8 +71,9 @@ function BuyerManagementBody() {
             </ul>
           ) : (
             <p className="px-4 py-8 text-center text-sm text-muted">
-              No Buyer user profiles are currently registered. Crayons Loop remains Buyer No. 1 in the architecture;
-              future Buyer onboarding stays separately controlled.
+              No Buyer user profiles are currently registered in the live Bridge profile registry.
+              Crayons Loop is the consumer streaming experience; it is not a substitute for independent
+              Buyer organizations. Verify each Buyer account and organization before granting dashboard access.
             </p>
           )}
         </section>
