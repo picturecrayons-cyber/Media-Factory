@@ -984,6 +984,10 @@ export const createServicePaymentOrderFn = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "service.order_create");
+    const configuredKeyId = bridgeEnv.razorpayKeyId();
+    if (!configuredKeyId?.startsWith("rzp_test_")) {
+      throw new Error("Razorpay live payments are disabled. Configure an approved Test Mode key for Preview verification.");
+    }
     return createServicePaymentOrder({
       orderId: data.orderId,
       actorUserId: actor.userId,
