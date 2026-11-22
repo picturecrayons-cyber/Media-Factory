@@ -17,7 +17,7 @@ const createSchema = z.object({
   documentIds: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
 });
 
-const requestSelect = \`
+const requestSelect = `
   select r.id, r.requester_user_id, r.requester_account_type, r.organization_id,
     r.title_id, t.name as title_name, r.category, r.description,
     r.attachment_document_ids, r.status, r.assigned_provider,
@@ -31,7 +31,7 @@ const requestSelect = \`
   left join public.bridge_service_quotes q on q.id = r.quote_id
   left join public.bridge_service_orders o on o.id = r.order_id
   left join public.bridge_service_invoices i on i.order_id = o.id
-\`;
+`;
 
 type RequestRow = {
   id: string;
@@ -128,12 +128,12 @@ async function addEventAndNotification(
   );
   await tx.query(
     "insert into public.bridge_service_request_notifications(id,request_id,recipient_user_id,title,message) values($1,$2,$3,$4,$5)",
-    [randomUUID(), request.id, request.requester_user_id, "Service request updated", note || \`Your service request is now \${to.replaceAll("_", " ")}.\`],
+    [randomUUID(), request.id, request.requester_user_id, "Service request updated", note || `Your service request is now \${to.replaceAll("_", " ")}.`],
   );
   if (request.organization_id) {
     await tx.query(
       "insert into public.bridge_service_request_notifications(id,request_id,organization_id,title,message) values($1,$2,$3,$4,$5)",
-      [randomUUID(), request.id, request.organization_id, "Studio service request updated", note || \`A service request is now \${to.replaceAll("_", " ")}.\`],
+      [randomUUID(), request.id, request.organization_id, "Studio service request updated", note || `A service request is now \${to.replaceAll("_", " ")}.`],
     );
   }
 }
@@ -373,7 +373,7 @@ export const transitionBridgeServiceRequest = createServerFn({ method: "POST" })
         "update public.bridge_service_requests set status=$1,assigned_provider=coalesce($2,assigned_provider),updated_at=now() where id=$3",
         [data.toStatus, data.provider ?? null, request.id],
       );
-      await addEventAndNotification(tx, request, actor.userId, request.status, data.toStatus, data.note ?? \`Service request moved to \${data.toStatus.replaceAll("_", " ")}.\`);
+      await addEventAndNotification(tx, request, actor.userId, request.status, data.toStatus, data.note ?? `Service request moved to \${data.toStatus.replaceAll("_", " ")}.`);
       return { id: request.id, status: data.toStatus };
     });
     await writeAudit({
