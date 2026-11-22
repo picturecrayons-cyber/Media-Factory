@@ -218,7 +218,7 @@ const rightsDetailsSchema = z.object({
   signatoryCapacity: z.string().min(2).max(160),
   revenueShare: z.string().min(1).max(300),
   paymentTerms: z.string().min(2).max(500),
-  ownerDeclaration: z.literal(true),
+  ownerDeclaration: z.boolean(),
 });
 
 export const saveCreatorRightsDraft = createServerFn({ method: "POST" })
@@ -263,6 +263,7 @@ export const submitCreatorRightsPackage = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireCreatorOwner(context.userId, data.titleId);
     await assertEvidenceEditable(title.id, actor.userId, title.status);
+    if (!data.details.ownerDeclaration) throw new Error("Confirm the Creator declaration before submitting.");
     const sql = await getSql();
     const required = await sql<{ document_type: string }>`
       select distinct d.document_type
@@ -329,7 +330,7 @@ export const getCreatorRightsDraft = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireCreatorOwner(context.userId, data.titleId);
     const sql = await getSql();
-    const rows = await sql<{ details: unknown; submission_status: string; submitted_at: string | null }>`
+    const rows = await sql<{ details: Record<string, unknown>; submission_status: string; submitted_at: string | null }>`
       select details, submission_status, submitted_at
       from bridge_title_owner_submissions
       where title_id = ${title.id} and owner_user_id = ${actor.userId}
