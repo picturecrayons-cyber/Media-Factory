@@ -7,7 +7,8 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { inviteInternalRole } from "@/lib/bridge/profiles";
-import { listAuditLogs, listTitles } from "@/lib/bridge/titles";
+import { archiveDraftTitle, listArchivedDraftTitles, listAuditLogs, listTitles, restoreArchivedDraftTitle } from "@/lib/bridge/titles";
+import { archiveOwnerSubmission, listOwnerSubmissionQueue, reviewOwnerSubmission } from "@/lib/bridge/title-owner-submissions";
 import {
   authorizeLoopPublication,
   listLoopPublicationReadiness,
@@ -33,6 +34,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            canArchive={actor.internalRole === "super_admin"}
           />
         </BridgeShell>
       )}
@@ -44,13 +46,16 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  canArchive,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  canArchive: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
+  const archivedQ = useQuery({queryKey:["bridge-archived-titles"],queryFn:()=>listArchivedDraftTitles(),enabled:canArchive});
   const titles = titlesQ.data?.titles ?? [];
   if (titlesQ.isError || logsQ.isError)
     return <p role="alert">Operations data could not be loaded. Refresh to retry.</p>;
