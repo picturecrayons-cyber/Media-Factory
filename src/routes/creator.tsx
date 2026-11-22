@@ -10,6 +10,7 @@ import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 import { listTitles } from "@/lib/bridge/titles";
 import { ProductsServicesCatalogue } from "@/components/bridge/products-services-catalogue";
+import { ServiceCentre } from "@/components/bridge/service-centre";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -20,6 +21,7 @@ const SECTIONS = [
   ["Overview", "#overview"],
   ["My Titles", "#my-titles"],
   ["Products & Services", "#products-services"],
+  ["Service Centre", "#service-centre"],
   ["Add New Title", "#add-title"],
   ["Metadata & Credits", "#metadata"],
   ["Rights & Ownership", "#rights"],
@@ -212,6 +214,7 @@ function CreatorDashboard({
       </section>
 
       <ProductsServicesCatalogue audience="Creator" />
+      <ServiceCentre audience="Creator" userId={actor.userId} />
 
       <section id="metadata" className="scroll-mt-20 grid gap-4 md:grid-cols-2">
         <InfoPanel
