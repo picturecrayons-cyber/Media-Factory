@@ -214,6 +214,14 @@ async function persistVerifiedAssetScoped(
        and a.byte_size = $1
        and a.s3_key = $6
        and a.checksum_sha256 = $9
+       and a.source_object_key = $7
+       and a.verified_object_key = $6
+       and a.storage_provider = 'OCI'
+       and a.storage_bucket = $11
+       and a.storage_namespace = $12
+       and a.storage_region = $13
+       and a.storage_endpoint = $14
+       and a.storage_verified_at is not null
     ),
     persisted as (
       select id, title_id, kind, s3_key, asset_version_id from verified
