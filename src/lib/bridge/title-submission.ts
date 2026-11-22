@@ -1,6 +1,6 @@
 import type { Sql } from "@/lib/db";
 import type { BridgeTitle, TitleStatus } from "./types";
-import { hasVerifiedMasterAndArtwork } from "./asset-roles.ts";
+import { hasVerifiedFinishedFilmPackage } from "./asset-roles.ts";
 
 /**
  * Executes the real Submit-for-QC database path. Authentication and permission
@@ -19,8 +19,8 @@ export async function submitTitleForQc(
     from bridge_assets
     where title_id = ${title.id} and coalesce(byte_size, 0) > 0
   `;
-  if (!hasVerifiedMasterAndArtwork(assets, title.masterKey, title.posterKey)) {
-    throw new Error("Verified master and artwork required before QC");
+  if (!hasVerifiedFinishedFilmPackage(assets, title.masterKey, title.posterKey)) {
+    throw new Error("Verified master, vertical poster, horizontal artwork and thumbnail are required before Bridge submission");
   }
 
   await sql.transaction(async (tx) => {
