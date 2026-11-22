@@ -69,9 +69,6 @@ function InternalBody({
       {canArchive ? <SuperAdminArchiveDesk /> : null}
       {canArchive ? <OwnerSubmissionDesk /> : null}
 
-      {canArchive ? <SuperAdminArchiveDesk /> : null}
-      {canArchive ? <OwnerSubmissionDesk /> : null}
-
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
 
