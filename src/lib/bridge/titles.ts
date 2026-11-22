@@ -513,8 +513,7 @@ export const removeDraftTitle = createServerFn({ method: "POST" })
           exists(select 1 from bridge_legal_cases where title_id = ${data.id}) as has_legal_case,
           exists(select 1 from bridge_rights_grants where title_id = ${data.id}) as has_rights_grant,
           exists(select 1 from bridge_payments where title_id = ${data.id}) as has_payment,
-          exists(select 1 from bridge_title_owner_submissions where title_id = ${data.id}) as has_submission,
-          exists(select 1 from bridge_publications where bridge_title_id = ${data.id}) as has_publication
+          exists(select 1 from bridge_title_owner_submissions where title_id = ${data.id}) as has_submission
       `;
       if (!facts || !canRemoveDraft({
         status: title.status,
@@ -523,7 +522,7 @@ export const removeDraftTitle = createServerFn({ method: "POST" })
         hasLegalCase: facts.has_legal_case,
         hasRightsGrant: facts.has_rights_grant,
         hasPayment: facts.has_payment,
-        hasSubmission: facts.has_submission || facts.has_publication,
+        hasSubmission: facts.has_submission,
       })) {
         throw new Error(DRAFT_TITLE_REMOVAL_DISABLED_MESSAGE);
       }
