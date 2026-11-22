@@ -3,22 +3,25 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 export const Route = createFileRoute("/privacy")({ component: Privacy });
 
 function Privacy() {
-  return (
-    <main className="min-h-screen bg-white px-5 py-12 text-fg sm:px-6">
-      <article className="mx-auto max-w-3xl space-y-6 rounded-3xl border border-line bg-surface p-7 sm:p-10">
-        <Link to="/" className="text-sm font-semibold text-accent">← Crayons Bridge</Link>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">StreamVista OPC Pvt Ltd.</p>
-          <h1 className="mt-2 font-display text-4xl font-semibold">Privacy</h1>
-          <p className="mt-3 text-sm leading-7 text-muted">Crayons Bridge uses account, workspace, title, rights, licensing, delivery, billing, and security information to provide and protect the service.</p>
-        </div>
-        <section className="space-y-3 text-sm leading-7 text-muted">
-          <p>We process information needed to authenticate users, operate workspaces, secure media workflows, maintain audit records, and support transactions and customer requests.</p>
-          <p>Access to operational data is limited according to workspace permissions and service requirements. We do not publish private workspace information as part of the public site.</p>
-          <p>For privacy questions or requests, email <a className="font-semibold text-accent underline" href="mailto:privacy@streamvista.com">privacy@streamvista.com</a>.</p>
-        </section>
-        <p className="border-t border-line pt-5 text-xs text-muted">Last updated: 1 October 2026.</p>
-      </article>
-    </main>
-  );
+  return <main className="min-h-screen bg-white px-5 py-10 text-fg sm:px-6">
+    <article className="mx-auto max-w-4xl rounded-3xl border border-line bg-surface p-6 sm:p-10">
+      <Link to="/" className="text-sm font-semibold text-accent">← Crayons Bridge</Link>
+      <p className="mt-8 text-xs font-semibold uppercase tracking-[0.16em] text-muted">StreamVista OPC Pvt Ltd · B2B privacy</p>
+      <h1 className="mt-2 font-display text-3xl font-semibold sm:text-4xl">Privacy Policy</h1>
+      <p className="mt-3 text-sm leading-7 text-muted">This policy describes how Crayons Bridge processes information for its business workspaces. It is specific to Bridge and does not replace Crayons Loop’s consumer privacy notice.</p>
+      <p className="mt-4 text-xs text-muted">Version 1.0 — draft for legal review · Effective date to be confirmed by the Company.</p>
+      <div className="mt-8 space-y-7 text-sm leading-7 text-muted">
+        <section><h2 className="font-semibold text-fg">1. Information we process</h2><p>Depending on your account and activity, we may process identity and contact details, authentication and security events, organization membership, title metadata, submitted assets, rights and clearance evidence, licensing enquiries, access grants, delivery records, payment references and support correspondence.</p></section>
+        <section><h2 className="font-semibold text-fg">2. Purposes and lawful basis</h2><p>We use information to create and secure accounts, provide role-specific workspaces, process title and asset workflows, administer rights and buyer access, support licensing and delivery, prevent misuse, maintain audit evidence, comply with legal obligations and respond to requests. The Company must document the applicable lawful basis and notices for each processing purpose before final publication.</p></section>
+        <section><h2 className="font-semibold text-fg">3. Workspace access and sharing</h2><p>Access is controlled by account role, individual title grants, active organization membership and operational permissions. Organization grouping does not automatically expose another member’s private account or title grants. Buyer access is limited to the titles and assets specifically authorized for that Buyer. Private masters, screeners, contracts and legal evidence are not intended for public display.</p></section>
+        <section><h2 className="font-semibold text-fg">4. Service providers and transfers</h2><p>We may use infrastructure, authentication, storage, email, payment and monitoring providers to operate Bridge. Relevant providers process information under their own contractual and security arrangements. The Company must maintain an accurate provider list, processing locations and transfer safeguards.</p></section>
+        <section><h2 className="font-semibold text-fg">5. Retention and security</h2><p>We apply access controls and operational safeguards appropriate to the information and retain records only for documented business, security, contractual, dispute-resolution and legal purposes. Exact retention periods and deletion schedules must be approved and published by the Company; audit records may need to be retained where required.</p></section>
+        <section><h2 className="font-semibold text-fg">6. Your requests</h2><p>You may contact the Company to ask about personal information associated with your account or to request correction or other action available under applicable law. We may verify identity and authority before acting and may retain information where legally required. The Company must confirm the applicable statutory request process and designated contact before this policy is treated as final.</p></section>
+        <section><h2 className="font-semibold text-fg">7. India data-protection framework</h2><p>Bridge’s privacy operations are intended to be aligned with applicable Indian data-protection law, including the Digital Personal Data Protection Act, 2023 and rules or notifications in force from time to time. Commencement and obligations may be phased. The Company’s legal adviser must verify the provisions currently in force, notices, consent requirements, grievance arrangements and any applicable exemptions before publication.</p></section>
+        <section><h2 className="font-semibold text-fg">8. Contact</h2><p>For privacy questions, use <a className="font-semibold text-accent underline" href="mailto:privacy@streamvista.com">privacy@streamvista.com</a>. For other Bridge business and legal enquiries, use <a className="font-semibold text-accent underline" href="mailto:abijithasokan@crayonspictures.com">abijithasokan@crayonspictures.com</a>. Do not send passwords, one-time codes or payment-card details by email.</p></section>
+      </div>
+      <nav className="mt-10 flex flex-wrap gap-5 border-t border-line pt-5 text-sm"><Link to="/legal" className="text-accent hover:underline">Legal &amp; Compliance</Link><Link to="/terms" className="text-accent hover:underline">B2B Terms</Link><Link to="/contact" className="text-accent hover:underline">Contact</Link></nav>
+      <p className="mt-6 text-xs leading-6 text-muted">Draft for legal review. This page does not claim legal certification. The Company must verify its designated privacy/grievance contact, address, retention schedule, providers and effective date before publication.</p>
+    </article>
+  </main>;
 }
