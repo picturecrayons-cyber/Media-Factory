@@ -1,6 +1,6 @@
 import type { Sql } from "@/lib/db";
 import type { BridgeTitle, TitleStatus } from "./types";
-import { bridgeEnv } from "./env";
+import { bridgeEnv } from "./env.ts";
 
 const REQUIRED_QC_FILES = [
   { label: "main film", kinds: ["master"] },
