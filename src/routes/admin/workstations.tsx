@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
@@ -10,10 +10,15 @@ import type { BridgeActor } from "@/lib/bridge/session";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
-export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
-
 const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
+
+export const Route = createFileRoute("/admin/workstations")({
+  validateSearch: (search: Record<string, unknown>): { tab?: Tab } => ({
+    tab: TABS.includes(search.tab as Tab) ? (search.tab as Tab) : undefined,
+  }),
+  component: AdminWorkstations,
+});
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft", UPLOADING: "Uploading", PREPARING: "Preparing", QC_REVIEW: "QC Review",
@@ -40,7 +45,10 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
     mutationFn: setBuyerPublicationGate,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
-  const [activeTab, setActiveTab] = useState<Tab>("Titles");
+  const requestedTab = Route.useSearch().tab;
+  const navigate = Route.useNavigate();
+  const [activeTab, setActiveTab] = useState<Tab>(requestedTab ?? "Titles");
+  useEffect(() => setActiveTab(requestedTab ?? "Titles"), [requestedTab]);
 
   const data = query.data;
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading Admin…</div>;
@@ -66,7 +74,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
 
       <nav className="flex gap-2 overflow-x-auto border-b border-line pb-2">
         {TABS.map((tab) => (
-          <button key={tab} type="button" onClick={() => setActiveTab(tab)}
+          <button key={tab} type="button" onClick={() => { setActiveTab(tab); void navigate({ search: (previous) => ({ ...previous, tab }) }); }}
             className={"whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition " + (activeTab === tab ? "bg-fg text-bg" : "border border-line bg-surface text-muted hover:text-fg")}>
             {tab}
           </button>
