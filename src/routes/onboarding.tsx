@@ -375,11 +375,19 @@ function Onboarding() {
             <label className="text-sm font-medium">Your name *
               <input required value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
             </label>
-            <label className="text-sm font-medium">Account type *
-              <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
-              </select>
-            </label>
+            {signupAccountType ? (
+              <div className="rounded-xl border border-line bg-elevated px-3.5 py-3">
+                <p className="text-xs text-muted">Selected account type</p>
+                <p className="mt-1 text-sm font-semibold text-fg">{ACCOUNT_LABELS[signupAccountType]}</p>
+                <p className="mt-1 text-xs text-muted">Already selected during sign-up. You do not need to choose it again.</p>
+              </div>
+            ) : (
+              <label className="text-sm font-medium">Account type *
+                <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
+                  {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
+                </select>
+              </label>
+            )}
           </div>
           {accountType === "studio" ? (
             <label className="block text-sm font-medium">Studio / company name *
