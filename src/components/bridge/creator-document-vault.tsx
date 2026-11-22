@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { getBridgeSession } from "@/lib/bridge/session";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   confirmCreatorDocumentUpload,
@@ -28,6 +30,10 @@ function message(error: unknown) {
 
 export function CreatorDocumentVault() {
   const queryClient = useQueryClient();
+  const { user, isPending: userPending } = useCurrentUserState();
+  const sessionQ = useQuery({ queryKey: ["bridge-session", user?.id], queryFn: () => getBridgeSession(), enabled: !userPending && Boolean(user), retry: false });
+  const actor = sessionQ.data?.profile ?? null;
+  const scope = [actor?.userId ?? user?.id ?? "anonymous", actor?.accountType ?? "unresolved", actor?.organizationId ?? null];
   const [documentType, setDocumentType] = useState<DocumentType>("FINISHED_FILM_AGREEMENT");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedTitle, setSelectedTitle] = useState("");
@@ -36,18 +42,19 @@ export function CreatorDocumentVault() {
   const [errorText, setErrorText] = useState("");
 
   const documentsQ = useQuery({
-    queryKey: ["bridge-creator-documents"],
+    queryKey: ["bridge-creator-documents", ...scope],
     queryFn: () => listCreatorDocuments(),
+    enabled: Boolean(actor?.userId && actor.emailVerified),
     retry: 1,
   });
   const titlesQ = useQuery({
-    queryKey: ["bridge-titles-for-document-vault"],
+    queryKey: ["bridge-titles-for-document-vault", ...scope],
     queryFn: () => listTitles(),
     retry: 1,
   });
   const titles = useMemo(() => titlesQ.data?.titles ?? [], [titlesQ.data]);
   const evidenceQ = useQuery({
-    queryKey: ["bridge-title-document-evidence", selectedTitle],
+    queryKey: ["bridge-title-document-evidence", ...scope, selectedTitle],
     queryFn: () => listTitleDocumentEvidence({ data: { titleId: selectedTitle } }),
     enabled: Boolean(selectedTitle),
     retry: 1,
