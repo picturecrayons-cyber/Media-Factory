@@ -17,11 +17,15 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-// The historical manifest is the immutable Production ledger snapshot (70 rows).
-// This additive archive migration is a Testing candidate, not a
-// Production ledger entry.
 const EXPECTED_PRODUCTION_MIGRATIONS = 70;
+// Additive lifecycle migrations are Testing candidates and are not part of
+// the immutable historical Production manifest. Keep every exclusion explicit.
 const NON_PRODUCTION_MIGRATIONS = new Set([
+  "20261122100000_bridge_title_owner_submissions.sql",
+  "20261122125255_owner_submission_lifecycle_20261122.sql",
+  "20261122141000_reversible_archive_owner_submission_repair_20261122.sql",
+  "20261122150000_bridge_delivery_jobs_testing_reconciliation.sql",
+  "20261122153000_bridge_delivery_jobs_no_cascade_hardening_20261122.sql",
   "20261122180000_bridge_archive_fail_closed_contract.sql",
 ]);
 const FIXTURE_MIGRATION =
