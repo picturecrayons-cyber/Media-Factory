@@ -7,9 +7,9 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitleOwnerTitles, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "", ownerOnly = false }: { empty: string; query?: string; ownerOnly?: boolean }) {
+export function TitleList({ empty, query = "", ownerOnly = false, scopeKey = "workspace" }: { empty: string; query?: string; ownerOnly?: boolean; scopeKey?: string }) {
   const titlesQ = useQuery({
-    queryKey: ownerOnly ? ["bridge-owner-titles"] : ["bridge-titles"],
+    queryKey: ownerOnly ? ["bridge-owner-titles", scopeKey] : ["bridge-titles", scopeKey],
     queryFn: () => ownerOnly ? listTitleOwnerTitles() : listTitles(),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
