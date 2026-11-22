@@ -9,6 +9,7 @@ import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 import { FounderServiceQueue } from "@/components/bridge/products-services-catalogue";
+import { FounderServiceQueue } from "@/components/bridge/products-services-catalogue";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -107,6 +108,8 @@ function AdminBody({ actor }: { actor: any }) {
             </>
           ) : null}
         </section>
+
+        {actor.internalRole === "super_admin" ? <FounderServiceQueue /> : null}
 
         <section aria-labelledby="admin-gallery-heading" className="rounded-2xl border border-line bg-surface p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">Asset review</p>
