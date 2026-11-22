@@ -204,7 +204,7 @@ function CreatorDashboard({
             Keep story concepts separate from finished-film title records. A concept submission is not a
             finished film or a license-ready asset.
           </p>
-          <MyStoryConcepts />
+          <MyStoryConcepts userId={actor.userId} />
         </div>
       </section>
 
@@ -227,7 +227,7 @@ function CreatorDashboard({
       </section>
 
       <section id="document-vault" className="scroll-mt-20">
-        <CreatorDocumentVault />
+        <CreatorDocumentVault userId={actor.userId} />
       </section>
 
       <section id="assets" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
