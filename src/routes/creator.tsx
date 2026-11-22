@@ -166,6 +166,27 @@ function CreatorDashboard({
         </div>
       </section>
 
+      <section id="studio-upgrade" className="scroll-mt-20 rounded-2xl border border-accent/30 bg-surface p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-widest text-accent">Grow your workspace</p>
+            <h2 className="mt-2 font-display text-2xl font-semibold">Upgrade to Studio</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              Move from an individual Creator workspace to an organization workspace with member management,
+              multiple film projects, producer workflows, assigned Studio DIT operations and shared production
+              documents and assets.
+            </p>
+            <p className="mt-2 text-xs text-muted">
+              Studio access is separate from account payment status. It activates only after a verified payment
+              event and entitlement check. Secure checkout is not enabled in this release; no payment will be taken here.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full border border-line px-3 py-2 text-xs font-semibold text-muted">
+            Paid upgrade · checkout pending
+          </span>
+        </div>
+      </section>
+
       <section id="add-title" className="scroll-mt-20 grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-widest text-accent">Start here</p>
