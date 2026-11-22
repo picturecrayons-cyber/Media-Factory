@@ -72,7 +72,7 @@ test("Testing candidate migrations are explicitly excluded from the immutable Pr
     assert.ok(replaySource.includes(name), `missing explicit non-Production classification: ${name}`);
     assert.ok(replaySource.includes(`Declared Testing candidate migration is missing: ${name}` ) === false);
   }
-  assert.match(replaySource, /const names = allNames\\.filter/);
+  assert.match(replaySource, /const names = allNames\.filter/);
   assert.match(replaySource, /manifestRows.size !== EXPECTED_PRODUCTION_MIGRATIONS/);
 });
 
