@@ -106,8 +106,12 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
     if (!canReadTitle(actor, title)) {
       throw new Error("You can request services only for a title owned by your Creator account or Studio organization");
     }
-    const id = randomUUID();
     const sql = await getSql();
+    const eligible = await sql<{ id: string }>`
+      select id from bridge_titles where id=${title.id} and submission_type='finished_film' limit 1
+    `;
+    if (!eligible[0]) throw new Error("Vendor services are available only for finished-film title workspaces");
+    const id = randomUUID();
     await sql`
       insert into bridge_delivery_jobs (id, title_id, job_type, status, requested_by, request_note)
       values (${id}::uuid, ${title.id}, ${databaseType[data.type]}, 'requested', ${actor.userId}, ${data.note ?? null})
