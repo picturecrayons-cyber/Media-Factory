@@ -24,10 +24,12 @@ test("My Library requires authentication and scopes saved rows to the verified u
 
 test("My Library resolves title metadata through the Bridge-authorized catalog", () => {
   const handler = block("getConsumerWatchlist");
-  assert.match(handler, /from public_loop_catalog\(\)/);
-  assert.match(handler, /l\.id::text = catalog\.id/);
-  assert.match(handler, /any\(\$\{savedIds\}::uuid\[\]\)/);
-  assert.doesNotMatch(handler, /join loop_titles l on l\.id = w\.loop_title_id/);
+  assert.match(handler, /from public_loop_catalog\(\) catalog/);
+  assert.match(handler, /catalog\.id = any\(\$\{savedIds\}::text\[\]\)/);
+  assert.match(handler, /catalog\.poster_available/);
+  assert.match(handler, /catalog\.backdrop_available/);
+  assert.doesNotMatch(handler, /join\\s+loop_titles/i);
+  assert.doesNotMatch(handler, /from\\s+loop_titles/i);
 });
 
 test("Watchlist add, remove, and membership use the canonical Production schema", () => {
