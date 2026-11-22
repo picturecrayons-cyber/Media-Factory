@@ -74,7 +74,7 @@ function completeDetails(value: z.infer<typeof detailsSchema>) {
 async function ownerScope(actor: {userId:string; accountType:string; internalRole?:string|null; organizationId?:string|null}, titleId: string) {
   const title = await loadTitle(titleId);
   if (!title) throw new Error("Title not found");
-  if (!canMutateTitle(actor, title, "title.update_own", "title.license")) {
+  if (actor.internalRole || !["independent_creator","studio"].includes(actor.accountType) || !canMutateTitle(actor, title, "title.update_own", "title.license")) {
     throw new Error("Only the verified title owner or authorized Studio organization can update submission details");
   }
   if (!actor.internalRole && !["DRAFT","UPLOADING","PREPARING"].includes(title.status)) {
