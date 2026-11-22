@@ -1,12 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
-import { inviteInternalRole } from "@/lib/bridge/profiles";
 import { listAuditLogs, listTitles } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
@@ -16,7 +15,6 @@ import {
   extendDistributionWindow,
   type ExploitationModel,
 } from "@/lib/bridge/loop-publication";
-import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
 
 export const Route = createFileRoute("/internal")({ component: Internal });
@@ -26,11 +24,11 @@ function Internal() {
     <RequireBridge allow="internal">
       {(actor) => (
         <BridgeShell actor={actor} title="Distribution & Operations Desk">
-          <p className="mb-6 text-xs text-muted">
-            {actor.internalRole?.replaceAll("_", " ")} · {actor.email}
-          </p>
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-muted">{actor.internalRole?.replaceAll("_", " ")} · {actor.email}</p>
+            {hasPermission(actor, "users.invite_internal") ? <Link to="/admin/team" className="text-sm font-semibold text-accent hover:underline">Team & Permissions →</Link> : null}
+          </div>
           <InternalBody
-            canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
           />
@@ -41,11 +39,9 @@ function Internal() {
 }
 
 function InternalBody({
-  canInvite,
   canPublish,
   canRevoke,
 }: {
-  canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
 }) {
@@ -60,10 +56,7 @@ function InternalBody({
       {/* 1. Master Distribution Desk */}
       <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
 
-      {/* 2. Team Invitation Module */}
-      {canInvite ? <InviteForm /> : null}
-
-      {/* 3. Catalog Queue */}
+      {/* Catalog Queue */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -678,74 +671,3 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
   );
 }
 
-function InviteForm() {
-  const qc = useQueryClient();
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<(typeof INTERNAL_ROLES)[number]>("viewer");
-
-  const mut = useMutation({
-    mutationFn: () => inviteInternalRole({ data: { email, role } }),
-    onSuccess: () => {
-      toast.success("Internal role invite sent");
-      setEmail("");
-      void qc.invalidateQueries({ queryKey: ["bridge-audit"] });
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Invite failed"),
-  });
-
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    mut.mutate();
-  }
-
-  return (
-    <form
-      onSubmit={onSubmit}
-      className="grid gap-4 rounded-2xl border border-line bg-surface p-5 sm:grid-cols-3"
-    >
-      <div className="sm:col-span-3">
-        <h3 className="font-display text-lg font-semibold text-fg">Team & Permissions</h3>
-        <p className="text-xs text-muted">
-          Invite internal team reviewers for QC, Legal, Licensing or Operations.
-        </p>
-      </div>
-
-      <label className="text-xs font-semibold text-muted sm:col-span-2">
-        Team member email
-        <input
-          required
-          type="email"
-          placeholder="colleague@crayonspictures.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="mt-1 h-10 w-full rounded-xl border border-line bg-elevated px-3 text-sm text-fg placeholder:text-faint focus:border-accent focus:outline-none"
-        />
-      </label>
-
-      <label className="text-xs font-semibold text-muted">
-        Internal Role
-        <select
-          value={role}
-          onChange={(e) => setRole(e.target.value as (typeof INTERNAL_ROLES)[number])}
-          className="mt-1 h-10 w-full rounded-xl border border-line bg-elevated px-3 text-sm text-fg focus:border-accent focus:outline-none"
-        >
-          {INTERNAL_ROLES.map((r) => (
-            <option key={r} value={r}>
-              {r.replaceAll("_", " ")}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <div className="sm:col-span-3">
-        <Button
-          type="submit"
-          disabled={mut.isPending}
-          className="rounded-full px-5 text-xs font-semibold"
-        >
-          {mut.isPending ? "Sending invite…" : "Send internal invitation"}
-        </Button>
-      </div>
-    </form>
-  );
-}
