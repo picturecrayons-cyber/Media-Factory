@@ -131,16 +131,16 @@ async function persistVerifiedAssetScoped(
         $9,
         $1,
         jsonb_build_object(
-          'verifiedObjectKey', $6,
-          'sourceObjectKey', $7,
+          'verifiedObjectKey', $6::text,
+          'sourceObjectKey', $7::text,
           'storageProvider', 'OCI',
-          'storageBucket', $11,
-          'storageNamespace', $12,
-          'storageRegion', $13,
-          'storageEndpoint', $14,
+          'storageBucket', $11::text,
+          'storageNamespace', $12::text,
+          'storageRegion', $13::text,
+          'storageEndpoint', $14::text,
           'storageVerifiedAt', now(),
           'sha256', $9,
-          'etag', $10
+          'etag', $10::text
         ),
         'PASSED',
         $4
@@ -248,15 +248,15 @@ async function persistVerifiedAssetScoped(
           'kind', v.kind,
           'assetVersionId', v.asset_version_id,
           'byteSize', $1,
-          'checksumSha256', $9,
-          'etag', $10,
-          'sourceObjectKey', $7,
-          'verifiedObjectKey', $6,
+          'checksumSha256', $9::text,
+          'etag', $10::text,
+          'sourceObjectKey', $7::text,
+          'verifiedObjectKey', $6::text,
           'storageProvider', 'OCI',
-          'storageBucket', $11,
-          'storageNamespace', $12,
-          'storageRegion', $13,
-          'storageEndpoint', $14
+          'storageBucket', $11::text,
+          'storageNamespace', $12::text,
+          'storageRegion', $13::text,
+          'storageEndpoint', $14::text
         )
       from verified v
       join title_set t on t.id = v.title_id
