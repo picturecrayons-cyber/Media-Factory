@@ -313,7 +313,7 @@ export const saveTitleOwnerRightsDraft = createServerFn({ method: "POST" })
     if (existing[0] && existing[0].submission_status === "SUBMITTED") {
       throw new Error("This rights package is submitted. Legal must return it for correction before the Creator can edit it.");
     }
-    await sql`
+    const saved = await sql<{ id: string }>`
       insert into bridge_title_owner_submissions (
         id, title_id, owner_user_id, owner_organization_id, details,
         submission_status, updated_by
@@ -327,7 +327,9 @@ export const saveTitleOwnerRightsDraft = createServerFn({ method: "POST" })
       where bridge_title_owner_submissions.owner_user_id = excluded.owner_user_id
         and bridge_title_owner_submissions.owner_organization_id is not distinct from excluded.owner_organization_id
         and bridge_title_owner_submissions.submission_status in ('DRAFT', 'NEEDS_CORRECTION')
+      returning id
     `;
+    if (!saved.length) throw new Error("This title already has a rights submission owned by another account.");
     await writeAudit({
       actorUserId: actor.userId,
       action: "owner.rights_draft_saved",
