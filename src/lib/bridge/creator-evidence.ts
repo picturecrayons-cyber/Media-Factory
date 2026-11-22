@@ -33,6 +33,20 @@ async function requireCreatorOwner(userId: string, titleId: string) {
   return { actor, title };
 }
 
+async function assertEvidenceEditable(titleId: string, userId: string, status: string) {
+  if (["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(status)) {
+    throw new Error("Evidence changes are locked for buyer-facing or licensed titles. Contact the Legal Reviewer.");
+  }
+  const sql = await getSql();
+  const rows = await sql<{ submission_status: string }>`
+    select submission_status from bridge_title_owner_submissions
+    where title_id = ${titleId} and owner_user_id = ${userId} limit 1
+  `;
+  if (rows[0]?.submission_status === "SUBMITTED") {
+    throw new Error("This package is submitted. Legal must return it for correction before further edits.");
+  }
+}
+
 export const listCreatorEvidence = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
@@ -64,6 +78,7 @@ export const requestCreatorEvidenceUpload = createServerFn({ method: "POST" })
   }))
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireCreatorOwner(context.userId, data.titleId);
+    await assertEvidenceEditable(title.id, actor.userId, title.status);
     const id = randomBytes(16).toString("hex");
     const safeName = data.fileName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-100) || "evidence.pdf";
     const storageKey = `creator-evidence/${actor.userId}/${title.id}/${id}.pdf`;
@@ -203,7 +218,7 @@ const rightsDetailsSchema = z.object({
   signatoryCapacity: z.string().min(2).max(160),
   revenueShare: z.string().min(1).max(300),
   paymentTerms: z.string().min(2).max(500),
-  ownerDeclaration: z.boolean(),
+  ownerDeclaration: z.literal(true),
 });
 
 export const saveCreatorRightsDraft = createServerFn({ method: "POST" })
@@ -268,7 +283,7 @@ export const submitCreatorRightsPackage = createServerFn({ method: "POST" })
     if (missing.length) throw new Error("Upload and verify all five required evidence categories before submitting the legal package.");
     const datesValid = new Date(data.details.rightsStart).getTime() < new Date(data.details.rightsEnd).getTime();
     if (!datesValid) throw new Error("Rights start and end dates are invalid.");
-    await sql`
+    const saved = await sql<{ id: string }>`
       insert into bridge_title_owner_submissions (
         id, title_id, owner_user_id, owner_organization_id, details,
         submission_status, submitted_at, submitted_by, updated_by
@@ -282,7 +297,9 @@ export const submitCreatorRightsPackage = createServerFn({ method: "POST" })
         updated_by = excluded.updated_by, updated_at = now()
       where bridge_title_owner_submissions.owner_user_id = excluded.owner_user_id
         and bridge_title_owner_submissions.submission_status in ('DRAFT', 'NEEDS_CORRECTION')
+      returning id
     `;
+    if (!saved.length) throw new Error("The rights package is already submitted or is owned by another account.");
     await writeAudit({
       actorUserId: actor.userId,
       action: "creator.rights_package_submitted",
