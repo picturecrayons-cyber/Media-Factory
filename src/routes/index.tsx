@@ -258,8 +258,10 @@ function Home() {
                   From rights to audience.
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-muted max-w-2xl">
-                  Crayons Bridge manages rights, licensing and distribution authorization. Crayons
-                  Loop is the consumer streaming experience.
+                  Crayons Bridge manages rights, licensing and distribution authorization for
+                  multiple independent Buyers—including OTT platforms, broadcasters, satellite,
+                  airline and territory partners. Crayons Loop is our consumer streaming experience,
+                  not the only destination or Buyer.
                 </p>
               </div>
 
