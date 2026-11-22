@@ -310,3 +310,65 @@ export const reviewOwnerSubmission = createServerFn({method:"POST"})
     });
     return {updated:true as const,status:data.decision==="ACCEPTED_INTAKE"?"ACCEPTED_INTAKE":data.decision==="REJECTED"?"REJECTED":"NEEDS_CORRECTION",qcQueued};
   });
+
+/** Owner withdrawal is available only while this owner's submission is pending. */
+export const withdrawOwnerSubmission = createServerFn({method:"POST"})
+  .middleware([authMiddleware])
+  .validator(z.object({titleId:z.string().min(8),submissionKind:z.enum(["finished_film","story_concept"]),reason:z.string().trim().min(3).max(2000)}))
+  .handler(async ({context,data})=>{
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    const reason=assertSubmissionDecisionReason(data.reason);
+    const sql=await getSql();
+    await sql.transaction(async(tx)=>{
+      const titleRows=await tx<{id:string;owner_user_id:string;owner_account_type:string;owner_organization_id:string|null}> `
+        select id,owner_user_id,owner_account_type,owner_organization_id
+        from bridge_titles where id=${data.titleId} for update
+      `;
+      const title=titleRows[0];
+      if(!title) throw new Error("Title not found");
+      if(actor.internalRole || !["independent_creator","studio"].includes(actor.accountType)) {
+        throw new Error("Creator or Studio owner access required");
+      }
+      const ownsDirectly=title.owner_user_id===actor.userId;
+      const ownsThroughStudio=title.owner_account_type==="studio" && Boolean(title.owner_organization_id)
+        && title.owner_organization_id===actor.organizationId;
+      if(!ownsDirectly && !ownsThroughStudio) throw new Error("You cannot withdraw another owner's submission");
+      let current:string|undefined;
+      if(data.submissionKind==="finished_film") {
+        const rows=await tx<{status:string}> `
+          select submission_status as status from bridge_title_owner_submissions
+          where title_id=${data.titleId} for update
+        `;
+        current=rows[0]?.status;
+      } else {
+        const rows=await tx<{status:string}> `
+          select owner_submission_status as status from bridge_story_concept_submissions
+          where title_id=${data.titleId} for update
+        `;
+        current=rows[0]?.status;
+      }
+      const transition=ownerSubmissionWithdrawTransition(current??"");
+      if(data.submissionKind==="finished_film") {
+        await tx `
+          update bridge_title_owner_submissions set submission_status='WITHDRAWN',updated_by=${actor.userId},updated_at=now()
+          where title_id=${data.titleId} and submission_status='SUBMITTED'
+        `;
+      } else {
+        await tx `
+          update bridge_story_concept_submissions set owner_submission_status='WITHDRAWN',updated_at=now()
+          where title_id=${data.titleId} and owner_submission_status='SUBMITTED'
+        `;
+      }
+      await tx `
+        insert into bridge_owner_submission_events
+          (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
+        values (${data.titleId},${data.submissionKind},${transition.action},${transition.fromStatus},${transition.toStatus},${actor.userId},${reason})
+      `;
+      await writeAudit({
+        actorUserId:actor.userId,action:"title.owner_submission.withdrawn",entityType:"bridge_title",entityId:data.titleId,
+        metadata:{submissionKind:data.submissionKind,from:transition.fromStatus,to:transition.toStatus,reason,organizationId:actor.organizationId??null},
+      },tx);
+    });
+    return {withdrawn:true as const,status:"WITHDRAWN" as const};
+  });
