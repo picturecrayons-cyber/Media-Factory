@@ -401,40 +401,40 @@ export const archiveOwnerSubmission = createServerFn({method:"POST"})
     const reason=assertSubmissionDecisionReason(data.reason);
     const sql=await getSql();
     await sql.transaction(async(tx)=>{
-      const titleRows=await tx<{id:string}> \`
-        select id from bridge_titles where id=\${data.titleId} for update
-      \`;
+      const titleRows=await tx<{id:string}> `
+        select id from bridge_titles where id=${data.titleId} for update
+      `;
       if(!titleRows[0]) throw new Error("Title not found");
       const currentRows=data.submissionKind==="finished_film"
-        ? await tx<{status:string}>\`
+        ? await tx<{status:string}>`
             select submission_status as status from bridge_title_owner_submissions
-            where title_id=\${data.titleId} for update
-          \`
-        : await tx<{status:string}>\`
+            where title_id=${data.titleId} for update
+          `
+        : await tx<{status:string}>`
             select owner_submission_status as status from bridge_story_concept_submissions
-            where title_id=\${data.titleId} for update
-          \`;
+            where title_id=${data.titleId} for update
+          `;
       const current=currentRows[0]?.status;
       if(!current || current==="ACCEPTED_INTAKE" || current==="ARCHIVED") {
         throw new Error("Only an existing, non-accepted submission can be archived");
       }
       if(data.submissionKind==="finished_film") {
-        await tx\`
+        await tx`
           update bridge_title_owner_submissions set submission_status='ARCHIVED',
-            updated_by=\${actor.userId},updated_at=now()
-          where title_id=\${data.titleId}
-        \`;
+            updated_by=${actor.userId},updated_at=now()
+          where title_id=${data.titleId}
+        `;
       } else {
-        await tx\`
+        await tx`
           update bridge_story_concept_submissions set owner_submission_status='ARCHIVED',updated_at=now()
-          where title_id=\${data.titleId}
-        \`;
+          where title_id=${data.titleId}
+        `;
       }
-      await tx\`
+      await tx`
         insert into bridge_owner_submission_events
           (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
-        values (\${data.titleId},\${data.submissionKind},'ARCHIVED',\${current},'ARCHIVED',\${actor.userId},\${reason})
-      \`;
+        values (${data.titleId},${data.submissionKind},'ARCHIVED',${current},'ARCHIVED',${actor.userId},${reason})
+      `;
       await writeAudit({
         actorUserId:actor.userId,action:"title.owner_submission.archived",
         entityType:"bridge_title",entityId:data.titleId,
