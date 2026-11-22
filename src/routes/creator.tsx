@@ -44,7 +44,7 @@ function CreatorDashboard({
   actor: { userId: string; organizationId?: string | null };
 }) {
   const titlesQ = useQuery({
-    queryKey: ["bridge-owner-titles", actor.userId, actor.organizationId],
+    queryKey: ["bridge-owner-titles", actor.userId],
     queryFn: () => listTitleOwnerTitles(),
     retry: 1,
   });
@@ -160,7 +160,7 @@ function CreatorDashboard({
           </a>
         </div>
         <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
-          <TitleList empty="No titles are available for this account yet. Start a submission to add your first title." />
+          <TitleList ownerOnly scopeKey={actor.userId} empty="No titles are available for this account yet. Start a submission to add your first title." />
         </div>
       </section>
 
