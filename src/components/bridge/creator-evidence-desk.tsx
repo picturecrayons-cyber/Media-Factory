@@ -178,7 +178,6 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
   if (!titles.length) return null;
 
   const platformsComplete = details.platforms.length > 0;
-  const ownershipCount = countType(docs, "OWNERSHIP_CHAIN_OF_TITLE");
   const ownershipDocuments = docs.filter((doc) => doc.document_type === "OWNERSHIP_CHAIN_OF_TITLE" && doc.status === "VERIFIED").length;
   const requirements = [
     ["Signed OTT Rights Agreement", countType(docs, "FINISHED_FILM_AGREEMENT") > 0],
