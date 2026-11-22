@@ -36,83 +36,10 @@ function navigationFor(actor: BridgeActor): NavItem[] {
 }
 
 function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
-  return <Link to={item.to} onClick={onNavigate} className="flex min-h-10 items-center rounded-lg px-3 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg" activeProps={{ className: "flex min-h-10 items-center rounded-lg bg-accent-soft px-3 text-sm font-semibold text-accent" }}>{item.label}</Link>;
-}
-
-export function BrandMark({ className }: { className?: string }) {
   return (
-    <Link to="/" className={cn("inline-flex items-center shrink-0", className)} aria-label="Crayons Bridge">
-      <svg viewBox="0 0 168 48" role="img" aria-label="Crayons Bridge" className="bridge-logo block h-[38px] w-auto">
-        <text x="0" y="16" fill="#6f6f6f" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="13" fontWeight="600" letterSpacing="0.5">crayons</text>
-        <text x="0" y="40" fill="#007291" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="26" fontWeight="700" letterSpacing="-0.5">bridge</text>
-      </svg>
-    </Link>
-  );
-}
-
-import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
-import { UserButton } from "@/lib/auth/gates";
-import type { BridgeActor } from "@/lib/bridge/session";
-import { cn } from "@/lib/cn";
-
-type NavItem = { to: string; label: string };
-
-function navigationFor(actor: BridgeActor): NavItem[] {
-  if (actor.internalRole === "super_admin") {
-    return [
-      { to: "/dashboard", label: "Founder Centre" },
-      { to: "/workspace", label: "Titles" },
-      { to: "/admin/workstations", label: "QC & Rights" },
-      { to: "/internal", label: "Distribution" },
-      { to: "/admin/buyers", label: "Buyers" },
-      { to: "/admin/users", label: "People" },
-      { to: "/admin/services", label: "Services" },
-      { to: "/admin-cms", label: "Website CMS" },
-      { to: "/admin/audit", label: "Audit & Security" },
-      { to: "/account", label: "Account" },
-    ];
-  }
-
-  if (actor.internalRole) {
-    const items: NavItem[] = [
-      { to: "/internal", label: "Operations" },
-      { to: "/workspace", label: "Titles" },
-    ];
-    if (actor.internalRole === "admin") {
-      items.push(
-        { to: "/admin", label: "Admin" },
-        { to: "/admin/team", label: "Team & Permissions" },
-        { to: "/admin-cms", label: "Website CMS" },
-      );
-    }
-    return [...items, { to: "/account", label: "Account" }];
-  }
-
-  const accountNavigation: Record<BridgeActor["accountType"], NavItem[]> = {
-    independent_creator: [
-      { to: "/creator", label: "Creator Home" },
-      { to: "/workspace", label: "My Titles" },
-      { to: "/deliveries", label: "Updates & Deliveries" },
-    ],
-    studio: [
-      { to: "/studio", label: "Studio Home" },
-      { to: "/workspace", label: "Titles" },
-      { to: "/deliveries", label: "Deliveries" },
-    ],
-    buyer: [{ to: "/buyer", label: "Buyer Desk" }],
-    investor: [{ to: "/investor", label: "Portfolio" }],
-  };
-  return [...accountNavigation[actor.accountType], { to: "/account", label: "Account" }];
-}
-
-function NavLink({ item }: { item: NavItem }) {
-  return (
-    <Link
-      to={item.to}
-      className="bridge-nav-item whitespace-nowrap"
-      activeProps={{ className: "bridge-nav-item bridge-nav-active whitespace-nowrap" }}
-    >
+    <Link to={item.to} onClick={onNavigate}
+      className="flex min-h-10 items-center rounded-lg px-3 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg"
+      activeProps={{ className: "flex min-h-10 items-center rounded-lg bg-accent-soft px-3 text-sm font-semibold text-accent" }}>
       {item.label}
     </Link>
   );
@@ -121,7 +48,7 @@ function NavLink({ item }: { item: NavItem }) {
 export function BrandMark({ className }: { className?: string }) {
   return (
     <Link to="/" className={cn("inline-flex items-center shrink-0", className)} aria-label="Crayons Bridge">
-      <svg viewBox="0 0 168 48" role="img" aria-label="Crayons Bridge" className="bridge-logo block h-[42px] w-auto sm:h-[46px] lg:h-[48px]">
+      <svg viewBox="0 0 168 48" role="img" aria-label="Crayons Bridge" className="bridge-logo block h-[38px] w-auto">
         <text x="0" y="16" fill="#6f6f6f" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="13" fontWeight="600" letterSpacing="0.5">crayons</text>
         <text x="0" y="40" fill="#007291" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="26" fontWeight="700" letterSpacing="-0.5">bridge</text>
       </svg>
