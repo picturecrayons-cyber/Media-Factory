@@ -281,7 +281,7 @@ function BuyerBody({ userId }: { userId: string }) {
       {!titles.length ? (
         <BuyerEmptyState />
       ) : tab === "licenses" ? (
-        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
+        <TitleList userId={userId} titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
       ) : view === "gallery" ? (
         <div className="space-y-4">
           <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
@@ -308,7 +308,7 @@ function BuyerBody({ userId }: { userId: string }) {
           ) : null}
         </div>
       ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
+        <TitleList userId={userId} titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
       )}
       {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
         <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>
@@ -463,7 +463,7 @@ function BuyerPosterImage({ blob, title }: { blob: Blob | undefined; title: stri
   );
 }
 
-function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
+function TitleList({ userId, titles, entitled, order, empty }: { userId: string; titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
