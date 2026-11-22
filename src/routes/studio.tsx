@@ -8,7 +8,7 @@ import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
-import { ProductsServicesCatalogue } from "@/components/bridge/products-services-catalogue";
+import { ProductsServicesCatalogue, CreatorStudioServiceCentre } from "@/components/bridge/products-services-catalogue";
 import { ServiceCentre } from "@/components/bridge/service-centre";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
@@ -94,6 +94,7 @@ function Studio() {
             </section>
 
             <ProductsServicesCatalogue audience="Studio" />
+            <CreatorStudioServiceCentre actor={actor} />
             <ServiceCentre audience="Studio" userId={actor.userId} />
 
             <section id="studio-gallery" className="scroll-mt-24 space-y-3">
