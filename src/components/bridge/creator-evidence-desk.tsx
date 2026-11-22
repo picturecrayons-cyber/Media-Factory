@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   confirmTitleOwnerEvidenceUpload,
+  getTitleOwnerEvidenceViewUrl,
   getTitleOwnerRightsDraft,
   getTitleOwnerRightsReviewHistory,
   listTitleOwnerEvidence,
@@ -66,6 +67,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
   const [titleId, setTitleId] = useState(preferred);
   const [details, setDetails] = useState<RightsDetails>(EMPTY);
   const [notice, setNotice] = useState("");
+  const [viewingDocumentId, setViewingDocumentId] = useState<string | null>(null);
   const [busyType, setBusyType] = useState<EvidenceType | null>(null);
   const evidenceQ = useQuery({
     queryKey: ["creator-evidence", titleId],
@@ -155,6 +157,18 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
     }
   }
 
+  async function previewDocument(documentId: string) {
+    setViewingDocumentId(documentId);
+    try {
+      const result = await getTitleOwnerEvidenceViewUrl({ data: { titleId, documentId } });
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Document preview unavailable.");
+    } finally {
+      setViewingDocumentId(null);
+    }
+  }
+
   if (!titles.length) return null;
 
   const platformsComplete = details.platforms.length > 0;
@@ -231,7 +245,14 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
                   <p className="text-muted">{doc.document_type.replaceAll("_", " ")} · {doc.status.replaceAll("_", " ")}</p>
                 </div>
                 {doc.status === "PENDING_UPLOAD" ? <button type="button" onClick={() => void undo(doc.id)} className="font-semibold text-accent underline">Undo pending upload</button> : null}
-                {doc.status === "VERIFIED" ? <span className="text-muted">Retained for audit · upload a new version to replace</span> : null}
+                {doc.status === "VERIFIED" ? (
+                  <div className="flex items-center gap-3">
+                    <button type="button" disabled={viewingDocumentId === doc.id} onClick={() => void previewDocument(doc.id)} className="font-semibold text-accent underline">
+                      {viewingDocumentId === doc.id ? "Opening…" : "Preview / Download"}
+                    </button>
+                    <span className="text-muted">Storage verified · Legal review separate</span>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
