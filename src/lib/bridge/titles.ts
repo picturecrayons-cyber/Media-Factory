@@ -548,7 +548,7 @@ export const removeDraftTitle = createServerFn({ method: "POST" })
       const [facts] = await tx<{
         has_assets: boolean; has_qc_case: boolean; has_legal_case: boolean;
         has_rights_grant: boolean; has_payment: boolean; has_submission: boolean;
-        has_publication: boolean;
+        has_document_links: boolean;
       }>`
         select
           exists(select 1 from bridge_assets where title_id = ${data.id}) as has_assets,
@@ -556,7 +556,8 @@ export const removeDraftTitle = createServerFn({ method: "POST" })
           exists(select 1 from bridge_legal_cases where title_id = ${data.id}) as has_legal_case,
           exists(select 1 from bridge_rights_grants where title_id = ${data.id}) as has_rights_grant,
           exists(select 1 from bridge_payments where title_id = ${data.id}) as has_payment,
-          exists(select 1 from bridge_title_owner_submissions where title_id = ${data.id}) as has_submission
+          exists(select 1 from bridge_title_owner_submissions where title_id = ${data.id}) as has_submission,
+          exists(select 1 from bridge_title_document_links where title_id = ${data.id}) as has_document_links
       `;
       if (!facts || !canRemoveDraft({
         status: title.status,
