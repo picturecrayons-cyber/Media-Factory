@@ -187,6 +187,21 @@ describe("PRD authorization matrix", () => {
     );
   });
 
+  it("keeps Creator and Studio workspaces isolated from Buyer and other organization accounts", () => {
+    const creatorActor = creator();
+    const studioActor = studio();
+    const buyerActor = buyer();
+    assert.equal(workspaceHome(creatorActor), "/creator");
+    assert.equal(workspaceHome(studioActor), "/studio");
+    assert.equal(workspaceHome(buyerActor), "/buyer");
+    assert.equal(canAccessTitleWorkspace(creatorActor), true);
+    assert.equal(canAccessTitleWorkspace(studioActor), true);
+    assert.equal(canAccessTitleWorkspace(buyerActor), false);
+    assert.equal(hasPermission(creatorActor, "title.create"), true);
+    assert.equal(hasPermission(studioActor, "title.create"), true);
+    assert.equal(hasPermission(buyerActor, "title.create"), false);
+  });
+
   it("restricts the shared title workspace to creators, studios, and catalog-authorized staff", () => {
     assert.equal(canAccessTitleWorkspace(creator()), true);
     assert.equal(canAccessTitleWorkspace(studio()), true);
