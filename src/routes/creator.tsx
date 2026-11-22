@@ -203,7 +203,9 @@ function CreatorDashboard({
         />
       </section>
 
-      <CreatorEvidenceDesk titles={titles.map(({ id, name, status }) => ({ id, name, status }))} />
+      <section id="rights" className="scroll-mt-20">
+        <CreatorEvidenceDesk titles={titles.map(({ id, name, status }) => ({ id, name, status }))} />
+      </section>
 
       <section id="assets" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
