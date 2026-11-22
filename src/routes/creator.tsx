@@ -7,6 +7,7 @@ import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
+import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 import { listTitles } from "@/lib/bridge/titles";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
@@ -246,6 +247,7 @@ function CreatorDashboard({
         <a href="#my-titles" className="mt-4 inline-flex text-sm font-semibold text-accent hover:underline">
           Open a title's asset workspace →
         </a>
+        <div className="mt-6"><TitleAssetGallery userId={actor.userId} scopeLabel="Creator" /></div>
       </section>
 
       <section id="review" className="scroll-mt-20 grid gap-4 md:grid-cols-2">
