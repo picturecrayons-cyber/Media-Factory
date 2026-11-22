@@ -8,6 +8,7 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { inviteInternalRole } from "@/lib/bridge/profiles";
 import { listAuditLogs, listTitles } from "@/lib/bridge/titles";
+
 import {
   authorizeLoopPublication,
   listLoopPublicationReadiness,
@@ -18,6 +19,8 @@ import {
 } from "@/lib/bridge/loop-publication";
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
+import { OwnerSubmissionDesk, SuperAdminArchiveDesk } from "@/components/bridge/super-admin-archive-desk";
+
 
 export const Route = createFileRoute("/internal")({ component: Internal });
 
@@ -33,6 +36,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            canArchive={actor.internalRole === "super_admin"}
           />
         </BridgeShell>
       )}
@@ -44,10 +48,12 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  canArchive,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  canArchive: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -59,6 +65,9 @@ function InternalBody({
     <div className="grid gap-12">
       {/* 1. Master Distribution Desk */}
       <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
+
+      {canArchive ? <SuperAdminArchiveDesk /> : null}
+      {canArchive ? <OwnerSubmissionDesk /> : null}
 
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
