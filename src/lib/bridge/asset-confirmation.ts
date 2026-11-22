@@ -128,7 +128,7 @@ async function persistVerifiedAssetScoped(
         ), 0) + 1,
         e.version_language,
         $6,
-        $9,
+        $9::text,
         $1,
         jsonb_build_object(
           'verifiedObjectKey', $6::text,
@@ -139,7 +139,7 @@ async function persistVerifiedAssetScoped(
           'storageRegion', $13::text,
           'storageEndpoint', $14::text,
           'storageVerifiedAt', now(),
-          'sha256', $9,
+          'sha256', $9::text,
           'etag', $10::text
         ),
         'PASSED',
@@ -158,7 +158,7 @@ async function persistVerifiedAssetScoped(
       where v.title_id = e.title_id
         and v.asset_type = e.kind
         and v.s3_key = $6
-        and v.checksum_sha256 = $9
+        and v.checksum_sha256 = $9::text
         and v.byte_size = $1
         and v.processing_state = 'PASSED'
     ),
@@ -168,8 +168,8 @@ async function persistVerifiedAssetScoped(
         byte_size = $1,
         content_type = coalesce($2, a.content_type),
         s3_key = $6,
-        sha256 = $9,
-        checksum_sha256 = $9,
+        sha256 = $9::text,
+        checksum_sha256 = $9::text,
         source_object_key = $7,
         verified_object_key = $6,
         storage_provider = 'OCI',
@@ -184,7 +184,7 @@ async function persistVerifiedAssetScoped(
         on v.title_id = e.title_id
        and v.asset_type = e.kind
        and v.s3_key = $6
-       and v.checksum_sha256 = $9
+       and v.checksum_sha256 = $9::text
        and v.byte_size = $1
        and v.processing_state = 'PASSED'
       where a.id = e.id
@@ -193,7 +193,7 @@ async function persistVerifiedAssetScoped(
           a.asset_version_id is distinct from v.id
           or a.byte_size is distinct from $1
           or a.s3_key is distinct from $6
-          or a.checksum_sha256 is distinct from $9
+          or a.checksum_sha256 is distinct from $9::text
           or a.storage_verified_at is null
         )
       returning a.id, a.title_id, a.kind, a.s3_key, v.id as asset_version_id
@@ -205,7 +205,7 @@ async function persistVerifiedAssetScoped(
         on v.title_id = e.title_id
        and v.asset_type = e.kind
        and v.s3_key = $6
-       and v.checksum_sha256 = $9
+       and v.checksum_sha256 = $9::text
        and v.byte_size = $1
        and v.processing_state = 'PASSED'
       join bridge_assets a
@@ -213,7 +213,7 @@ async function persistVerifiedAssetScoped(
        and a.asset_version_id = v.id
        and a.byte_size = $1
        and a.s3_key = $6
-       and a.checksum_sha256 = $9
+       and a.checksum_sha256 = $9::text
        and a.source_object_key = $7
        and a.verified_object_key = $6
        and a.storage_provider = 'OCI'
