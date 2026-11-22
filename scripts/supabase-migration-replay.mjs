@@ -18,10 +18,10 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
 // The historical manifest is the immutable Production ledger snapshot (70 rows).
-// This additive archive migration was applied only to Testing and is not a
+// This additive archive migration is a Testing candidate, not a
 // Production ledger entry.
 const EXPECTED_PRODUCTION_MIGRATIONS = 70;
-const TESTING_ONLY_MIGRATIONS = new Set([
+const NON_PRODUCTION_MIGRATIONS = new Set([
   "20261122180000_bridge_archive_fail_closed_contract.sql",
 ]);
 const FIXTURE_MIGRATION =
@@ -63,15 +63,15 @@ const allNames = (await readdir(MIGRATIONS_DIR))
 if (new Set(allNames).size !== allNames.length) {
   throw new Error("Duplicate migration filenames detected");
 }
-for (const name of TESTING_ONLY_MIGRATIONS) {
+for (const name of NON_PRODUCTION_MIGRATIONS) {
   if (!allNames.includes(name)) {
     throw new Error(`Declared Testing-only migration is missing: ${name}`);
   }
 }
-const names = allNames.filter((name) => !TESTING_ONLY_MIGRATIONS.has(name));
+const names = allNames.filter((name) => !NON_PRODUCTION_MIGRATIONS.has(name));
 if (names.length !== EXPECTED_PRODUCTION_MIGRATIONS) {
   throw new Error(
-    `Expected ${EXPECTED_PRODUCTION_MIGRATIONS} Production migrations plus ${TESTING_ONLY_MIGRATIONS.size} explicitly classified Testing-only migrations; found ${allNames.length} total (${names.length} Production-classified)`,
+    `Expected ${EXPECTED_PRODUCTION_MIGRATIONS} Production migrations plus ${NON_PRODUCTION_MIGRATIONS.size} explicitly classified Testing-only migrations; found ${allNames.length} total (${names.length} Production-classified)`,
   );
 }
 
