@@ -238,7 +238,7 @@ export const getConsumerWatchlist = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const sql = await getSql();
     const savedRows = await sql<{ title_id: string; created_at: string | Date }>`
-      select loop_title_id, created_at
+      select title_id, created_at
       from loop_watchlists
       where user_id = ${context.userId}
       order by created_at desc
