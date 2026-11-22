@@ -14,6 +14,7 @@ import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
+import { canRemoveDraft, DRAFT_TITLE_REMOVAL_DISABLED_MESSAGE } from "./title-deletion-policy";
 
 type TitleRow = {
   id: string;
@@ -32,6 +33,7 @@ type TitleRow = {
   poster_key: string | null;
   master_key: string | null;
   content_type: string;
+  submission_type?: "finished_film" | "story_concept" | null;
   country_of_origin: string | null;
   release_date: string | Date | null;
   credits: Array<{ role: string; name: string }>;
@@ -62,6 +64,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     posterKey: r.poster_key,
     masterKey: r.master_key,
     contentType: r.content_type,
+    submissionType: r.submission_type ?? "finished_film",
     countryOfOrigin: r.country_of_origin,
     releaseDate: r.release_date ? asIso(r.release_date) : null,
     credits: r.credits,
@@ -83,45 +86,98 @@ async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
   return Boolean(rows[0]?.exists);
 }
 
-async function listCatalog(sql: Sql): Promise<TitleRow[]> {
-  if (!(await hasTitleMergeColumn(sql))) {
-    return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
-  }
-  return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
+async function hasArchiveColumn(sql: Sql): Promise<boolean> {
+  const rows = await sql<{ exists: boolean }>`
+    select exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'bridge_titles' and column_name = 'archived_at'
+    ) as exists
+  `;
+  return Boolean(rows[0]?.exists);
 }
 
-async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
+async function listCatalog(sql: Sql): Promise<TitleRow[]> {
+  const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+  const archiveColumnAvailable = await hasArchiveColumn(sql);
+  if (mergeColumnAvailable && archiveColumnAvailable) {
+    return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null and archived_at is null order by updated_at desc limit 200`;
+  }
+  if (mergeColumnAvailable) return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
+  if (archiveColumnAvailable) return sql<TitleRow>`select * from bridge_titles where archived_at is null order by updated_at desc limit 200`;
+  return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
+}
+
+async function listOwned(
+  sql: Sql,
+  userId: string,
+  accountType: AccountType,
+  organizationId: string | null | undefined,
+): Promise<TitleRow[]> {
   const orgId = organizationId || null;
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
-  if (!orgId) {
-    return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
-  }
-  return mergeColumnAvailable
-    ? sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.merged_into_title_id is null
-          and (
-            t.owner_user_id = ${userId}
-            or (
-              t.owner_account_type = 'studio'
-              and t.owner_organization_id = ${orgId}
-              and exists (
-                select 1 from bridge_organization_memberships m
-                where m.organization_id = ${orgId}
-                  and m.user_id = ${userId}
-                  and m.status = 'active'
-              )
+  const archiveColumnAvailable = await hasArchiveColumn(sql);
+  const activeRowsOnly = (mergeColumnAvailable: boolean, archiveColumnAvailable: boolean) =>
+    mergeColumnAvailable && archiveColumnAvailable
+      ? "merged_and_active"
+      : mergeColumnAvailable
+        ? "merged_only"
+        : archiveColumnAvailable
+          ? "active_only"
+          : "all";
+
+  // Studio title visibility is organization-scoped. A Studio user must not
+  // pull in unassigned legacy/test rows merely because the user_id matches.
+  // Those records remain in the Super Admin catalog until ownership mapping is reviewed.
+  if (accountType === "studio") {
+    if (!orgId) return [];
+    switch (activeRowsOnly(mergeColumnAvailable, archiveColumnAvailable)) {
+      case "merged_and_active":
+        return sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and t.merged_into_title_id is null
+            and t.archived_at is null
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
             )
-          )
-        order by t.updated_at desc limit 200
-      `
-    : sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
-          or (
-            t.owner_account_type = 'studio'
+          order by t.updated_at desc limit 200
+        `;
+      case "merged_only":
+        return sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and t.merged_into_title_id is null
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          order by t.updated_at desc limit 200
+        `;
+      case "active_only":
+        return sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and t.archived_at is null
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          order by t.updated_at desc limit 200
+        `;
+      default:
+        return sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_account_type = 'studio'
             and t.owner_organization_id = ${orgId}
             and exists (
               select 1 from bridge_organization_memberships m
@@ -129,9 +185,27 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
                 and m.user_id = ${userId}
                 and m.status = 'active'
             )
-          )
-        order by t.updated_at desc limit 200
-      `;
+          order by t.updated_at desc limit 200
+        `;
+    }
+  }
+
+  // Creator accounts can see only finished-film records they own; they do
+  // not inherit Studio records even when using the same login identity.
+  if (accountType === "independent_creator") {
+    const archiveClause = archiveColumnAvailable ? sql` archived_at is null and ` : sql``;
+    const mergeClause = mergeColumnAvailable ? sql` merged_into_title_id is null and ` : sql``;
+    return sql<TitleRow>`
+      select * from bridge_titles
+      where owner_user_id = ${userId}
+        and owner_account_type = 'independent_creator'
+        and ${mergeClause}
+        ${archiveClause}
+      order by updated_at desc limit 200
+    `;
+  }
+
+  return [];
 }
 
 function slugify(name: string, id: string): string {
@@ -405,7 +479,7 @@ export const listTitles = createServerFn({ method: "GET" })
       }
     } else {
       assertPermission(actor, "title.read_own");
-      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
+      rows = await listOwned(sql, actor.userId, actor.accountType, actor.accountType === "studio" ? actor.organizationId : null);
     }
     return { titles: rows.flatMap((row) => {
       try {
@@ -462,6 +536,82 @@ export const getTitle = createServerFn({ method: "GET" })
         createdAt: asIso(e.created_at),
       })),
     };
+  });
+
+export const removeDraftTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ id: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+
+    return sql.transaction(async (tx) => {
+      const [title] = await tx<{
+        id: string; status: string; owner_user_id: string;
+        owner_account_type: string; owner_organization_id: string | null;
+        archived_at: string | Date | null;
+      }>`
+        select id, status, owner_user_id, owner_account_type, owner_organization_id, archived_at
+        from bridge_titles where id = ${data.id} for update
+      `;
+      if (!title || title.archived_at) throw new Error("Draft not found");
+      const ownerAllowed = canMutateTitle(
+        actor,
+        {
+          ownerUserId: title.owner_user_id,
+          ownerAccountType: title.owner_account_type as AccountType,
+          ownerOrganizationId: title.owner_organization_id,
+        },
+        "title.update_own",
+        "title.license",
+      );
+      if (!ownerAllowed || title.status !== "DRAFT") {
+        throw new Error("Only your own DRAFT title can be removed");
+      }
+
+      const [facts] = await tx<{
+        has_assets: boolean; has_qc_case: boolean; has_legal_case: boolean;
+        has_rights_grant: boolean; has_payment: boolean; has_submission: boolean;
+        has_document_links: boolean;
+      }>`
+        select
+          exists(select 1 from bridge_assets where title_id = ${data.id}) as has_assets,
+          exists(select 1 from bridge_qc_cases where title_id = ${data.id}) as has_qc_case,
+          exists(select 1 from bridge_legal_cases where title_id = ${data.id}) as has_legal_case,
+          exists(select 1 from bridge_rights_grants where title_id = ${data.id}) as has_rights_grant,
+          exists(select 1 from bridge_payments where title_id = ${data.id}) as has_payment,
+          exists(select 1 from bridge_title_owner_submissions where title_id = ${data.id}) as has_submission,
+          exists(select 1 from bridge_title_document_links where title_id = ${data.id}) as has_document_links
+      `;
+      if (!facts || !canRemoveDraft({
+        status: title.status,
+        hasAssets: facts.has_assets,
+        hasQcCase: facts.has_qc_case,
+        hasLegalCase: facts.has_legal_case,
+        hasRightsGrant: facts.has_rights_grant,
+        hasPayment: facts.has_payment,
+        hasSubmission: facts.has_submission,
+        hasDocumentLinks: facts.has_document_links,
+      })) {
+        throw new Error(DRAFT_TITLE_REMOVAL_DISABLED_MESSAGE);
+      }
+
+      await tx`
+        update bridge_titles
+        set archived_at = now(), archived_by = ${actor.userId},
+            archive_reason = 'OWNER_REMOVED_DRAFT', updated_at = now()
+        where id = ${data.id} and status = 'DRAFT' and archived_at is null
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.draft_archived",
+        entityType: "bridge_title",
+        entityId: data.id,
+        metadata: { reversible: true, archiveReason: "OWNER_REMOVED_DRAFT" },
+      }, tx);
+      return { archived: true, id: data.id };
+    });
   });
 
 export const updateTitle = createServerFn({ method: "POST" })

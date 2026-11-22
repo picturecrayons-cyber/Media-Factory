@@ -49,8 +49,9 @@ function VendorJobs({ actor }: { actor: Actor }) {
   const [error, setError] = useState("");
 
   const jobsQuery = useQuery({
-    queryKey: ["bridge-delivery-jobs"],
+    queryKey: ["bridge-delivery-jobs", actor.userId, actor.accountType, actor.organizationId ?? null],
     queryFn: () => listBridgeDeliveryJobs(),
+    retry: 1,
   });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["bridge-delivery-jobs"] });
   const request = useMutation({
@@ -116,7 +117,12 @@ function VendorJobs({ actor }: { actor: Actor }) {
       )}
       {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
       {jobsQuery.isError ? <p className="mt-3 text-sm text-red-600" role="alert">Delivery records could not be loaded.</p> : null}
-      {jobsQuery.isPending ? <p className="mt-4 text-sm text-muted">Loading persisted delivery jobs…</p> : (
+      {jobsQuery.isPending ? <p className="mt-4 text-sm text-muted">Loading persisted delivery jobs…</p> : jobsQuery.isError ? (
+        <div role="alert" className="mt-4 rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-sm">
+          <p>Delivery jobs could not be loaded.</p>
+          <button type="button" onClick={() => void jobsQuery.refetch()} className="mt-2 font-semibold underline">Retry</button>
+        </div>
+      ) : (
         <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
           {jobs.map((job: {
             id: string; type: string; state: string; titleId: string; note: string;

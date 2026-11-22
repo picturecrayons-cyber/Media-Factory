@@ -188,19 +188,36 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     try {
-      const rows = await sql<ConceptRow & { title_name: string }>`
-        select c.*, t.name as title_name
-        from bridge_story_concept_submissions c
-        join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
-           or (
-             t.owner_account_type = 'studio'
-             and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
-           )
-        order by c.created_at desc
-        limit 100
-      `;
+      // Keep Creator and Studio Concept lists tenant-scoped just like Finished Films.
+      const rows = actor.accountType === "studio"
+        ? actor.organizationId
+          ? await sql<ConceptRow & { title_name: string }>`
+              select c.*, t.name as title_name
+              from bridge_story_concept_submissions c
+              join bridge_titles t on t.id = c.title_id
+              where t.owner_account_type = 'studio'
+                and t.owner_organization_id = ${actor.organizationId}
+                and exists (
+                  select 1 from bridge_organization_memberships m
+                  where m.organization_id = ${actor.organizationId}
+                    and m.user_id = ${actor.userId}
+                    and m.status = 'active'
+                )
+              order by c.created_at desc
+              limit 100
+            `
+          : []
+        : actor.accountType === "independent_creator"
+          ? await sql<ConceptRow & { title_name: string }>`
+              select c.*, t.name as title_name
+              from bridge_story_concept_submissions c
+              join bridge_titles t on t.id = c.title_id
+              where t.owner_user_id = ${actor.userId}
+                and t.owner_account_type = 'independent_creator'
+              order by c.created_at desc
+              limit 100
+            `
+          : [];
 
       return {
         concepts: rows.map((r) => ({
