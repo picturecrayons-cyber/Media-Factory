@@ -54,7 +54,7 @@ alter table public.bridge_story_concept_submissions
   drop constraint if exists bridge_story_concept_owner_submission_owner_submission_status_check;
 alter table public.bridge_story_concept_submissions
   add constraint bridge_story_concept_owner_submission_owner_submission_status_check
-  check (owner_submission_status in ('DRAFT','SUBMITTED','NEEDS_CORRECTION','ACCEPTED_INTAKE','WITHDRAWN','REJECTED'))
+  check (owner_submission_status in ('DRAFT','SUBMITTED','NEEDS_CORRECTION','ACCEPTED_INTAKE','WITHDRAWN','REJECTED','ARCHIVED'))
   not valid;
 
 create table if not exists public.bridge_title_archive_events (
