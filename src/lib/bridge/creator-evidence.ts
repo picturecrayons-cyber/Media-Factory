@@ -405,6 +405,7 @@ export const getTitleOwnerRightsDraft = createServerFn({ method: "GET" })
       select details, submission_status, submitted_at
       from bridge_title_owner_submissions
       where title_id = ${title.id} and owner_user_id = ${actor.userId}
+        and owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
       limit 1
     `;
     return { submission: rows[0] ?? null };
