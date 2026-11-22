@@ -424,7 +424,8 @@ export const acceptServiceQuote = createServerFn({ method: "POST" })
         [data.quoteId],
       );
       const quote = rows[0];
-      if (!quote || quote.user_id !== actor.userId || quote.status !== "QUOTED") {
+      const quoteTitle = quote ? await loadTitle(quote.title_id) : null;
+      if (!quote || !quoteTitle || !canOperateOnTitle(actor, quoteTitle, "title.read_own") || quote.status !== "QUOTED") {
         throw new Error("Quote is unavailable");
       }
 
@@ -504,7 +505,9 @@ export async function createServicePaymentOrder(opts: {
     [opts.orderId],
   );
   const order = rows[0];
-  if (!order || order.user_id !== opts.actorUserId || order.status !== "PAYMENT_PENDING") {
+  const actor = await requireVerifiedActor(opts.actorUserId);
+  const orderTitle = order ? await loadTitle(order.title_id) : null;
+  if (!order || !orderTitle || !canOperateOnTitle(actor, orderTitle, "title.read_own") || order.status !== "PAYMENT_PENDING") {
     throw new Error("Service order unavailable");
   }
 
