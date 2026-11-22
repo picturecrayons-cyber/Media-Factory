@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   confirmTitleOwnerEvidenceUpload,
   getTitleOwnerRightsDraft,
+  getTitleOwnerRightsReviewHistory,
   listTitleOwnerEvidence,
   requestTitleOwnerEvidenceUpload,
   revokePendingTitleOwnerEvidence,
@@ -74,6 +75,11 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
   const draftQ = useQuery({
     queryKey: ["creator-rights-draft", titleId],
     queryFn: () => getTitleOwnerRightsDraft({ data: { titleId } }),
+    enabled: Boolean(titleId),
+  });
+  const reviewQ = useQuery({
+    queryKey: ["creator-rights-review-history", titleId],
+    queryFn: () => getTitleOwnerRightsReviewHistory({ data: { titleId } }),
     enabled: Boolean(titleId),
   });
   const docs = evidenceQ.data?.documents ?? [];
@@ -285,6 +291,23 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
             </li>
           ))}
         </ol>
+      </div>
+      <div className="rounded-xl border border-line p-4">
+        <h3 className="font-semibold">Submission & review history</h3>
+        <p className="mt-1 text-xs text-muted">Status and reviewer activity are displayed from recorded Bridge events. Owner uploads do not count as legal verification.</p>
+        <p className="mt-3 text-sm">Current submission: <strong>{submission?.submission_status?.replaceAll("_", " ") ?? "NOT STARTED"}</strong></p>
+        {reviewQ.isPending ? <p className="mt-2 text-xs text-muted">Loading review history…</p> : null}
+        {reviewQ.isError ? <p role="alert" className="mt-2 text-xs text-muted">Review history is currently unavailable.</p> : null}
+        {reviewQ.data?.reviewEvents?.length ? (
+          <ol className="mt-3 space-y-2">
+            {reviewQ.data.reviewEvents.map((event, index) => (
+              <li key={index} className="border-t border-line pt-2 text-xs">
+                <strong>{event.action.replaceAll(".", " ").replaceAll("_", " ")}</strong>
+                <span className="ml-2 text-muted">{new Date(event.created_at).toLocaleString()}</span>
+              </li>
+            ))}
+          </ol>
+        ) : <p className="mt-2 text-xs text-muted">No staff review events recorded yet.</p>}
       </div>
       <p className="text-xs leading-relaxed text-muted">
         Important: an uploaded PDF or Creator declaration never marks rights as cleared. Legal review, QC, licensing readiness and Crayons LOOP publication remain separate approval gates. Submitted evidence is retained; corrections should be handled through the Legal Reviewer workflow and replacement uploads.
