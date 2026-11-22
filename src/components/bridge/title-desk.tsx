@@ -7,9 +7,25 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles, removeDraftTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
+import { getBridgeSession } from "@/lib/bridge/session";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const { user, isPending: userPending } = useCurrentUserState();
+  const sessionQ = useQuery({
+    queryKey: ["bridge-session", user?.id],
+    queryFn: () => getBridgeSession(),
+    enabled: !userPending && Boolean(user),
+    retry: false,
+  });
+  const actor = sessionQ.data?.profile ?? null;
+  const titlesKey = ["bridge-titles", actor?.userId ?? user?.id ?? "anonymous", actor?.accountType ?? "unresolved", actor?.organizationId ?? null];
+  const titlesQ = useQuery({
+    queryKey: titlesKey,
+    queryFn: () => listTitles(),
+    enabled: Boolean(actor?.userId && actor.emailVerified),
+    retry: 1,
+  });
   const qc = useQueryClient();
   const [search, setSearch] = useState(query);
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -18,7 +34,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
     mutationFn: (id: string) => removeDraftTitle({ data: { id } }),
     onSuccess: () => {
       toast.success("Draft archived");
-      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+      void qc.invalidateQueries({ queryKey: titlesKey });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Draft could not be archived"),
   });
@@ -29,7 +45,8 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
     const matchesKind = kindFilter === "ALL" || kindFilter === "FILM";
     return matchesText && matchesStatus && matchesKind;
   });
-  if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
+  if (userPending || sessionQ.isPending || titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
+  if (sessionQ.isError || !actor) return <p role="alert" className="text-sm text-muted">Your account scope could not be verified. Refresh the workspace and try again.</p>;
   if (titlesQ.isError) {
     return (
       <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
