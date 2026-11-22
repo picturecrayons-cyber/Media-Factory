@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { createTitle, listTitles, removeDraftTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
@@ -15,6 +15,15 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
+  });
+  const qc = useQueryClient();
+  const removeDraft = useMutation({
+    mutationFn: (id: string) => removeDraftTitle({ data: { id } }),
+    onSuccess: () => {
+      toast.success("Eligible draft removed");
+      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Draft could not be removed"),
   });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
@@ -45,7 +54,21 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           </Link>
           <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-            
+            {t.status === "DRAFT" ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={removeDraft.isPending}
+                onClick={() => {
+                  if (window.confirm("Remove this untouched draft? Drafts with linked files, evidence or review records cannot be removed.")) {
+                    removeDraft.mutate(t.id);
+                  }
+                }}
+              >
+                {removeDraft.isPending ? "Removing…" : "Delete draft"}
+              </Button>
+            ) : null}
           </div>
         </li>
       ))}
