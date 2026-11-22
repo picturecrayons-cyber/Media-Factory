@@ -273,6 +273,10 @@ export async function verifyObject(key: string, expectedContentType?: string | n
     byteSize: contentLength,
     contentType,
     etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
+    bucket: targetBucket,
+    namespace,
+    region: cfg.region,
+    endpoint: endpoint(cfg.region),
   };
 }
 
@@ -363,29 +367,18 @@ export async function sealVerifiedObject(
   return verifyObject(destinationKey, undefined, targetBucket);
 }
 
-/** Stream an OCI object and verify its exact byte length and SHA-256 digest. */
-export async function verifyObjectSha256(
-  key: string,
-  expectedSha256: string,
-  expectedByteSize: number,
-  bucket?: string,
-) {
-  if (!/^[a-f0-9]{64}$/i.test(expectedSha256)) {
-    throw new Error("Expected SHA-256 must be a 64-character hexadecimal digest");
-  }
-  if (!Number.isSafeInteger(expectedByteSize) || expectedByteSize < 0) {
-    throw new Error("Expected byte size must be a non-negative safe integer");
-  }
+/** Stream an OCI object and calculate its exact byte length and SHA-256 digest. */
+export async function calculateObjectSha256(key: string, bucket?: string) {
   const cfg = config();
   const targetBucket = bucket?.trim() || cfg.bucket;
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
-  const res = await signedFetch({ cfg, method: "GET", path });
+  const res = await signedFetch({ cfg, method: "GET", path, timeoutMs: 120_000 });
   if (!res.ok || !res.body) throw new Error(`OCI object download for checksum failed (${res.status})`);
   const declaredSize = Number(res.headers.get("content-length") || 0);
-  if (declaredSize !== expectedByteSize) {
+  if (!Number.isSafeInteger(declaredSize) || declaredSize <= 0) {
     await res.body.cancel();
-    throw new Error(`OCI object size mismatch: expected ${expectedByteSize}, received ${declaredSize}`);
+    throw new Error("OCI object has an invalid or empty content length");
   }
   const hash = createHash("sha256");
   const reader = res.body.getReader();
@@ -395,20 +388,49 @@ export async function verifyObjectSha256(
       const { done, value } = await reader.read();
       if (done) break;
       byteSize += value.byteLength;
-      if (byteSize > expectedByteSize) {
+      if (byteSize > declaredSize) {
         await reader.cancel();
-        throw new Error("OCI object exceeded expected byte size during checksum");
+        throw new Error("OCI object exceeded its declared byte size during checksum");
       }
       hash.update(value);
     }
   } finally {
     reader.releaseLock();
   }
-  const sha256 = hash.digest("hex");
-  if (byteSize !== expectedByteSize || sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
+  if (byteSize !== declaredSize) {
+    throw new Error(`OCI object stream size mismatch: declared ${declaredSize}, received ${byteSize}`);
+  }
+  return {
+    key,
+    bucket: targetBucket,
+    namespace,
+    region: cfg.region,
+    endpoint: endpoint(cfg.region),
+    byteSize,
+    sha256: hash.digest("hex"),
+    etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
+    verified: true as const,
+  };
+}
+
+/** Stream an OCI object and compare its actual SHA-256 and byte length to the expected values. */
+export async function verifyObjectSha256(
+  key: string,
+  expectedSha256: string,
+  expectedByteSize: number,
+  bucket?: string,
+) {
+  if (!/^[a-f0-9]{64}$/i.test(expectedSha256)) {
+    throw new Error("Expected SHA-256 must be a 64-character hexadecimal digest");
+  }
+  if (!Number.isSafeInteger(expectedByteSize) || expectedByteSize <= 0) {
+    throw new Error("Expected byte size must be a positive safe integer");
+  }
+  const actual = await calculateObjectSha256(key, bucket);
+  if (actual.byteSize !== expectedByteSize || actual.sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
     throw new Error(`OCI object SHA-256 mismatch for ${key}`);
   }
-  return { key, bucket: targetBucket, byteSize, sha256, etag: res.headers.get("etag")?.replaceAll('"', "") ?? null, verified: true as const };
+  return actual;
 }
 
 export async function deleteObject(key: string, bucket?: string) {
