@@ -95,7 +95,6 @@ function Studio() {
 
             <ProductsServicesCatalogue audience="Studio" />
             <ServiceCentre audience="Studio" userId={actor.userId} />
-            <ServiceCentre audience="Studio" userId={actor.userId} />
 
             <section id="studio-gallery" className="scroll-mt-24 space-y-3">
               <div><p className="text-xs font-semibold uppercase tracking-wider text-accent">Studio media</p><h3 className="mt-1 font-display text-xl font-semibold">Studio Gallery</h3><p className="mt-1 text-sm text-muted">Artwork and verified image assets from titles visible to this active Studio membership.</p></div>
