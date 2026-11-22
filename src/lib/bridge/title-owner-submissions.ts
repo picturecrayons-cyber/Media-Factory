@@ -8,6 +8,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { canMutateTitle, canReadTitle } from "./rbac";
 import { writeAudit } from "./audit";
+import { ownerSubmissionSubmitTransition } from "./owner-submission-state";
 
 const creditsSchema = z.array(z.object({
   role: z.enum(["Director","Producer","Writer","Cinematographer","Editor","Music","Cast","Other"]),
@@ -163,12 +164,9 @@ export const submitTitleOwnerDetails = createServerFn({method:"POST"})
           title.ownerOrganizationId !== null)
       );
       if (!row || !sameOwner) throw new Error("Save the owner details draft before submitting");
-      if (!["DRAFT","NEEDS_CORRECTION"].includes(row.submission_status)) {
-        throw new Error("This owner submission is already pending review or accepted into intake");
-      }
+      const transition = ownerSubmissionSubmitTransition(row.submission_status);
       const details=detailsSchema.parse(row.details);
       completeDetails(details);
-      const nextAction = row.submission_status === "NEEDS_CORRECTION" ? "RESUBMITTED" : "SUBMITTED";
       await tx `
         update bridge_title_owner_submissions set
           submission_status='SUBMITTED',submitted_at=now(),submitted_by=${actor.userId},
@@ -178,9 +176,9 @@ export const submitTitleOwnerDetails = createServerFn({method:"POST"})
       await tx `
         insert into bridge_owner_submission_events
           (title_id,submission_kind,action,from_status,to_status,actor_user_id)
-        values (${title.id},'finished_film',${nextAction},${row.submission_status},'SUBMITTED',${actor.userId})
+        values (${title.id},'finished_film',${transition.action},${row.submission_status},'SUBMITTED',${actor.userId})
       `;
-      await writeAudit({actorUserId:actor.userId,action:`title.owner_submission_${nextAction.toLowerCase()}`,entityType:"bridge_title",entityId:title.id,metadata:{titleStatus:title.status,from:row.submission_status,to:"SUBMITTED"}},tx);
+      await writeAudit({actorUserId:actor.userId,action:`title.owner_submission_${transition.action.toLowerCase()}`,entityType:"bridge_title",entityId:title.id,metadata:{titleStatus:title.status,from:row.submission_status,to:"SUBMITTED"}},tx);
     });
     // Owner details submission is intentionally separate from title QC,
     // rights review, legal approval, licensing and publication state.
