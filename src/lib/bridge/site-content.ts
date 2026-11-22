@@ -7,10 +7,10 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 
 export const DEFAULT_BRIDGE_SITE_CONTENT = {
-  heroTitle: "One bridge from content to market.",
-  heroBody: "The professional workspace for preparing, protecting, licensing and delivering film and television.",
-  workflowHeading: "From upload to delivery.",
-  audienceHeading: "Built for the media business.",
+  heroTitle: "From rights to audience.",
+  heroBody: "Crayons Bridge manages rights, licensing and distribution authorization across multiple independent Buyers. Crayons Loop is one consumer streaming experience—not the only Buyer or distribution destination.",
+  workflowHeading: "Prepare, protect, license and distribute.",
+  audienceHeading: "Built for the whole media business.",
   finalCtaHeading: "Ready to move your content forward?",
   carouselSlides: [] as Array<{ imageUrl: string; alt: string; caption: string }>,
 } as const;
