@@ -12,6 +12,7 @@ import { bridgeEnv } from "./env";
 import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
 import { destinationSchema, detectRequiredWork, type DetectedAsset, type RequiredWork } from "./service-pricing";
 import { calculateServiceLine, calculateRefundSplit, calculateNetProfit } from "./commercial-math";
+import { serviceQuoteAcceptanceInput } from "./service-request-workflow";
 
 const quoteInputSchema = z.object({
   titleId: z.string().min(8),
@@ -404,7 +405,7 @@ export const createServiceQuote = createServerFn({ method: "POST" })
 
 export const acceptServiceQuote = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ quoteId: z.string().uuid() }))
+  .validator(serviceQuoteAcceptanceInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
