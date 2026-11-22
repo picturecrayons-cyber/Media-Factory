@@ -6,10 +6,11 @@ function Privacy() {
   return <main className="min-h-screen bg-white px-5 py-10 text-fg sm:px-6">
     <article className="mx-auto max-w-4xl rounded-3xl border border-line bg-surface p-6 sm:p-10">
       <Link to="/" className="text-sm font-semibold text-accent">← Crayons Bridge</Link>
+      <Link to="/legal" className="ml-5 text-sm font-semibold text-accent">Legal & Compliance</Link>
       <p className="mt-8 text-xs font-semibold uppercase tracking-[0.16em] text-muted">StreamVista OPC Pvt Ltd · B2B privacy</p>
       <h1 className="mt-2 font-display text-3xl font-semibold sm:text-4xl">Privacy Policy</h1>
       <p className="mt-3 text-sm leading-7 text-muted">This policy describes how Crayons Bridge processes information for its business workspaces. It is specific to Bridge and does not replace Crayons Loop’s consumer privacy notice.</p>
-      <p className="mt-4 text-xs text-muted">Version 1.0 — draft for legal review · Effective date to be confirmed by the Company.</p>
+      <p className="mt-4 text-xs text-muted">Version 1.0 — draft for legal review · Effective: to be confirmed before publication · Last updated: 23 November 2026.</p>
       <div className="mt-8 space-y-7 text-sm leading-7 text-muted">
         <section><h2 className="font-semibold text-fg">1. Information we process</h2><p>Depending on your account and activity, we may process identity and contact details, authentication and security events, organization membership, title metadata, submitted assets, rights and clearance evidence, licensing enquiries, access grants, delivery records, payment references and support correspondence.</p></section>
         <section><h2 className="font-semibold text-fg">2. Purposes and lawful basis</h2><p>We use information to create and secure accounts, provide role-specific workspaces, process title and asset workflows, administer rights and buyer access, support licensing and delivery, prevent misuse, maintain audit evidence, comply with legal obligations and respond to requests. The Company must document the applicable lawful basis and notices for each processing purpose before final publication.</p></section>
