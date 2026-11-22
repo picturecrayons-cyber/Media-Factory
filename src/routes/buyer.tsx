@@ -406,16 +406,19 @@ function TitleGallery({
                     ? `${formatLicensingFeePaise(title.licensingFeePaise)} licensing fee`
                     : "Commercial terms on request"}
                 </p>
-                {entitled.has(title.id) ? (
-                  <span className="shrink-0 text-sm font-semibold text-accent">Licensed</span>
-                ) : (
-                  <Button
-                    disabled={order.isPending || title.licensingFeePaise <= 0}
-                    onClick={() => order.mutate(title.id)}
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    href={`mailto:abijithasokan@crayonspictures.com?subject=${encodeURIComponent(`Crayons Bridge title enquiry — ${title.name}`)}&body=${encodeURIComponent(`Title: ${title.name}\\nBridge Title ID: ${title.id}\\nBuyer account: ${userId}\\n\\nPlease contact me regarding availability, rights, territory, language, commercial terms or licensing.`)}`}
+                    className="rounded-lg border border-line px-3 py-2 text-xs font-semibold hover:border-accent hover:text-accent"
                   >
-                    License
-                  </Button>
-                )}
+                    Enquire
+                  </a>
+                  {entitled.has(title.id) ? (
+                    <span className="shrink-0 text-sm font-semibold text-accent">Licensed</span>
+                  ) : (
+                    <Button disabled={order.isPending || title.licensingFeePaise <= 0} onClick={() => order.mutate(title.id)}>License</Button>
+                  )}
+                </div>
               </div>
             </div>
           </article>
@@ -472,6 +475,7 @@ function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[
           </div>
           <div className="flex items-center gap-3">
             <StatusChip status={t.status as never} />
+            <a href={`mailto:abijithasokan@crayonspictures.com?subject=${encodeURIComponent(`Crayons Bridge title enquiry — ${t.name}`)}&body=${encodeURIComponent(`Title: ${t.name}\\nBridge Title ID: ${t.id}\\nBuyer account: ${userId}\\n\\nPlease contact me regarding this title.`)}`} className="text-xs font-semibold text-accent underline">Enquire</a>
             {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
           </div>
         </li>
