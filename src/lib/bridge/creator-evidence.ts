@@ -117,9 +117,9 @@ export const listTitleOwnerEvidence = createServerFn({ method: "GET" })
       from bridge_title_document_links l
       join bridge_creator_documents d on d.id = l.document_id
       where l.title_id = ${data.titleId}
-        and d.owner_user_id = (select owner_user_id from bridge_titles where id = ${data.titleId})
-        and d.owner_account_type = (select owner_account_type from bridge_titles where id = ${data.titleId})
-        and d.owner_organization_id is not distinct from (select owner_organization_id from bridge_titles where id = ${data.titleId})
+        and d.owner_user_id = ${(await requireTitleOwner(context.userId, data.titleId)).actor.userId}
+        and d.owner_account_type = ${(await requireTitleOwner(context.userId, data.titleId)).actor.accountType}
+        and d.owner_organization_id is not distinct from ${(await requireTitleOwner(context.userId, data.titleId)).actor.accountType === "studio" ? (await requireTitleOwner(context.userId, data.titleId)).actor.organizationId : null}
       order by d.created_at desc
     `;
     return { documents: rows };
