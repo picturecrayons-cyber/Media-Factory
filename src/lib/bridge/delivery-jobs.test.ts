@@ -106,3 +106,52 @@ test("vendor completion verifies a private PDF object, exact byte size and SHA-2
   assert.match(completion, /receipt_verified_at=now\(\)/);
   assert.match(completion, /receipt_verified_by=\$\{actor\.userId\}/);
 });
+
+
+test("Delivery Desk evidence migration replays additively and preserves pre-existing job state", async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`
+      create table bridge_delivery_jobs (
+        id uuid primary key,
+        title_id text not null,
+        job_type text not null,
+        status text not null,
+        assigned_vendor text,
+        delivery_receipt_url text,
+        admin_sign_off boolean not null default false,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        requested_by text,
+        request_note text
+      );
+      insert into bridge_delivery_jobs
+        (id,title_id,job_type,status,admin_sign_off)
+      values
+        ('00000000-0000-4000-8000-000000000001','film-1','dcp','completed',false);
+    `);
+    const migration = readFileSync(
+      new URL("../../../supabase/migrations/20261121220000_bridge_delivery_job_idempotency_evidence.sql", import.meta.url),
+      "utf8",
+    );
+    await db.exec(migration);
+    await db.exec(migration);
+    const columns = await db.query(
+      "select column_name from information_schema.columns where table_name='bridge_delivery_jobs'",
+    );
+    const names = new Set(columns.rows.map((row) => row.column_name));
+    for (const name of ["idempotency_key","receipt_object_key","receipt_sha256","receipt_byte_size","receipt_verified_at","receipt_verified_by"]) {
+      assert.equal(names.has(name), true, name);
+    }
+    const indexes = await db.query(
+      "select indexname from pg_indexes where tablename='bridge_delivery_jobs'",
+    );
+    assert.ok(indexes.rows.some((row) => row.indexname === "bridge_delivery_jobs_request_idempotency_idx"));
+    const preserved = await db.query(
+      "select status,admin_sign_off from bridge_delivery_jobs where title_id='film-1'",
+    );
+    assert.deepEqual(preserved.rows[0], { status: "completed", admin_sign_off: false });
+  } finally {
+    await db.close();
+  }
+});
