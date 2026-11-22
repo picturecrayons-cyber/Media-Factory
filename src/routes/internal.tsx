@@ -19,6 +19,7 @@ import {
 } from "@/lib/bridge/loop-publication";
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
+import { OwnerSubmissionDesk, SuperAdminArchiveDesk } from "@/components/bridge/super-admin-archive-desk";
 
 export const Route = createFileRoute("/internal")({ component: Internal });
 
@@ -64,6 +65,9 @@ function InternalBody({
     <div className="grid gap-12">
       {/* 1. Master Distribution Desk */}
       <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
+
+      {canArchive ? <SuperAdminArchiveDesk /> : null}
+      {canArchive ? <OwnerSubmissionDesk /> : null}
 
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
