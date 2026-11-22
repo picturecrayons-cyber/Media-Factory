@@ -25,7 +25,7 @@ function navigationFor(actor: BridgeActor): NavItem[] {
   const accountNavigation: Record<BridgeActor["accountType"], NavItem[]> = {
     independent_creator: [
       { to: "/creator", label: "Home" },
-      { to: "/workspace", label: "My Titles" },
+      { to: "/workspace", label: "Titles" },
       { to: "/deliveries", label: "Deliveries" },
     ],
     studio: [],
