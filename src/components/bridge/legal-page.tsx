@@ -1,13 +1,13 @@
 import { Link } from "@tanstack/react-router";
 
 export type LegalSection = { heading: string; paragraphs: string[]; bullets?: string[] };
-export type LegalDocument = { title: string; summary: string; version: string; effective: string; sections: LegalSection[] };
+export type LegalDocument = { title: string; summary: string; version: string; effective: string; lastUpdated: string; sections: LegalSection[] };
 
 export const LEGAL_DOCUMENTS: Record<string, LegalDocument> = {
   "b2b-terms": {
     title: "B2B Terms of Use",
     summary: "Terms governing business accounts and use of the Crayons Bridge platform.",
-    version: "1.0 — draft for legal review", effective: "Publication date to be confirmed",
+    version: "1.0 — draft for legal review", effective: "To be confirmed before publication", lastUpdated: "23 November 2026",
     sections: [
       { heading: "Operator and scope", paragraphs: ["Crayons Bridge is operated by StreamVista OPC Pvt Ltd (the “Company”). It is a business-to-business workspace for title intake, production coordination, rights evidence, licensing discussions, buyer access and authorized delivery. These terms apply to account holders and their permitted organization members."] },
       { heading: "Accounts and authority", paragraphs: ["You must provide accurate information, use an individual account, protect your credentials and promptly report suspected compromise. An organization administrator may manage organization membership but does not automatically receive or transfer another member’s individual title grants.", "Access is determined by the account role, organization membership, title-level authorization and applicable agreement. A login, invitation, payment or organization association does not itself grant title ownership, rights approval, buyer access, QC sign-off or publication authority."] },
@@ -21,7 +21,7 @@ export const LEGAL_DOCUMENTS: Record<string, LegalDocument> = {
   "content-rights": {
     title: "Content Submission & Rights Declaration",
     summary: "Responsibilities for submitting titles, artwork, footage, documents and rights evidence.",
-    version: "1.0 — draft for legal review", effective: "Publication date to be confirmed",
+    version: "1.0 — draft for legal review", effective: "To be confirmed before publication", lastUpdated: "23 November 2026",
     sections: [
       { heading: "Authority to submit", paragraphs: ["You may submit content only if you own it or are duly authorized by the relevant owner or representative. You are responsible for the accuracy and completeness of title metadata, contributor details and rights information."] },
       { heading: "Rights and clearances", paragraphs: ["Before requesting licensing or distribution, identify the relevant chain of title and obtain applicable author, performer, producer, music, artwork, location, archive, privacy and other permissions. State any restrictions, encumbrances, prior grants, exclusivity, territory, language, media, term and holdbacks accurately.", "A declaration or uploaded document is evidence for review; it is not an approval or legal opinion by Crayons Bridge. Rights status remains pending until an authorized reviewer records a decision."] },
@@ -33,7 +33,7 @@ export const LEGAL_DOCUMENTS: Record<string, LegalDocument> = {
   "licensing-deals": {
     title: "Licensing & Deal Terms",
     summary: "Rules for buyer enquiries, title access, negotiations, offers and executed licences.",
-    version: "1.0 — draft for legal review", effective: "Publication date to be confirmed",
+    version: "1.0 — draft for legal review", effective: "To be confirmed before publication", lastUpdated: "23 November 2026",
     sections: [
       { heading: "Enquiries are not offers", paragraphs: ["A marketplace listing, enquiry, request for access, screener invitation or discussion is not an offer, acceptance, option, licence or promise to transact. Commercial terms become binding only when documented in an agreement executed by parties with authority."] },
       { heading: "Scope of a licence", paragraphs: ["A licence should expressly identify the title and version, rights granted, media, territory, language, exclusivity, term, start and end dates, permitted platforms, sublicensing, marketing rights, delivery specifications, fees, taxes, reporting, payment milestones and any holdbacks or restrictions."] },
@@ -45,7 +45,7 @@ export const LEGAL_DOCUMENTS: Record<string, LegalDocument> = {
   "acceptable-use": {
     title: "Acceptable Use & Security Policy",
     summary: "Minimum security and conduct rules for every Bridge account and organization.",
-    version: "1.0 — draft for legal review", effective: "Publication date to be confirmed",
+    version: "1.0 — draft for legal review", effective: "To be confirmed before publication", lastUpdated: "23 November 2026",
     sections: [
       { heading: "Account security", paragraphs: ["Use your own account, keep authentication factors private, use strong unique credentials and report suspected compromise immediately. Do not share accounts or impersonate another user."] },
       { heading: "Prohibited activity", paragraphs: [], bullets: ["Attempting unauthorized access, privilege escalation or security testing without written permission.", "Copying, recording, scraping, redistributing or reverse engineering private screeners, masters, documents or deal information.", "Uploading malware, unlawful content, deceptive metadata or material without authority.", "Circumventing title grants, expiry, revocation, download controls, payment verification or audit controls.", "Interfering with platform availability, other users’ workspaces or integrity of records."] },
@@ -56,7 +56,7 @@ export const LEGAL_DOCUMENTS: Record<string, LegalDocument> = {
   "copyright-disputes": {
     title: "Copyright & Content Disputes",
     summary: "A business-facing process for ownership objections and rights disputes relating to Bridge submissions.",
-    version: "1.0 — draft for legal review", effective: "Publication date to be confirmed",
+    version: "1.0 — draft for legal review", effective: "To be confirmed before publication", lastUpdated: "23 November 2026",
     sections: [
       { heading: "What to submit", paragraphs: ["A rights or copyright complaint should identify the claimant, the work, the relevant Bridge title or asset, the claimant’s basis of authority, the specific disputed material, the nature of the alleged infringement and supporting documents. Include a reliable reply contact and a good-faith declaration."] },
       { heading: "Review process", paragraphs: ["The Company may acknowledge the complaint, request clarification, notify relevant account holders where appropriate, preserve records and refer the matter for legal review. Temporary access restrictions may be considered where reasonably necessary; a complaint alone does not automatically establish infringement or transfer ownership."] },
@@ -67,7 +67,7 @@ export const LEGAL_DOCUMENTS: Record<string, LegalDocument> = {
   "grievance": {
     title: "Grievance & Legal Contact",
     summary: "How to route privacy, account, rights, licensing and legal notices to the Company.",
-    version: "1.0 — draft for legal review", effective: "Publication date to be confirmed",
+    version: "1.0 — draft for legal review", effective: "To be confirmed before publication", lastUpdated: "23 November 2026",
     sections: [
       { heading: "Contact route", paragraphs: ["For business, account, licensing and general legal correspondence, contact abijithasokan@crayonspictures.com with “Crayons Bridge — Legal / Grievance” in the subject. For privacy-related questions, the existing privacy contact shown in the Privacy Policy may also be used."] },
       { heading: "Information to include", paragraphs: [], bullets: ["Your full name and organization, if applicable.", "The account email and relevant title, asset or transaction reference.", "A clear description of the request, complaint or dispute.", "Supporting evidence and the outcome you are seeking. Do not email passwords, authentication codes or payment-card details."] },
@@ -84,7 +84,7 @@ export function LegalPage({ document }: { document: LegalDocument }) {
       <p className="mt-8 text-xs font-semibold uppercase tracking-[0.16em] text-muted">StreamVista OPC Pvt Ltd · B2B legal</p>
       <h1 className="mt-2 font-display text-3xl font-semibold sm:text-4xl">{document.title}</h1>
       <p className="mt-3 max-w-3xl text-sm leading-7 text-muted">{document.summary}</p>
-      <div className="mt-5 flex flex-wrap gap-3 text-xs text-muted"><span>Version: {document.version}</span><span>Effective: {document.effective}</span></div>
+      <div className="mt-5 flex flex-wrap gap-3 text-xs text-muted"><span>Version: {document.version}</span><span>Effective: {document.effective}</span><span>Last updated: {document.lastUpdated}</span></div>
       <div className="mt-8 space-y-7">{document.sections.map((section) => <section key={section.heading} className="space-y-3">
         <h2 className="font-semibold text-fg">{section.heading}</h2>
         {section.paragraphs?.map((paragraph) => <p key={paragraph} className="text-sm leading-7 text-muted">{paragraph}</p>)}
