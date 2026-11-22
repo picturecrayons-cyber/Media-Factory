@@ -151,7 +151,7 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
 
   if (!titles.length) return null;
 
-  const platformsComplete = ["SVOD", "TVOD", "AVOD"].every((value) => details.platforms.includes(value as RightsDetails["platforms"][number]));
+  const platformsComplete = details.platforms.length > 0;
   const ownershipCount = countType(docs, "OWNERSHIP_CHAIN_OF_TITLE");
   const requirements = [
     ["Signed OTT Rights Agreement", countType(docs, "FINISHED_FILM_AGREEMENT") > 0],
@@ -235,7 +235,7 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
         </div>
         <fieldset disabled={locked} className="mt-3 space-y-4 disabled:opacity-70">
           <div>
-            <p className="text-sm font-medium">Platforms covered by the signed agreement</p>
+            <p className="text-sm font-medium">Platforms covered by the signed agreement (unchecked platforms are not declared)</p>
             <div className="mt-2 flex flex-wrap gap-4">
               {(["SVOD", "TVOD", "AVOD"] as const).map((platform) => (
                 <label key={platform} className="inline-flex items-center gap-2 text-sm">
