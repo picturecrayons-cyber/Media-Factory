@@ -9,6 +9,7 @@ import { loadTitle } from "./titles";
 import { canMutateTitle, canReadTitle } from "./rbac";
 import { writeAudit } from "./audit";
 import { ownerSubmissionSubmitTransition } from "./owner-submission-state";
+import { submitTitleForQcInTransaction } from "./title-submission";
 
 const creditsSchema = z.array(z.object({
   role: z.enum(["Director","Producer","Writer","Cinematographer","Editor","Music","Cast","Other"]),
@@ -257,8 +258,11 @@ export const reviewOwnerSubmission = createServerFn({method:"POST"})
     assertNotDevUser(context.userId);
     const actor=await requireVerifiedActor(context.userId);
     if(actor.internalRole!=="super_admin") throw new Error("Super Admin access required");
+    const title=await loadTitle(data.titleId);
+    if(!title) throw new Error("Title not found");
     const sql=await getSql();
     const nextStatus=data.decision==="ACCEPTED_INTAKE"?"ACCEPTED_INTAKE":"NEEDS_CORRECTION";
+    let qcQueued=title.status==="QC_REVIEW";
     await sql.transaction(async(tx)=>{
       if(data.submissionKind==="finished_film"){
         const rows=await tx<{submission_status:string}>`
@@ -267,6 +271,12 @@ export const reviewOwnerSubmission = createServerFn({method:"POST"})
         `;
         const current=rows[0]?.submission_status;
         if(current!=="SUBMITTED") throw new Error("Submission is no longer pending review");
+        // Use the canonical QC submission checks. This enters the QC queue only;
+        // it does not create a QC result or approve rights/publication.
+        if(data.decision==="ACCEPTED_INTAKE" && title.status==="PREPARING"){
+          await submitTitleForQcInTransaction(tx,title,actor.userId,"Owner submission accepted into Technical QC queue");
+          qcQueued=true;
+        }
         await tx`
           update bridge_title_owner_submissions set submission_status=${nextStatus},
             updated_by=${actor.userId},updated_at=now()
@@ -298,9 +308,16 @@ export const reviewOwnerSubmission = createServerFn({method:"POST"})
         actorUserId:actor.userId,
         action:data.decision==="ACCEPTED_INTAKE"?"title.owner_submission.accepted_intake":"title.owner_submission.request_changes",
         entityType:"bridge_title",entityId:data.titleId,
-        metadata:{submissionKind:data.submissionKind,from:"SUBMITTED",to:nextStatus,reason:data.reason??null,
-          titleStatusUnchanged:true,qcStatusUnchanged:true,rightsAndPublicationUnchanged:true},
+        metadata:{
+          submissionKind:data.submissionKind,
+          from:"SUBMITTED",
+          to:nextStatus,
+          reason:data.reason??null,
+          qcQueueEntered:qcQueued,
+          qcApprovalGranted:false,
+          rightsAndPublicationUnchanged:true,
+        },
       },tx);
     });
-    return {updated:true as const,status:nextStatus};
+    return {updated:true as const,status:nextStatus,qcQueued};
   });
