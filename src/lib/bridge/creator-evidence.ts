@@ -412,14 +412,6 @@ export const getTitleOwnerRightsReviewHistory = createServerFn({ method: "GET" }
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireTitleOwner(context.userId, data.titleId);
     const sql = await getSql();
-    const submission = await sql<{ submission_status: string; submitted_at: string | null; details: Record<string, unknown> }>`
-      select submission_status, submitted_at, details
-      from bridge_title_owner_submissions
-      where title_id = ${title.id}
-        and owner_user_id = ${title.ownerUserId}
-        and owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
-      limit 1
-    `;
     const legalCases = await sql<{
       status: string;
       classification: string | null;
@@ -435,7 +427,7 @@ export const getTitleOwnerRightsReviewHistory = createServerFn({ method: "GET" }
       order by l.created_at desc
       limit 20
     `;
-    return { legalCases, submission: submission[0] ?? null };
+    return { legalCases };
   });
 
 export const getTitleOwnerRightsDraft = createServerFn({ method: "GET" })
@@ -444,12 +436,21 @@ export const getTitleOwnerRightsDraft = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireTitleOwner(context.userId, data.titleId);
     const sql = await getSql();
-    const rows = await sql<{ details: Record<string, unknown>; submission_status: string; submitted_at: string | null }>`
+    const rows = await sql<{ details: unknown; submission_status: string; submitted_at: string | null }>`
       select details, submission_status, submitted_at
       from bridge_title_owner_submissions
       where title_id = ${title.id} and owner_user_id = ${title.ownerUserId}
         and owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
       limit 1
     `;
-    return { submission: rows[0] ?? null };
+    const row = rows[0];
+    return {
+      submission: row
+        ? {
+            detailsJson: JSON.stringify(row.details ?? {}),
+            submission_status: row.submission_status,
+            submitted_at: row.submitted_at,
+          }
+        : null,
+    };
   });
