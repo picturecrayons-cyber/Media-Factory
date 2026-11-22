@@ -36,6 +36,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   }
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
+    <>
     <ul className="divide-y divide-line rounded-sm border border-line">
       {titles.map((t) => (
         <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -77,6 +78,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
         </div>
       </div>
     ) : null}
+    </>
   );
 }
 
