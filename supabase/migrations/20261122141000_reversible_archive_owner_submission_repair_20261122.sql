@@ -33,7 +33,7 @@ alter table public.bridge_title_owner_submissions
   drop constraint if exists bridge_title_owner_submissions_submission_status_check;
 alter table public.bridge_title_owner_submissions
   add constraint bridge_title_owner_submissions_submission_status_check
-  check (submission_status in ('DRAFT','SUBMITTED','NEEDS_CORRECTION','ACCEPTED_INTAKE','WITHDRAWN','REJECTED'))
+  check (submission_status in ('DRAFT','SUBMITTED','NEEDS_CORRECTION','ACCEPTED_INTAKE','WITHDRAWN','REJECTED','ARCHIVED'))
   not valid;
 
 alter table public.bridge_owner_submission_events
