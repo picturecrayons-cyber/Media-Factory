@@ -124,7 +124,7 @@ function RightsReadySubmission() {
               <label className="text-sm">Exclusivity<select value={exclusivity} onChange={(e) => setExclusivity(e.target.value as typeof exclusivity)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"><option value="NON_EXCLUSIVE">Non-exclusive</option><option value="EXCLUSIVE">Exclusive</option></select></label>
             </div>
           </div>
-        </section>
+        </details>
 
         <details className="space-y-4 rounded-xl border border-line p-4" open>
           <summary className="cursor-pointer font-display text-lg font-semibold">3. Authorization <span className="ml-2 text-xs font-normal text-muted">Required</span></summary>
@@ -134,7 +134,7 @@ function RightsReadySubmission() {
           </div>
           <label className="flex items-start gap-3 rounded-xl border border-line p-3 text-sm"><input required type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-1" /><span>I confirm that I am authorized to submit this title and that the selected rights scope is accurate. Bridge will verify the supporting evidence before licensing.</span></label>
           <p className="text-xs leading-relaxed text-muted">Authorization evidence remains private and must be attached in the Title Workspace before Rights Review can approve this submission.</p>
-        </section>
+        </details>
 
         <details className="space-y-4 rounded-xl border border-line p-4" >
           <summary className="cursor-pointer font-display text-lg font-semibold">4. Buyer access <span className="ml-2 text-xs font-normal text-muted">Optional preferences</span></summary>
