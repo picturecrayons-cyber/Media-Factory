@@ -157,7 +157,7 @@ function CorrectionForm({ concept, onSaved, onNotice, onError }: {
         screenplayUrl,
         genre: genre.split(",").map((value: string) => value.trim()).filter(Boolean),
         estimatedBudgetRange: budget,
-        targetPlatforms: platforms.split(",").map((value) => value.trim()).filter(Boolean),
+        targetPlatforms: platforms.split(",").map((value: string) => value.trim()).filter(Boolean),
       },
     }),
     onSuccess: async () => { onError(""); onNotice("Corrections resubmitted. The concept has returned to the review queue."); await onSaved(); },
