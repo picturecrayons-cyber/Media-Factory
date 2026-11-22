@@ -63,10 +63,14 @@ test("finished-film handoff requires master, current vertical poster, horizontal
   );
   assert.equal(
     hasVerifiedFinishedFilmPackage(
-      complete.map((asset) => asset.kind === "poster_horizontal" ? { ...asset, s3_key: "unverified/horizontal" } : asset),
+      complete.filter((asset) => asset.kind !== "poster_horizontal"),
       "verified/master",
       "verified/vertical",
     ),
-    true,
+    false,
+  );
+  assert.equal(
+    hasVerifiedFinishedFilmPackage(complete, "verified/master", "stale/vertical"),
+    false,
   );
 });
