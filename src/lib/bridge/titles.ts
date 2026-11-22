@@ -93,13 +93,13 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
   const orgId = organizationId || null;
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+  let rows: TitleRow[];
   if (!orgId) {
-    return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and submission_type = 'finished_film' and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and submission_type = 'finished_film' order by updated_at desc limit 200`;
-  }
-  return mergeColumnAvailable
-    ? sql<TitleRow>`
+    rows = mergeColumnAvailable
+      ? await sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and submission_type = 'finished_film' and merged_into_title_id is null order by updated_at desc limit 200`
+      : await sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and submission_type = 'finished_film' order by updated_at desc limit 200`;
+  } else if (mergeColumnAvailable) {
+    rows = await sql<TitleRow>`
         select t.* from bridge_titles t
         where t.submission_type = 'finished_film'
           and t.merged_into_title_id is null
@@ -117,8 +117,9 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
             )
           )
         order by t.updated_at desc limit 200
-      `
-    : sql<TitleRow>`
+      `;
+  } else {
+    rows = await sql<TitleRow>`
         select t.* from bridge_titles t
         where t.submission_type = 'finished_film'
           and (
@@ -136,6 +137,26 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
           )
         order by t.updated_at desc limit 200
       `;
+  }
+
+  // Fail-safe against legacy/misclassified concepts: a title linked to a
+  // concept submission must never also appear in the Finished Films catalogue.
+  if (!rows.length) return rows;
+  const conceptTable = await sql<{ exists: boolean }>`
+    select exists (
+      select 1 from information_schema.tables
+      where table_schema = 'public'
+        and table_name = 'bridge_story_concept_submissions'
+    ) as exists
+  `;
+  if (!conceptTable[0]?.exists) return rows;
+  const conceptRows = await sql<{ title_id: string }>`
+    select title_id::text as title_id
+    from bridge_story_concept_submissions
+    where title_id::text = any(${rows.map((row) => row.id)}::text[])
+  `;
+  const conceptTitleIds = new Set(conceptRows.map((row) => row.title_id));
+  return rows.filter((row) => !conceptTitleIds.has(row.id));
 }
 
 function slugify(name: string, id: string): string {
