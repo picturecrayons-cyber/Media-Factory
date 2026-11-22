@@ -254,68 +254,59 @@ export const reviewOwnerSubmission = createServerFn({method:"POST"})
     assertNotDevUser(context.userId);
     const actor=await requireVerifiedActor(context.userId);
     if(actor.internalRole!=="super_admin") throw new Error("Super Admin access required");
-    const title=await loadTitle(data.titleId);
-    if(!title) throw new Error("Title not found");
     const sql=await getSql();
-    const transition=ownerSubmissionReviewTransition("SUBMITTED",data.decision);
     const reason=assertSubmissionDecisionReason(data.reason);
-    const nextStatus=transition.toStatus;
-    let qcQueued=title.status==="QC_REVIEW";
+    let qcQueued=false;
     await sql.transaction(async(tx)=>{
+      const titleRows=await tx<{id:string;status:string}> `
+        select id,status from bridge_titles where id=${data.titleId} for update
+      `;
+      const lockedTitle=titleRows[0];
+      if(!lockedTitle) throw new Error("Title not found");
+      const currentRows=data.submissionKind==="finished_film"
+        ? await tx<{status:string}>`
+            select submission_status as status from bridge_title_owner_submissions
+            where title_id=${data.titleId} for update
+          `
+        : await tx<{status:string}>`
+            select owner_submission_status as status from bridge_story_concept_submissions
+            where title_id=${data.titleId} for update
+          `;
+      const current=currentRows[0]?.status;
+      const transition=ownerSubmissionReviewTransition(current??"",data.decision);
+      const nextStatus=transition.toStatus;
       if(data.submissionKind==="finished_film"){
-        const rows=await tx<{submission_status:string}>`
-          select submission_status from bridge_title_owner_submissions
-          where title_id=${data.titleId} for update
-        `;
-        const current=rows[0]?.submission_status;
-        if(current!=="SUBMITTED") throw new Error("Submission is no longer pending review");
-        // Use the canonical QC submission checks. This enters the QC queue only;
-        // it does not create a QC result or approve rights/publication.
-        if(data.decision==="ACCEPTED_INTAKE" && title.status==="PREPARING"){
+        if(data.decision==="ACCEPTED_INTAKE" && lockedTitle.status==="PREPARING"){
+          const title=await loadTitle(data.titleId);
+          if(!title) throw new Error("Title not found");
           await submitTitleForQcInTransaction(tx,title,actor.userId,"Owner submission accepted into Technical QC queue");
           qcQueued=true;
         }
         await tx`
           update bridge_title_owner_submissions set submission_status=${nextStatus},
             updated_by=${actor.userId},updated_at=now()
-          where title_id=${data.titleId}
+          where title_id=${data.titleId} and submission_status='SUBMITTED'
         `;
-        await tx`
-          insert into bridge_owner_submission_events
-            (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
-          values (${data.titleId},'finished_film',${data.decision},'SUBMITTED',${nextStatus},${actor.userId},${reason})
-        `;
-      }else{
-        const rows=await tx<{owner_submission_status:string}>`
-          select owner_submission_status from bridge_story_concept_submissions
-          where title_id=${data.titleId} for update
-        `;
-        const current=rows[0]?.owner_submission_status;
-        if(current!=="SUBMITTED") throw new Error("Submission is no longer pending review");
+      } else {
         await tx`
           update bridge_story_concept_submissions set owner_submission_status=${nextStatus},updated_at=now()
-          where title_id=${data.titleId}
-        `;
-        await tx`
-          insert into bridge_owner_submission_events
-            (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
-          values (${data.titleId},'story_concept',${data.decision},'SUBMITTED',${nextStatus},${actor.userId},${reason})
+          where title_id=${data.titleId} and owner_submission_status='SUBMITTED'
         `;
       }
+      await tx`
+        insert into bridge_owner_submission_events
+          (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
+        values (${data.titleId},${data.submissionKind},${data.decision},'SUBMITTED',${nextStatus},${actor.userId},${reason})
+      `;
       await writeAudit({
         actorUserId:actor.userId,
         action:data.decision==="ACCEPTED_INTAKE"?"title.owner_submission.accepted_intake":data.decision==="REJECTED"?"title.owner_submission.rejected":"title.owner_submission.request_changes",
         entityType:"bridge_title",entityId:data.titleId,
         metadata:{
-          submissionKind:data.submissionKind,
-          from:"SUBMITTED",
-          to:nextStatus,
-          reason,
-          qcQueueEntered:qcQueued,
-          qcApprovalGranted:false,
-          rightsAndPublicationUnchanged:true,
+          submissionKind:data.submissionKind,from:"SUBMITTED",to:nextStatus,reason,
+          qcQueueEntered:qcQueued,qcApprovalGranted:false,rightsAndPublicationUnchanged:true,
         },
       },tx);
     });
-    return {updated:true as const,status:nextStatus,qcQueued};
+    return {updated:true as const,status:data.decision==="ACCEPTED_INTAKE"?"ACCEPTED_INTAKE":data.decision==="REJECTED"?"REJECTED":"NEEDS_CORRECTION",qcQueued};
   });
