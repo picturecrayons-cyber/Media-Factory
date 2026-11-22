@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
+import { getTitleOwnerSubmission, saveTitleOwnerSubmission, submitTitleOwnerDetails } from "@/lib/bridge/title-owner-submissions";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   abortAssetMultipart,
@@ -45,7 +46,7 @@ export const Route = createFileRoute("/title/$id")({
   component: TitlePage,
 });
 
-const WORKSPACE_TABS = ["Overview", "Files", "Production"] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Production", "Submission Details"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -121,6 +122,11 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const reviewQ = useQuery({
     queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
+    enabled: !buyerView,
+  });
+  const ownerSubmissionQ = useQuery({
+    queryKey: ["title-owner-submission", id, actor.userId],
+    queryFn: () => getTitleOwnerSubmission({ data: { titleId: id } }),
     enabled: !buyerView,
   });
   const title = titleQ.data?.title;
@@ -279,6 +285,17 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
         />
+      ) : activeTab === "Submission Details" && !buyerView ? (
+        <OwnerSubmissionPanel
+          titleId={id}
+          title={title}
+          initial={ownerSubmissionQ.data?.submission?.details ?? null}
+          submissionStatus={ownerSubmissionQ.data?.submission?.status ?? "DRAFT"}
+          loading={ownerSubmissionQ.isPending}
+          error={ownerSubmissionQ.error instanceof Error ? ownerSubmissionQ.error.message : null}
+          canEdit={canOperateOnTitle(actor, title, "title.update_own", "title.license") && ["DRAFT","UPLOADING","PREPARING"].includes(title.status)}
+          onSaved={() => ownerSubmissionQ.refetch()}
+        />
       ) : activeTab === "Production" && !buyerView ? (
         <ProductionAssetsPanel
           assets={productionAssets}
@@ -289,6 +306,164 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     </div>
   );
 }
+
+type OwnerSubmissionTitle = {
+  name: string;
+  nameMl: string | null;
+  credits: Array<{ role: string; name: string }>;
+};
+type OwnerSubmissionValues = {
+  originalTitle: string; productionCompany: string; completionDate: string;
+  masterVersion: string; resolution: string; codec: string; masterLanguage: string;
+  subtitleLanguages: string[]; rightsBasis: string; territories: string[];
+  rightsLanguages: string[]; media: string[]; rightsStartDate: string;
+  rightsEndDate: string; exclusivity: string; contactName: string;
+  contactEmail: string; contactPhone: string; credits: Array<{role:string;name:string}>;
+};
+const EMPTY_OWNER_SUBMISSION: OwnerSubmissionValues = {
+  originalTitle:"", productionCompany:"", completionDate:"", masterVersion:"",
+  resolution:"", codec:"", masterLanguage:"Malayalam", subtitleLanguages:[],
+  rightsBasis:"", territories:[], rightsLanguages:["Malayalam"], media:[],
+  rightsStartDate:"", rightsEndDate:"", exclusivity:"NON_EXCLUSIVE",
+  contactName:"", contactEmail:"", contactPhone:"", credits:[]
+};
+
+function OwnerSubmissionPanel(props: {
+  titleId: string; title: OwnerSubmissionTitle; initial: unknown;
+  submissionStatus: string; loading: boolean; error: string | null;
+  canEdit: boolean; onSaved: () => Promise<unknown> | unknown;
+}) {
+  const {titleId,title,initial,submissionStatus,loading,error,canEdit,onSaved}=props;
+  const [form,setForm]=useState<OwnerSubmissionValues>(()=>({
+    ...EMPTY_OWNER_SUBMISSION,
+    originalTitle:title.nameMl || title.name,
+    credits:title.credits?.map(c=>({role:c.role,name:c.name})) ?? [],
+    ...(initial && typeof initial==="object" ? initial as Partial<OwnerSubmissionValues> : {})
+  }));
+  const [notice,setNotice]=useState("");
+  const [errorText,setErrorText]=useState("");
+  const save=useMutation({
+    mutationFn:()=>saveTitleOwnerSubmission({data:{titleId,details:form}}),
+    onSuccess:async()=>{setNotice("Owner details saved as draft.");setErrorText("");await onSaved();},
+    onError:(e)=>{setErrorText(e instanceof Error?e.message:"Could not save owner details.");setNotice("");}
+  });
+  const submit=useMutation({
+    mutationFn:()=>submitTitleOwnerDetails({data:{titleId}}),
+    onSuccess:async()=>{setNotice("Owner details submitted. QC and Legal review remain separate.");setErrorText("");await onSaved();},
+    onError:(e)=>{setErrorText(e instanceof Error?e.message:"Could not submit owner details.");setNotice("");}
+  });
+  const update=(key:keyof OwnerSubmissionValues,value:unknown)=>setForm(old=>({...old,[key]:value}));
+  const inputClass="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2 text-sm";
+  const textField=(label:string,key:keyof OwnerSubmissionValues,type="text",required=false)=>(
+    <label className="block text-sm">{label}{required?<span className="text-red-600"> *</span>:null}
+      <input className={inputClass} type={type} value={String(form[key]??"")} disabled={!canEdit}
+        onChange={e=>update(key,e.target.value)}/>
+    </label>
+  );
+  const listField=(label:string,key:"territories"|"rightsLanguages"|"media"|"subtitleLanguages",required=false)=>(
+    <label className="block text-sm">{label}{required?<span className="text-red-600"> *</span>:null}
+      <input className={inputClass} value={form[key].join(", ")} disabled={!canEdit}
+        placeholder="Separate items with commas"
+        onChange={e=>update(key,e.target.value.split(",").map(v=>v.trim()).filter(Boolean))}/>
+    </label>
+  );
+  const addCredit=()=>update("credits",[...form.credits,{role:"Cast",name:""}]);
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6 space-y-6">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Owner intake</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Submission Details</h2>
+          <p className="mt-1 text-sm text-muted">Add all required title information before sending the title for QC.</p>
+        </div>
+        <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{submissionStatus}</span>
+      </header>
+      {loading?<p className="text-sm text-muted">Loading saved owner details…</p>:null}
+      {error?<p role="alert" className="text-sm text-red-700">{error}</p>:null}
+      <div className="space-y-3">
+        <h3 className="font-semibold">Film identity & production</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {textField("Original / English title","originalTitle","text",true)}
+          {textField("Production house","productionCompany","text",true)}
+          {textField("Completion date","completionDate","date")}
+          {textField("Master language","masterLanguage","text",true)}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="block text-sm">Resolution *
+            <select className={inputClass} value={form.resolution} disabled={!canEdit} onChange={e=>update("resolution",e.target.value)}>
+              <option value="">Select</option>{["SD","HD","2K","4K","6K","8K","OTHER"].map(v=><option key={v}>{v}</option>)}
+            </select>
+          </label>
+          {textField("Master version","masterVersion","text",true)}
+          {textField("Codec","codec","text",true)}
+        </div>
+        {listField("Subtitle languages","subtitleLanguages")}
+      </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between"><h3 className="font-semibold">Credits & cast</h3>
+          <button type="button" disabled={!canEdit} onClick={addCredit} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Add credit</button>
+        </div>
+        {form.credits.map((credit,index)=>(
+          <div key={index} className="grid gap-2 sm:grid-cols-[180px_1fr_auto]">
+            <select className={inputClass} value={credit.role} disabled={!canEdit}
+              onChange={e=>update("credits",form.credits.map((c,i)=>i===index?{...c,role:e.target.value}:c))}>
+              {["Director","Producer","Writer","Cinematographer","Editor","Music","Cast","Other"].map(v=><option key={v}>{v}</option>)}
+            </select>
+            <input className={inputClass} value={credit.name} disabled={!canEdit} placeholder="Name"
+              onChange={e=>update("credits",form.credits.map((c,i)=>i===index?{...c,name:e.target.value}:c))}/>
+            <button type="button" disabled={!canEdit} onClick={()=>update("credits",form.credits.filter((_,i)=>i!==index))}
+              className="rounded-full border border-line px-3 py-1 text-xs">Remove</button>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-3">
+        <h3 className="font-semibold">Rights information — owner declaration</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm">Rights basis *
+            <select className={inputClass} value={form.rightsBasis} disabled={!canEdit} onChange={e=>update("rightsBasis",e.target.value)}>
+              <option value="">Select</option>
+              {["OWNER","EXCLUSIVE_LICENSEE","AUTHORIZED_DISTRIBUTOR","PRODUCER_AUTHORITY"].map(v=><option key={v} value={v}>{v.replaceAll("_"," ")}</option>)}
+            </select>
+          </label>
+          <label className="block text-sm">Exclusivity
+            <select className={inputClass} value={form.exclusivity} disabled={!canEdit} onChange={e=>update("exclusivity",e.target.value)}>
+              <option value="NON_EXCLUSIVE">Non-exclusive</option><option value="EXCLUSIVE">Exclusive</option>
+            </select>
+          </label>
+          {textField("Rights start date","rightsStartDate","date",true)}
+          {textField("Rights end date","rightsEndDate","date",true)}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {listField("Territories","territories",true)}
+          {listField("Rights languages","rightsLanguages",true)}
+          {listField("Media (OTT, TV, Theatrical, etc.)","media",true)}
+        </div>
+        <p className="text-xs text-muted">These are the owner’s declarations only. They do not approve rights, grant a licence or authorize publication.</p>
+      </div>
+      <div className="space-y-3">
+        <h3 className="font-semibold">Authorized contact</h3>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {textField("Contact name","contactName","text",true)}
+          {textField("Email","contactEmail","email",true)}
+          {textField("Phone","contactPhone","tel",true)}
+        </div>
+      </div>
+      {errorText?<p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{errorText}</p>:null}
+      {notice?<p role="status" className="rounded-lg border border-line p-3 text-sm">{notice}</p>:null}
+      <div className="flex flex-wrap gap-3">
+        <button type="button" disabled={!canEdit||save.isPending||loading} onClick={()=>save.mutate()}
+          className="rounded-full border border-line-strong px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
+          {save.isPending?"Saving…":"Save draft"}
+        </button>
+        <button type="button" disabled={!canEdit||submit.isPending||save.isPending||loading} onClick={()=>submit.mutate()}
+          className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50">
+          {submit.isPending?"Submitting…":"Submit details"}
+        </button>
+      </div>
+      {!canEdit?<p className="text-xs text-muted">Editing is locked after QC review begins. QC, Legal and publication remain separate gates.</p>:null}
+    </section>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-elevated/40 p-4">
