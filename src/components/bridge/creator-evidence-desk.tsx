@@ -192,7 +192,6 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
   if (!titles.length) return null;
 
   const platformsComplete = details.platforms.length > 0;
-  const ownershipDocuments = docs.filter((doc) => doc.document_type === "OWNERSHIP_CHAIN_OF_TITLE" && doc.status === "VERIFIED").length;
   const legalApproved = workflowQ.data?.legal?.status === "APPROVED";
   const publication = publicationQ.data?.publication;
   const publicationApproved = Boolean(
@@ -250,7 +249,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
                 </p>
               </div>
               <label className="inline-flex cursor-pointer items-center rounded-full border border-line-strong px-3 py-2 text-xs font-semibold hover:border-accent">
-                {busyType === item.key ? "Uploading…" : "Upload PDF"}
+                {busyType === item.key ? "Uploading…" : hasVerifiedSlot(docs, item.key) ? "Upload replacement" : "Upload PDF"}
                 <input type="file" accept="application/pdf,.pdf" className="sr-only" disabled={Boolean(busyType) || locked} onChange={(event) => { void upload(item, event.target.files?.[0]); event.currentTarget.value = ""; }} />
               </label>
             </div>
