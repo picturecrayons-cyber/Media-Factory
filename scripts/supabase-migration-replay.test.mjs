@@ -69,6 +69,7 @@ test("Delivery Desk pre-ledger baseline is restored before the historical owners
   assert.match(replaySource, /bridge_delivery_jobs_internal_only/);
   assert.match(replaySource, /private\.bridge_is_internal\(\)/);
   assert.match(replaySource, /alter table public\.bridge_delivery_jobs enable row level security/);
+  assert.match(replaySource, /20261121220000_bridge_delivery_job_idempotency_evidence\.sql/);
 });
 
 test("delivery evidence migration is additive and does not mutate existing job records", () => {
