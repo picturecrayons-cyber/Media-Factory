@@ -84,8 +84,8 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
 
       {activeTab === "Titles" ? (
         <TitleQueue titles={data.titles} review={review} />
-      ) : activeTab === "Owner Submissions" ? (
-        <OwnerSubmissionQueue submissions={ownerSubmissionsQ.data?.submissions ?? []} loading={ownerSubmissionsQ.isPending} error={ownerSubmissionsQ.error instanceof Error ? ownerSubmissionsQ.error.message : null} />
+      ) : activeTab === "Incoming Owner Submissions" ? (
+        <OwnerSubmissionQueue submissions={ownerSubmissionsQ.data?.submissions ?? []} loading={ownerSubmissionsQ.isPending} error={ownerSubmissionsQ.error instanceof Error ? ownerSubmissionsQ.error.message : null} decision={ownerDecision} />
       
       ) : activeTab === "Concepts" ? (
         <StoryConceptDesk />
