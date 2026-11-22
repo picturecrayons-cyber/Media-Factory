@@ -106,3 +106,19 @@ test("signup-selected account type is shown once and not re-selected during onbo
   assert.match(onboarding, /Already selected during sign-up/);
   assert.match(onboarding, /\) : \(\s*<label className="text-sm font-medium">Account type \*/);
 });
+
+
+test("Buyer Management is Super Admin-only and reads Bridge Buyer profiles without mutating access", () => {
+  const buyers = read("../../routes/admin/buyers.tsx");
+  const dashboard = read("../../routes/dashboard.tsx");
+  const shell = read("../../components/bridge/shell.tsx");
+  assert.match(buyers, /<RequireBridge allow="super_admin">/);
+  assert.match(buyers, /listAdminProfiles\(\)/);
+  assert.match(buyers, /profile\.accountType === "buyer"/);
+  assert.match(buyers, /profile\.emailVerified/);
+  assert.match(buyers, /BOOKMYSHOW_CONTACTS/);
+  assert.match(buyers, /does not import legacy accounts or change roles/);
+  assert.match(dashboard, /to="\/admin\/buyers"/);
+  assert.match(shell, /to: "\/admin\/buyers", label: "Buyers"/);
+  assert.doesNotMatch(buyers, /inviteInternalRole|update bridge_profiles|insert into bridge_profiles|delete from bridge_profiles/);
+});
