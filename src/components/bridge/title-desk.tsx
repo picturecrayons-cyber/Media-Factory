@@ -4,13 +4,29 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { archiveDraftTitle, createTitle, listTitles } from "@/lib/bridge/titles";
+import { archiveDraftTitle, createTitle, listArchivedDraftTitles, listTitles, restoreArchivedDraftTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const qc = useQueryClient();
   const [archiveTarget, setArchiveTarget] = useState<{id:string;name:string}|null>(null);
   const [archiveReason, setArchiveReason] = useState("");
+  const [restoreTarget,setRestoreTarget]=useState<{id:string;name:string}|null>(null);
+  const [restoreReason,setRestoreReason]=useState("");
+  const archivedQ=useQuery({queryKey:["bridge-archived-titles"],queryFn:()=>listArchivedDraftTitles()});
+  const restoreMut=useMutation({
+    mutationFn:()=> {
+      if(!restoreTarget) throw new Error("Select an archived draft first");
+      return restoreArchivedDraftTitle({data:{titleId:restoreTarget.id,reason:restoreReason}});
+    },
+    onSuccess:()=>{
+      toast.success("Draft restored");
+      setRestoreTarget(null);setRestoreReason("");
+      void qc.invalidateQueries({queryKey:["bridge-titles"]});
+      void qc.invalidateQueries({queryKey:["bridge-archived-titles"]});
+    },
+    onError:(error)=>toast.error(error instanceof Error?error.message:"Restore blocked"),
+  });
   const archiveMut = useMutation({
     mutationFn: () => {
       if (!archiveTarget) throw new Error("Select a draft first");
@@ -34,7 +50,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
       </div>
     );
   }
-  if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
+  if (!titles.length && !(archivedQ.data?.titles?.length)) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <>
     <ul className="divide-y divide-line rounded-sm border border-line">
@@ -62,6 +78,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           </div>
         </li>
       ))}
+      {!titles.length ? <li className="px-4 py-3 text-sm text-muted">{empty}</li> : null}
     </ul>
     {archiveTarget ? (
       <div role="dialog" aria-modal="true" aria-label="Confirm draft archive" className="mt-4 rounded-xl border border-line bg-surface p-4 space-y-3">
@@ -75,6 +92,31 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           <Button type="button" disabled={archiveMut.isPending || archiveReason.trim().length<3} onClick={()=>archiveMut.mutate()}>
             {archiveMut.isPending ? "Checking…" : "Confirm Archive"}
           </Button>
+        </div>
+      </div>
+    ) : null}
+    {(archivedQ.data?.titles?.length ?? 0) > 0 ? (
+      <section className="mt-4 space-y-2">
+        <h3 className="font-semibold">Archived Drafts</h3>
+        <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+          {archivedQ.data?.titles.map((item)=>(
+            <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div><p className="font-medium">{item.name}</p><p className="text-xs text-muted">{item.archive_reason}</p></div>
+              <Button type="button" size="sm" variant="outline" onClick={()=>setRestoreTarget({id:item.id,name:item.name})}>Restore</Button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : null}
+    {restoreTarget ? (
+      <div role="dialog" aria-modal="true" aria-label="Confirm draft restore" className="mt-4 rounded-xl border border-line bg-surface p-4 space-y-3">
+        <h3 className="font-semibold">Restore draft: {restoreTarget.name}</h3>
+        <label className="block text-sm">Reason
+          <textarea value={restoreReason} onChange={e=>setRestoreReason(e.target.value)} minLength={3} maxLength={2000} required rows={3} className="mt-1 w-full rounded-lg border border-line bg-elevated p-3" />
+        </label>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={()=>{setRestoreTarget(null);setRestoreReason("");}}>Cancel</Button>
+          <Button type="button" disabled={restoreMut.isPending||restoreReason.trim().length<3} onClick={()=>restoreMut.mutate()}>Confirm Restore</Button>
         </div>
       </div>
     ) : null}
