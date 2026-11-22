@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { listMyStoryConcepts, submitStoryConceptToSuperAdmin } from "@/lib/bridge/story-concept-api";
 import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -18,6 +19,11 @@ function listLogline(value: string | null | undefined) {
 }
 
 export function MyStoryConcepts() {
+  const qc = useQueryClient();
+  const submit = useMutation({
+    mutationFn: (titleId: string) => submitStoryConceptToSuperAdmin({ data: { titleId } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["my-story-concepts"] }),
+  });
   const query = useQuery({
     queryKey: ["my-story-concepts"],
     queryFn: () => listMyStoryConcepts(),
