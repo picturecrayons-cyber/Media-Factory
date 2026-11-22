@@ -33,13 +33,13 @@ function StoryConceptReviewPage() {
         if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
           return <BridgeShell actor={actor} title="Story / Concept"><p className="rounded-xl border border-line p-4 text-sm">This submission view is available to its owning Creator or Studio account.</p></BridgeShell>;
         }
-        return <StoryConceptReviewBody id={id} userId={actor.userId} />;
+        return <StoryConceptReviewBody id={id} userId={actor.userId} actor={actor} />;
       }}
     </RequireBridge>
   );
 }
 
-function StoryConceptReviewBody({ id, userId }: { id: string; userId: string }) {
+function StoryConceptReviewBody({ id, userId, actor }: { id: string; userId: string; actor: any }) {
   const client = useQueryClient();
   const query = useQuery({
     queryKey: ["story-concept-review", userId, id],
@@ -52,9 +52,10 @@ function StoryConceptReviewBody({ id, userId }: { id: string; userId: string }) 
     onSuccess: () => client.invalidateQueries({ queryKey: ["story-concept-review", userId, id] }),
   });
   const concept = query.data?.concept;
+  const notifications = query.data?.notifications ?? [];
 
   return (
-    <BridgeShell title="Story / Concept submission">
+    <BridgeShell actor={actor} title="Story / Concept submission">
       <main className="mx-auto max-w-4xl space-y-5 pb-16">
         <header className="rounded-2xl border border-line bg-surface p-5">
           <p className="text-xs font-semibold uppercase tracking-widest text-accent">Separate submission workflow</p>
@@ -106,15 +107,15 @@ function StoryConceptReviewBody({ id, userId }: { id: string; userId: string }) 
               <section className="rounded-2xl border border-line bg-surface p-5">
                 <h2 className="font-semibold">Super Admin review notes / correction request</h2>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-muted">{concept.adminNotes}</p>
-                {concept.status === "UNDER_REVIEW" ? <CorrectionForm concept={concept} userId={userId} onSaved={() => client.invalidateQueries({ queryKey: ["story-concept-review", userId, id] })} onNotice={setNotice} onError={setError} /> : null}
+                {concept.status === "UNDER_REVIEW" ? <CorrectionForm concept={concept} onSaved={() => client.invalidateQueries({ queryKey: ["story-concept-review", userId, id] })} onNotice={setNotice} onError={setError} /> : null}
               </section>
             ) : null}
 
             <section className="rounded-2xl border border-line bg-surface p-5">
               <h2 className="font-semibold">Notifications</h2>
-              {query.data.notifications.length ? (
+              {notifications.length ? (
                 <ul className="mt-3 divide-y divide-line">
-                  {query.data.notifications.map((item: any) => (
+                  {notifications.map((item: any) => (
                     <li key={item.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
                       <div><p className="text-sm">{item.message}</p><p className="mt-1 text-xs text-muted">{formatDate(item.createdAt)}</p></div>
                       {!item.readAt ? <button type="button" onClick={() => read.mutate(item.id)} className="text-xs font-semibold text-accent underline">Mark read</button> : <span className="text-xs text-muted">Read</span>}
@@ -127,15 +128,14 @@ function StoryConceptReviewBody({ id, userId }: { id: string; userId: string }) 
         ) : null}
         {notice ? <p role="status" className="rounded-lg border border-line p-3 text-sm">{notice}</p> : null}
         {error ? <p role="alert" className="rounded-lg border border-red-300 p-3 text-sm text-red-700">{error}</p> : null}
-        <Link to="/creator" className="inline-block text-sm font-semibold text-accent underline">Return to Creator / Studio workspace</Link>
+        <Link to={actor.accountType === "studio" ? "/studio" : "/creator"} className="inline-block text-sm font-semibold text-accent underline">Return to Creator / Studio workspace</Link>
       </main>
     </BridgeShell>
   );
 }
 
-function CorrectionForm({ concept, userId, onSaved, onNotice, onError }: {
+function CorrectionForm({ concept, onSaved, onNotice, onError }: {
   concept: any;
-  userId: string;
   onSaved: () => void | Promise<void>;
   onNotice: (message: string) => void;
   onError: (message: string) => void;
