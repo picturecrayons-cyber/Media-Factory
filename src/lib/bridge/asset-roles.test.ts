@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasVerifiedMasterAndArtwork } from "./asset-roles";
+import { hasVerifiedFinishedFilmPackage, hasVerifiedMasterAndArtwork } from "./asset-roles";
 
 const exactVerticalArtwork = [
   { kind: "master", s3_key: "verified/master" },
@@ -43,6 +43,29 @@ test("retains compatibility with a legacy poster when its pointer matches exactl
       [{ kind: "master", s3_key: "verified/master" }, { kind: "poster", s3_key: "verified/poster" }],
       "verified/master",
       "verified/poster",
+    ),
+    true,
+  );
+});
+
+
+test("finished-film handoff requires master, current vertical poster, horizontal artwork and thumbnail", () => {
+  const complete = [
+    { kind: "master", s3_key: "verified/master" },
+    { kind: "poster_vertical", s3_key: "verified/vertical" },
+    { kind: "poster_horizontal", s3_key: "verified/horizontal" },
+    { kind: "thumbnail", s3_key: "verified/thumbnail" },
+  ];
+  assert.equal(hasVerifiedFinishedFilmPackage(complete, "verified/master", "verified/vertical"), true);
+  assert.equal(
+    hasVerifiedFinishedFilmPackage(complete.slice(0, 3), "verified/master", "verified/vertical"),
+    false,
+  );
+  assert.equal(
+    hasVerifiedFinishedFilmPackage(
+      complete.map((asset) => asset.kind === "poster_horizontal" ? { ...asset, s3_key: "unverified/horizontal" } : asset),
+      "verified/master",
+      "verified/vertical",
     ),
     true,
   );
