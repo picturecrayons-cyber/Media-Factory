@@ -112,7 +112,7 @@ export const updateHomepageCarousel = createServerFn({ method: "POST" })
       throw new Error("Only the designated Super Admin can manage homepage carousel images");
     }
     const sql = await getSql();
-    const rows = await sql`
+    const rows = await sql<SiteRow>`
       insert into bridge_site_content (
         content_key, hero_title, hero_body, workflow_heading, audience_heading,
         final_cta_heading, carousel_slides, updated_by, updated_at
