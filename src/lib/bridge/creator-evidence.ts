@@ -273,6 +273,18 @@ export const submitCreatorRightsPackage = createServerFn({ method: "POST" })
         and d.status = 'VERIFIED'
     `;
     const present = new Set(required.map((r) => r.document_type));
+    const ownershipDocs = await sql<{ count: number }>`
+      select count(*)::int as count
+      from bridge_title_document_links l
+      join bridge_creator_documents d on d.id = l.document_id
+      where l.title_id = ${title.id}
+        and d.owner_user_id = ${actor.userId}
+        and d.document_type = 'OWNERSHIP_CHAIN_OF_TITLE'
+        and d.status = 'VERIFIED'
+    `;
+    if (Number(ownershipDocs[0]?.count ?? 0) < 2) {
+      throw new Error("Upload two separate ownership-chain PDFs: film ownership proof and New Darsan Creations rights-transfer proof.");
+    }
     const mustHave = [
       "FINISHED_FILM_AGREEMENT",
       "DISTRIBUTION_AGREEMENT",
