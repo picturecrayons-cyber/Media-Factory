@@ -309,6 +309,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 }
 
 type OwnerSubmissionTitle = {
+  status: string;
   name: string;
   nameMl: string | null;
   credits: Array<{ role: string; name: string }>;
@@ -389,7 +390,7 @@ function OwnerSubmissionPanel(props: {
       {loading?<p className="text-sm text-muted">Loading saved owner details…</p>:null}
       {submissionStatus === "NEEDS_CORRECTION" && submissionReason ? <p role="status" className="rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900">Super Admin requested changes: {submissionReason}</p> : null}
       {submissionStatus === "SUBMITTED" ? <p className="rounded-lg border border-line p-3 text-sm">Submitted / Pending Review. Editing is locked while Super Admin reviews this package.</p> : null}
-      {submissionStatus === "ACCEPTED_INTAKE" ? <p className="rounded-lg border border-line p-3 text-sm">Accepted into intake. Technical QC, Rights & Legal and publication remain separate review gates.</p> : null}
+      {submissionStatus === "ACCEPTED_INTAKE" ? <p className="rounded-lg border border-line p-3 text-sm">{title.status === "QC_REVIEW" ? "Accepted into intake and queued for Technical QC. QC result, Rights & Legal and publication remain separate gates." : "Accepted into intake. Technical QC queue entry will follow when the title is prepared and its master and artwork are verified."}</p> : null}
       {error?<p role="alert" className="text-sm text-red-700">{error}</p>:null}
       <div className="space-y-3">
         <h3 className="font-semibold">Film identity & production</h3>
