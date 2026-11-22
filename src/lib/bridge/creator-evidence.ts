@@ -21,7 +21,15 @@ async function requireTitleOwner(userId: string, titleId: string) {
   assertNotDevUser(userId);
   const actor = await requireVerifiedActor(userId);
   const title = await loadTitle(titleId);
-  if (!title || actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+  // A verified Super Admin who is also the recorded Creator owner may
+  // manage that exact title's evidence; this grants no access to other owners.
+  const isInternalOwnerException =
+    actor.internalRole === "super_admin" &&
+    actor.accountType === "independent_creator" &&
+    title?.ownerAccountType === "independent_creator" &&
+    title.ownerUserId === actor.userId;
+  if (!title || (!actor.internalRole && !["independent_creator", "studio"].includes(actor.accountType)) ||
+    (actor.internalRole && !isInternalOwnerException)) {
     throw new Error("Title not found for this owner account");
   }
   if (actor.accountType !== title.ownerAccountType) throw new Error("Owner account type mismatch");
