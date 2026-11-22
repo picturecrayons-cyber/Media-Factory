@@ -8,12 +8,12 @@ import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { hasPermission } from "@/lib/bridge/rbac";
 import type { BridgeActor } from "@/lib/bridge/session";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
-import { listOwnerSubmissionQueue } from "@/lib/bridge/title-owner-submissions";
+import { listFounderSubmissionInbox } from "@/lib/bridge/title-owner-submissions";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "Owner Submissions", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "Submissions", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -33,7 +33,7 @@ function AdminWorkstations() {
 function WorkstationBody({ actor }: { actor: BridgeActor }) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
-  const ownerSubmissionsQ = useQuery({ queryKey: ["owner-submission-queue"], queryFn: () => listOwnerSubmissionQueue(), enabled: actor.internalRole === "super_admin" });
+  const founderInboxQ = useQuery({ queryKey: ["founder-submission-inbox"], queryFn: () => listFounderSubmissionInbox(), enabled: actor.internalRole === "super_admin" });
   const review = useMutation({
     mutationFn: reviewAdminTitle,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
@@ -77,8 +77,8 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
 
       {activeTab === "Titles" ? (
         <TitleQueue titles={data.titles} review={review} />
-      ) : activeTab === "Owner Submissions" ? (
-        <OwnerSubmissionQueue submissions={ownerSubmissionsQ.data?.submissions ?? []} loading={ownerSubmissionsQ.isPending} error={ownerSubmissionsQ.error instanceof Error ? ownerSubmissionsQ.error.message : null} />
+      ) : activeTab === "Submissions" ? (
+        <FounderSubmissionInbox submissions={founderInboxQ.data?.submissions ?? []} loading={founderInboxQ.isPending} error={founderInboxQ.error instanceof Error ? founderInboxQ.error.message : null} />
       
       ) : activeTab === "Concepts" ? (
         <StoryConceptDesk />
@@ -114,41 +114,118 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
 }
 
 
-function OwnerSubmissionQueue({ submissions, loading, error }: { submissions: any[]; loading: boolean; error: string | null }) {
+function FounderSubmissionInbox({ submissions, loading, error }: {
+  submissions: any[];
+  loading: boolean;
+  error: string | null;
+}) {
+  const finishedFilms = submissions.filter((item) => item.submission_type === "finished_film");
+  const concepts = submissions.filter((item) => item.submission_type === "story_concept");
+  const formatDate = (value: string | null | undefined) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+  };
+  const filmState = (item: any) => {
+    if (item.title_status === "QC_REVIEW") return "Submitted for QC";
+    if (item.title_status === "PREPARING") return "Preparing — awaiting QC submission";
+    if (item.title_status === "UPLOADING") return "Uploading";
+    if (item.title_status === "DRAFT") return "Draft — not yet submitted for QC";
+    return STATUS_LABELS[item.title_status] ?? item.title_status;
+  };
+  const conceptState = (item: any) => (item.concept_curation_status ?? "Curation record unavailable").replaceAll("_", " ");
+  const ownerLabel = (item: any) => item.owner_account_type === "studio" ? "Studio" : "Creator";
+  const ownerName = (item: any) => item.owner_display_name || item.owner_organization_name || item.owner_user_id;
+
   return (
-    <section className="space-y-3">
-      <SectionHeader title="Owner Submissions" description="Packages submitted by title owners. This queue is separate from QC and Legal approval." />
-      {error ? <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">Could not load submissions: {error}</p> : null}
-      {loading ? <Empty text="Loading owner submissions…" /> : null}
-      {!loading && !error && submissions.length === 0 ? <Empty text="No owner submission packages are waiting." /> : null}
-      <div className="space-y-3">
-        {submissions.map((item: any) => (
-          <article key={item.title_id} className="rounded-2xl border border-line bg-surface p-4 space-y-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="font-semibold">{item.title_name}</h3>
-                <p className="mt-1 text-xs text-muted">{item.owner_display_name ?? item.owner_user_id} · {item.owner_email ?? "No email"} · {item.title_status}</p>
-              </div>
-              <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">OWNER SUBMITTED</span>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-              <p>Original title: {item.details?.originalTitle ?? "—"}</p>
-              <p>Production: {item.details?.productionCompany ?? "—"}</p>
-              <p>Master: {[item.details?.masterVersion,item.details?.resolution,item.details?.codec].filter(Boolean).join(" · ") || "—"}</p>
-              <p>Rights basis: {item.details?.rightsBasis ?? "—"}</p>
-              <p>Territories: {(item.details?.territories ?? []).join(", ") || "—"}</p>
-              <p>Rights window: {[item.details?.rightsStartDate,item.details?.rightsEndDate].filter(Boolean).join(" → ") || "—"}</p>
-              <p>Contact: {[item.details?.contactName,item.details?.contactEmail,item.details?.contactPhone].filter(Boolean).join(" · ") || "—"}</p>
-              <p>Submitted: {item.submitted_at ? new Date(item.submitted_at).toLocaleString() : "—"}</p>
-            </div>
-            <Link to="/title/$id" params={{ id: item.title_id }} className="inline-flex rounded-full border border-line px-4 py-2 text-xs font-semibold">Open title & review evidence</Link>
-          </article>
-        ))}
+    <section className="space-y-5">
+      <div>
+        <SectionHeader
+          title="Founder Submission Inbox"
+          description="Creator and Studio submissions use the same intake. Finished Film and Story / Concept remain separate products with their own review stages."
+        />
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-line bg-surface p-4">
+            <p className="text-xs text-muted">Finished Film records</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">{finishedFilms.length}</p>
+            <p className="mt-1 text-xs text-muted">Draft → Preparing → QC → Rights → License → Deliver</p>
+          </div>
+          <div className="rounded-xl border border-line bg-surface p-4">
+            <p className="text-xs text-muted">Story / Concept submissions</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">{concepts.length}</p>
+            <p className="mt-1 text-xs text-muted">Admin curation → buyers & investors</p>
+          </div>
+        </div>
       </div>
+
+      {error ? <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">Could not load Founder submissions: {error}</p> : null}
+      {loading ? <Empty text="Loading Creator and Studio submissions…" /> : null}
+      {!loading && !error && !submissions.length ? <Empty text="No Creator or Studio submissions are recorded." /> : null}
+
+      {!loading && !error ? (
+        <div className="space-y-7">
+          <section className="space-y-3">
+            <SectionHeader
+              title="Finished Film"
+              description="The existing free title-record path. QC submission occurs only after preparation and verified master and artwork checks."
+            />
+            {!finishedFilms.length ? <Empty text="No Finished Film records." /> : finishedFilms.map((item: any) => (
+              <article key={item.title_id} className="rounded-2xl border border-line bg-surface p-4 space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold">{item.title_name}</h3>
+                    <p className="mt-1 text-xs text-muted">
+                      {ownerLabel(item)} · {ownerName(item)} · {item.owner_email ?? "Email unavailable"}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{filmState(item)}</span>
+                </div>
+                <div className="grid gap-2 text-sm sm:grid-cols-2">
+                  <p>Title status: {item.title_status}</p>
+                  <p>Owner details: {item.owner_details_status ?? "Not submitted"}</p>
+                  <p>Created: {formatDate(item.created_at)}</p>
+                  <p>Updated: {formatDate(item.updated_at)}</p>
+                </div>
+                <Link to="/title/$id" params={{ id: item.title_id }} className="inline-flex rounded-full border border-line px-4 py-2 text-xs font-semibold">
+                  Open Finished Film record
+                </Link>
+              </article>
+            ))}
+          </section>
+
+          <section className="space-y-3">
+            <SectionHeader
+              title="Story / Concept"
+              description="The separate network submission path. Curation, editorial review and Legal review are shown independently; buyer or investor introduction is not automatic."
+            />
+            {!concepts.length ? <Empty text="No Story / Concept submissions." /> : concepts.map((item: any) => (
+              <article key={item.title_id} className="rounded-2xl border border-line bg-surface p-4 space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold">{item.title_name}</h3>
+                    <p className="mt-1 text-xs text-muted">
+                      {ownerLabel(item)} · {ownerName(item)} · {item.owner_email ?? "Email unavailable"}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{conceptState(item)}</span>
+                </div>
+                <div className="grid gap-2 text-sm sm:grid-cols-2">
+                  <p>Title status: {item.title_status}</p>
+                  <p>Editorial: {(item.concept_editorial_status ?? "Pending").replaceAll("_", " ")}</p>
+                  <p>Legal: {(item.concept_legal_status ?? "Pending").replaceAll("_", " ")}</p>
+                  <p>Created: {formatDate(item.created_at)}</p>
+                </div>
+                <Link to="/title/$id" params={{ id: item.title_id }} className="inline-flex rounded-full border border-line px-4 py-2 text-xs font-semibold">
+                  Open Story / Concept record
+                </Link>
+              </article>
+            ))}
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
-
 function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
   return (
     <section className="space-y-3">
