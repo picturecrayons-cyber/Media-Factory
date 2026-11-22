@@ -74,6 +74,33 @@ function AdminBody({ actor }: { actor: any }) {
           <Metric label="Buyer-ready" value={loading ? "—" : String(buyerReady)} detail="Licensing stages" />
         </section>
 
+        <section aria-label="Administration workspaces" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Link to="/admin/team" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+            <h3 className="font-semibold">Team & Permissions</h3>
+            <p className="mt-1 text-sm text-muted">Invite internal reviewers and assign permitted staff roles.</p>
+            <span className="mt-3 inline-block text-xs font-semibold text-accent">Manage team →</span>
+          </Link>
+          <Link to="/admin-cms" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+            <h3 className="font-semibold">Website CMS</h3>
+            <p className="mt-1 text-sm text-muted">Manage public homepage copy and Super Admin carousel images.</p>
+            <span className="mt-3 inline-block text-xs font-semibold text-accent">Open CMS →</span>
+          </Link>
+          {actor.internalRole === "super_admin" ? (
+            <>
+              <Link to="/admin/users" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+                <h3 className="font-semibold">Users & Access</h3>
+                <p className="mt-1 text-sm text-muted">Review verified Bridge profiles and internal access assignments.</p>
+                <span className="mt-3 inline-block text-xs font-semibold text-accent">Review access →</span>
+              </Link>
+              <Link to="/admin/audit" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+                <h3 className="font-semibold">Audit & Security</h3>
+                <p className="mt-1 text-sm text-muted">Inspect persisted operational audit events.</p>
+                <span className="mt-3 inline-block text-xs font-semibold text-accent">Open audit →</span>
+              </Link>
+            </>
+          ) : null}
+        </section>
+
         <section className="rounded-2xl border border-line bg-surface p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="font-semibold">Workspace snapshot</h3>
