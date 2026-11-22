@@ -83,9 +83,9 @@ export const getTitleOwnerEvidenceViewUrl = createServerFn({ method: "GET" })
       join bridge_creator_documents d on d.id = l.document_id
       where l.title_id = ${title.id}
         and d.id = ${data.documentId}
-        and d.owner_user_id = ${actor.userId}
+        and d.owner_user_id = ${title.ownerUserId}
         and d.owner_account_type = ${actor.accountType}
-        and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+        and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
         and d.status = 'VERIFIED'
       limit 1
     `;
@@ -117,9 +117,9 @@ export const listTitleOwnerEvidence = createServerFn({ method: "GET" })
       from bridge_title_document_links l
       join bridge_creator_documents d on d.id = l.document_id
       where l.title_id = ${data.titleId}
-        and d.owner_user_id = ${actor.userId}
+        and d.owner_user_id = ${title.ownerUserId}
         and d.owner_account_type = ${actor.accountType}
-        and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+        and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
       order by d.created_at desc
     `;
     return { documents: rows };
@@ -135,10 +135,10 @@ export const requestTitleOwnerEvidenceUpload = createServerFn({ method: "POST" }
   }))
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireTitleOwner(context.userId, data.titleId);
-    await assertEvidenceEditable(title.id, actor.userId, actor.accountType === "studio" ? actor.organizationId ?? null : null, title.status);
+    await assertEvidenceEditable(title.id, title.ownerUserId, actor.accountType === "studio" ? actor.organizationId ?? null : null, title.status);
     const id = randomBytes(16).toString("hex");
     const safeName = data.fileName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-100) || "evidence.pdf";
-    const storageKey = `creator-evidence/${actor.userId}/${title.id}/${id}.pdf`;
+    const storageKey = `creator-evidence/${title.ownerUserId}/${title.id}/${id}.pdf`;
     const { signUpload } = await import("./oci-object-storage.server");
     const signed = await signUpload({
       key: storageKey,
@@ -152,7 +152,7 @@ export const requestTitleOwnerEvidenceUpload = createServerFn({ method: "POST" }
           id, owner_user_id, owner_account_type, owner_organization_id,
           document_type, file_name, content_type, byte_size, storage_key, status, created_by
         ) values (
-          ${id}, ${actor.userId}, ${actor.accountType}, ${actor.accountType === "studio" ? actor.organizationId : null},
+          ${id}, ${title.ownerUserId}, ${actor.accountType}, ${actor.accountType === "studio" ? title.ownerOrganizationId : null},
           ${data.documentType}, ${safeName}, 'application/pdf', ${data.byteSize},
           ${storageKey}, 'PENDING_UPLOAD', ${actor.userId}
         )
@@ -185,9 +185,9 @@ export const confirmTitleOwnerEvidenceUpload = createServerFn({ method: "POST" }
       select d.id, d.document_type, d.storage_key, d.byte_size, d.content_type, d.status
       from bridge_creator_documents d
       join bridge_title_document_links l on l.document_id = d.id and l.title_id = ${title.id}
-      where d.id = ${data.documentId} and d.owner_user_id = ${actor.userId}
+      where d.id = ${data.documentId} and d.owner_user_id = ${title.ownerUserId}
         and d.owner_account_type = ${actor.accountType}
-        and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+        and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
       limit 1
     `;
     let doc = rows[0];
@@ -195,9 +195,9 @@ export const confirmTitleOwnerEvidenceUpload = createServerFn({ method: "POST" }
       const pending = await sql<typeof doc>`
         select id, document_type, storage_key, byte_size, content_type, status
         from bridge_creator_documents
-        where id = ${data.documentId} and owner_user_id = ${actor.userId}
+        where id = ${data.documentId} and owner_user_id = ${title.ownerUserId}
           and owner_account_type = ${actor.accountType}
-          and owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+          and owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
           and status = 'PENDING_UPLOAD'
         limit 1
       `;
@@ -213,9 +213,9 @@ export const confirmTitleOwnerEvidenceUpload = createServerFn({ method: "POST" }
       await tx`
         update bridge_creator_documents
         set status = 'VERIFIED', verified_at = now(), updated_at = now()
-        where id = ${doc!.id} and owner_user_id = ${actor.userId}
+        where id = ${doc!.id} and owner_user_id = ${title.ownerUserId}
           and owner_account_type = ${actor.accountType}
-          and owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+          and owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
           and status = 'PENDING_UPLOAD'
       `;
       await tx`
@@ -245,9 +245,9 @@ export const revokePendingTitleOwnerEvidence = createServerFn({ method: "POST" }
         update bridge_creator_documents
         set status = 'REVOKED', revoked_at = now(), updated_at = now()
         where id = ${data.documentId}
-          and owner_user_id = ${actor.userId}
+          and owner_user_id = ${title.ownerUserId}
           and owner_account_type = ${actor.accountType}
-          and owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+          and owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
           and status = 'PENDING_UPLOAD'
           and exists (
             select 1 from bridge_title_document_links l
@@ -288,13 +288,13 @@ export const saveTitleOwnerRightsDraft = createServerFn({ method: "POST" })
   .validator(z.object({ titleId: z.string().min(8), details: rightsDetailsSchema }))
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireTitleOwner(context.userId, data.titleId);
-    await assertEvidenceEditable(title.id, actor.userId, actor.accountType === "studio" ? actor.organizationId ?? null : null, title.status);
+    await assertEvidenceEditable(title.id, title.ownerUserId, actor.accountType === "studio" ? actor.organizationId ?? null : null, title.status);
     const sql = await getSql();
     const existing = await sql<{ submission_status: string }>`
       select submission_status from bridge_title_owner_submissions
     where title_id = ${title.id}
-      and owner_user_id = ${actor.userId}
-      and owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+      and owner_user_id = ${title.ownerUserId}
+      and owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
     limit 1
     `;
     if (existing[0] && existing[0].submission_status === "SUBMITTED") {
@@ -305,7 +305,7 @@ export const saveTitleOwnerRightsDraft = createServerFn({ method: "POST" })
         id, title_id, owner_user_id, owner_organization_id, details,
         submission_status, updated_by
       ) values (
-        ${randomBytes(16).toString("hex")}, ${title.id}, ${actor.userId}, ${actor.accountType === "studio" ? actor.organizationId : null},
+        ${randomBytes(16).toString("hex")}, ${title.id}, ${title.ownerUserId}, ${actor.accountType === "studio" ? title.ownerOrganizationId : null},
         ${JSON.stringify(data.details)}::jsonb, 'DRAFT', ${actor.userId}
       )
       on conflict (title_id) do update set
@@ -330,7 +330,7 @@ export const submitTitleOwnerRightsPackage = createServerFn({ method: "POST" })
   .validator(z.object({ titleId: z.string().min(8), details: rightsDetailsSchema }))
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireTitleOwner(context.userId, data.titleId);
-    await assertEvidenceEditable(title.id, actor.userId, actor.accountType === "studio" ? actor.organizationId ?? null : null, title.status);
+    await assertEvidenceEditable(title.id, title.ownerUserId, actor.accountType === "studio" ? actor.organizationId ?? null : null, title.status);
     if (!data.details.ownerDeclaration) throw new Error("Confirm the Creator declaration before submitting.");
     if (
       data.details.platforms.length === 0 ||
@@ -350,9 +350,9 @@ export const submitTitleOwnerRightsPackage = createServerFn({ method: "POST" })
       from bridge_title_document_links l
       join bridge_creator_documents d on d.id = l.document_id
       where l.title_id = ${title.id}
-        and d.owner_user_id = ${actor.userId}
+        and d.owner_user_id = ${title.ownerUserId}
         and d.owner_account_type = ${actor.accountType}
-        and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+        and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
         and d.status = 'VERIFIED'
     `;
     const present = new Set(required.map((r) => r.document_type));
@@ -361,9 +361,9 @@ export const submitTitleOwnerRightsPackage = createServerFn({ method: "POST" })
       from bridge_title_document_links l
       join bridge_creator_documents d on d.id = l.document_id
       where l.title_id = ${title.id}
-        and d.owner_user_id = ${actor.userId}
+        and d.owner_user_id = ${title.ownerUserId}
         and d.owner_account_type = ${actor.accountType}
-        and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+        and d.owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
         and d.document_type = 'OWNERSHIP_CHAIN_OF_TITLE'
         and d.status = 'VERIFIED'
     `;
@@ -386,7 +386,7 @@ export const submitTitleOwnerRightsPackage = createServerFn({ method: "POST" })
         id, title_id, owner_user_id, owner_organization_id, details,
         submission_status, submitted_at, submitted_by, updated_by
       ) values (
-        ${randomBytes(16).toString("hex")}, ${title.id}, ${actor.userId}, ${actor.accountType === "studio" ? actor.organizationId : null},
+        ${randomBytes(16).toString("hex")}, ${title.id}, ${actor.userId}, ${actor.accountType === "studio" ? title.ownerOrganizationId : null},
         ${JSON.stringify(data.details)}::jsonb, 'SUBMITTED', now(), ${actor.userId}, ${actor.userId}
       )
       on conflict (title_id) do update set
@@ -428,8 +428,8 @@ export const getTitleOwnerRightsReviewHistory = createServerFn({ method: "GET" }
       select submission_status, submitted_at, details
       from bridge_title_owner_submissions
       where title_id = ${title.id}
-        and owner_user_id = ${actor.userId}
-        and owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+        and owner_user_id = ${title.ownerUserId}
+        and owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
       limit 1
     `;
     return { reviewEvents: rows, submission: submission[0] ?? null };
@@ -444,8 +444,8 @@ export const getTitleOwnerRightsDraft = createServerFn({ method: "GET" })
     const rows = await sql<{ details: Record<string, unknown>; submission_status: string; submitted_at: string | null }>`
       select details, submission_status, submitted_at
       from bridge_title_owner_submissions
-      where title_id = ${title.id} and owner_user_id = ${actor.userId}
-        and owner_organization_id is not distinct from ${actor.accountType === "studio" ? actor.organizationId : null}
+      where title_id = ${title.id} and owner_user_id = ${title.ownerUserId}
+        and owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
       limit 1
     `;
     return { submission: rows[0] ?? null };
