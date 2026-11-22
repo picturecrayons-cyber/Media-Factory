@@ -180,7 +180,7 @@ function OwnerSubmissionCard({ item, decision }: { item: any; decision: any }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link to="/title/$id" params={{ id: item.title_id }} className="inline-flex rounded-full border border-line px-4 py-2 text-xs font-semibold">Open title workspace</Link>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" disabled={decision.isPending} onClick={() => decision.mutate({ data: { titleId: item.title_id, submissionKind: kind, decision: "ACCEPTED_INTAKE" } })}>Accept into Intake / QC</Button>
+          <Button size="sm" disabled={decision.isPending} onClick={() => decision.mutate({ data: { titleId: item.title_id, submissionKind: kind, decision: "ACCEPTED_INTAKE" } })}>{kind === "finished_film" ? "Accept into Intake / QC" : "Accept into Concept Intake"}</Button>
         </div>
       </div>
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
