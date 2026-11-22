@@ -826,11 +826,23 @@ export const listArchivedDraftTitles = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor=await requireVerifiedActor(context.userId);
-    if(actor.internalRole!=="super_admin") throw new Error("Super Admin access required");
     const sql=await getSql();
+    if(actor.internalRole==="super_admin") {
+      const rows=await sql<{id:string;name:string;archived_at:string|Date;archive_reason:string|null}>`
+        select id,name,archived_at,archive_reason from bridge_titles
+        where archived_at is not null order by archived_at desc limit 200
+      `;
+      return {titles:rows};
+    }
+    if(actor.internalRole || !["independent_creator","studio"].includes(actor.accountType)) throw new Error("Owner access required");
     const rows=await sql<{id:string;name:string;archived_at:string|Date;archive_reason:string|null}>`
-      select id,name,archived_at,archive_reason from bridge_titles
-      where archived_at is not null order by archived_at desc limit 200
+      select id,name,archived_at,archive_reason from bridge_titles t
+      where t.archived_at is not null and (
+        t.owner_user_id=${actor.userId}
+        or (t.owner_account_type='studio' and t.owner_organization_id=${actor.organizationId}
+          and exists(select 1 from bridge_organization_memberships m
+            where m.organization_id=t.owner_organization_id and m.user_id=${actor.userId} and m.status='active'))
+      ) order by archived_at desc limit 200
     `;
     return {titles:rows};
   });
