@@ -355,7 +355,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
               <li key={index} className="border-t border-line pt-3 text-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <strong>Legal case · {legalCase.status.replaceAll("_", " ")}</strong>
-                  <span className="text-muted">{legalCase.reviewed_at ? new Date(legalCase.reviewed_at).toLocaleString() : "Awaiting independent reviewer"}</span>
+                  <span className="text-muted">{legalCase.reviewed_at ? `Reviewed ${new Date(legalCase.reviewed_at).toLocaleString()}${legalCase.reviewed_by_name ? ` by ${legalCase.reviewed_by_name}` : ""}` : "Awaiting independent reviewer"}</span>
                 </div>
                 {legalCase.classification ? <p className="mt-1 text-muted">Classification: {legalCase.classification.replaceAll("_", " ")}</p> : null}
                 {legalCase.evidence?.map((item, itemIndex) => (
