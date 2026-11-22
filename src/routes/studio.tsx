@@ -40,7 +40,6 @@ function Studio() {
                 <p className="mt-2 max-w-2xl text-sm text-muted">One workspace for title intake, production handover and private evidence. Access is checked by the server for every operation.</p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <Link to="/account" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold hover:border-accent">Account</Link>
                 <Link to="/deliveries" className="rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-white">View deliveries</Link>
               </div>
             </header>
