@@ -345,7 +345,7 @@ function OwnerSubmissionPanel(props: {
     setForm({
       ...EMPTY_OWNER_SUBMISSION,
       originalTitle: title.nameMl || title.name,
-      credits: title.credits?.map(c=>({role:c.role,name:c.name})) ?? [],
+      credits: title.credits?.map(c=>({role:c.role as OwnerSubmissionValues["credits"][number]["role"],name:c.name})) ?? [],
       ...(initial && typeof initial==="object" ? initial as Partial<OwnerSubmissionValues> : {})
     });
   }, [initial, title.name, title.nameMl, title.credits]);
