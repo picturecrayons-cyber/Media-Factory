@@ -145,3 +145,22 @@ test("homepage and Buyer surfaces describe multiple independent Buyers, not Loop
   assert.match(buyerRegister, /Verify Buyer category/);
   assert.match(buyerRegister, /ID 55/);
 });
+
+
+test("Buyer catalogue, direct title, checkout and poster access require an explicit live per-user grant", () => {
+  const titles = read("./titles.ts");
+  const buyerAccess = read("./buyer-visibility.ts");
+  const payments = read("./payments.ts");
+  const poster = read("../../routes/api/buyer/poster.ts");
+  const accessMigration = read("../../../migrations/0009_buyer_title_access.sql");
+  assert.match(buyerAccess, /buyerHasExplicitTitleAccess/);
+  assert.match(buyerAccess, /revoked_at is null/);
+  assert.match(buyerAccess, /expires_at is null or expires_at > now\(\)/);
+  assert.match(buyerAccess, /to_regclass\('public\.bridge_buyer_title_access'\)/);
+  assert.match(titles, /ba\.buyer_user_id = \$\{actor\.userId\}/);
+  assert.match(titles, /buyerHasExplicitTitleAccess\(title\.id, actor\.userId\)/);
+  assert.match(payments, /buyerHasExplicitTitleAccess\(title\.id, actor\.userId\)/);
+  assert.match(poster, /buyerHasExplicitTitleAccess\(titleId, actor\.userId\)/);
+  assert.match(accessMigration, /primary key \(title_id, buyer_user_id\)/);
+  assert.match(accessMigration, /revoked_at/);
+});
