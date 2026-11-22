@@ -189,3 +189,77 @@ export const listOwnerSubmissionQueue = createServerFn({method:"GET"})
     `;
     return {submissions:rows};
   });
+
+/**
+ * Unified Founder Centre intake. This is a read-only overview of both
+ * submission products; it never changes title, curation, QC, Legal or rights
+ * status. Access is limited to verified Super Admins.
+ */
+export const listFounderSubmissionInbox = createServerFn({method:"GET"})
+  .middleware([authMiddleware])
+  .handler(async ({context}) => {
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
+
+    const sql=await getSql();
+    const rows=await sql<{
+      title_id:string;
+      title_name:string;
+      submission_type:string;
+      title_status:string;
+      owner_user_id:string;
+      owner_account_type:string;
+      owner_organization_id:string|null;
+      owner_email:string|null;
+      owner_display_name:string|null;
+      owner_organization_name:string|null;
+      created_at:string|Date;
+      updated_at:string|Date;
+      concept_curation_status:string|null;
+      concept_editorial_status:string|null;
+      concept_legal_status:string|null;
+      owner_details_status:string|null;
+      owner_details_submitted_at:string|Date|null;
+    }>`
+      select
+        t.id as title_id,
+        t.name as title_name,
+        coalesce(t.submission_type, 'finished_film') as submission_type,
+        t.status as title_status,
+        t.owner_user_id,
+        t.owner_account_type,
+        t.owner_organization_id,
+        p.email as owner_email,
+        p.display_name as owner_display_name,
+        p.organization_name as owner_organization_name,
+        t.created_at,
+        t.updated_at,
+        c.curation_status as concept_curation_status,
+        c.editorial_status as concept_editorial_status,
+        c.legal_status as concept_legal_status,
+        s.submission_status as owner_details_status,
+        s.submitted_at as owner_details_submitted_at
+      from bridge_titles t
+      left join bridge_profiles p on p.user_id=t.owner_user_id
+      left join bridge_story_concept_submissions c on c.title_id=t.id
+      left join bridge_title_owner_submissions s on s.title_id=t.id
+      where coalesce(t.submission_type, 'finished_film') in ('finished_film','story_concept')
+      order by t.created_at desc
+      limit 300
+    `;
+
+    return {
+      submissions: rows.map((row) => ({
+        ...row,
+        submission_type: row.submission_type === "story_concept" ? "story_concept" : "finished_film",
+        created_at: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+        updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+        owner_details_submitted_at: row.owner_details_submitted_at == null
+          ? null
+          : row.owner_details_submitted_at instanceof Date
+            ? row.owner_details_submitted_at.toISOString()
+            : String(row.owner_details_submitted_at),
+      })),
+    };
+  });
