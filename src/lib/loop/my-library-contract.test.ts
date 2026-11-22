@@ -28,6 +28,8 @@ test("My Library resolves title metadata through the Bridge-authorized catalog",
   assert.match(handler, /catalog\.id = any\(\$\{savedIds\}::text\[\]\)/);
   assert.match(handler, /catalog\.poster_available/);
   assert.match(handler, /catalog\.backdrop_available/);
+  assert.match(handler, /posterPath: null/);
+  assert.match(handler, /backdropPath: null/);
   assert.doesNotMatch(handler, /join\\s+loop_titles/i);
   assert.doesNotMatch(handler, /from\\s+loop_titles/i);
 });
