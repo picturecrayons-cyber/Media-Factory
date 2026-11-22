@@ -8,11 +8,12 @@ import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { hasPermission } from "@/lib/bridge/rbac";
 import type { BridgeActor } from "@/lib/bridge/session";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
+import { listOwnerSubmissionQueue } from "@/lib/bridge/title-owner-submissions";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "Owner Submissions", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -32,6 +33,7 @@ function AdminWorkstations() {
 function WorkstationBody({ actor }: { actor: BridgeActor }) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
+  const ownerSubmissionsQ = useQuery({ queryKey: ["owner-submission-queue"], queryFn: () => listOwnerSubmissionQueue(), enabled: actor.internalRole === "super_admin" });
   const review = useMutation({
     mutationFn: reviewAdminTitle,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
@@ -75,6 +77,9 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
 
       {activeTab === "Titles" ? (
         <TitleQueue titles={data.titles} review={review} />
+      ) : activeTab === "Owner Submissions" ? (
+        <OwnerSubmissionQueue submissions={ownerSubmissionsQ.data?.submissions ?? []} loading={ownerSubmissionsQ.isPending} error={ownerSubmissionsQ.error instanceof Error ? ownerSubmissionsQ.error.message : null} />
+      
       ) : activeTab === "Concepts" ? (
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
@@ -105,6 +110,42 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
 
       {review.isError || gate.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error)}</p> : null}
     </div>
+  );
+}
+
+
+function OwnerSubmissionQueue({ submissions, loading, error }: { submissions: any[]; loading: boolean; error: string | null }) {
+  return (
+    <section className="space-y-3">
+      <SectionHeader title="Owner Submissions" description="Packages submitted by title owners. This queue is separate from QC and Legal approval." />
+      {error ? <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">Could not load submissions: {error}</p> : null}
+      {loading ? <Empty text="Loading owner submissions…" /> : null}
+      {!loading && !error && submissions.length === 0 ? <Empty text="No owner submission packages are waiting." /> : null}
+      <div className="space-y-3">
+        {submissions.map((item: any) => (
+          <article key={item.title_id} className="rounded-2xl border border-line bg-surface p-4 space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">{item.title_name}</h3>
+                <p className="mt-1 text-xs text-muted">{item.owner_display_name ?? item.owner_user_id} · {item.owner_email ?? "No email"} · {item.title_status}</p>
+              </div>
+              <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">OWNER SUBMITTED</span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+              <p>Original title: {item.details?.originalTitle ?? "—"}</p>
+              <p>Production: {item.details?.productionCompany ?? "—"}</p>
+              <p>Master: {[item.details?.masterVersion,item.details?.resolution,item.details?.codec].filter(Boolean).join(" · ") || "—"}</p>
+              <p>Rights basis: {item.details?.rightsBasis ?? "—"}</p>
+              <p>Territories: {(item.details?.territories ?? []).join(", ") || "—"}</p>
+              <p>Rights window: {[item.details?.rightsStartDate,item.details?.rightsEndDate].filter(Boolean).join(" → ") || "—"}</p>
+              <p>Contact: {[item.details?.contactName,item.details?.contactEmail,item.details?.contactPhone].filter(Boolean).join(" · ") || "—"}</p>
+              <p>Submitted: {item.submitted_at ? new Date(item.submitted_at).toLocaleString() : "—"}</p>
+            </div>
+            <Link to="/title/$id" params={{ id: item.title_id }} className="inline-flex rounded-full border border-line px-4 py-2 text-xs font-semibold">Open title & review evidence</Link>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
