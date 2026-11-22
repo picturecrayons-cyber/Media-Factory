@@ -284,7 +284,7 @@ function BuyerBody({ userId }: { userId: string }) {
         <TitleList userId={userId} titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
       ) : view === "gallery" ? (
         <div className="space-y-4">
-          <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
+          <TitleGallery userId={userId} titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
           {visible.length > BUYER_GALLERY_PAGE_SIZE ? (
             <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
               <button
@@ -361,11 +361,13 @@ function BuyerEmptyState() {
 }
 
 function TitleGallery({
+  userId,
   titles,
   artworkByTitle,
   entitled,
   order,
 }: {
+  userId: string;
   titles: BuyerTitleCard[];
   artworkByTitle: Map<string, Blob>;
   entitled: Set<string>;
