@@ -7,6 +7,8 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { archiveDraftTitle, createTitle, listArchivedDraftTitles, listTitles, restoreArchivedDraftTitle } from "@/lib/bridge/titles";
 import { getBridgeSession } from "@/lib/bridge/session";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { getBridgeSession } from "@/lib/bridge/session";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
