@@ -67,9 +67,8 @@ function Home() {
     );
   }
 
-  if (user) {
-    if (sessionQ.data?.home) return <Navigate to={sessionQ.data.home as any} replace />;
-    if (!sessionQ.data?.profile) return <Navigate to="/onboarding" replace />;
+  if (user && sessionQ.data?.profile && sessionQ.data.home) {
+    return <Navigate to={sessionQ.data.home as any} replace />;
   }
 
   return (
@@ -109,12 +108,16 @@ function Home() {
               <HeroCarousel slides={siteContent.carouselSlides ?? []} />
 
               <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
-                <Link to="/signup">
-                  <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
-                    Create account
-                  </Button>
-                </Link>
-                <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link>
+                {user ? (
+                  <Link to="/onboarding">
+                    <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">Continue setup</Button>
+                  </Link>
+                ) : (
+                  <Link to="/signup">
+                    <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">Create account</Button>
+                  </Link>
+                )}
+                {!user ? <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link> : null}
               </div>
             </div>
           </div>
