@@ -63,6 +63,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     posterKey: r.poster_key,
     masterKey: r.master_key,
     contentType: r.content_type,
+    submissionType: r.submission_type ?? "finished_film",
     countryOfOrigin: r.country_of_origin,
     releaseDate: r.release_date ? asIso(r.release_date) : null,
     credits: r.credits,
@@ -105,24 +106,77 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
 }
 
-async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
+async function listOwned(
+  sql: Sql,
+  userId: string,
+  accountType: AccountType,
+  organizationId: string | null | undefined,
+): Promise<TitleRow[]> {
   const orgId = organizationId || null;
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
   const archiveColumnAvailable = await hasArchiveColumn(sql);
-  if (mergeColumnAvailable && archiveColumnAvailable) {
-    if (!orgId) return sql<TitleRow>`
-      select * from bridge_titles
-      where owner_user_id = ${userId}
-        and merged_into_title_id is null and archived_at is null
-      order by updated_at desc limit 200
-    `;
-    return sql<TitleRow>`
-      select t.* from bridge_titles t
-      where t.merged_into_title_id is null and t.archived_at is null
-        and (
-          t.owner_user_id = ${userId}
-          or (
-            t.owner_account_type = 'studio'
+  const activeRowsOnly = (mergeColumnAvailable: boolean, archiveColumnAvailable: boolean) =>
+    mergeColumnAvailable && archiveColumnAvailable
+      ? "merged_and_active"
+      : mergeColumnAvailable
+        ? "merged_only"
+        : archiveColumnAvailable
+          ? "active_only"
+          : "all";
+
+  // Studio title visibility is organization-scoped. A Studio user must not
+  // pull in unassigned legacy/test rows merely because the user_id matches.
+  // Those records remain in the Super Admin catalog until ownership mapping is reviewed.
+  if (accountType === "studio") {
+    if (!orgId) return [];
+    switch (activeRowsOnly(mergeColumnAvailable, archiveColumnAvailable)) {
+      case "merged_and_active":
+        return sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and t.merged_into_title_id is null
+            and t.archived_at is null
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          order by t.updated_at desc limit 200
+        `;
+      case "merged_only":
+        return sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and t.merged_into_title_id is null
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          order by t.updated_at desc limit 200
+        `;
+      case "active_only":
+        return sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and t.archived_at is null
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          order by t.updated_at desc limit 200
+        `;
+      default:
+        return sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_account_type = 'studio'
             and t.owner_organization_id = ${orgId}
             and exists (
               select 1 from bridge_organization_memberships m
@@ -130,57 +184,27 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
                 and m.user_id = ${userId}
                 and m.status = 'active'
             )
-          )
-        )
-      order by t.updated_at desc limit 200
-    `;
+          order by t.updated_at desc limit 200
+        `;
+    }
   }
-  if (mergeColumnAvailable) {
-    if (!orgId) return sql<TitleRow>`
+
+  // Creator accounts can see only finished-film records they own; they do
+  // not inherit Studio records even when using the same login identity.
+  if (accountType === "independent_creator") {
+    const archiveClause = archiveColumnAvailable ? sql` archived_at is null and ` : sql``;
+    const mergeClause = mergeColumnAvailable ? sql` merged_into_title_id is null and ` : sql``;
+    return sql<TitleRow>`
       select * from bridge_titles
-      where owner_user_id = ${userId} and merged_into_title_id is null
+      where owner_user_id = ${userId}
+        and owner_account_type = 'independent_creator'
+        and ${mergeClause}
+        ${archiveClause}
       order by updated_at desc limit 200
     `;
-    return sql<TitleRow>`
-      select t.* from bridge_titles t
-      where t.merged_into_title_id is null
-        and (t.owner_user_id = ${userId} or (
-          t.owner_account_type = 'studio' and t.owner_organization_id = ${orgId}
-          and exists (select 1 from bridge_organization_memberships m
-            where m.organization_id = ${orgId} and m.user_id = ${userId} and m.status = 'active')
-        ))
-      order by t.updated_at desc limit 200
-    `;
   }
-  if (archiveColumnAvailable) {
-    if (!orgId) return sql<TitleRow>`
-      select * from bridge_titles where owner_user_id = ${userId} and archived_at is null
-      order by updated_at desc limit 200
-    `;
-    return sql<TitleRow>`
-      select t.* from bridge_titles t
-      where t.archived_at is null
-        and (t.owner_user_id = ${userId} or (
-          t.owner_account_type = 'studio' and t.owner_organization_id = ${orgId}
-          and exists (select 1 from bridge_organization_memberships m
-            where m.organization_id = ${orgId} and m.user_id = ${userId} and m.status = 'active')
-        ))
-      order by t.updated_at desc limit 200
-    `;
-  }
-  if (!orgId) return sql<TitleRow>`
-    select * from bridge_titles where owner_user_id = ${userId}
-    order by updated_at desc limit 200
-  `;
-  return sql<TitleRow>`
-    select t.* from bridge_titles t
-    where t.owner_user_id = ${userId} or (
-      t.owner_account_type = 'studio' and t.owner_organization_id = ${orgId}
-      and exists (select 1 from bridge_organization_memberships m
-        where m.organization_id = ${orgId} and m.user_id = ${userId} and m.status = 'active')
-    )
-    order by t.updated_at desc limit 200
-  `;
+
+  return [];
 }
 
 function slugify(name: string, id: string): string {
@@ -454,7 +478,7 @@ export const listTitles = createServerFn({ method: "GET" })
       }
     } else {
       assertPermission(actor, "title.read_own");
-      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
+      rows = await listOwned(sql, actor.userId, actor.accountType, actor.accountType === "studio" ? actor.organizationId : null);
     }
     return { titles: rows.flatMap((row) => {
       try {
