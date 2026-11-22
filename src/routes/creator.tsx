@@ -45,7 +45,7 @@ function CreatorDashboard({ actor }: { actor: { userId: string; organizationId?:
           <h2 className="mt-1 font-display text-2xl font-semibold">Your submissions</h2>
           <p className="mt-1 text-sm text-muted">Create a film or story and follow its review progress.</p>
         </div>
-        <Link to="/account" className="text-sm font-semibold text-accent hover:underline">Account</Link>
+        
       </header>
 
       {titlesQ.isError ? (
