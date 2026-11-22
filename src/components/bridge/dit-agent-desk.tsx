@@ -175,15 +175,15 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-xl font-semibold">DIT ingest desk</h2>
-            <p className="mt-1 text-sm text-muted">Camera-card inventory, checksum evidence and two-copy verification for {actor.organizationName || "this Studio"}.</p>
+            <p className="mt-1 text-sm text-muted">Register source footage during production. Bridge records the title, camera-card manifest and Primary / Recovery verification for {actor.organizationName || "this Studio"}.</p>
           </div>
           <span className="rounded-full border border-line px-3 py-1 text-xs text-muted">Camera A / B / C</span>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="space-y-1 text-sm">
-            <span className="font-medium">Finished film</span>
+            <span className="font-medium">Production / Title</span>
             <select className="h-11 w-full rounded-lg border border-line bg-bg px-3" value={titleId} onChange={(event) => setTitleId(event.target.value)}>
-              <option value="">Select a finished film</option>
+              <option value="">Select a Studio production title</option>
               {(workspace.data?.titles ?? []).map((title) => <option key={title.id} value={title.id}>{title.name}</option>)}
             </select>
           </label>
@@ -237,7 +237,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
           <Button disabled={createMutation.isPending || !titleId || !cardLabel.trim() || !sourceVolume.trim() || !sourceRoot.trim() || !sourceManifest || !sourceMediaFiles.length} onClick={() => createMutation.mutate()}>
             {createMutation.isPending ? "Uploading and verifying…" : activeSessionId ? "Resume camera-card ingest" : "Register and ingest camera card"}
           </Button>
-          <span className="text-xs text-muted">Original files upload to OCI Primary; Bridge creates and verifies the Recovery copy independently.</span>
+          <span className="text-xs text-muted">Bridge issues a short-lived Primary upload authorization, then verifies the uploaded originals and independently creates and SHA-256 verifies the Recovery copy.</span>
         </div>
         {uploadProgress ? <p className="mt-3 text-xs text-muted" aria-live="polite">Verified {uploadProgress.completed} of {uploadProgress.total} source files in Primary and Recovery Vaults.</p> : null}
       </section>
