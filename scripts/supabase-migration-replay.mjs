@@ -71,6 +71,7 @@ const featureNames = names.filter((name) => name >= "20261118130000_");
 const supportedFeatureMigrations = new Set([
   "20261118130000_loop_tvod_payment_fulfillment.sql",
   "20261118150000_bridge_exclusive_sublicensing_authority.sql",
+  "20261122182000_owner_submission_lifecycle.sql",
 ]);
 for (const name of featureNames) {
   if (!supportedFeatureMigrations.has(name)) {
