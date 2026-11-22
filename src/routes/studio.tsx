@@ -6,6 +6,7 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
+import { CreatorEvidenceDesk } from "@/components/bridge/creator-evidence-desk";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -60,6 +61,14 @@ function Studio() {
               <MyStoryConcepts />
             </section>
 
+
+            <section id="studio-legal" className="space-y-3">
+              <div>
+                <h3 className="font-display text-xl font-semibold">Rights Clearance & Legal Documents</h3>
+                <p className="mt-1 text-sm text-muted">Manage legal evidence for titles owned by this Studio. Access is limited by the authenticated active Studio organization membership; staff approvals remain separate.</p>
+              </div>
+              <CreatorEvidenceDesk ownerType="studio" titles={[]} />
+            </section>
 
             <section id="studio-members" className="space-y-3">
               <div>
