@@ -55,8 +55,8 @@ const requiredForSubmission = [
 ] as const;
 
 function completeDetails(value: z.infer<typeof detailsSchema>) {
-  const missing = requiredForSubmission.filter((key) => {
-    const field = value[key];
+  const missing: string[] = requiredForSubmission.filter((key) => {
+    const field: unknown = value[key];
     return Array.isArray(field) ? field.length === 0 : !field;
   });
   if (!value.credits?.some((credit) => credit.role === "Director")) missing.push("Director credit");
@@ -113,12 +113,12 @@ export const saveTitleOwnerSubmission = createServerFn({method:"POST"})
       insert into bridge_title_owner_submissions
         (id,title_id,owner_user_id,owner_organization_id,details,submission_status,updated_by)
       values
-        (${id},${title.id},${actor.userId},${actor.accountType==="studio"?actor.organizationId??null:null},${JSON.stringify(data.details)}::jsonb,'DRAFT',${actor.userId})
+        (${id},${title.id},${title.ownerUserId},${title.ownerOrganizationId??null},${JSON.stringify(data.details)}::jsonb,'DRAFT',${actor.userId})
       on conflict (title_id) do update set
-        owner_user_id=excluded.owner_user_id,
-        owner_organization_id=excluded.owner_organization_id,
         details=excluded.details,
-        submission_status=case when bridge_title_owner_submissions.submission_status='SUBMITTED' then 'SUBMITTED' else 'DRAFT' end,
+        submission_status='DRAFT',
+        submitted_at=null,
+        submitted_by=null,
         updated_by=excluded.updated_by,
         updated_at=now()
     `;
@@ -134,20 +134,31 @@ export const submitTitleOwnerDetails = createServerFn({method:"POST"})
     const actor=await requireVerifiedActor(context.userId);
     const title=await ownerScope(actor,data.titleId);
     const sql=await getSql();
-    const rows=await sql<{details:unknown}> `
-      select details from bridge_title_owner_submissions
-      where title_id=${title.id} and owner_user_id=${actor.userId} for update
-    `;
-    const row=rows[0];
-    if (!row) throw new Error("Save the owner details draft before submitting");
-    const details=detailsSchema.parse(row.details);
-    completeDetails(details);
-    await sql `
-      update bridge_title_owner_submissions set
-        submission_status='SUBMITTED',submitted_at=now(),submitted_by=${actor.userId},
-        updated_by=${actor.userId},updated_at=now()
-      where title_id=${title.id} and owner_user_id=${actor.userId}
-    `;
+    const sql=await getSql();
+    await sql.transaction(async (tx) => {
+      const rows=await tx<{details:unknown; owner_user_id:string; owner_organization_id:string|null}> `
+        select details, owner_user_id, owner_organization_id
+        from bridge_title_owner_submissions
+        where title_id=${title.id}
+        for update
+      `;
+      const row=rows[0];
+      const sameOwner = row && (
+        row.owner_user_id === title.ownerUserId ||
+        (title.ownerAccountType === "studio" &&
+          row.owner_organization_id === title.ownerOrganizationId &&
+          title.ownerOrganizationId !== null)
+      );
+      if (!row || !sameOwner) throw new Error("Save the owner details draft before submitting");
+      const details=detailsSchema.parse(row.details);
+      completeDetails(details);
+      await tx `
+        update bridge_title_owner_submissions set
+          submission_status='SUBMITTED',submitted_at=now(),submitted_by=${actor.userId},
+          updated_by=${actor.userId},updated_at=now()
+        where title_id=${title.id}
+      `;
+    });
     await writeAudit({actorUserId:actor.userId,action:"title.owner_submission_submitted",entityType:"bridge_title",entityId:title.id,metadata:{titleStatus:title.status}});
     // Owner details submission is intentionally separate from title QC,
     // rights review, legal approval, licensing and publication state.
