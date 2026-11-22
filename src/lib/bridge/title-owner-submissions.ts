@@ -134,7 +134,6 @@ export const submitTitleOwnerDetails = createServerFn({method:"POST"})
     const actor=await requireVerifiedActor(context.userId);
     const title=await ownerScope(actor,data.titleId);
     const sql=await getSql();
-    const sql=await getSql();
     await sql.transaction(async (tx) => {
       const rows=await tx<{details:unknown; owner_user_id:string; owner_organization_id:string|null}> `
         select details, owner_user_id, owner_organization_id
