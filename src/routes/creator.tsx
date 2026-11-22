@@ -25,6 +25,7 @@ const SECTIONS = [
   ["My Assets", "#assets"],
   ["Review & Corrections", "#review"],
   ["Delivery Status", "#delivery"],
+  ["Recent Updates", "#updates"],
   ["Statements", "#statements"],
 ] as const;
 
@@ -59,10 +60,10 @@ function CreatorDashboard({
     .slice(0, 5);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-7 px-1 pb-16">
+    <div className="mx-auto max-w-7xl space-y-8 px-1 pb-16">
       <header
         id="overview"
-        className="relative overflow-hidden rounded-2xl border border-line bg-surface p-6 sm:p-8"
+        className="relative overflow-hidden rounded-2xl border border-line bg-surface shadow-sm p-6 sm:p-8"
       >
         <div
           aria-hidden="true"
@@ -81,13 +82,12 @@ function CreatorDashboard({
               rights clearance and authorized delivery.
             </p>
           </div>
-          <Link
-            to="/account"
-            className="inline-flex min-h-10 items-center rounded-full border border-line-strong px-4 py-2 text-sm font-semibold transition hover:border-accent"
-          >
-            Account & access <span aria-hidden="true" className="ml-2">↗</span>
-          </Link>
-          <Link to="/deliveries" className="inline-flex min-h-10 items-center rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg">Vendor Services ↗</Link>
+          <div className="flex flex-wrap gap-2">
+            <a href="#add-title" className="inline-flex min-h-10 items-center rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg transition hover:opacity-90">+ Add a title</a>
+            <a href="#my-titles" className="inline-flex min-h-10 items-center rounded-full border border-line-strong px-4 py-2 text-sm font-semibold transition hover:border-accent">My Titles</a>
+            <Link to="/deliveries" className="inline-flex min-h-10 items-center rounded-full border border-line-strong px-4 py-2 text-sm font-semibold transition hover:border-accent">Vendor Services ↗</Link>
+            <Link to="/account" className="inline-flex min-h-10 items-center rounded-full border border-line px-4 py-2 text-sm font-semibold text-muted transition hover:border-accent hover:text-fg">Account & access ↗</Link>
+          </div>
         </div>
         <div className="relative mt-7 grid gap-2 sm:grid-cols-4">
           {[
@@ -107,7 +107,7 @@ function CreatorDashboard({
 
       <nav
         aria-label="Creator workspace navigation"
-        className="sticky top-0 z-10 -mx-1 flex gap-1 overflow-x-auto border-y border-line bg-bg/95 px-1 py-2 backdrop-blur"
+        className="sticky top-0 z-20 -mx-1 flex gap-1 overflow-x-auto border-y border-line bg-bg/95 px-1 py-2 shadow-sm backdrop-blur"
       >
         {SECTIONS.map(([label, href]) => (
           <a
@@ -123,7 +123,7 @@ function CreatorDashboard({
       <section className="space-y-4" aria-label="Creator title overview">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-display text-2xl font-semibold">Overview</h2>
-          <span className="text-xs text-muted">Authenticated account scope · up to 200 returned records</span>
+          <span className="rounded-full border border-line px-3 py-1 text-xs text-muted">Private Creator workspace</span>
         </div>
         {titlesQ.isPending ? (
           <p className="text-sm text-muted">Loading your title records…</p>
@@ -152,7 +152,7 @@ function CreatorDashboard({
       <section id="my-titles" className="scroll-mt-20 space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-accent">Your catalogue</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-accent">01 · Your catalogue</p>
             <h2 className="mt-1 font-display text-2xl font-semibold">My Titles</h2>
             <p className="mt-1 text-sm text-muted">
               Only records returned by the authenticated, server-scoped Creator title query are shown.
@@ -162,7 +162,7 @@ function CreatorDashboard({
             + Add a title
           </a>
         </div>
-        <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+        <div className="rounded-2xl border border-line bg-surface shadow-sm p-4 sm:p-5">
           <TitleList empty="No titles are available for this account yet. Start a submission to add your first title." />
         </div>
       </section>
@@ -170,7 +170,7 @@ function CreatorDashboard({
       <section id="studio-upgrade" className="scroll-mt-20 rounded-2xl border border-accent/30 bg-surface p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-widest text-accent">Grow your workspace</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-accent">Workspace options</p>
             <h2 className="mt-2 font-display text-2xl font-semibold">Upgrade to Studio</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted">
               Move from an individual Creator workspace to an organization workspace with member management,
@@ -198,7 +198,7 @@ function CreatorDashboard({
           </p>
           <NewSubmissionPanel />
         </div>
-        <div className="space-y-3 rounded-2xl border border-line bg-surface p-5">
+        <div className="space-y-3 rounded-2xl border border-line bg-surface shadow-sm p-5">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted">Separate submission path</p>
           <h3 className="font-display text-xl font-semibold">Story & Concept</h3>
           <p className="text-sm leading-relaxed text-muted">
@@ -231,10 +231,10 @@ function CreatorDashboard({
         <CreatorDocumentVault userId={actor.userId} />
       </section>
 
-      <section id="assets" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <section id="assets" className="scroll-mt-20 rounded-2xl border border-line bg-surface shadow-sm p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-accent">Secure media</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-accent">03 · Secure media</p>
             <h2 className="mt-1 font-display text-2xl font-semibold">My Assets & Uploads</h2>
           </div>
           <span className="rounded-full border border-line px-3 py-1 text-xs text-muted">Title-scoped access</span>
@@ -296,7 +296,7 @@ function CreatorDashboard({
         )}
       </section>
 
-      <section id="statements" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <section id="statements" className="scroll-mt-20 rounded-2xl border border-line bg-surface shadow-sm p-5 sm:p-6">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted">Creator finance</p>
         <h2 className="mt-1 font-display text-2xl font-semibold">Statements</h2>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">
@@ -343,7 +343,7 @@ function InfoPanel({
   href: string;
 }) {
   return (
-    <article id={id} className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+    <article id={id} className="scroll-mt-20 rounded-2xl border border-line bg-surface shadow-sm p-5 sm:p-6">
       <p className="text-xs font-semibold uppercase tracking-widest text-accent">{eyebrow}</p>
       <h2 className="mt-2 font-display text-xl font-semibold">{title}</h2>
       <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
