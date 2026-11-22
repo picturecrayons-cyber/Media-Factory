@@ -311,11 +311,14 @@ function Home() {
             aria-label="Footer Legal and External Links"
             className="flex flex-wrap items-center gap-5 text-xs text-muted"
           >
-            <Link to="/legal" className="hover:text-fg transition-colors">Legal &amp; Compliance</Link>
-            <Link to="/legal/copyright-disputes" className="hover:text-fg transition-colors">Copyright &amp; Content Disputes</Link>
-            <Link to="/privacy" className="hover:text-fg transition-colors">Privacy Policy</Link>
-            <Link to="/terms" className="hover:text-fg transition-colors">B2B Terms</Link>
             <Link to="/contact" className="hover:text-fg transition-colors">Contact</Link>
+            <Link to="/privacy" className="hover:text-fg transition-colors">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-fg transition-colors">B2B Terms of Use</Link>
+            <Link to="/legal/content-rights" className="hover:text-fg transition-colors">Content Rights Declaration</Link>
+            <Link to="/legal/licensing-deals" className="hover:text-fg transition-colors">Licensing &amp; Deal Terms</Link>
+            <Link to="/legal/acceptable-use" className="hover:text-fg transition-colors">Acceptable Use &amp; Security</Link>
+            <Link to="/legal/copyright-disputes" className="hover:text-fg transition-colors">Copyright &amp; Content Disputes</Link>
+            <Link to="/legal/grievance" className="hover:text-fg transition-colors">Grievance &amp; Legal Contact</Link>
           </nav>
         </div>
       </footer>
