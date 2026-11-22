@@ -40,6 +40,11 @@ function Signup() {
     e.preventDefault();
     setError(null);
 
+    if (!legalAcknowledged) {
+      setError("Please acknowledge the current B2B Terms and Privacy Policy before creating an account.");
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
       return;
