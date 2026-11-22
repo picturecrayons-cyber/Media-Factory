@@ -35,8 +35,8 @@ function navigationFor(actor: BridgeActor): NavItem[] {
   return [...accountNavigation[actor.accountType], { to: "/account", label: "Account" }];
 }
 
-function NavLink({ item }: { item: NavItem }) {
-  return <Link to={item.to} onClick={() => {}} className="flex min-h-10 items-center rounded-lg px-3 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg" activeProps={{ className: "flex min-h-10 items-center rounded-lg bg-accent-soft px-3 text-sm font-semibold text-accent" }}>{item.label}</Link>;
+function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
+  return <Link to={item.to} onClick={onNavigate} className="flex min-h-10 items-center rounded-lg px-3 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg" activeProps={{ className: "flex min-h-10 items-center rounded-lg bg-accent-soft px-3 text-sm font-semibold text-accent" }}>{item.label}</Link>;
 }
 
 export function BrandMark({ className }: { className?: string }) {
@@ -151,7 +151,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
         <aside className={cn("fixed inset-y-16 left-0 z-40 w-64 border-r border-line bg-surface p-3 transition-transform md:sticky md:top-16 md:block md:h-[calc(100vh-4rem)] md:translate-x-0", menuOpen ? "translate-x-0" : "-translate-x-full")}>
           <p className="px-3 pb-2 pt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted">{actor.internalRole === "super_admin" ? "Super Admin" : actor.accountType.replaceAll("_", " ")}</p>
           <nav aria-label="Primary navigation" className="grid gap-1">
-            {navigation.map((item) => <NavLink key={item.to} item={item} />)}
+            {navigation.map((item) => <NavLink key={item.to} item={item} onNavigate={() => setMenuOpen(false)} />)}
           </nav>
         </aside>
         {menuOpen ? <button aria-label="Close navigation" className="fixed inset-16 z-30 bg-black/20 md:hidden" onClick={() => setMenuOpen(false)} /> : null}
