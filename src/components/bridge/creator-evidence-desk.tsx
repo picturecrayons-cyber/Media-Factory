@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getTitleWorkflow } from "@/lib/bridge/workflow";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
-import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import {
   confirmTitleOwnerEvidenceUpload,
   getTitleOwnerEvidenceViewUrl,
@@ -60,8 +59,8 @@ const UPLOADS: Array<{ key: string; type: EvidenceType; label: string; help: str
   { key: "revenue", type: "OTHER", label: "Signed revenue-sharing agreement", help: "Signed revenue-share agreement or addendum" },
 ];
 
-function countType(documents: Array<{ document_type: string; status: string }>, type: string) {
-  return documents.filter((doc) => doc.document_type === type && doc.status === "VERIFIED").length;
+function hasVerifiedSlot(documents: Array<{ evidence_slot?: string; status: string }>, slot: string) {
+  return documents.some((doc) => doc.evidence_slot === slot && doc.status === "VERIFIED");
 }
 
 export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator", titleId: fixedTitleId }: { titles: OwnerTitle[]; ownerType?: "independent_creator" | "studio"; titleId?: string }) {
@@ -149,7 +148,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
         throw new Error("Each PDF must be smaller than or equal to 20 MB.");
       }
       const requested = await requestTitleOwnerEvidenceUpload({
-        data: { titleId, documentType: item.type, fileName: file.name, byteSize: file.size },
+        data: { titleId, documentType: item.type, evidenceSlot: item.key, fileName: file.name, byteSize: file.size },
       });
       const response = await fetch(requested.uploadUrl, {
         method: "PUT",
@@ -200,15 +199,15 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
     publication && ["authorized", "preparing", "delivered", "live"].includes((publication.authorizationStatus ?? "").toLowerCase()),
   );
   const requirements = [
-    ["Signed OTT Rights Agreement", countType(docs, "FINISHED_FILM_AGREEMENT") > 0],
+    ["Signed OTT Rights Agreement", hasVerifiedSlot(docs, "ott")],
     ["OTT platform rights scope recorded", platformsComplete],
     ["Territory scope recorded", Boolean(details.territory.trim())],
     ["Rights duration and expiry", Boolean(details.rightsStart && details.rightsEnd)],
-    ["K.M. Mathew original signed LOA", countType(docs, "DISTRIBUTION_AGREEMENT") > 0],
-    ["Film ownership proof", ownershipDocuments >= 1],
-    ["New Darsan Creations rights-transfer proof", ownershipDocuments >= 2],
-    ["Signatory authority proof", countType(docs, "AUTHOR_ASSIGNMENT") > 0],
-    ["Signed revenue-sharing agreement", countType(docs, "OTHER") > 0],
+    ["K.M. Mathew original signed LOA", hasVerifiedSlot(docs, "loa")],
+    ["Film ownership proof", hasVerifiedSlot(docs, "ownership")],
+    ["New Darsan Creations rights-transfer proof", hasVerifiedSlot(docs, "transfer")],
+    ["Signatory authority proof", hasVerifiedSlot(docs, "authority")],
+    ["Signed revenue-sharing agreement", hasVerifiedSlot(docs, "revenue")],
     ["Revenue-share, payment method and terms", Boolean(details.revenueShare && details.paymentTerms && details.paymentMethod)],
     ["Independent Legal Reviewer approval", legalApproved],
     ["Crayons LOOP publication approval", publicationApproved],
@@ -247,7 +246,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
                 <p className="text-sm font-medium">{item.label}</p>
                 <p className="mt-1 text-xs text-muted">{item.help}</p>
                 <p className="mt-1 text-xs text-muted">
-                  {docs.filter((doc) => doc.document_type === item.type && doc.status === "VERIFIED").length} verified · {docs.filter((doc) => doc.document_type === item.type && doc.status === "PENDING_UPLOAD").length} pending
+                  {docs.filter((doc) => doc.evidence_slot === item.key && doc.status === "VERIFIED").length} storage-verified · {docs.filter((doc) => doc.evidence_slot === item.key && doc.status === "PENDING_UPLOAD").length} pending
                 </p>
               </div>
               <label className="inline-flex cursor-pointer items-center rounded-full border border-line-strong px-3 py-2 text-xs font-semibold hover:border-accent">
