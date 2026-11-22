@@ -244,3 +244,50 @@ CREATE POLICY "deny_client_access" ON public.bridge_story_concept_review_events
   FOR ALL TO anon, authenticated USING (false) WITH CHECK (false);
 CREATE POLICY "deny_client_access" ON public.bridge_story_concept_notifications
   FOR ALL TO anon, authenticated USING (false) WITH CHECK (false);
+
+
+-- Status changes are a server-controlled state machine; clients cannot skip
+-- quote acceptance, verified payment, assignment, work and delivery review.
+CREATE OR REPLACE FUNCTION public.bridge_validate_service_request_status()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.status = OLD.status THEN
+    RETURN NEW;
+  END IF;
+  IF NOT (
+    (OLD.status = 'SUBMITTED' AND NEW.status IN ('UNDER_REVIEW','QUOTE_READY','CANCELLED')) OR
+    (OLD.status = 'UNDER_REVIEW' AND NEW.status IN ('QUOTE_READY','CANCELLED')) OR
+    (OLD.status = 'QUOTE_READY' AND NEW.status IN ('AWAITING_PAYMENT','CANCELLED')) OR
+    (OLD.status = 'AWAITING_PAYMENT' AND NEW.status IN ('PAID','CANCELLED')) OR
+    (OLD.status = 'PAID' AND NEW.status IN ('ASSIGNED','REFUNDED')) OR
+    (OLD.status = 'ASSIGNED' AND NEW.status IN ('IN_PROGRESS','REFUNDED')) OR
+    (OLD.status = 'IN_PROGRESS' AND NEW.status IN ('REVIEW','REFUNDED')) OR
+    (OLD.status = 'REVIEW' AND NEW.status IN ('COMPLETED','REFUNDED')) OR
+    (OLD.status = 'COMPLETED' AND NEW.status = 'REFUNDED')
+  ) THEN
+    RAISE EXCEPTION 'Invalid service request transition: % -> %', OLD.status, NEW.status;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS bridge_service_request_status_guard ON public.bridge_service_requests;
+CREATE TRIGGER bridge_service_request_status_guard
+BEFORE UPDATE OF status ON public.bridge_service_requests
+FOR EACH ROW EXECUTE FUNCTION public.bridge_validate_service_request_status();
+
+CREATE OR REPLACE FUNCTION public.bridge_reject_service_request_event_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Service request event history is immutable';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS bridge_service_request_events_immutable ON public.bridge_service_request_events;
+CREATE TRIGGER bridge_service_request_events_immutable
+BEFORE UPDATE OR DELETE ON public.bridge_service_request_events
+FOR EACH ROW EXECUTE FUNCTION public.bridge_reject_service_request_event_mutation();
