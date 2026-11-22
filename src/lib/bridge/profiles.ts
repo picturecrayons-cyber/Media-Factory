@@ -232,16 +232,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       throw new Error("Investor access requires a reviewed access request.");
     }
 
-    // Creator/Studio accounts must explicitly accept the reusable account-level mandate.
-    // This mandate is not a title-specific legal approval or blanket rights grant.
-    if (
-      (data.accountType === "independent_creator" || data.accountType === "studio") &&
-      data.creatorMandateAccepted !== true
-    ) {
-      throw new Error("Accept the Creator Distribution Mandate to create this workspace.");
-    }
-
-    const email = context.userEmail;
+        const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
     const verified = true;
 
@@ -377,7 +368,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
             `;
           }
         }
-        if (data.accountType === "independent_creator" || data.accountType === "studio") {
+        if ((data.accountType === "independent_creator" || data.accountType === "studio") && data.creatorMandateAccepted === true) {
           const mandate = createDefaultDistributionMandate(new Date().toISOString());
           await tx`
             insert into bridge_creator_distribution_mandates
