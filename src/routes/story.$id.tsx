@@ -155,7 +155,7 @@ function CorrectionForm({ concept, onSaved, onNotice, onError }: {
         synopsis,
         treatmentUrl,
         screenplayUrl,
-        genre: genre.split(",").map((value) => value.trim()).filter(Boolean),
+        genre: genre.split(",").map((value: string) => value.trim()).filter(Boolean),
         estimatedBudgetRange: budget,
         targetPlatforms: platforms.split(",").map((value) => value.trim()).filter(Boolean),
       },
