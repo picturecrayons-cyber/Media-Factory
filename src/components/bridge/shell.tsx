@@ -10,6 +10,7 @@ function navigationFor(actor: BridgeActor): NavItem[] {
   if (actor.internalRole === "super_admin") {
     return [
       { to: "/dashboard", label: "Founder Centre" },
+      { to: "/admin/buyers", label: "Buyers" },
       { to: "/workspace", label: "Titles" },
       { to: "/internal", label: "Operations" },
       { to: "/account", label: "Account" },
