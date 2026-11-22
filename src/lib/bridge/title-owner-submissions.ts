@@ -97,7 +97,7 @@ export const getTitleOwnerSubmission = createServerFn({method:"GET"})
     const rows=await sql<{details:unknown;submission_status:string;updated_at:string|Date|null;submitted_at:string|Date|null;submitted_by:string|null;latest_reason:string|null}> `
       select s.details,s.submission_status,s.updated_at,s.submitted_at,s.submitted_by,
         (select e.reason from bridge_owner_submission_events e
-         where e.title_id=s.title_id and e.action='REQUEST_CHANGES'
+         where e.title_id=s.title_id and e.action in ('REQUEST_CHANGES','REJECTED','WITHDRAWN','ARCHIVED')
          order by e.created_at desc limit 1) as latest_reason
       from bridge_title_owner_submissions s where s.title_id=${title.id} limit 1
     `;
@@ -276,10 +276,12 @@ export const reviewOwnerSubmission = createServerFn({method:"POST"})
       const transition=ownerSubmissionReviewTransition(current??"",data.decision);
       const nextStatus=transition.toStatus;
       if(data.submissionKind==="finished_film"){
-        if(data.decision==="ACCEPTED_INTAKE" && lockedTitle.status==="PREPARING"){
+        if(data.decision==="ACCEPTED_INTAKE" && ["PREPARING","QC_REVIEW"].includes(lockedTitle.status)){
           const title=await loadTitle(data.titleId);
           if(!title) throw new Error("Title not found");
-          await submitTitleForQcInTransaction(tx,title,actor.userId,"Owner submission accepted into Technical QC queue");
+          if (lockedTitle.status === "PREPARING") {
+            await submitTitleForQcInTransaction(tx,title,actor.userId,"Owner submission accepted into Technical QC queue");
+          }
           qcQueued=true;
         }
         await tx`
@@ -334,6 +336,17 @@ export const withdrawOwnerSubmission = createServerFn({method:"POST"})
       const ownsThroughStudio=title.owner_account_type==="studio" && Boolean(title.owner_organization_id)
         && title.owner_organization_id===actor.organizationId;
       if(!ownsDirectly && !ownsThroughStudio) throw new Error("You cannot withdraw another owner's submission");
+      if (ownsThroughStudio) {
+        const membership = await tx<{ active: boolean }>`
+          select exists (
+            select 1 from bridge_organization_memberships
+            where organization_id=${title.owner_organization_id}
+              and user_id=${actor.userId}
+              and status='active'
+          ) as active
+        `;
+        if (!membership[0]?.active) throw new Error("Active Studio organization membership is required");
+      }
       let current:string|undefined;
       if(data.submissionKind==="finished_film") {
         const rows=await tx<{status:string}> `
@@ -372,3 +385,62 @@ export const withdrawOwnerSubmission = createServerFn({method:"POST"})
     });
     return {withdrawn:true as const,status:"WITHDRAWN" as const};
   });
+
+/** Super Admin may archive a submission record without deleting its history or title. */
+export const archiveOwnerSubmission = createServerFn({method:"POST"})
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId:z.string().min(8),
+    submissionKind:z.enum(["finished_film","story_concept"]),
+    reason:z.string().trim().min(3).max(2000),
+  }))
+  .handler(async ({context,data})=>{
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    if(actor.internalRole!=="super_admin") throw new Error("Super Admin access required");
+    const reason=assertSubmissionDecisionReason(data.reason);
+    const sql=await getSql();
+    await sql.transaction(async(tx)=>{
+      const titleRows=await tx<{id:string}> \`
+        select id from bridge_titles where id=\${data.titleId} for update
+      \`;
+      if(!titleRows[0]) throw new Error("Title not found");
+      const currentRows=data.submissionKind==="finished_film"
+        ? await tx<{status:string}>\`
+            select submission_status as status from bridge_title_owner_submissions
+            where title_id=\${data.titleId} for update
+          \`
+        : await tx<{status:string}>\`
+            select owner_submission_status as status from bridge_story_concept_submissions
+            where title_id=\${data.titleId} for update
+          \`;
+      const current=currentRows[0]?.status;
+      if(!current || current==="ACCEPTED_INTAKE" || current==="ARCHIVED") {
+        throw new Error("Only an existing, non-accepted submission can be archived");
+      }
+      if(data.submissionKind==="finished_film") {
+        await tx\`
+          update bridge_title_owner_submissions set submission_status='ARCHIVED',
+            updated_by=\${actor.userId},updated_at=now()
+          where title_id=\${data.titleId}
+        \`;
+      } else {
+        await tx\`
+          update bridge_story_concept_submissions set owner_submission_status='ARCHIVED',updated_at=now()
+          where title_id=\${data.titleId}
+        \`;
+      }
+      await tx\`
+        insert into bridge_owner_submission_events
+          (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason)
+        values (\${data.titleId},\${data.submissionKind},'ARCHIVED',\${current},'ARCHIVED',\${actor.userId},\${reason})
+      \`;
+      await writeAudit({
+        actorUserId:actor.userId,action:"title.owner_submission.archived",
+        entityType:"bridge_title",entityId:data.titleId,
+        metadata:{submissionKind:data.submissionKind,from:current,to:"ARCHIVED",reason},
+      },tx);
+    });
+    return {archived:true as const,status:"ARCHIVED" as const};
+  });
+
