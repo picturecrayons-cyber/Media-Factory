@@ -40,6 +40,6 @@ export function assertServiceRequestTransition(
   to: ServiceRequestStatus,
 ): void {
   if (!canTransitionServiceRequest(from, to)) {
-    throw new Error(\`Invalid service request transition: \${from} -> \${to}\`);
+    throw new Error(`Invalid service request transition: \${from} -> \${to}`);
   }
 }
