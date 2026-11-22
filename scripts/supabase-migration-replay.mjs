@@ -17,7 +17,13 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 70;
+// The historical manifest is the immutable Production ledger snapshot (70 rows).
+// This additive archive migration is a Testing candidate, not a
+// Production ledger entry.
+const EXPECTED_PRODUCTION_MIGRATIONS = 70;
+const NON_PRODUCTION_MIGRATIONS = new Set([
+  "20261122180000_bridge_archive_fail_closed_contract.sql",
+]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -50,17 +56,23 @@ if (
   );
 }
 
-const names = (await readdir(MIGRATIONS_DIR))
+const allNames = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
-  throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
-  );
-}
-if (new Set(names).size !== names.length) {
+if (new Set(allNames).size !== allNames.length) {
   throw new Error("Duplicate migration filenames detected");
+}
+for (const name of NON_PRODUCTION_MIGRATIONS) {
+  if (!allNames.includes(name)) {
+    throw new Error(`Declared Testing-only migration is missing: ${name}`);
+  }
+}
+const names = allNames.filter((name) => !NON_PRODUCTION_MIGRATIONS.has(name));
+if (names.length !== EXPECTED_PRODUCTION_MIGRATIONS) {
+  throw new Error(
+    `Expected ${EXPECTED_PRODUCTION_MIGRATIONS} Production migrations plus ${NON_PRODUCTION_MIGRATIONS.size} explicitly classified Testing-only migrations; found ${allNames.length} total (${names.length} Production-classified)`,
+  );
 }
 
 const manifestPath = resolve(
@@ -86,9 +98,9 @@ for (const line of manifest.split(String.fromCharCode(10))) {
   }
   manifestRows.set(`${version}_${migrationName}.sql`, { bytes, sha256 });
 }
-if (manifestRows.size !== EXPECTED_MIGRATIONS) {
+if (manifestRows.size !== EXPECTED_PRODUCTION_MIGRATIONS) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
+    `Expected ${EXPECTED_PRODUCTION_MIGRATIONS} Production manifest rows; found ${manifestRows.size}`,
   );
 }
 
