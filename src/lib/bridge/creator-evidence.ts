@@ -425,11 +425,14 @@ export const getTitleOwnerRightsReviewHistory = createServerFn({ method: "GET" }
       classification: string | null;
       evidence: Array<{ note?: string; type?: string; items?: string[] }>;
       reviewed_at: string | null;
+      reviewed_by_name: string | null;
     }>`
-      select status, classification, evidence, reviewed_at
-      from bridge_legal_cases
-      where title_id = ${title.id}
-      order by created_at desc
+      select l.status, l.classification, l.evidence, l.reviewed_at,
+        reviewer.display_name as reviewed_by_name
+      from bridge_legal_cases l
+      left join bridge_profiles reviewer on reviewer.user_id = l.reviewed_by
+      where l.title_id = ${title.id}
+      order by l.created_at desc
       limit 20
     `;
     return { legalCases, submission: submission[0] ?? null };
