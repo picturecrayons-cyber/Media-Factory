@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export const SERVICE_REQUEST_STATUSES = [
   "SUBMITTED",
   "UNDER_REVIEW",
@@ -43,3 +45,5 @@ export function assertServiceRequestTransition(
     throw new Error(`Invalid service request transition: \${from} -> \${to}`);
   }
 }
+
+export const serviceQuoteAcceptanceInput = z.object({ quoteId: z.string().uuid() }).strict();
