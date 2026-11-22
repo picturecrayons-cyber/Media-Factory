@@ -40,6 +40,9 @@ describe("PRD authorization matrix", () => {
       assert.equal(hasPermission(owner, "title.qc_review"), false);
       assert.equal(hasPermission(owner, "title.license"), false);
       assert.equal(hasPermission(owner, "service.order_create"), true);
+      assert.equal(hasPermission(owner, "service.request_create"), true);
+      assert.equal(hasPermission(owner, "service.request_read"), true);
+      assert.equal(hasPermission(owner, "service.request_manage"), false);
       assert.equal(hasPermission(owner, "delivery.assign_vendor"), false);
       assert.equal(hasPermission(owner, "delivery.record_receipt"), false);
       assert.equal(hasPermission(owner, "delivery.sign_off"), false);
@@ -65,6 +68,7 @@ describe("PRD authorization matrix", () => {
   it("admin receives only explicit staff permissions, not account-type mutation powers", () => {
     const a = admin();
     assert.equal(hasPermission(a, "title.read_catalog"), true);
+    assert.equal(hasPermission(a, "service.request_manage"), false);
     assert.equal(hasPermission(a, "title.qc_review"), false);
     assert.equal(hasPermission(a, "title.rights_review"), false);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
