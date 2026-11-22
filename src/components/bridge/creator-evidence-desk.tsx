@@ -46,12 +46,13 @@ const EMPTY: RightsDetails = {
   ownerDeclaration: false,
 };
 
-const UPLOADS: Array<{ type: EvidenceType; label: string; help: string }> = [
-  { type: "FINISHED_FILM_AGREEMENT", label: "Signed OTT Rights Agreement", help: "Signed agreement covering the requested OTT rights" },
-  { type: "DISTRIBUTION_AGREEMENT", label: "K.M. Mathew original signed LOA", help: "Original signed authorization / letter of authority" },
-  { type: "OWNERSHIP_CHAIN_OF_TITLE", label: "Ownership and rights-transfer proof", help: "Upload each supporting ownership / transfer document separately" },
-  { type: "AUTHOR_ASSIGNMENT", label: "Signatory authority proof", help: "Proof that the person signing can bind the rights holder" },
-  { type: "OTHER", label: "Signed revenue-sharing agreement", help: "Signed revenue-share agreement or addendum" },
+const UPLOADS: Array<{ key: string; type: EvidenceType; label: string; help: string }> = [
+  { key: "ott", type: "FINISHED_FILM_AGREEMENT", label: "Signed OTT Rights Agreement", help: "Signed agreement covering the requested OTT rights" },
+  { key: "loa", type: "DISTRIBUTION_AGREEMENT", label: "K.M. Mathew original signed LOA", help: "Original signed authorization / letter of authority" },
+  { key: "ownership", type: "OWNERSHIP_CHAIN_OF_TITLE", label: "Film ownership proof", help: "Certificate, agreement or other primary ownership record" },
+  { key: "transfer", type: "OWNERSHIP_CHAIN_OF_TITLE", label: "New Darsan Creations rights-transfer proof", help: "Separate signed transfer / assignment / license chain proof" },
+  { key: "authority", type: "AUTHOR_ASSIGNMENT", label: "Signatory authority proof", help: "Proof that the person signing can bind the rights holder" },
+  { key: "revenue", type: "OTHER", label: "Signed revenue-sharing agreement", help: "Signed revenue-share agreement or addendum" },
 ];
 
 function countType(documents: Array<{ document_type: string; status: string }>, type: string) {
@@ -68,7 +69,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
   const [details, setDetails] = useState<RightsDetails>(EMPTY);
   const [notice, setNotice] = useState("");
   const [viewingDocumentId, setViewingDocumentId] = useState<string | null>(null);
-  const [busyType, setBusyType] = useState<EvidenceType | null>(null);
+  const [busyType, setBusyType] = useState<string | null>(null);
   const evidenceQ = useQuery({
     queryKey: ["creator-evidence", titleId],
     queryFn: () => listTitleOwnerEvidence({ data: { titleId } }),
@@ -116,9 +117,9 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
     onError: (error) => setNotice(error instanceof Error ? error.message : "Could not submit the package."),
   });
 
-  async function upload(type: EvidenceType, file?: File) {
+  async function upload(item: (typeof UPLOADS)[number], file?: File) {
     if (!file) return;
-    setBusyType(type);
+    setBusyType(item.key);
     setNotice("");
     try {
       if (file.type !== "application/pdf" || !file.name.toLowerCase().endsWith(".pdf")) {
@@ -128,7 +129,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
         throw new Error("Each PDF must be smaller than or equal to 20 MB.");
       }
       const requested = await requestTitleOwnerEvidenceUpload({
-        data: { titleId, documentType: type, fileName: file.name, byteSize: file.size },
+        data: { titleId, documentType: item.type, fileName: file.name, byteSize: file.size },
       });
       const response = await fetch(requested.uploadUrl, {
         method: "PUT",
@@ -225,8 +226,8 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
                 </p>
               </div>
               <label className="inline-flex cursor-pointer items-center rounded-full border border-line-strong px-3 py-2 text-xs font-semibold hover:border-accent">
-                {busyType === item.type ? "Uploading…" : "Upload PDF"}
-                <input type="file" accept="application/pdf,.pdf" className="sr-only" disabled={Boolean(busyType) || locked} onChange={(event) => { void upload(item.type, event.target.files?.[0]); event.currentTarget.value = ""; }} />
+                {busyType === item.key ? "Uploading…" : "Upload PDF"}
+                <input type="file" accept="application/pdf,.pdf" className="sr-only" disabled={Boolean(busyType) || locked} onChange={(event) => { void upload(item, event.target.files?.[0]); event.currentTarget.value = ""; }} />
               </label>
             </div>
           ))}
