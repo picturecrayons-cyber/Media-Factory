@@ -8,7 +8,7 @@ import { requireVerifiedActor, type BridgeActor } from "./session";
 import { loadTitle } from "./titles";
 import { canMutateTitle, canReadTitle } from "./rbac";
 import { writeAudit } from "./audit";
-import { ownerSubmissionSubmitTransition, ownerSubmissionReviewTransition, assertSubmissionDecisionReason } from "./owner-submission-state";
+import { ownerSubmissionSubmitTransition, ownerSubmissionReviewTransition, ownerSubmissionWithdrawTransition, assertSubmissionDecisionReason } from "./owner-submission-state";
 import { submitTitleForQcInTransaction } from "./title-submission";
 
 const creditsSchema = z.array(z.object({
