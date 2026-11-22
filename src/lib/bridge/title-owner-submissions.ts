@@ -230,12 +230,10 @@ export const listFounderSubmissionInbox = createServerFn({method:"GET"})
         p.organization_name as owner_organization_name,
         t.created_at,
         t.updated_at,
-        c.curation_status as concept_curation_status,
         s.submission_status as owner_details_status,
         s.submitted_at as owner_details_submitted_at
       from bridge_titles t
       left join bridge_profiles p on p.user_id=t.owner_user_id
-      left join bridge_story_concept_submissions c on c.title_id=t.id
       left join bridge_title_owner_submissions s on s.title_id=t.id
       where coalesce(t.submission_type, 'finished_film') in ('finished_film','story_concept')
       order by t.created_at desc
