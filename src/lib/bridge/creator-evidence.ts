@@ -255,12 +255,7 @@ export const revokePendingTitleOwnerEvidence = createServerFn({ method: "POST" }
           )
         returning id
       `;
-      if (rows.length) {
-        await tx`
-          delete from bridge_title_document_links
-          where title_id = ${title.id} and document_id = ${data.documentId}
-        `;
-      }
+      // Keep the title link: REVOKED is an audit-visible undone state.
       return rows;
     });
     if (!changed.length) throw new Error("Only an unverified upload can be undone. Verified evidence is retained; upload a replacement to preserve the audit trail.");
@@ -292,7 +287,7 @@ export const saveTitleOwnerRightsDraft = createServerFn({ method: "POST" })
   .validator(z.object({ titleId: z.string().min(8), details: rightsDetailsSchema }))
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireTitleOwner(context.userId, data.titleId);
-    await assertEvidenceEditable(title.id, actor.userId, title.status);
+    await assertEvidenceEditable(title.id, actor.userId, actor.accountType === "studio" ? actor.organizationId ?? null : null, title.status);
     const sql = await getSql();
     const existing = await sql<{ submission_status: string }>`
       select submission_status from bridge_title_owner_submissions
@@ -334,7 +329,7 @@ export const submitTitleOwnerRightsPackage = createServerFn({ method: "POST" })
   .validator(z.object({ titleId: z.string().min(8), details: rightsDetailsSchema }))
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireTitleOwner(context.userId, data.titleId);
-    await assertEvidenceEditable(title.id, actor.userId, title.status);
+    await assertEvidenceEditable(title.id, actor.userId, actor.accountType === "studio" ? actor.organizationId ?? null : null, title.status);
     if (!data.details.ownerDeclaration) throw new Error("Confirm the Creator declaration before submitting.");
     if (
       data.details.platforms.length === 0 ||
