@@ -1,5 +1,4 @@
 import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
 
 export type LegalSection = { heading: string; paragraphs: string[]; bullets?: string[] };
 export type LegalDocument = { title: string; summary: string; version: string; effective: string; sections: LegalSection[] };
