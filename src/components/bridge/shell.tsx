@@ -48,10 +48,12 @@ function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void 
 export function BrandMark({ className, size = "default" }: { className?: string; size?: "default" | "large" }) {
   return (
     <Link to="/" className={cn("inline-flex items-center shrink-0", className)} aria-label="Crayons Bridge">
-      <svg viewBox="0 0 168 48" role="img" aria-label="Crayons Bridge" className={cn("bridge-logo block w-auto", size === "large" ? "h-[54px] sm:h-[62px] lg:h-[68px]" : "h-[38px]")}>
-        <text x="0" y="16" fill="#6f6f6f" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="13" fontWeight="600" letterSpacing="0.5">crayons</text>
-        <text x="0" y="40" fill="#007291" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="26" fontWeight="700" letterSpacing="-0.5">bridge</text>
-      </svg>
+      <img
+        src="/logo/crayons-bridge-logo-3d.png"
+        alt="Crayons Bridge"
+        className={cn("bridge-logo block w-auto object-contain", size === "large" ? "h-[76px] sm:h-[92px] lg:h-[112px] max-w-[min(92vw,520px)]" : "h-[38px] max-w-[190px]")}
+        fetchPriority={size === "large" ? "high" : "auto"}
+      />
     </Link>
   );
 }
