@@ -10,7 +10,6 @@ import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 import { ProductsServicesCatalogue } from "@/components/bridge/products-services-catalogue";
 import { ServiceCentre } from "@/components/bridge/service-centre";
-import { ServiceCentre } from "@/components/bridge/service-centre";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
