@@ -133,11 +133,11 @@ export const saveWatchProgress = createServerFn({ method: "POST" })
 
     await sql`
       insert into loop_watch_progress (
-        user_id, loop_title_id, position_seconds, duration_seconds, completed, updated_at
+        user_id, title_id, position_seconds, duration_seconds, completed, updated_at
       ) values (
         ${context.userId}, ${data.loopTitleId}, ${data.positionSeconds}, ${data.durationSeconds}, ${completed}, now()
       )
-      on conflict (user_id, loop_title_id) do update set
+      on conflict (user_id, title_id) do update set
         position_seconds = excluded.position_seconds,
         duration_seconds = excluded.duration_seconds,
         completed = excluded.completed,
@@ -156,22 +156,22 @@ export const getWatchProgress = createServerFn({ method: "GET" })
   .handler(async ({ context, data }): Promise<LoopWatchProgress | null> => {
     const sql = await getSql();
     const rows = await sql<{
-      loop_title_id: string;
+      title_id: string;
       position_seconds: number;
       duration_seconds: number;
       completed: boolean;
       updated_at: string | Date;
     }>`
-      select loop_title_id, position_seconds, duration_seconds, completed, updated_at
+      select title_id, position_seconds, duration_seconds, completed, updated_at
       from loop_watch_progress
-      where user_id = ${context.userId} and loop_title_id = ${data.loopTitleId}
+      where user_id = ${context.userId} and title_id = ${data.loopTitleId}
       limit 1
     `;
 
     if (!rows[0]) return null;
 
     return {
-      loopTitleId: rows[0].loop_title_id,
+      loopTitleId: rows[0].title_id,
       positionSeconds: rows[0].position_seconds,
       durationSeconds: rows[0].duration_seconds,
       completed: Boolean(rows[0].completed),
@@ -189,21 +189,21 @@ export const toggleWatchlist = createServerFn({ method: "POST" })
     const sql = await getSql();
     const existing = await sql<{ loop_title_id: string }>`
       select loop_title_id from loop_watchlist
-      where user_id = ${context.userId} and loop_title_id = ${data.loopTitleId}
+      where user_id = ${context.userId} and title_id = ${data.loopTitleId}
       limit 1
     `;
 
     if (existing.length > 0) {
       await sql`
         delete from loop_watchlist
-        where user_id = ${context.userId} and loop_title_id = ${data.loopTitleId}
+        where user_id = ${context.userId} and title_id = ${data.loopTitleId}
       `;
       return { inWatchlist: false };
     } else {
       await sql`
-        insert into loop_watchlist (user_id, loop_title_id)
+        insert into loop_watchlists (user_id, title_id)
         values (${context.userId}, ${data.loopTitleId})
-        on conflict (user_id, loop_title_id) do nothing
+        on conflict (user_id, title_id) do nothing
       `;
       return { inWatchlist: true };
     }
@@ -219,7 +219,7 @@ export const isTitleInWatchlist = createServerFn({ method: "GET" })
     const sql = await getSql();
     const existing = await sql<{ loop_title_id: string }>`
       select loop_title_id from loop_watchlist
-      where user_id = ${context.userId} and loop_title_id = ${data.loopTitleId}
+      where user_id = ${context.userId} and title_id = ${data.loopTitleId}
       limit 1
     `;
     return existing.length > 0;
@@ -237,7 +237,7 @@ export const getConsumerWatchlist = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const sql = await getSql();
-    const savedRows = await sql<{ loop_title_id: string; created_at: string | Date }>`
+    const savedRows = await sql<{ title_id: string; created_at: string | Date }>`
       select loop_title_id, created_at
       from loop_watchlists
       where user_id = ${context.userId}
@@ -248,7 +248,7 @@ export const getConsumerWatchlist = createServerFn({ method: "GET" })
       return { items: [] };
     }
 
-    const savedIds = savedRows.map((row) => row.loop_title_id);
+    const savedIds = savedRows.map((row) => row.title_id);
     const catalogRows = await sql<{
       id: string;
       bridge_title_id: string | null;
@@ -272,7 +272,7 @@ export const getConsumerWatchlist = createServerFn({ method: "GET" })
     const catalogById = new Map(catalogRows.map((row) => [row.id, row]));
     return {
       items: savedRows.flatMap((saved) => {
-        const row = catalogById.get(saved.loop_title_id);
+        const row = catalogById.get(saved.title_id);
         if (!row) return [];
         return [{
           id: row.id,
