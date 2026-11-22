@@ -96,7 +96,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-5 py-14 text-center sm:px-6 sm:py-16 lg:py-20">
             <div className="mx-auto max-w-5xl">
               <div className="mx-auto flex justify-center">
-                <BrandMark className="text-3xl sm:text-4xl lg:text-5xl" />
+                <BrandMark size="large" />
               </div>
               <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
                 {siteContent.heroTitle}
@@ -106,6 +106,27 @@ function Home() {
               </p>
 
               <HeroCarousel slides={siteContent.carouselSlides ?? []} />
+
+              <section aria-labelledby="our-buyers-heading" className="mx-auto mt-10 max-w-5xl border-t border-line pt-7">
+                <h2 id="our-buyers-heading" className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Our Buyers</h2>
+                <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2 text-left">
+                  <article className="flex min-w-[230px] snap-start items-center gap-4 rounded-2xl border border-line bg-surface px-5 py-4">
+                    <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-[#101820] text-white">
+                      <span className="font-display text-xl font-bold tracking-tight">loop</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-fg">Crayons Loop</p>
+                      <p className="mt-1 text-xs text-muted">Consumer streaming destination</p>
+                    </div>
+                  </article>
+                  <article className="flex min-w-[230px] snap-start items-center rounded-2xl border border-dashed border-line px-5 py-4">
+                    <div>
+                      <p className="font-semibold text-fg">Buyer & distribution partners</p>
+                      <p className="mt-1 text-xs leading-5 text-muted">Official partner marks will appear after approved logo assets are supplied and verified.</p>
+                    </div>
+                  </article>
+                </div>
+              </section>
 
               <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
                 {user ? (
@@ -159,7 +180,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                {siteContent.audienceHeading}
+                Built for the media business.
               </h2>
             </div>
 
@@ -312,7 +333,7 @@ function Home() {
             className="flex flex-wrap items-center gap-5 text-xs text-muted"
           >
             <Link to="/contact" className="hover:text-fg transition-colors">Contact</Link>
-            <Link to="/privacy" className="hover:text-fg transition-colors">Privacy Policy</Link>
+            <Link to="/legal" className="hover:text-fg transition-colors">Legal & Compliance</Link>\n            <Link to="/privacy" className="hover:text-fg transition-colors">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-fg transition-colors">B2B Terms of Use</Link>
             <a href="/legal/content-rights" className="hover:text-fg transition-colors">Content Rights Declaration</a>
             <a href="/legal/licensing-deals" className="hover:text-fg transition-colors">Licensing &amp; Deal Terms</a>
