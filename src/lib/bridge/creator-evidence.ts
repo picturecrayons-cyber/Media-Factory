@@ -54,14 +54,17 @@ async function requireTitleOwner(userId: string, titleId: string) {
   return { actor, title };
 }
 
-async function assertEvidenceEditable(titleId: string, userId: string, status: string) {
+async function assertEvidenceEditable(titleId: string, userId: string, organizationId: string | null, status: string) {
   if (["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(status)) {
     throw new Error("Evidence changes are locked for buyer-facing or licensed titles. Contact the Legal Reviewer.");
   }
   const sql = await getSql();
   const rows = await sql<{ submission_status: string }>`
     select submission_status from bridge_title_owner_submissions
-    where title_id = ${titleId} and owner_user_id = ${userId} limit 1
+    where title_id = ${titleId}
+      and owner_user_id = ${userId}
+      and owner_organization_id is not distinct from ${organizationId}
+    limit 1
   `;
   if (rows[0]?.submission_status === "SUBMITTED") {
     throw new Error("This package is submitted. Legal must return it for correction before further edits.");
@@ -132,7 +135,7 @@ export const requestTitleOwnerEvidenceUpload = createServerFn({ method: "POST" }
   }))
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireTitleOwner(context.userId, data.titleId);
-    await assertEvidenceEditable(title.id, actor.userId, title.status);
+    await assertEvidenceEditable(title.id, actor.userId, actor.accountType === "studio" ? actor.organizationId ?? null : null, title.status);
     const id = randomBytes(16).toString("hex");
     const safeName = data.fileName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-100) || "evidence.pdf";
     const storageKey = `creator-evidence/${actor.userId}/${title.id}/${id}.pdf`;
