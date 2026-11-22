@@ -109,7 +109,7 @@ function DashboardBody() {
           <Workspace title="Title Library" detail="Titles, Creator and Studio submissions, assets and metadata." to="/workspace" />
           <Workspace title="QC & Approvals" detail="Intake checks, technical review and approval queue." to="/admin/workstations" />
           <Workspace title="Rights & Licensing" detail="Rights evidence, legal review and licensing readiness." to="/admin/workstations" />
-          <Workspace title="Buyer Management" detail="Buyer accounts, organizations and title-specific access." to="/buyer-management" />
+          <Workspace title="Buyer Management" detail="Verified Buyer profiles, organization grouping and Buyer dashboard access." to="/admin/buyers" />
           <Workspace title="Investor Management" detail="Investor access and account review." to="/investor" />
           <Workspace title="Finance" detail="Commercial status, payments and reconciliation." to="/admin" />
           <Workspace title="Vendor Services" detail="Dubbing, localization, accessibility, finishing and delivery QC." to="/deliveries" />
