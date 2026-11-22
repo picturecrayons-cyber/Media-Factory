@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  confirmCreatorEvidenceUpload,
-  getCreatorRightsDraft,
-  listCreatorEvidence,
-  requestCreatorEvidenceUpload,
-  revokePendingCreatorEvidence,
-  saveCreatorRightsDraft,
-  submitCreatorRightsPackage,
+  confirmTitleOwnerEvidenceUpload,
+  getTitleOwnerRightsDraft,
+  listTitleOwnerEvidence,
+  requestTitleOwnerEvidenceUpload,
+  revokePendingTitleOwnerEvidence,
+  saveTitleOwnerRightsDraft,
+  submitTitleOwnerRightsPackage,
 } from "@/lib/bridge/creator-evidence";
 
 type OwnerTitle = { id: string; name: string; status: string };
@@ -56,11 +56,11 @@ function countType(documents: Array<{ document_type: string; status: string }>, 
   return documents.filter((doc) => doc.document_type === type && doc.status === "VERIFIED").length;
 }
 
-export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
+export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator", titleId: fixedTitleId }: { titles: OwnerTitle[]; ownerType?: "independent_creator" | "studio"; titleId?: string }) {
   const queryClient = useQueryClient();
   const preferred = useMemo(
-    () => titles.find((title) => title.name.toLowerCase().includes("malayalakkara residency"))?.id ?? titles[0]?.id ?? "",
-    [titles],
+    () => fixedTitleId ?? titles.find((title) => title.name.toLowerCase().includes("malayalakkara residency"))?.id ?? titles[0]?.id ?? "",
+    [fixedTitleId, titles],
   );
   const [titleId, setTitleId] = useState(preferred);
   const [details, setDetails] = useState<RightsDetails>(EMPTY);
@@ -68,12 +68,12 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
   const [busyType, setBusyType] = useState<EvidenceType | null>(null);
   const evidenceQ = useQuery({
     queryKey: ["creator-evidence", titleId],
-    queryFn: () => listCreatorEvidence({ data: { titleId } }),
+    queryFn: () => listTitleOwnerEvidence({ data: { titleId } }),
     enabled: Boolean(titleId),
   });
   const draftQ = useQuery({
     queryKey: ["creator-rights-draft", titleId],
-    queryFn: () => getCreatorRightsDraft({ data: { titleId } }),
+    queryFn: () => getTitleOwnerRightsDraft({ data: { titleId } }),
     enabled: Boolean(titleId),
   });
   const docs = evidenceQ.data?.documents ?? [];
@@ -92,7 +92,7 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
   }, [titleId, draftQ.data]);
 
   const saveMutation = useMutation({
-    mutationFn: () => saveCreatorRightsDraft({ data: { titleId, details } }),
+    mutationFn: () => saveTitleOwnerRightsDraft({ data: { titleId, details } }),
     onSuccess: async () => {
       setNotice("Draft saved. No legal or publication approval was granted.");
       await queryClient.invalidateQueries({ queryKey: ["creator-rights-draft", titleId] });
@@ -100,7 +100,7 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
     onError: (error) => setNotice(error instanceof Error ? error.message : "Could not save the draft."),
   });
   const submitMutation = useMutation({
-    mutationFn: () => submitCreatorRightsPackage({ data: { titleId, details } }),
+    mutationFn: () => submitTitleOwnerRightsPackage({ data: { titleId, details } }),
     onSuccess: async () => {
       setNotice("Rights package submitted for independent Legal review. The title status and publication state were not changed.");
       await queryClient.invalidateQueries({ queryKey: ["creator-rights-draft", titleId] });
@@ -119,7 +119,7 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
       if (file.size <= 0 || file.size > 20 * 1024 * 1024) {
         throw new Error("Each PDF must be smaller than or equal to 20 MB.");
       }
-      const requested = await requestCreatorEvidenceUpload({
+      const requested = await requestTitleOwnerEvidenceUpload({
         data: { titleId, documentType: type, fileName: file.name, byteSize: file.size },
       });
       const response = await fetch(requested.uploadUrl, {
@@ -128,7 +128,7 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
         body: file,
       });
       if (!response.ok) throw new Error(`Storage upload failed (${response.status}). Use Undo on the pending upload and retry.`);
-      await confirmCreatorEvidenceUpload({ data: { titleId, documentId: requested.documentId } });
+      await confirmTitleOwnerEvidenceUpload({ data: { titleId, documentId: requested.documentId } });
       setNotice("PDF uploaded and storage-verified. Legal review is still required.");
       await queryClient.invalidateQueries({ queryKey: ["creator-evidence", titleId] });
     } catch (error) {
@@ -141,7 +141,7 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
 
   async function undo(documentId: string) {
     try {
-      await revokePendingCreatorEvidence({ data: { titleId, documentId } });
+      await revokePendingTitleOwnerEvidence({ data: { titleId, documentId } });
       setNotice("Pending upload undone. Verified evidence cannot be deleted; upload a replacement to preserve the audit trail.");
       await queryClient.invalidateQueries({ queryKey: ["creator-evidence", titleId] });
     } catch (error) {
@@ -172,7 +172,7 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
     <section id="rights-evidence" className="scroll-mt-20 space-y-5 rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-accent">Creator evidence desk</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-accent">{ownerType === "studio" ? "Studio owner evidence desk" : "Creator evidence desk"}</p>
           <h2 className="mt-1 font-display text-2xl font-semibold">Rights Clearance & Legal Documents</h2>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
             Upload signed PDFs and enter the rights terms exactly as stated in your agreements. Uploads and declarations are evidence for review, not legal clearance or publication approval.
@@ -183,7 +183,7 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
 
       <label className="block max-w-xl text-sm font-medium">
         Select title
-        <select value={titleId} onChange={(event) => setTitleId(event.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-bg px-3">
+        <select value={titleId} disabled={Boolean(fixedTitleId)} onChange={(event) => setTitleId(event.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-bg px-3">
           {titles.map((title) => <option key={title.id} value={title.id}>{title.name} · {title.status.replaceAll("_", " ")}</option>)}
         </select>
       </label>
@@ -275,7 +275,7 @@ export function CreatorEvidenceDesk({ titles }: { titles: OwnerTitle[] }) {
 
       <div className="rounded-xl border border-line p-4">
         <h3 className="font-semibold">12-point clearance checklist</h3>
-        <p className="mt-1 text-xs text-muted">Creator evidence is tracked separately from reviewer decisions. The last two approvals are controlled by authorized staff.</p>
+        <p className="mt-1 text-xs text-muted">{ownerType === "studio" ? "Studio organization evidence is visible only to active members of the title-owning Studio. " : ""}Owner evidence is tracked separately from reviewer decisions. The last two approvals are controlled by authorized staff.</p>
         <ol className="mt-3 space-y-2">
           {requirements.map(([label, complete], index) => (
             <li key={label} className="flex items-start gap-3 text-sm">
