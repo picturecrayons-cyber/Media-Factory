@@ -4,11 +4,20 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { createTitle, listTitles, removeDraftTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const qc = useQueryClient();
+  const archiveDraft = useMutation({
+    mutationFn: (id: string) => removeDraftTitle({ data: { id } }),
+    onSuccess: () => {
+      toast.success("Draft archived");
+      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Draft could not be archived"),
+  });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
@@ -38,7 +47,14 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           </Link>
           <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-            
+            {t.status === "DRAFT" ? (
+              <Button type="button" variant="outline" size="sm" disabled={archiveDraft.isPending}
+                onClick={() => {
+                  if (window.confirm("Archive this draft? It will be hidden from your active workspace and can be restored by Super Admin. Drafts with assets, rights or review records are blocked.")) archiveDraft.mutate(t.id);
+                }}>
+                {archiveDraft.isPending ? "Archiving…" : "Delete draft"}
+              </Button>
+            ) : null}
           </div>
         </li>
       ))}
