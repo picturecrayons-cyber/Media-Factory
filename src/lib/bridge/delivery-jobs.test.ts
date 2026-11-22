@@ -70,7 +70,14 @@ test("final delivery readiness checks current-asset QC, independent Legal, valid
   assert.match(readiness, /reviewer_findings->0->>'posterKey'/);
   assert.match(readiness, /l\.status='APPROVED'/);
   assert.match(readiness, /rg\.status='VALID'/);
-  assert.match(readiness, /g\.packaging_status='COMPLETE'/);
+  assert.match(readiness, /ott_preparation_status='READY'/);
+  assert.match(readiness, /packaging_status='COMPLETE'/);
+  assert.match(readiness, /curation_status='APPROVED'/);
+  assert.match(readiness, /delivery_status='READY'/);
+  assert.match(readiness, /readiness_state in \\('READY','AUTHORIZED'\\)/);
+  assert.match(readiness, /p\.rights_grant_id/);
+  assert.match(readiness, /p\.qc_case_id/);
+  assert.match(readiness, /p\.legal_case_id/);
   assert.match(readiness, /g\.delivery_status='READY'/);
 });
 
