@@ -7,6 +7,7 @@ import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
+import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -82,6 +83,11 @@ function Studio() {
                 <p className="mb-3 mt-1 text-sm text-muted">Concepts remain in their own review workflow and are not treated as finished films.</p>
                 <MyStoryConcepts userId={actor.userId} />
               </div>
+            </section>
+
+            <section id="studio-gallery" className="scroll-mt-20 space-y-3">
+              <div><p className="text-xs font-semibold uppercase tracking-wider text-accent">Studio media</p><h3 className="mt-1 font-display text-xl font-semibold">Studio Gallery</h3><p className="mt-1 text-sm text-muted">Artwork and verified image assets from titles visible to this active Studio membership.</p></div>
+              <div className="rounded-sm border border-line p-4 sm:p-5"><TitleAssetGallery userId={actor.userId} scopeLabel="Studio" /></div>
             </section>
 
             <section id="studio-dit" className="scroll-mt-20 space-y-3">
