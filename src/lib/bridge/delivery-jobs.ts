@@ -5,7 +5,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
-import { assertPermission, canReadTitle } from "./rbac";
+import { assertPermission, canReadTitle, hasPermission } from "./rbac";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 
