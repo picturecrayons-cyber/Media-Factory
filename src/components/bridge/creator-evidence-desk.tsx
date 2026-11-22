@@ -201,8 +201,8 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
   );
   const requirements = [
     ["Signed OTT Rights Agreement", countType(docs, "FINISHED_FILM_AGREEMENT") > 0],
-    ["SVOD, TVOD and AVOD rights confirmation", platformsComplete],
-    ["Worldwide territory confirmation", /worldwide|world wide|global/i.test(details.territory)],
+    ["OTT platform rights scope recorded", platformsComplete],
+    ["Territory scope recorded", Boolean(details.territory.trim())],
     ["Rights duration and expiry", Boolean(details.rightsStart && details.rightsEnd)],
     ["K.M. Mathew original signed LOA", countType(docs, "DISTRIBUTION_AGREEMENT") > 0],
     ["Film ownership proof", ownershipDocuments >= 1],
@@ -350,6 +350,25 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
         <p className="mt-3 text-sm">Current submission: <strong>{submission?.submission_status?.replaceAll("_", " ") ?? "NOT STARTED"}</strong></p>
         {reviewQ.isPending ? <p className="mt-2 text-xs text-muted">Loading review history…</p> : null}
         {reviewQ.isError ? <p role="alert" className="mt-2 text-xs text-muted">Review history is currently unavailable.</p> : null}
+        {reviewQ.data?.legalCases?.length ? (
+          <ol className="mt-3 space-y-3">
+            {reviewQ.data.legalCases.map((legalCase, index) => (
+              <li key={index} className="border-t border-line pt-3 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <strong>Legal case · {legalCase.status.replaceAll("_", " ")}</strong>
+                  <span className="text-muted">{legalCase.reviewed_at ? new Date(legalCase.reviewed_at).toLocaleString() : "Awaiting independent reviewer"}</span>
+                </div>
+                {legalCase.classification ? <p className="mt-1 text-muted">Classification: {legalCase.classification.replaceAll("_", " ")}</p> : null}
+                {legalCase.evidence?.map((item, itemIndex) => (
+                  <div key={itemIndex} className="mt-2">
+                    {item.note ? <p>{item.note}</p> : null}
+                    {item.items?.length ? <ul className="mt-1 list-disc pl-4">{item.items.map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
+                  </div>
+                ))}
+              </li>
+            ))}
+          </ol>
+        ) : null}
         {reviewQ.data?.reviewEvents?.length ? (
           <ol className="mt-3 space-y-2">
             {reviewQ.data.reviewEvents.map((event, index) => (
@@ -359,7 +378,8 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
               </li>
             ))}
           </ol>
-        ) : <p className="mt-2 text-xs text-muted">No staff review events recorded yet.</p>}
+        ) : null}
+        {!reviewQ.data?.legalCases?.length && !reviewQ.data?.reviewEvents?.length ? <p className="mt-2 text-xs text-muted">No reviewer decision or correction history recorded yet.</p> : null}
       </div>
       <p className="text-xs leading-relaxed text-muted">
         Important: an uploaded PDF or Creator declaration never marks rights as cleared. Legal review, QC, licensing readiness and Crayons LOOP publication remain separate approval gates. Submitted evidence is retained; corrections should be handled through the Legal Reviewer workflow and replacement uploads.
