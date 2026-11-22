@@ -8,8 +8,7 @@ import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
-import { FounderServiceQueue } from "@/components/bridge/products-services-catalogue";
-import { FounderServiceQueue } from "@/components/bridge/products-services-catalogue";
+
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -90,6 +89,11 @@ function AdminBody({ actor }: { actor: any }) {
           </Link>
           {actor.internalRole === "super_admin" ? (
             <>
+              <Link to="/admin/services" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+                <h3 className="font-semibold">Founder Centre · Services</h3>
+                <p className="mt-1 text-sm text-muted">Review Creator and Studio service requests, quotes and fulfilment.</p>
+                <span className="mt-3 inline-block text-xs font-semibold text-accent">Open service queue →</span>
+              </Link>
               <Link to="/admin/buyers" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
                 <h3 className="font-semibold">Buyer Management</h3>
                 <p className="mt-1 text-sm text-muted">Review Bridge Buyer profiles, organization grouping and role-gated Buyer dashboards.</p>
@@ -108,8 +112,6 @@ function AdminBody({ actor }: { actor: any }) {
             </>
           ) : null}
         </section>
-
-        {actor.internalRole === "super_admin" ? <FounderServiceQueue /> : null}
 
         <section aria-labelledby="admin-gallery-heading" className="rounded-2xl border border-line bg-surface p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">Asset review</p>
