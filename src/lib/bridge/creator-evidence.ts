@@ -33,6 +33,7 @@ async function requireTitleOwner(userId: string, titleId: string) {
     throw new Error("Title not found for this owner account");
   }
   if (actor.accountType !== title.ownerAccountType) throw new Error("Owner account type mismatch");
+  if (actor.internalRole && !isInternalOwnerException) throw new Error("Internal staff must use the reviewer workflow");
   if (title.ownerAccountType === "independent_creator") {
     if (title.ownerUserId !== actor.userId) throw new Error("This title belongs to another Creator");
   } else {
