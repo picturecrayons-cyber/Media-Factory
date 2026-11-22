@@ -36,6 +36,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
       toast.success("Draft archived. It can be restored by an authorized owner or Super Admin.");
       setArchiveTarget(null); setArchiveReason("");
       void qc.invalidateQueries({queryKey:["bridge-titles"]});
+      void qc.invalidateQueries({queryKey:["bridge-archived-titles"]});
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Archive blocked"),
   });
