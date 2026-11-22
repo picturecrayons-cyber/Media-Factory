@@ -112,7 +112,7 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
   }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
-    if (asset.byte_size != null) return { assetId: asset.id, alreadyVerified: true as const };
+    if (asset.byte_size != null) throw new Error("Asset already contains bytes; canonical re-verification is required before another multipart upload");
     const { beginMultipartUpload } = await import("./oci-object-storage.server");
     const expiresIn = uploadUrlLifetimeSeconds(data.byteSize);
     const started = await beginMultipartUpload({
@@ -134,7 +134,7 @@ export const commitAssetMultipart = createServerFn({ method: "POST" })
   .validator(z.object({ assetId: z.string().min(8), partBaseUrl: z.string().url().max(2000) }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
-    if (asset.byte_size != null) return { committed: true };
+    if (asset.byte_size != null) throw new Error("Asset already contains bytes; use the confirmation/re-verification path");
     const { commitMultipartUpload } = await import("./oci-object-storage.server");
     await commitMultipartUpload(data.partBaseUrl, asset.s3_key);
     return { committed: true };
@@ -171,8 +171,11 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       created_by: string;
       content_type: string | null;
       byte_size: number | null;
+      source_object_key: string | null;
+      verified_object_key: string | null;
     }>`
-      select id, title_id, kind, s3_key, created_by, content_type, byte_size
+      select id, title_id, kind, s3_key, created_by, content_type, byte_size,
+        source_object_key, verified_object_key
       from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
@@ -181,36 +184,57 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
     }
-    if (asset.byte_size != null)
-      return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
+    const {
+      verifyObject,
+      calculateObjectSha256,
+      sealVerifiedObject,
+      verifyObjectSha256,
+    } = await import("./oci-object-storage.server");
+    const verifiedSuffix = `.verified/${asset.id}`;
+    const sourceKey = asset.source_object_key ||
+      (asset.s3_key.endsWith(verifiedSuffix)
+        ? asset.s3_key.slice(0, -verifiedSuffix.length)
+        : asset.s3_key);
+    const sealedKey = asset.verified_object_key || `${sourceKey}.verified/${asset.id}`;
 
-    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
-    const object = await verifyObject(asset.s3_key, asset.content_type);
-    if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
+    // Verify the original upload by reading its bytes and calculating SHA-256.
+    // ETag is retained as an OCI copy precondition only; it is never a checksum.
+    const sourceHead = await verifyObject(sourceKey, asset.content_type);
+    const sourceDigest = await calculateObjectSha256(sourceKey);
+    if (sourceHead.byteSize !== sourceDigest.byteSize) {
+      throw new Error("Source object changed between HEAD and SHA-256 read-back");
+    }
+    if (data.expectedByteSize != null && sourceDigest.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
     }
-    if (!object.etag) throw new Error("Object ETag is required for immutable verification");
-    // Use the immutable asset row ID, not a per-request UUID. If a browser timeout
-    // leads to a duplicate confirmation while the first server call is still running,
-    // both attempts target the same sealed object instead of creating orphan copies.
-    const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
-    const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
-    if (sealed.byteSize !== object.byteSize || !sealed.etag) {
+    if (!sourceHead.etag) throw new Error("Source object ETag is required for immutable copy");
+
+    // Copy to the deterministic immutable key, then independently read the
+    // sealed object and compare its actual bytes to the source SHA-256.
+    const sealed = await sealVerifiedObject(sourceKey, sealedKey, sourceHead.etag);
+    if (sealed.byteSize !== sourceDigest.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
-    // Persist asset/title/audit state first. Do not advance the migration queue
-    // if persistence fails: its prior state remains the truthful state.
+    await verifyObjectSha256(sealedKey, sourceDigest.sha256, sourceDigest.byteSize);
+
+    // Persist the asset, canonical version, title pointer, provenance and audit
+    // evidence atomically. No migration-queue state advances on persistence failure.
     const confirmed = await persistVerifiedAsset(sql, {
       assetId: asset.id,
       actorUserId: actor.userId,
       internalActor: Boolean(actor.internalRole),
       titleId: title.id,
       kind: asset.kind,
-      byteSize: sealed.byteSize,
+      byteSize: sourceDigest.byteSize,
       contentType: sealed.contentType,
-      checksum: sealed.etag,
-      sourceKey: asset.s3_key,
+      checksum: sourceDigest.sha256,
+      etag: sealed.etag,
+      sourceKey,
       sealedKey,
+      storageBucket: sealed.bucket,
+      storageNamespace: sealed.namespace,
+      storageRegion: sealed.region,
+      storageEndpoint: sealed.endpoint,
     });
     if (confirmed) {
       // UPLOADED is only recorded after persistVerifiedAsset succeeds.
@@ -230,31 +254,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       `;
     }
     if (!confirmed) {
-      const current = await sql<{
-        byte_size: number | null;
-      }>`select byte_size from bridge_assets where id = ${asset.id}`;
-      if (current[0]?.byte_size != null) {
-        // A concurrent confirmation persisted the asset successfully. Bring the
-        // queue into line with that durable state before returning idempotently.
-        await sql`
-          update loop_media_migration_queue
-          set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
-          where title_id = ${title.id}
-            and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
-            and status in ('PENDING_REUPLOAD', 'UPLOADED')
-        `;
-        await sql`
-          update loop_media_migration_queue
-          set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
-          where title_id = ${title.id}
-            and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
-            and status in ('UPLOADED', 'PENDING_REUPLOAD')
-        `;
-        return { assetId: asset.id, byteSize: Number(current[0].byte_size), verified: true };
-      }
-      throw new Error("Asset confirmation changed; retry after refreshing the title");
+      throw new Error("Canonical asset version was not persisted; refresh the title and retry verification");
     }
-    return { assetId: asset.id, byteSize: sealed.byteSize, verified: true };
+    return { assetId: asset.id, byteSize: sourceDigest.byteSize, verified: true };
   });
 
 export const requestAssetDownload = createServerFn({ method: "POST" })
@@ -322,10 +324,23 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       s3_key: string;
       content_type: string | null;
       byte_size: number | null;
+      checksum_sha256: string | null;
+      version_id: string | null;
+      version_s3_key: string | null;
+      version_checksum_sha256: string | null;
+      version_byte_size: number | null;
+      version_processing_state: string | null;
       created_at: string | Date;
     }>`
-      select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      select
+        a.id, a.kind, a.s3_key, a.content_type, a.byte_size, a.checksum_sha256,
+        v.id as version_id, v.s3_key as version_s3_key,
+        v.checksum_sha256 as version_checksum_sha256, v.byte_size as version_byte_size,
+        v.processing_state as version_processing_state, a.created_at
+      from bridge_assets a
+      left join bridge_asset_versions v on v.id = a.asset_version_id
+      where a.title_id = ${title.id} and a.byte_size > 0
+      order by a.created_at desc
     `;
     return {
       assets: rows
@@ -336,7 +351,12 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           key: buyer ? null : r.s3_key,
           contentType: r.content_type,
           byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0,
+          verified: Number(r.byte_size) > 0 &&
+            Boolean(r.version_id) &&
+            r.version_s3_key === r.s3_key &&
+            Number(r.version_byte_size) === Number(r.byte_size) &&
+            r.version_checksum_sha256 === r.checksum_sha256 &&
+            r.version_processing_state === "PASSED",
           createdAt:
             r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
