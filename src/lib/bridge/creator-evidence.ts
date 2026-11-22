@@ -239,6 +239,7 @@ export const revokePendingTitleOwnerEvidence = createServerFn({ method: "POST" }
   .validator(z.object({ titleId: z.string().min(8), documentId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireTitleOwner(context.userId, data.titleId);
+    await assertEvidenceEditable(title.id, title.ownerUserId, actor.accountType === "studio" ? title.ownerOrganizationId ?? null : null, title.status);
     const sql = await getSql();
     const changed = await sql.transaction(async (tx) => {
       const rows = await tx<{ id: string }>`
@@ -386,7 +387,7 @@ export const submitTitleOwnerRightsPackage = createServerFn({ method: "POST" })
         id, title_id, owner_user_id, owner_organization_id, details,
         submission_status, submitted_at, submitted_by, updated_by
       ) values (
-        ${randomBytes(16).toString("hex")}, ${title.id}, ${actor.userId}, ${actor.accountType === "studio" ? title.ownerOrganizationId : null},
+        ${randomBytes(16).toString("hex")}, ${title.id}, ${title.ownerUserId}, ${actor.accountType === "studio" ? title.ownerOrganizationId : null},
         ${JSON.stringify(data.details)}::jsonb, 'SUBMITTED', now(), ${actor.userId}, ${actor.userId}
       )
       on conflict (title_id) do update set
