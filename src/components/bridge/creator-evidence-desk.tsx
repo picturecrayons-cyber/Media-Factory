@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getTitleWorkflow } from "@/lib/bridge/workflow";
+import { getLoopPublication } from "@/lib/bridge/loop-publication";
+import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import {
   confirmTitleOwnerEvidenceUpload,
   getTitleOwnerEvidenceViewUrl,
@@ -86,6 +89,16 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
   const reviewQ = useQuery({
     queryKey: ["creator-rights-review-history", titleId],
     queryFn: () => getTitleOwnerRightsReviewHistory({ data: { titleId } }),
+    enabled: Boolean(titleId),
+  });
+  const workflowQ = useQuery({
+    queryKey: ["title-workflow", titleId],
+    queryFn: () => getTitleWorkflow({ data: { titleId } }),
+    enabled: Boolean(titleId),
+  });
+  const publicationQ = useQuery({
+    queryKey: ["loop-pub", titleId],
+    queryFn: () => getLoopPublication({ data: { bridgeTitleId: titleId } }),
     enabled: Boolean(titleId),
   });
   const docs = evidenceQ.data?.documents ?? [];
@@ -181,6 +194,11 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
 
   const platformsComplete = details.platforms.length > 0;
   const ownershipDocuments = docs.filter((doc) => doc.document_type === "OWNERSHIP_CHAIN_OF_TITLE" && doc.status === "VERIFIED").length;
+  const legalApproved = workflowQ.data?.legal?.status === "APPROVED";
+  const publication = publicationQ.data?.publication;
+  const publicationApproved = Boolean(
+    publication && ["authorized", "preparing", "delivered", "live"].includes((publication.authorizationStatus ?? "").toLowerCase()),
+  );
   const requirements = [
     ["Signed OTT Rights Agreement", countType(docs, "FINISHED_FILM_AGREEMENT") > 0],
     ["SVOD, TVOD and AVOD rights confirmation", platformsComplete],
@@ -192,8 +210,8 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
     ["Signatory authority proof", countType(docs, "AUTHOR_ASSIGNMENT") > 0],
     ["Signed revenue-sharing agreement", countType(docs, "OTHER") > 0],
     ["Revenue-share, payment method and terms", Boolean(details.revenueShare && details.paymentTerms && details.paymentMethod)],
-    ["Independent Legal Reviewer approval", false],
-    ["Crayons LOOP publication approval", false],
+    ["Independent Legal Reviewer approval", legalApproved],
+    ["Crayons LOOP publication approval", publicationApproved],
   ] as const;
 
   return (
