@@ -30,6 +30,7 @@ type RightsDetails = {
   signatoryCapacity: string;
   revenueShare: string;
   paymentTerms: string;
+  paymentMethod: string;
   ownerDeclaration: boolean;
 };
 
@@ -43,6 +44,7 @@ const EMPTY: RightsDetails = {
   signatoryCapacity: "",
   revenueShare: "",
   paymentTerms: "",
+  paymentMethod: "",
   ownerDeclaration: false,
 };
 
@@ -189,7 +191,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
     ["New Darsan Creations rights-transfer proof", ownershipDocuments >= 2],
     ["Signatory authority proof", countType(docs, "AUTHOR_ASSIGNMENT") > 0],
     ["Signed revenue-sharing agreement", countType(docs, "OTHER") > 0],
-    ["Revenue-share and payment terms", Boolean(details.revenueShare && details.paymentTerms)],
+    ["Revenue-share, payment method and terms", Boolean(details.revenueShare && details.paymentTerms && details.paymentMethod)],
     ["Independent Legal Reviewer approval", false],
     ["Crayons LOOP publication approval", false],
   ] as const;
@@ -294,6 +296,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
           </div>
           <Field label="Revenue share terms" value={details.revenueShare} onChange={(value) => setDetails((old) => ({ ...old, revenueShare: value }))} placeholder="Enter percentages and parties exactly as agreed" />
           <Field label="Payment terms" value={details.paymentTerms} onChange={(value) => setDetails((old) => ({ ...old, paymentTerms: value }))} placeholder="Enter payment schedule, deductions and settlement terms" />
+          <Field label="Payment method" value={details.paymentMethod} onChange={(value) => setDetails((old) => ({ ...old, paymentMethod: value }))} placeholder="e.g. bank transfer; record bank/account beneficiary details securely in the signed agreement" />
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" checked={details.ownerDeclaration} onChange={(event) => setDetails((old) => ({ ...old, ownerDeclaration: event.target.checked }))} className="mt-1" />
             I confirm these details are entered from the documents submitted and are accurate to the best of my knowledge.
@@ -318,7 +321,7 @@ export function CreatorEvidenceDesk({ titles, ownerType = "independent_creator",
             <li key={label} className="flex items-start gap-3 text-sm">
               <span className="mt-0.5 w-6 shrink-0 text-xs tabular-nums text-muted">{String(index + 1).padStart(2, "0")}</span>
               <span className="flex-1">{label}</span>
-              <span className={complete ? "text-xs font-semibold text-emerald-700" : "text-xs font-semibold text-muted"}>{complete ? "Evidence present" : index >= 10 ? "Staff-controlled" : "Pending"}</span>
+              <span className={complete ? "text-xs font-semibold text-emerald-700" : "text-xs font-semibold text-muted"}>{complete ? "File uploaded" : index >= 10 ? "Staff-controlled" : "Pending"}</span>
             </li>
           ))}
         </ol>
