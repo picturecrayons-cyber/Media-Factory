@@ -27,8 +27,8 @@ function RightsReadySubmission() {
   const [runtime, setRuntime] = useState("");
   const [territories, setTerritories] = useState<string[]>(["IN"]);
   const [exploitation, setExploitation] = useState<string[]>(["OTT / Streaming"]);
-  const [windowStart, setWindowStart] = useState(() => `${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
-  const [windowEnd, setWindowEnd] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() + 5); return `${d.toISOString().slice(0, 10)}T23:59:59.999Z`; });
+  const [windowStart, setWindowStart] = useState("");
+  const [windowEnd, setWindowEnd] = useState("");
   const [exclusivity, setExclusivity] = useState<"EXCLUSIVE" | "NON_EXCLUSIVE">("NON_EXCLUSIVE");
   const [authorityType, setAuthorityType] = useState("RIGHTS_OWNER");
   const [evidenceType, setEvidenceType] = useState("RIGHTS_AGREEMENT");
@@ -112,7 +112,7 @@ function RightsReadySubmission() {
           </div>
         </section>
 
-        <details className="space-y-4 rounded-xl border border-line p-4" >
+        <details className="space-y-4 rounded-xl border border-line p-4" open>
           <summary className="cursor-pointer font-display text-lg font-semibold">2. Rights scope <span className="ml-2 text-xs font-normal text-muted">Edit if needed</span></summary>
           <div className="space-y-3">
             <div><p className="text-sm font-medium">Rights languages</p><div className="mt-2 flex flex-wrap gap-2">{LANGUAGES.map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={rightsLanguages.includes(x)} onChange={() => toggle(x, rightsLanguages, setRightsLanguages)} />{x}</label>)}</div></div>
