@@ -162,7 +162,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-3">
               <p>
                 {title.status === "PREPARING" || title.status === "UPLOADING" || title.status === "DRAFT"
-                  ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit for QC. QC is not reviewed yet."
+                  ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit to Bridge for QC. QC is not reviewed yet."
                   : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
               {title.status === "PREPARING" && !actor.internalRole &&
@@ -187,7 +187,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       ? "Start ingest"
                       : title.status === "UPLOADING"
                         ? "Prepare package"
-                        : "Submit for QC",
+                        : "Submit to Bridge for QC",
                     () =>
                       advanceTitle({
                         data: {
