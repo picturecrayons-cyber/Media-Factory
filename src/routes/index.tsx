@@ -111,12 +111,9 @@ function Home() {
                 <h2 id="our-buyers-heading" className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Our Buyers</h2>
                 <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2 text-left">
                   <article className="flex min-w-[230px] snap-start items-center gap-4 rounded-2xl border border-line bg-surface px-5 py-4">
-                    <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-[#101820] text-white">
-                      <span className="font-display text-xl font-bold tracking-tight">loop</span>
-                    </div>
                     <div>
-                      <p className="font-semibold text-fg">Crayons Loop</p>
-                      <p className="mt-1 text-xs text-muted">Consumer streaming destination</p>
+                      <p className="font-display text-2xl font-semibold tracking-tight text-fg">Crayons Loop</p>
+                      <p className="mt-1 text-xs text-muted">Consumer streaming destination · text reference only</p>
                     </div>
                   </article>
                   <article className="flex min-w-[230px] snap-start items-center rounded-2xl border border-dashed border-line px-5 py-4">
