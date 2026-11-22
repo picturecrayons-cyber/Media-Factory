@@ -410,15 +410,6 @@ export const getTitleOwnerRightsReviewHistory = createServerFn({ method: "GET" }
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireTitleOwner(context.userId, data.titleId);
     const sql = await getSql();
-    const rows = await sql<{ action: string; metadata: string; created_at: string }>`
-      select action, metadata, created_at
-      from bridge_audit_logs
-      where entity_type = 'bridge_title_owner_submission'
-        and entity_id = ${title.id}
-        and actor_user_id <> ${actor.userId}
-      order by created_at desc
-      limit 50
-    `;
     const submission = await sql<{ submission_status: string; submitted_at: string | null; details: Record<string, unknown> }>`
       select submission_status, submitted_at, details
       from bridge_title_owner_submissions
@@ -439,7 +430,7 @@ export const getTitleOwnerRightsReviewHistory = createServerFn({ method: "GET" }
       order by created_at desc
       limit 20
     `;
-    return { reviewEvents: rows, legalCases, submission: submission[0] ?? null };
+    return { legalCases, submission: submission[0] ?? null };
   });
 
 export const getTitleOwnerRightsDraft = createServerFn({ method: "GET" })
