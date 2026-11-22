@@ -9,7 +9,7 @@ import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 import { listTitles } from "@/lib/bridge/titles";
-import { ProductsServicesCatalogue } from "@/components/bridge/products-services-catalogue";
+import { ProductsServicesCatalogue, CreatorStudioServiceCentre } from "@/components/bridge/products-services-catalogue";
 import { ServiceCentre } from "@/components/bridge/service-centre";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
@@ -214,6 +214,7 @@ function CreatorDashboard({
       </section>
 
       <ProductsServicesCatalogue audience="Creator" />
+      <CreatorStudioServiceCentre actor={actor} />
       <ServiceCentre audience="Creator" userId={actor.userId} />
 
       <section id="metadata" className="scroll-mt-20 grid gap-4 md:grid-cols-2">
