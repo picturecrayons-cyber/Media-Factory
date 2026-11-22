@@ -77,6 +77,8 @@ declare
   required_tables text[] := array[
     'public.bridge_titles',
     'public.bridge_profiles',
+    'public.bridge_organization_memberships',
+    'public.bridge_audit_logs',
     'public.bridge_assets',
     'public.bridge_asset_versions',
     'public.bridge_buyer_title_access',
@@ -113,6 +115,59 @@ begin
   foreach required_table in array required_tables loop
     if to_regclass(required_table) is null then
       blockers := array_append(blockers, 'schema:' || required_table || ':missing');
+    end if;
+  end loop;
+  if cardinality(blockers) > 0 then
+    return blockers;
+  end if;
+
+  -- Validate the exact columns used by the archive lifecycle and dependency
+  -- scan before dynamic SQL runs. Missing columns must block archival.
+  for item in
+    select * from (values
+      ('public','bridge_titles','id'),('public','bridge_titles','slug'),
+      ('public','bridge_titles','status'),('public','bridge_titles','owner_user_id'),
+      ('public','bridge_titles','owner_account_type'),('public','bridge_titles','owner_organization_id'),
+      ('public','bridge_titles','archived_at'),('public','bridge_titles','archived_by'),
+      ('public','bridge_titles','archive_reason'),('public','bridge_titles','previous_status'),
+      ('public','bridge_titles','master_key'),('public','bridge_titles','poster_key'),
+      ('public','bridge_profiles','user_id'),
+      ('public','bridge_organization_memberships','organization_id'),
+      ('public','bridge_organization_memberships','user_id'),
+      ('public','bridge_organization_memberships','status'),
+      ('public','bridge_audit_logs','actor_user_id'),('public','bridge_audit_logs','action'),
+      ('public','bridge_audit_logs','entity_type'),('public','bridge_audit_logs','entity_id'),
+      ('public','bridge_audit_logs','metadata'),
+      ('public','bridge_title_archive_events','title_id'),('public','bridge_title_archive_events','action'),
+      ('public','bridge_title_archive_events','actor_user_id'),('public','bridge_title_archive_events','actor_role'),
+      ('public','bridge_title_archive_events','organization_id'),('public','bridge_title_archive_events','previous_state'),
+      ('public','bridge_title_archive_events','new_state'),('public','bridge_title_archive_events','reason'),
+      ('public','bridge_assets','title_id'),('public','bridge_asset_versions','title_id'),
+      ('public','bridge_buyer_title_access','title_id'),('public','bridge_delivery_jobs','title_id'),
+      ('public','bridge_destination_packages','title_id'),('public','bridge_dit_ingest_sessions','title_id'),
+      ('public','bridge_financial_ledger','title_id'),('public','bridge_language_rights','title_id'),
+      ('public','bridge_legal_cases','title_id'),('public','bridge_license_packages','title_id'),
+      ('public','bridge_loop_publications','bridge_title_id'),('public','bridge_package_entitlements','title_id'),
+      ('public','bridge_production_assets','title_id'),('public','bridge_qc_cases','title_id'),
+      ('public','bridge_rights_grants','title_id'),('public','bridge_service_orders','title_id'),
+      ('public','bridge_service_quotes','title_id'),('public','bridge_service_settlement_rules','title_id'),
+      ('public','bridge_story_concept_submissions','title_id'),('public','bridge_title_document_links','title_id'),
+      ('public','bridge_title_events','title_id'),('public','bridge_title_events','from_status'),
+      ('public','bridge_title_events','to_status'),('public','bridge_title_gate_certifications','title_id'),
+      ('public','bridge_title_owner_submissions','title_id'),('public','bridge_title_submission_intake','title_id'),
+      ('public','loop_titles','bridge_title_id'),('public','streamvista_legacy_links','bridge_title_id')
+    ) as expected(schema_name,table_name,column_name)
+  loop
+    if not exists (
+      select 1 from information_schema.columns c
+      where c.table_schema=item.schema_name
+        and c.table_name=item.table_name
+        and c.column_name=item.column_name
+    ) then
+      blockers := array_append(
+        blockers,
+        'schema:' || item.schema_name || '.' || item.table_name || '.' || item.column_name || ':missing'
+      );
     end if;
   end loop;
   if cardinality(blockers) > 0 then
