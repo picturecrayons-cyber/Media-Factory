@@ -360,8 +360,12 @@ export const listTitleOwnerTitles = createServerFn({ method: "GET" })
       actor.userId,
       actor.accountType === "studio" ? actor.organizationId : null,
     );
+    const ownerScopedRows = rows.filter((row) =>
+      row.owner_account_type === actor.accountType &&
+      (actor.accountType !== "studio" || row.owner_organization_id === actor.organizationId),
+    );
     return {
-      titles: rows.flatMap((row) => {
+      titles: ownerScopedRows.flatMap((row) => {
         try {
           return [mapTitle(row)];
         } catch (error) {
