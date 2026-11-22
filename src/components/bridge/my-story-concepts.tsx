@@ -25,10 +25,13 @@ function listLogline(value: string | null | undefined) {
 
 export function MyStoryConcepts() {
   const qc = useQueryClient();
+  const { user, isPending: userPending } = useCurrentUserState();
+  const sessionQ = useQuery({ queryKey: ["bridge-session", user?.id], queryFn: () => getBridgeSession(), enabled: !userPending && Boolean(user), retry: false });
+  const actor = sessionQ.data?.profile ?? null;
   const query = useQuery({
-    queryKey: ["my-story-concepts"],
+    queryKey: ["my-story-concepts", actor?.userId ?? user?.id ?? "anonymous", actor?.accountType ?? "unresolved", actor?.organizationId ?? null],
     queryFn: () => listMyStoryConcepts(),
-    enabled: STORY_CONCEPT_ENABLED,
+    enabled: STORY_CONCEPT_ENABLED && Boolean(actor?.userId && actor.emailVerified),
   });
   const submit = useMutation({
     mutationFn: (titleId: string) => submitStoryConceptToSuperAdmin({ data: { titleId } }),
