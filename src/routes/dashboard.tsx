@@ -68,6 +68,9 @@ function DashboardBody() {
           <Link to="/admin/services" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">
             Open services
           </Link>
+          <Link to="/deliveries" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">
+            Vendor Services
+          </Link>
         </div>
       </header>
 
