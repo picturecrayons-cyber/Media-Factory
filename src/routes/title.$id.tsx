@@ -508,7 +508,6 @@ function OwnerSubmissionPanel(props: {
         </label>
         <p className="text-xs text-muted">These are owner declarations and references only. They do not record Legal clearance, QC approval, Rights verification or publication authorization.</p>
       </div>
-      </div>
       <div className="space-y-3">
         <div className="flex items-center justify-between"><h3 className="font-semibold">Credits & cast</h3>
           <button type="button" disabled={!canEdit} onClick={addCredit} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Add credit</button>
