@@ -46,7 +46,9 @@ export const Route = createFileRoute("/title/$id")({
   component: TitlePage,
 });
 
-const WORKSPACE_TABS = ["Overview", "Files", "Production"] as const;
+import { CreatorEvidenceDesk } from "@/components/bridge/creator-evidence-desk";
+
+const WORKSPACE_TABS = ["Overview", "Files", "Production", "Legal Clearance"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -288,6 +290,12 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           assets={productionAssets}
           loading={productionAssetsQ.isPending}
           error={productionAssetsQ.error instanceof Error ? productionAssetsQ.error.message : null}
+        />
+      ) : activeTab === "Legal Clearance" && !buyerView ? (
+        <CreatorEvidenceDesk
+          ownerType={title.ownerAccountType === "studio" ? "studio" : "independent_creator"}
+          titleId={title.id}
+          titles={[{ id: title.id, name: title.name, status: title.status }]}
         />
       ) : null}
     </div>
