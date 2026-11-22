@@ -215,7 +215,6 @@ function CreatorDashboard({
 
       <ProductsServicesCatalogue audience="Creator" />
       <ServiceCentre audience="Creator" userId={actor.userId} />
-      <ServiceCentre audience="Creator" userId={actor.userId} />
 
       <section id="metadata" className="scroll-mt-20 grid gap-4 md:grid-cols-2">
         <InfoPanel
