@@ -20,6 +20,33 @@ function tokenPair() {
   return { token, hash };
 }
 
+
+
+async function recordSignupLegalAcceptance(tx: Sql, bridgeUserId: string, authUserId: string): Promise<boolean> {
+  const rows = await tx<{ raw_user_meta_data: unknown }>`
+    select raw_user_meta_data from auth.users where id = ${authUserId}::uuid limit 1
+  `;
+  const metadata = rows[0]?.raw_user_meta_data;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return false;
+  const values = metadata as Record<string, unknown>;
+  const termsVersion = values.bridge_terms_version;
+  const privacyVersion = values.bridge_privacy_version;
+  const acknowledgedAt = values.bridge_legal_acknowledged_at;
+  if (termsVersion !== "1.0-draft" || privacyVersion !== "1.0-draft" || typeof acknowledgedAt !== "string") return false;
+  const parsedAcknowledgedAt = Date.parse(acknowledgedAt);
+  if (!Number.isFinite(parsedAcknowledgedAt)) return false;
+  await tx`
+    insert into bridge_legal_acceptances (
+      bridge_user_id, auth_user_id, terms_version, privacy_version, client_acknowledged_at
+    ) values (
+      ${bridgeUserId}, ${authUserId}::uuid, ${termsVersion}, ${privacyVersion},
+      ${new Date(parsedAcknowledgedAt).toISOString()}
+    )
+    on conflict (bridge_user_id, terms_version, privacy_version) do nothing
+  `;
+  return true;
+}
+
 async function mail(opts: { to: string; subject: string; text: string }) {
   const { sendBridgeMail } = await import("./mail.server");
   return sendBridgeMail(opts);
@@ -208,6 +235,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       await sql.transaction(async (tx) => {
         await persistSupabaseIdentityLink(tx, existing.userId, context.userId);
         await claimLegacyCreatorIntake(tx, email, existing.userId);
+        await recordSignupLegalAcceptance(tx, existing.userId, context.userId);
         if (
           data.creatorMandateAccepted === true &&
           (existing.accountType === "independent_creator" || existing.accountType === "studio")
@@ -398,6 +426,8 @@ export const completeOnboarding = createServerFn({ method: "POST" })
 
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
         await claimLegacyCreatorIntake(tx, email, bridgeUserId);
+        const legalRecorded = await recordSignupLegalAcceptance(tx, bridgeUserId, context.userId);
+        if (!legalRecorded) throw new Error("B2B Terms and Privacy acknowledgement is required before onboarding.");
         const roleForTransaction: string | null = internalRole;
         return roleForTransaction;
       });
