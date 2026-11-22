@@ -432,7 +432,19 @@ export const getTitleOwnerRightsReviewHistory = createServerFn({ method: "GET" }
         and owner_organization_id is not distinct from ${actor.accountType === "studio" ? title.ownerOrganizationId : null}
       limit 1
     `;
-    return { reviewEvents: rows, submission: submission[0] ?? null };
+    const legalCases = await sql<{
+      status: string;
+      classification: string | null;
+      evidence: Array<{ note?: string; type?: string; items?: string[] }>;
+      reviewed_at: string | null;
+    }>`
+      select status, classification, evidence, reviewed_at
+      from bridge_legal_cases
+      where title_id = ${title.id}
+      order by created_at desc
+      limit 20
+    `;
+    return { reviewEvents: rows, legalCases, submission: submission[0] ?? null };
   });
 
 export const getTitleOwnerRightsDraft = createServerFn({ method: "GET" })
