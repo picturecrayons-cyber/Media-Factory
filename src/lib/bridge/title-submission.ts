@@ -67,10 +67,9 @@ export async function submitTitleForQc(
       runtime_minutes: number | null;
       year: number | null;
       master_language: string | null;
-      original_language: string | null;
     }>`
       select status, owner_user_id, owner_organization_id, name, submission_type, content_type, original_language,
-        country_of_origin, release_date, synopsis, runtime_minutes, year, master_language, original_language
+        country_of_origin, release_date, synopsis, runtime_minutes, year, master_language
       from bridge_titles where id = ${title.id} for update
     `;
     if (!locked || locked.status !== title.status) {
