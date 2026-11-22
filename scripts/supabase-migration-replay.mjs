@@ -73,7 +73,7 @@ const supportedFeatureMigrations = new Set([
   "20261118150000_bridge_exclusive_sublicensing_authority.sql",
   "20261122090000_bridge_creator_document_vault.sql",
   "20261122100000_bridge_title_owner_submissions.sql",
-  "20261122182000_owner_submission_lifecycle.sql",
+  "20261122125255_owner_submission_lifecycle_20261122.sql",
 ]);
 for (const name of featureNames) {
   if (!supportedFeatureMigrations.has(name)) {
