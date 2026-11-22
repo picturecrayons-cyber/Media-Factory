@@ -226,6 +226,7 @@ export const saveCreatorRightsDraft = createServerFn({ method: "POST" })
   .validator(z.object({ titleId: z.string().min(8), details: rightsDetailsSchema }))
   .handler(async ({ context, data }) => {
     const { actor, title } = await requireCreatorOwner(context.userId, data.titleId);
+    await assertEvidenceEditable(title.id, actor.userId, title.status);
     const sql = await getSql();
     const existing = await sql<{ submission_status: string }>`
       select submission_status from bridge_title_owner_submissions where title_id = ${title.id} limit 1
