@@ -124,11 +124,12 @@ test("Buyer Management is Super Admin-only and reads Bridge Buyer profiles witho
 });
 
 
-test("Super Admin primary tabs expose the main Bridge workspaces without changing RBAC", () => {
+test("Super Admin primary tabs expose the simplified Bridge workspaces without changing RBAC", () => {
   const shell = read("../../components/bridge/shell.tsx");
-  for (const path of ["/dashboard", "/admin", "/workspace", "/internal", "/admin/buyers", "/admin/team", "/admin/users", "/admin/services", "/admin-cms", "/cms", "/admin/audit", "/account"]) {
+  for (const path of ["/dashboard", "/workspace", "/admin/workstations", "/internal", "/admin/buyers", "/admin/users", "/admin/services", "/admin-cms", "/admin/audit", "/account"]) {
     assert.ok(shell.includes(`to: "${path}"`), `missing Super Admin tab ${path}`);
   }
+  assert.doesNotMatch(shell, /to: "\/cms"|to: "\/admin\/team"/);
   assert.match(shell, /actor\.internalRole === "super_admin"/);
 });
 
