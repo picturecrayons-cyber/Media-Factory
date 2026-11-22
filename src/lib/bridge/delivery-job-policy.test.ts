@@ -24,10 +24,11 @@ test("vendor requests require owner visibility or an authorized delivery operato
 test("final delivery requires every independent Bridge gate", () => {
   const ready = {
     submissionType: "finished_film", lifecycleReady: true, qcPassedForCurrentAssets: true,
-    legalApproved: true, rightsGrantValid: true, packagingComplete: true, finalDeliveryGateReady: true,
+    legalApproved: true, rightsGrantValid: true, ottPreparationReady: true, packagingComplete: true,
+    curationApproved: true, finalDeliveryGateReady: true,
   };
   assert.deepEqual(deliveryFinalGate(ready), { ready: true, reasons: [] });
-  for (const key of ["qcPassedForCurrentAssets","legalApproved","rightsGrantValid","packagingComplete","finalDeliveryGateReady"] as const) {
+  for (const key of ["qcPassedForCurrentAssets","legalApproved","rightsGrantValid","ottPreparationReady","packagingComplete","curationApproved","finalDeliveryGateReady"] as const) {
     const result = deliveryFinalGate({ ...ready, [key]: false });
     assert.equal(result.ready, false, key);
     assert.ok(result.reasons.length > 0, key);
