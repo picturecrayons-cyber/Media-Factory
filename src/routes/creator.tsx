@@ -7,6 +7,7 @@ import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { listTitles } from "@/lib/bridge/titles";
+import { CreatorEvidenceDesk } from "@/components/bridge/creator-evidence-desk";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -201,6 +202,8 @@ function CreatorDashboard({
           href="#my-titles"
         />
       </section>
+
+      <CreatorEvidenceDesk titles={titles.map(({ id, name, status }) => ({ id, name, status }))} />
 
       <section id="assets" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
