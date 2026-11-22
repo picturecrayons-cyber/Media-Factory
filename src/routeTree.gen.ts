@@ -15,14 +15,17 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AdminCmsRouteImport } from './routes/admin-cms'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as BuyerRouteImport } from './routes/buyer'
+import { Route as BuyerWorkspaceRouteImport } from './routes/buyer-workspace'
 import { Route as CmsRouteImport } from './routes/cms'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DeliveriesRouteImport } from './routes/deliveries'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as FinanceRouteImport } from './routes/finance'
 import { Route as InternalRouteImport } from './routes/internal'
 import { Route as InvestorRouteImport } from './routes/investor'
+import { Route as InvestorGovernanceRouteImport } from './routes/investor-governance'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoopCmsRouteImport } from './routes/loop-cms'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -73,6 +76,11 @@ const BuyerRoute = BuyerRouteImport.update({
   path: '/buyer',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BuyerWorkspaceRoute = BuyerWorkspaceRouteImport.update({
+  id: '/buyer-workspace',
+  path: '/buyer-workspace',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CmsRoute = CmsRouteImport.update({
   id: '/cms',
   path: '/cms',
@@ -103,6 +111,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FinanceRoute = FinanceRouteImport.update({
+  id: '/finance',
+  path: '/finance',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InternalRoute = InternalRouteImport.update({
   id: '/internal',
   path: '/internal',
@@ -111,6 +124,11 @@ const InternalRoute = InternalRouteImport.update({
 const InvestorRoute = InvestorRouteImport.update({
   id: '/investor',
   path: '/investor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvestorGovernanceRoute = InvestorGovernanceRouteImport.update({
+  id: '/investor-governance',
+  path: '/investor-governance',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -216,14 +234,17 @@ export interface FileRoutesByFullPath {
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
+  '/buyer-workspace': typeof BuyerWorkspaceRoute
   '/cms': typeof CmsRoute
   '/contact': typeof ContactRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/finance': typeof FinanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
+  '/investor-governance': typeof InvestorGovernanceRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
@@ -251,14 +272,17 @@ export interface FileRoutesByTo {
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
+  '/buyer-workspace': typeof BuyerWorkspaceRoute
   '/cms': typeof CmsRoute
   '/contact': typeof ContactRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/finance': typeof FinanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
+  '/investor-governance': typeof InvestorGovernanceRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
@@ -287,14 +311,17 @@ export interface FileRoutesById {
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
+  '/buyer-workspace': typeof BuyerWorkspaceRoute
   '/cms': typeof CmsRoute
   '/contact': typeof ContactRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/finance': typeof FinanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
+  '/investor-governance': typeof InvestorGovernanceRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
@@ -324,14 +351,17 @@ export interface FileRouteTypes {
     | '/admin-cms'
     | '/app'
     | '/buyer'
+    | '/buyer-workspace'
     | '/cms'
     | '/contact'
     | '/creator'
     | '/dashboard'
     | '/deliveries'
     | '/forgot-password'
+    | '/finance'
     | '/internal'
     | '/investor'
+    | '/investor-governance'
     | '/login'
     | '/loop-cms'
     | '/onboarding'
@@ -359,14 +389,17 @@ export interface FileRouteTypes {
     | '/admin-cms'
     | '/app'
     | '/buyer'
+    | '/buyer-workspace'
     | '/cms'
     | '/contact'
     | '/creator'
     | '/dashboard'
     | '/deliveries'
     | '/forgot-password'
+    | '/finance'
     | '/internal'
     | '/investor'
+    | '/investor-governance'
     | '/login'
     | '/loop-cms'
     | '/onboarding'
@@ -394,14 +427,17 @@ export interface FileRouteTypes {
     | '/admin-cms'
     | '/app'
     | '/buyer'
+    | '/buyer-workspace'
     | '/cms'
     | '/contact'
     | '/creator'
     | '/dashboard'
     | '/deliveries'
     | '/forgot-password'
+    | '/finance'
     | '/internal'
     | '/investor'
+    | '/investor-governance'
     | '/login'
     | '/loop-cms'
     | '/onboarding'
@@ -430,14 +466,17 @@ export interface RootRouteChildren {
   AdminCmsRoute: typeof AdminCmsRoute
   AppRoute: typeof AppRoute
   BuyerRoute: typeof BuyerRoute
+  BuyerWorkspaceRoute: typeof BuyerWorkspaceRoute
   CmsRoute: typeof CmsRoute
   ContactRoute: typeof ContactRoute
   CreatorRoute: typeof CreatorRoute
   DashboardRoute: typeof DashboardRoute
   DeliveriesRoute: typeof DeliveriesRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  FinanceRoute: typeof FinanceRoute
   InternalRoute: typeof InternalRoute
   InvestorRoute: typeof InvestorRoute
+  InvestorGovernanceRoute: typeof InvestorGovernanceRoute
   LoginRoute: typeof LoginRoute
   LoopCmsRoute: typeof LoopCmsRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -502,6 +541,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BuyerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/buyer-workspace': {
+      id: '/buyer-workspace'
+      path: '/buyer-workspace'
+      fullPath: '/buyer-workspace'
+      preLoaderRoute: typeof BuyerWorkspaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cms': {
       id: '/cms'
       path: '/cms'
@@ -544,6 +590,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance': {
+      id: '/finance'
+      path: '/finance'
+      fullPath: '/finance'
+      preLoaderRoute: typeof FinanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/internal': {
       id: '/internal'
       path: '/internal'
@@ -556,6 +609,13 @@ declare module '@tanstack/react-router' {
       path: '/investor'
       fullPath: '/investor'
       preLoaderRoute: typeof InvestorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/investor-governance': {
+      id: '/investor-governance'
+      path: '/investor-governance'
+      fullPath: '/investor-governance'
+      preLoaderRoute: typeof InvestorGovernanceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -711,14 +771,17 @@ const rootRouteChildren: RootRouteChildren = {
   AdminCmsRoute: AdminCmsRoute,
   AppRoute: AppRoute,
   BuyerRoute: BuyerRoute,
+  BuyerWorkspaceRoute: BuyerWorkspaceRoute,
   CmsRoute: CmsRoute,
   ContactRoute: ContactRoute,
   CreatorRoute: CreatorRoute,
   DashboardRoute: DashboardRoute,
   DeliveriesRoute: DeliveriesRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  FinanceRoute: FinanceRoute,
   InternalRoute: InternalRoute,
   InvestorRoute: InvestorRoute,
+  InvestorGovernanceRoute: InvestorGovernanceRoute,
   LoginRoute: LoginRoute,
   LoopCmsRoute: LoopCmsRoute,
   OnboardingRoute: OnboardingRoute,

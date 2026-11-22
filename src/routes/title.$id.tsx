@@ -7,7 +7,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { getTitle, updateTitle } from "@/lib/bridge/titles";
+import { getTitle, updateTitle, saveTitleSubmissionAuthority } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   abortAssetMultipart,
@@ -21,7 +21,7 @@ import {
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
-import { MASTER_LANGUAGES, type MasterLanguage } from "@/lib/bridge/types";
+import { MASTER_LANGUAGES, type BridgeTitle, type MasterLanguage } from "@/lib/bridge/types";
 import {
   OTT_INGEST_SPEC,
   getOttIngestAccept,
@@ -158,6 +158,13 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
+      {!actor.internalRole && (actor.accountType === "independent_creator" || actor.accountType === "studio") &&
+      canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
+        <>
+          <OwnerMetadataCompletion title={title} />
+          <OwnerRightsDeclaration title={title} />
+        </>
+      ) : null}
       <WorkflowDesk title={title} actor={actor} />
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
@@ -293,6 +300,124 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     </div>
   );
 }
+
+function OwnerMetadataCompletion({ title }: { title: BridgeTitle }) {
+  const qc = useQueryClient();
+  const [year, setYear] = useState(title.year ? String(title.year) : "");
+  const [runtime, setRuntime] = useState(title.runtimeMinutes ? String(title.runtimeMinutes) : "");
+  const [country, setCountry] = useState(title.countryOfOrigin ?? "");
+  const [releaseDate, setReleaseDate] = useState(title.releaseDate?.slice(0, 10) ?? "");
+  const [language, setLanguage] = useState(title.language ?? "");
+  const [synopsis, setSynopsis] = useState(title.synopsis ?? "");
+  const [error, setError] = useState("");
+  const save = useMutation({
+    mutationFn: () => updateTitle({ data: {
+      id: title.id,
+      ...(year.trim() ? { year: Number(year) } : {}),
+      ...(runtime.trim() ? { runtimeMinutes: Number(runtime) } : {}),
+      ...(country.trim() ? { countryOfOrigin: country.trim() } : {}),
+      ...(releaseDate ? { releaseDate } : {}),
+      ...(language.trim() ? { language: language.trim() } : {}),
+      ...(synopsis.trim() ? { synopsis: synopsis.trim() } : {}),
+    }}),
+    onSuccess: async () => {
+      setError("");
+      await qc.invalidateQueries({ queryKey: ["bridge-title", title.id] });
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Could not save title details"),
+  });
+  const missing = [
+    !title.year ? "release year" : null,
+    !title.runtimeMinutes ? "runtime" : null,
+    !title.countryOfOrigin?.trim() ? "country" : null,
+    !title.releaseDate ? "release date" : null,
+    !title.language?.trim() ? "original language" : null,
+    !title.synopsis?.trim() ? "synopsis" : null,
+  ].filter(Boolean);
+  if (missing.length === 0) return null;
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Before submission</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Complete title details</h2>
+          <p className="mt-1 text-sm text-muted">Only missing details are requested. Your files remain unchanged.</p>
+        </div>
+        <span className="rounded-full border border-line px-3 py-1 text-xs">{missing.length} items left</span>
+      </div>
+      <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
+        {!title.year ? <label className="grid gap-1 text-sm">Release year<input required type="number" min="1888" max={new Date().getFullYear()+2} value={year} onChange={e=>setYear(e.target.value)} className="h-11 rounded-lg border border-line-strong bg-elevated px-3"/></label> : null}
+        {!title.runtimeMinutes ? <label className="grid gap-1 text-sm">Runtime (minutes)<input required type="number" min="1" max="600" value={runtime} onChange={e=>setRuntime(e.target.value)} className="h-11 rounded-lg border border-line-strong bg-elevated px-3"/></label> : null}
+        {!title.countryOfOrigin?.trim() ? <label className="grid gap-1 text-sm">Country of origin<input required maxLength={80} value={country} onChange={e=>setCountry(e.target.value)} placeholder="India" className="h-11 rounded-lg border border-line-strong bg-elevated px-3"/></label> : null}
+        {!title.releaseDate ? <label className="grid gap-1 text-sm">Release date<input required type="date" value={releaseDate} onChange={e=>setReleaseDate(e.target.value)} className="h-11 rounded-lg border border-line-strong bg-elevated px-3"/></label> : null}
+        {!title.language?.trim() ? <label className="grid gap-1 text-sm">Original language<input required maxLength={40} value={language} onChange={e=>setLanguage(e.target.value)} placeholder="Malayalam" className="h-11 rounded-lg border border-line-strong bg-elevated px-3"/></label> : null}
+        {!title.synopsis?.trim() ? <label className="grid gap-1 text-sm sm:col-span-2">Synopsis<textarea required minLength={20} maxLength={4000} value={synopsis} onChange={e=>setSynopsis(e.target.value)} rows={3} className="rounded-lg border border-line-strong bg-elevated p-3"/></label> : null}
+        {error ? <p role="alert" className="text-sm text-red-600 sm:col-span-2">{error}</p> : null}
+        <button type="submit" disabled={save.isPending} className="rounded-lg bg-fg px-4 py-2.5 text-sm font-semibold text-bg disabled:opacity-50 sm:col-span-2">{save.isPending ? "Saving…" : "Save missing details"}</button>
+      </form>
+    </section>
+  );
+}
+
+
+function OwnerRightsDeclaration({ title }: { title: BridgeTitle }) {
+  const qc = useQueryClient();
+  const [authorityType, setAuthorityType] = useState("RIGHTS_OWNER");
+  const [evidenceType, setEvidenceType] = useState("CHAIN_OF_TITLE");
+  const [evidenceReference, setEvidenceReference] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [error, setError] = useState("");
+  const save = useMutation({
+    mutationFn: () => saveTitleSubmissionAuthority({ data: {
+      titleId: title.id,
+      authorityType: authorityType as "RIGHTS_OWNER" | "PRODUCER" | "LICENSEE_WITH_ONWARD_RIGHTS" | "DISTRIBUTOR_SALES_AGENT",
+      evidenceType: evidenceType as "RIGHTS_AGREEMENT" | "CHAIN_OF_TITLE" | "AUTHORIZATION_LETTER" | "DISTRIBUTION_AGREEMENT" | "OTHER",
+      evidenceReference,
+      authorizationConfirmed: true,
+    }}),
+    onSuccess: async () => {
+      setError("");
+      setConfirmed(false);
+      await qc.invalidateQueries({ queryKey: ["title-workflow", title.id] });
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Could not save rights declaration"),
+  });
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <h2 className="font-display text-xl font-semibold">Rights authority</h2>
+      <p className="mt-1 text-sm text-muted">One short declaration before QC. Legal will independently verify the documents later.</p>
+      <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
+        <label className="grid gap-1 text-sm">Your authority
+          <select value={authorityType} onChange={e=>setAuthorityType(e.target.value)} className="h-11 rounded-lg border border-line-strong bg-elevated px-3">
+            <option value="RIGHTS_OWNER">I own the rights</option>
+            <option value="PRODUCER">I am the producer</option>
+            <option value="LICENSEE_WITH_ONWARD_RIGHTS">I hold onward distribution rights</option>
+            <option value="DISTRIBUTOR_SALES_AGENT">I am the appointed distributor / sales agent</option>
+          </select>
+        </label>
+        <label className="grid gap-1 text-sm">Evidence type
+          <select value={evidenceType} onChange={e=>setEvidenceType(e.target.value)} className="h-11 rounded-lg border border-line-strong bg-elevated px-3">
+            <option value="CHAIN_OF_TITLE">Ownership / chain-of-title document</option>
+            <option value="DISTRIBUTION_AGREEMENT">Distribution agreement</option>
+            <option value="RIGHTS_AGREEMENT">Rights / license agreement</option>
+            <option value="AUTHORIZATION_LETTER">Authorization letter / power of attorney</option>
+            <option value="OTHER">Other supporting document</option>
+          </select>
+        </label>
+        <label className="grid gap-1 text-sm sm:col-span-2">Evidence reference
+          <input required minLength={3} maxLength={500} value={evidenceReference} onChange={e=>setEvidenceReference(e.target.value)} placeholder="Uploaded document name or secure evidence reference" className="h-11 rounded-lg border border-line-strong bg-elevated px-3"/>
+        </label>
+        <label className="flex items-start gap-2 text-sm sm:col-span-2">
+          <input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-1"/>
+          <span>I confirm this authority statement is accurate and the referenced evidence is genuine and available for independent Legal review.</span>
+        </label>
+        {error ? <p role="alert" className="text-sm text-red-600 sm:col-span-2">{error}</p> : null}
+        <button type="submit" disabled={!confirmed || save.isPending} className="rounded-lg bg-fg px-4 py-2.5 text-sm font-semibold text-bg disabled:opacity-50 sm:col-span-2">{save.isPending ? "Saving…" : "Save rights declaration"}</button>
+      </form>
+    </section>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-elevated/40 p-4">
@@ -804,27 +929,27 @@ function FilesPanel({
   const groups: { title: string; hint: string; items: [SimpleAssetKind, string][] }[] = [
     {
       title: "1 · Picture",
-      hint: "Main film is required. Trailer is optional.",
+      hint: "Main film and trailer are both required for QC submission.",
       items: [
         ["master", "Required"],
-        ["screener", "Optional"],
+        ["screener", "Required"],
       ],
     },
     {
       title: "2 · Artwork",
-      hint: "Vertical poster, horizontal artwork, and thumbnail.",
+      hint: "All three artwork files are required for QC submission.",
       items: [
-        ["poster_vertical", "Recommended"],
-        ["poster_horizontal", "Recommended"],
-        ["thumbnail", "Recommended"],
+        ["poster_vertical", "Required"],
+        ["poster_horizontal", "Required"],
+        ["thumbnail", "Required"],
       ],
     },
     {
       title: "3 · Documents",
-      hint: "Add these only if you have them.",
+      hint: "Subtitles and the censor/legal certificate are required for QC submission.",
       items: [
-        ["subtitle", "Optional"],
-        ["censor_certificate", "Optional"],
+        ["subtitle", "Required"],
+        ["censor_certificate", "Required"],
       ],
     },
   ];
@@ -844,7 +969,7 @@ function FilesPanel({
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Upload</p>
           <h2 className="mt-1 font-display text-xl font-semibold">Package in three steps</h2>
-          <p className="mt-1 text-sm text-muted">{readyCount} of 7 files ready. A file is Ready only after storage verification.</p>
+          <p className="mt-1 text-sm text-muted">{readyCount} of 7 files storage-ready. QC also requires a matching PASSED SHA-256 asset-version record.</p>
         </div>
       </div>
 

@@ -11,6 +11,8 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0010_bridge_prd_phase1.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "supabase/migrations/20261122120000_bridge_asset_storage_provenance_repair.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type)
       values ('title1234','title','Title','creator','independent_creator');
@@ -25,7 +27,12 @@ test("only a verified upload sets the master reference, once, with an audit even
       kind: "master",
       byteSize: 120,
       contentType: "video/mp4",
-      checksum: "etag-1",
+      checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      etag: "test-etag",
+      storageBucket: "test-bucket",
+      storageNamespace: "test-namespace",
+      storageRegion: "ap-mumbai-1",
+      storageEndpoint: "https://objectstorage.ap-mumbai-1.oraclecloud.com",
       sourceKey: "bridge/creator/title1234/master/video.mp4",
       sealedKey: "bridge/creator/title1234/master/video.mp4.verified/uuid-1",
     };
@@ -37,7 +44,7 @@ test("only a verified upload sets the master reference, once, with an audit even
     assert.deepEqual(await state(), { master_key: null, byte_size: null });
     assert.equal(await persistVerifiedAsset(sql, args), true);
     assert.deepEqual(await state(), { master_key: "bridge/creator/title1234/master/video.mp4.verified/uuid-1", byte_size: 120 });
-    assert.equal(await persistVerifiedAsset(sql, args), false);
+    assert.equal(await persistVerifiedAsset(sql, args), true);
     assert.equal(await persistVerifiedAsset(sql, { ...args, assetId: "asset1234", sourceKey: "wrong" }), false);
     // A caller cannot verify an asset while supplying a different title ID.
     assert.equal(await persistVerifiedAsset(sql, { ...args, titleId: "different-title" }), false);
@@ -46,7 +53,7 @@ test("only a verified upload sets the master reference, once, with an audit even
     );
     assert.equal(audit.rows[0]?.action, "asset.upload_verified");
     const metadata = JSON.parse(audit.rows[0]?.metadata ?? "{}");
-    assert.equal(metadata.checksum, "etag-1");
+    assert.equal(metadata.checksumSha256, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     assert.equal(metadata.titleId, "title1234");
     assert.equal(metadata.kind, "master");
   } finally {
@@ -61,6 +68,8 @@ test("same-organization verified Studio member can confirm upload, other organiz
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0010_bridge_prd_phase1.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "supabase/migrations/20261122120000_bridge_asset_storage_provenance_repair.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
     await db.exec(`
       insert into bridge_profiles (user_id,email,display_name,account_type,email_verified)
@@ -96,7 +105,12 @@ test("same-organization verified Studio member can confirm upload, other organiz
       kind: "master",
       byteSize: 120,
       contentType: "video/mp4",
-      checksum: "etag-staging-test",
+      checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      etag: "test-etag",
+      storageBucket: "test-bucket",
+      storageNamespace: "test-namespace",
+      storageRegion: "ap-mumbai-1",
+      storageEndpoint: "https://objectstorage.ap-mumbai-1.oraclecloud.com",
     };
     assert.equal(await persistVerifiedAsset(sql, {
       ...common,
@@ -132,6 +146,8 @@ test("title owner can confirm an upload when organization tables are absent", as
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0010_bridge_prd_phase1.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "supabase/migrations/20261122120000_bridge_asset_storage_provenance_repair.sql"), "utf8"));
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
       values ('title1234','title','Title','creator','independent_creator','PREPARING');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
@@ -145,7 +161,12 @@ test("title owner can confirm an upload when organization tables are absent", as
       kind: "screener",
       byteSize: 170,
       contentType: "video/mp4",
-      checksum: "etag-no-org",
+      checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      etag: "test-etag",
+      storageBucket: "test-bucket",
+      storageNamespace: "test-namespace",
+      storageRegion: "ap-mumbai-1",
+      storageEndpoint: "https://objectstorage.ap-mumbai-1.oraclecloud.com",
       sourceKey: "bridge/creator/title1234/screener/video.mp4",
       sealedKey: "bridge/creator/title1234/screener/video.mp4.verified/asset1234",
     }), true);
