@@ -420,6 +420,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/admin'
+    | '/admin/buyers'
     | '/admin-cms'
     | '/app'
     | '/buyer'
