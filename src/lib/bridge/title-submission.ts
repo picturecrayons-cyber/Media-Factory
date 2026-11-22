@@ -183,7 +183,7 @@ export async function submitTitleForQc(
     }
 
     const schema = await tx<{ outbox: string | null }>`
-      select to_regclass('public.bridge_notification_outbox')::text as outbox
+      select to_regclass('bridge_notification_outbox')::text as outbox
     `;
     if (!schema[0]?.outbox) {
       throw new Error("QC notification outbox is not installed in this environment");
