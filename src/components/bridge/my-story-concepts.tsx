@@ -17,9 +17,9 @@ function listLogline(value: string | null | undefined) {
   return text.length > 80 ? `${text.slice(0, 80)}…` : text;
 }
 
-export function MyStoryConcepts() {
+export function MyStoryConcepts({ userId }: { userId: string }) {
   const query = useQuery({
-    queryKey: ["my-story-concepts"],
+    queryKey: ["my-story-concepts", userId],
     queryFn: () => listMyStoryConcepts(),
     enabled: STORY_CONCEPT_ENABLED,
   });
