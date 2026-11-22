@@ -10,6 +10,9 @@ import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const qc = useQueryClient();
+  const [search, setSearch] = useState(query);
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [kindFilter, setKindFilter] = useState("ALL");
   const archiveDraft = useMutation({
     mutationFn: (id: string) => removeDraftTitle({ data: { id } }),
     onSuccess: () => {
@@ -18,7 +21,13 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Draft could not be archived"),
   });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const allTitles = titlesQ.data?.titles ?? [];
+  const titles = allTitles.filter((t) => {
+    const matchesText = !search || `${t.name} ${t.language} ${t.year ?? ""} ${t.contentType ?? ""}`.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === "ALL" || t.status === statusFilter;
+    const matchesKind = kindFilter === "ALL" || (kindFilter === "FILM" ? ["Film", "FEATURE_FILM", "SHORT_FILM", "DOCUMENTARY"].includes(t.contentType ?? "") : t.contentType === "Story / Concept" || t.contentType === "STORY_CONCEPT");
+    return matchesText && matchesStatus && matchesKind;
+  });
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
@@ -28,9 +37,29 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
       </div>
     );
   }
-  if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
+    <div className="space-y-3">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px_180px]">
+        <input
+          aria-label="Search title library"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search titles, language or year"
+          className="h-10 w-full rounded-lg border border-line bg-bg px-3 text-sm"
+        />
+        <select aria-label="Filter by workflow status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-lg border border-line bg-bg px-3 text-sm">
+          <option value="ALL">All statuses</option>
+          {["DRAFT","UPLOADING","PREPARING","QC_REVIEW","RIGHTS_REVIEW","LICENSING_READY","LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].map((status) => <option key={status} value={status}>{status.replaceAll("_"," ")}</option>)}
+        </select>
+        <select aria-label="Filter by title type" value={kindFilter} onChange={(event) => setKindFilter(event.target.value)} className="h-10 rounded-lg border border-line bg-bg px-3 text-sm">
+          <option value="ALL">All title types</option>
+          <option value="FILM">Finished films</option>
+          <option value="CONCEPT">Story / Concept</option>
+        </select>
+      </div>
+      <p className="text-xs text-muted">{titles.length} of {allTitles.length} canonical records · Open a title to view its full Bridge workspace.</p>
+      {!titles.length ? <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">{allTitles.length ? "No titles match these filters." : empty}</p> : (
+      <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
       {titles.map((t) => (
         <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link
@@ -58,7 +87,9 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           </div>
         </li>
       ))}
-    </ul>
+      </ul>
+      )}
+    </div>
   );
 }
 
