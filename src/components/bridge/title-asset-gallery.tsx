@@ -51,7 +51,7 @@ export function TitleAssetGallery({ userId, scopeLabel }: { userId: string; scop
   });
 
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading your authorized gallery…</p>;
-  if (titlesQ.isError) return <p role="alert" className="text-sm text-muted">Gallery titles could not be loaded. Retry the dashboard data source.</p>;
+  if (titlesQ.isError) return <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-muted"><p>Gallery titles could not be loaded.</p><button type="button" onClick={() => void titlesQ.refetch()} disabled={titlesQ.isFetching} className="font-semibold text-accent underline">{titlesQ.isFetching ? "Retrying…" : "Retry"}</button></div>;
   if (!titles.length) return <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">No authorized titles are available for this gallery yet.</p>;
 
   return (
