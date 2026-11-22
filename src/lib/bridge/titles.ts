@@ -33,6 +33,7 @@ type TitleRow = {
   poster_key: string | null;
   master_key: string | null;
   content_type: string;
+  submission_type?: "finished_film" | "story_concept" | null;
   country_of_origin: string | null;
   release_date: string | Date | null;
   credits: Array<{ role: string; name: string }>;
