@@ -31,7 +31,7 @@ export function TitleFinanceWorkspace({ actor }: Props) {
   const [ownerJson, setOwnerJson] = useState('[{"ownerUserId":"","ownerAccountType":"independent_creator","ownerOrganizationId":null,"shareBps":10000,"agreementReference":"","evidenceUrl":"https://"}]');
   const [ownerVerifyIds, setOwnerVerifyIds] = useState("");
   const [investorJson, setInvestorJson] = useState('{"titleId":"","investorUserId":"","agreementReference":"","returnModel":"REVENUE_SHARE","shareBps":10000,"capAmountPaise":null,"evidenceUrl":"https://","effectiveFrom":"2026-11-23T00:00:00.000Z","effectiveTo":null}');
-  const [allocationJson, setAllocationJson] = useState('[{"beneficiaryType":"OWNER","beneficiaryUserId":"","ownerInterestId":"","amountPaise":0}]');
+  const [allocationJson, setAllocationJson] = useState('{"receiptId":"","allocations":[{"beneficiaryType":"OWNER","beneficiaryUserId":"","ownerInterestId":"","amountPaise":100}]}');
   const [reconciliation, setReconciliation] = useState({ periodStart: "", periodEnd: "", notes: "" });
   const [payoutEvidence, setPayoutEvidence] = useState<Record<string, { reference: string; url: string }>>({});
   const refresh = async () => { await qc.invalidateQueries({ queryKey: ["title-finance-own"] }); await qc.invalidateQueries({ queryKey: ["title-finance-control-centre"] }); };
