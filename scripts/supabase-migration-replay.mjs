@@ -755,7 +755,34 @@ try {
     }
   }
 
-  const baselineRls = await client.query(`
+  const financeRls = await client.query(`
+    select c.relname,c.relrowsecurity as rls_enabled,
+      exists(select 1 from pg_policy p where p.polrelid=c.oid
+        and p.polname=c.relname || '_deny_client' and p.polcmd='*'
+        and coalesce(pg_get_expr(p.polqual,p.polrelid),'')='false'
+        and coalesce(pg_get_expr(p.polwithcheck,p.polrelid),'')='false') as deny_policy_valid,
+      has_table_privilege('anon',c.oid,'SELECT') as anon_select,
+      has_table_privilege('authenticated',c.oid,'SELECT') as authenticated_select,
+      has_table_privilege('service_role',c.oid,'SELECT') as service_select,
+      has_table_privilege('service_role',c.oid,'INSERT') as service_insert,
+      has_table_privilege('service_role',c.oid,'UPDATE') as service_update
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and c.relname=any($1::text[])
+    order by c.relname
+  `, [[
+    "bridge_title_owner_interests","bridge_investment_agreements",
+    "bridge_licensing_receipts","bridge_licensing_allocations",
+    "bridge_finance_reconciliations","bridge_finance_reconciliation_items"
+  ]]);
+  if (financeRls.rows.length !== 6 || financeRls.rows.some((row) =>
+    !row.rls_enabled || !row.deny_policy_valid || row.anon_select ||
+    row.authenticated_select || !row.service_select || !row.service_insert || !row.service_update
+  )) {
+    throw new Error("Title finance server-only RLS/grants verification failed: " + JSON.stringify(financeRls.rows));
+  }
+  console.log("[migration-replay] PASS: all six title-finance tables enforce deny-client RLS and server-role grants");
+
+  const baselineRls = await client.query(`;
     select
       c.relname,
       c.relrowsecurity as rls_enabled,
