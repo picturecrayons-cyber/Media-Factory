@@ -26,6 +26,7 @@ function navigationFor(actor: BridgeActor): NavItem[] {
       items.push(
         { to: "/admin/buyers", label: "Buyers" },
         { to: "/admin/users", label: "People & Organizations" },
+        { to: "/admin/submissions", label: "Submissions" },
         { to: "/admin/services", label: "Services" },
       );
       items.push(
