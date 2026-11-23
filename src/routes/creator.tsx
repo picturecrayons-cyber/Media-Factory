@@ -58,24 +58,24 @@ function CreatorDashboard({
     .slice(0, 5);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-7 px-1 pb-16">
+    <div className="mx-auto max-w-7xl space-y-8 px-1 pb-16">
       <header
         id="overview"
-        className="relative overflow-hidden rounded-2xl border border-line bg-surface p-6 sm:p-8"
+        className="relative overflow-hidden rounded-[2rem] border border-line bg-gradient-to-br from-surface via-surface to-accent/10 p-6 shadow-sm sm:p-9"
       >
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 w-1/3 bg-gradient-to-l from-accent/10 to-transparent"
+          className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-accent/10 blur-3xl"
         />
         <div className="relative flex flex-wrap items-end justify-between gap-5">
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
               Crayons Bridge · Creator Desk
             </p>
-            <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h1 className="mt-3 max-w-2xl font-display text-3xl font-bold tracking-tight sm:text-5xl">
               Your films. Your rights. Your workspace.
             </h1>
-            <p className="mt-3 text-sm leading-relaxed text-muted sm:text-base">
+            <p className="mt-4 max-w-xl text-sm leading-7 text-muted sm:text-base">
               Manage your own submissions from first details and secure assets through review,
               rights clearance and authorized delivery.
             </p>
@@ -87,14 +87,14 @@ function CreatorDashboard({
             Account & access <span aria-hidden="true" className="ml-2">↗</span>
           </Link>
         </div>
-        <div className="relative mt-7 grid gap-2 sm:grid-cols-4">
+        <div className="relative mt-8 grid gap-3 sm:grid-cols-4">
           {[
             ["01", "Submit", "Create your title record"],
             ["02", "Prepare", "Add metadata and assets"],
             ["03", "Review", "Track QC and rights feedback"],
             ["04", "Deliver", "Follow authorized delivery"],
           ].map(([number, label, description]) => (
-            <div key={number} className="rounded-xl border border-line bg-bg/70 p-3">
+            <div key={number} className="rounded-2xl border border-line bg-bg/75 p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-accent/50">
               <p className="text-[11px] font-semibold tracking-widest text-accent">{number}</p>
               <p className="mt-1 text-sm font-semibold">{label}</p>
               <p className="mt-1 text-xs text-muted">{description}</p>
@@ -105,13 +105,13 @@ function CreatorDashboard({
 
       <nav
         aria-label="Creator workspace navigation"
-        className="sticky top-0 z-10 -mx-1 flex gap-1 overflow-x-auto border-y border-line bg-bg/95 px-1 py-2 backdrop-blur"
+        className="sticky top-0 z-20 -mx-1 flex gap-2 overflow-x-auto rounded-2xl border border-line bg-bg/95 px-2 py-2 shadow-sm backdrop-blur"
       >
         {SECTIONS.map(([label, href]) => (
           <a
             key={href}
             href={href}
-            className="shrink-0 rounded-full px-3 py-2 text-xs font-medium text-muted transition hover:bg-surface hover:text-fg sm:text-sm"
+            className="shrink-0 rounded-full border border-transparent px-3 py-2 text-xs font-semibold text-muted transition hover:border-line hover:bg-surface hover:text-fg sm:text-sm"
           >
             {label}
           </a>
@@ -120,7 +120,7 @@ function CreatorDashboard({
 
       <section className="space-y-4" aria-label="Creator title overview">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-2xl font-semibold">Overview</h2>
+          <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Overview</h2>
           <span className="text-xs text-muted">Authenticated account scope · up to 200 returned records</span>
         </div>
         {titlesQ.isPending ? (
@@ -151,16 +151,16 @@ function CreatorDashboard({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-accent">Your catalogue</p>
-            <h2 className="mt-1 font-display text-2xl font-semibold">My Titles</h2>
+            <h2 className="mt-1 font-display text-2xl font-bold tracking-tight sm:text-3xl">My Titles</h2>
             <p className="mt-1 text-sm text-muted">
               Only records returned by the authenticated, server-scoped Creator title query are shown.
             </p>
           </div>
-          <a href="#add-title" className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg hover:opacity-90">
+          <a href="#add-title" className="rounded-full bg-accent px-5 py-2.5 text-sm font-bold text-bg shadow-sm transition hover:-translate-y-0.5 hover:opacity-90">
             + Add a title
           </a>
         </div>
-        <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+        <div className="rounded-3xl border border-line bg-surface p-5 shadow-sm sm:p-6">
           <TitleList empty="No titles are available for this account yet. Start a submission to add your first title." />
         </div>
       </section>
@@ -175,7 +175,7 @@ function CreatorDashboard({
           </p>
           <NewSubmissionPanel />
         </div>
-        <div className="space-y-3 rounded-2xl border border-line bg-surface p-5">
+        <div className="space-y-3 rounded-3xl border border-line bg-surface p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted">Separate submission path</p>
           <h3 className="font-display text-xl font-semibold">Story & Concept</h3>
           <p className="text-sm leading-relaxed text-muted">
@@ -208,11 +208,11 @@ function CreatorDashboard({
         <CreatorDocumentVault />
       </section>
 
-      <section id="assets" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <section id="assets" className="scroll-mt-24 rounded-3xl border border-line bg-surface p-6 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-accent">Secure media</p>
-            <h2 className="mt-1 font-display text-2xl font-semibold">My Assets & Uploads</h2>
+            <h2 className="mt-1 font-display text-2xl font-bold tracking-tight sm:text-3xl">My Assets & Uploads</h2>
           </div>
           <span className="rounded-full border border-line px-3 py-1 text-xs text-muted">Title-scoped access</span>
         </div>
@@ -272,7 +272,7 @@ function CreatorDashboard({
         )}
       </section>
 
-      <section id="statements" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <section id="statements" className="scroll-mt-24 rounded-3xl border border-line bg-surface p-6 shadow-sm sm:p-7">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted">Creator finance</p>
         <h2 className="mt-1 font-display text-2xl font-semibold">Statements</h2>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">
@@ -295,7 +295,7 @@ function CreatorDashboard({
 
 function Metric({ label, value, note }: { label: string; value: number; note: string }) {
   return (
-    <article className="rounded-xl border border-line bg-surface p-4">
+    <article className="rounded-2xl border border-line bg-surface p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-accent/40">
       <p className="text-xs font-medium text-muted">{label}</p>
       <p className="mt-2 font-display text-2xl font-semibold tabular-nums">{value}</p>
       <p className="mt-1 text-xs text-muted">{note}</p>
@@ -319,7 +319,7 @@ function InfoPanel({
   href: string;
 }) {
   return (
-    <article id={id} className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+    <article id={id} className="scroll-mt-24 rounded-3xl border border-line bg-surface p-6 shadow-sm sm:p-7">
       <p className="text-xs font-semibold uppercase tracking-widest text-accent">{eyebrow}</p>
       <h2 className="mt-2 font-display text-xl font-semibold">{title}</h2>
       <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
