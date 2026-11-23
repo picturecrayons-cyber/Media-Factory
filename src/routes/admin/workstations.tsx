@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
@@ -194,7 +194,7 @@ function LoopPublicationCard({
   const published = record?.publication?.published === true &&
     ["AUTHORIZED", "LIVE"].includes(record?.publication?.authorizationStatus);
 
-  function submit(event: React.FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canPublish || !language.trim() || !windowStart || !windowEnd) return;
     const start = new Date(windowStart);
