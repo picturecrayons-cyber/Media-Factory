@@ -231,7 +231,7 @@ export const decideBridgeOwnerSubmission = createServerFn({ method: "POST" })
       throw new Error("A correction reason is required");
     }
     const sql = await getSql();
-    const nextStatus = data.decision === "ACCEPT" ? "ACCEPTED" : "NEEDS_CORRECTION";
+    const nextStatus = data.decision === "ACCEPT" ? "ACCEPTED_INTAKE" : "NEEDS_CORRECTION";
 
     await sql.transaction(async (tx) => {
       const rows = await tx<{
@@ -267,7 +267,7 @@ export const decideBridgeOwnerSubmission = createServerFn({ method: "POST" })
         values (
           ${submission.title_id},
           'finished_film',
-          ${data.decision === "ACCEPT" ? "ACCEPTED" : "REQUESTED_CORRECTIONS"},
+          ${data.decision === "ACCEPT" ? "ACCEPTED_INTAKE" : "REQUEST_CHANGES"},
           'SUBMITTED',
           ${nextStatus},
           ${actor.userId},
