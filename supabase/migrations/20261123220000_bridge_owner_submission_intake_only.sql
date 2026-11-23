@@ -46,7 +46,7 @@ grant select, insert, update on table public.bridge_title_owner_submissions to s
 alter table public.bridge_owner_submission_events enable row level security;
 revoke all on table public.bridge_owner_submission_events from public, anon, authenticated, service_role;
 grant select, insert on table public.bridge_owner_submission_events to service_role;
-revoke all on sequence public.bridge_owner_submission_events_id_seq from public, anon, authenticated;
+revoke all on sequence public.bridge_owner_submission_events_id_seq from public, anon, authenticated, service_role;
 grant usage, select on sequence public.bridge_owner_submission_events_id_seq to service_role;
 
 create or replace function public.bridge_reject_owner_submission_event_mutation()
