@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listInvestorInvestments } from "@/lib/bridge/investor";
+import { TitleFinanceWorkspace } from "@/components/bridge/title-finance-workspace";
 
 export const Route = createFileRoute("/investor")({ component: Investor });
 
@@ -11,14 +12,15 @@ function Investor() {
     <RequireBridge allow="investor">
       {(actor) => (
         <BridgeShell actor={actor} title="Investor desk">
-          <InvestorBody userId={actor.userId} />
+          <InvestorBody actor={actor} />
         </BridgeShell>
       )}
     </RequireBridge>
   );
 }
 
-function InvestorBody({ userId }: { userId: string }) {
+function InvestorBody({ actor }: { actor: { userId: string; accountType: string; internalRole: string | null } }) {
+  const userId = actor.userId;
   const investmentsQ = useQuery({
     queryKey: ["bridge-investor-investments", userId],
     queryFn: () => listInvestorInvestments(),
@@ -71,6 +73,7 @@ function InvestorBody({ userId }: { userId: string }) {
         </div>
       </section>
       </> : null}
+      <section aria-label="Verified investor return statements"><TitleFinanceWorkspace actor={actor} /></section>
     </div>
   );
 }
