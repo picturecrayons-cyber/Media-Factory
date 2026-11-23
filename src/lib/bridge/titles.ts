@@ -606,8 +606,9 @@ export const advanceTitle = createServerFn({ method: "POST" })
     assertTransition(title.status, data.to);
     const perm = permissionForTransition(title.status, data.to);
     if (!perm) throw new Error("Transition is not available");
-    assertPermission(actor, perm);
+    if (data.to !== "QC_REVIEW") assertPermission(actor, perm);
     if (
+      data.to !== "QC_REVIEW" &&
       perm === "title.advance_upload" &&
       title.ownerUserId !== actor.userId &&
       !canMutateTitle(actor, title, perm, perm)
