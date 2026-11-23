@@ -7,6 +7,7 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 import { ProductsServicesCatalogue } from "@/components/bridge/products-services-catalogue";
+import { ServiceCentre } from "@/components/bridge/service-centre";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
@@ -61,6 +62,7 @@ function Studio() {
             <section id="studio-services" className="space-y-3">
               <h3 className="font-display text-xl font-semibold">Products & Services</h3>
               <ProductsServicesCatalogue audience="Studio" />
+            <ServiceCentre audience="Studio" userId={actor.userId} />
             </section>
 
             <CreatorDocumentVault userId={actor.userId} />
