@@ -7,7 +7,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { getTitle, updateTitle } from "@/lib/bridge/titles";
+import { advanceTitle, getTitle, updateTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   abortAssetMultipart,
@@ -124,6 +124,16 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
     enabled: !buyerView && titleQ.data?.title?.submissionType !== "story_concept",
   });
+  const submitQcMutation = useMutation({
+    mutationFn: () => advanceTitle({ data: { id, to: "QC_REVIEW", note: "Submitted by title owner through the Bridge workspace." } }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["bridge-title", id] }),
+        qc.invalidateQueries({ queryKey: ["bridge-titles"] }),
+        qc.invalidateQueries({ queryKey: ["title-workflow", id] }),
+      ]);
+    },
+  });
   const title = titleQ.data?.title;
   const conceptQ = useQuery({
     queryKey: ["my-story-concepts", actor.userId, id],
@@ -228,12 +238,29 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 <button
                   type="button"
                   onClick={() => setChosenTab("Files")}
-                  className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
+                  className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold"
                 >
                   Upload Files
                 </button>
-                
+                {title.status === "PREPARING" ? (
+                  <button
+                    type="button"
+                    disabled={submitQcMutation.isPending || !qcReady}
+                    onClick={() => submitQcMutation.mutate()}
+                    className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-[#041018] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {submitQcMutation.isPending ? "Submitting to Bridge…" : "Submit to Bridge for QC review"}
+                  </button>
+                ) : null}
               </div>
+            ) : null}
+            {submitQcMutation.isError ? (
+              <p role="alert" className="mt-3 text-sm text-red-600">
+                {submitQcMutation.error instanceof Error ? submitQcMutation.error.message : "Could not submit to Bridge."}
+              </p>
+            ) : null}
+            {title.status === "PREPARING" && !qcReady ? (
+              <p className="mt-3 text-xs text-muted">Submit becomes available when the required master and artwork are storage-verified. QC review is a separate decision.</p>
             ) : null}
           </div>
         </div>
