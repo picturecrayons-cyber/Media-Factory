@@ -9,7 +9,7 @@ create table if not exists public.bridge_title_owner_submissions (
   owner_organization_id uuid,
   details jsonb not null default '{}'::jsonb,
   submission_status text not null default 'DRAFT'
-    check (submission_status in ('DRAFT', 'SUBMITTED', 'NEEDS_CORRECTION')),
+    check (submission_status in ('DRAFT', 'SUBMITTED', 'NEEDS_CORRECTION', 'ACCEPTED_INTAKE', 'WITHDRAWN', 'REJECTED', 'ARCHIVED')),
   submitted_at timestamptz,
   submitted_by text references public.bridge_profiles(user_id) on delete restrict,
   updated_by text not null references public.bridge_profiles(user_id) on delete restrict,
@@ -26,9 +26,9 @@ create table if not exists public.bridge_owner_submission_events (
   id bigserial primary key,
   title_id text not null references public.bridge_titles(id) on delete restrict,
   submission_kind text not null check (submission_kind = 'finished_film'),
-  action text not null check (action in ('SUBMITTED', 'RESUBMITTED')),
-  from_status text check (from_status is null or from_status in ('DRAFT', 'NEEDS_CORRECTION')),
-  to_status text not null check (to_status = 'SUBMITTED'),
+  action text not null check (action in ('SUBMITTED', 'RESUBMITTED', 'ACCEPTED_INTAKE', 'REQUEST_CHANGES', 'WITHDRAWN', 'REJECTED', 'ARCHIVED', 'RESTORED')),
+  from_status text check (from_status is null or from_status in ('DRAFT', 'NEEDS_CORRECTION', 'SUBMITTED', 'ACCEPTED_INTAKE', 'WITHDRAWN', 'REJECTED', 'ARCHIVED')),
+  to_status text not null check (to_status in ('DRAFT', 'SUBMITTED', 'NEEDS_CORRECTION', 'ACCEPTED_INTAKE', 'WITHDRAWN', 'REJECTED', 'ARCHIVED')),
   actor_user_id text not null references public.bridge_profiles(user_id) on delete restrict,
   reason text,
   created_at timestamptz not null default now(),
@@ -64,57 +64,3 @@ create trigger bridge_owner_submission_events_immutable
 before update or delete on public.bridge_owner_submission_events
 for each row execute function public.bridge_reject_owner_submission_event_mutation();
 
-
--- Extend the intake state machine for Admin decisions. This migration is source-only;
--- applying it to STAGING or PRODUCTION requires a separate database approval.
-do $migration$
-declare
-  constraint_row record;
-begin
-  for constraint_row in
-    select conname
-    from pg_constraint
-    where conrelid = 'public.bridge_title_owner_submissions'::regclass
-      and contype = 'c'
-      and pg_get_constraintdef(oid) ilike '%submission_status%'
-  loop
-    execute format(
-      'alter table public.bridge_title_owner_submissions drop constraint %I',
-      constraint_row.conname
-    );
-  end loop;
-
-  for constraint_row in
-    select conname
-    from pg_constraint
-    where conrelid = 'public.bridge_owner_submission_events'::regclass
-      and contype = 'c'
-      and (
-        pg_get_constraintdef(oid) ilike '%action%'
-        or pg_get_constraintdef(oid) ilike '%from_status%'
-        or pg_get_constraintdef(oid) ilike '%to_status%'
-      )
-  loop
-    execute format(
-      'alter table public.bridge_owner_submission_events drop constraint %I',
-      constraint_row.conname
-    );
-  end loop;
-end;
-$migration$;
-
-alter table public.bridge_title_owner_submissions
-  add constraint bridge_title_owner_submissions_status_lifecycle_check
-  check (submission_status in ('DRAFT', 'SUBMITTED', 'NEEDS_CORRECTION', 'ACCEPTED'));
-
-alter table public.bridge_owner_submission_events
-  add constraint bridge_owner_submission_events_action_lifecycle_check
-  check (action in ('SUBMITTED', 'RESUBMITTED', 'ACCEPTED', 'REQUESTED_CORRECTIONS'));
-
-alter table public.bridge_owner_submission_events
-  add constraint bridge_owner_submission_events_from_lifecycle_check
-  check (from_status is null or from_status in ('DRAFT', 'NEEDS_CORRECTION', 'SUBMITTED'));
-
-alter table public.bridge_owner_submission_events
-  add constraint bridge_owner_submission_events_to_lifecycle_check
-  check (to_status in ('SUBMITTED', 'ACCEPTED', 'NEEDS_CORRECTION'));
