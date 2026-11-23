@@ -58,6 +58,7 @@ const getBuyerWorkspace = createServerFn({ method: "GET" })
         join public.bridge_deals d on d.title_id = j.title_id and d.buyer_id = ${actor.userId}
         join public.bridge_titles t on t.id = j.title_id
         where d.buyer_id = ${actor.userId}
+          and j.requested_by = ${actor.userId}
         order by j.updated_at desc limit 100
       `,
       sql<{ id: string; title: string; status: string; created_at: string | Date }>`
