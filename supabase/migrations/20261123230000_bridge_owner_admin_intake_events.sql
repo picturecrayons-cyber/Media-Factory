@@ -22,6 +22,7 @@ create index if not exists bridge_owner_submission_events_title_created_idx
 alter table public.bridge_owner_submission_events enable row level security;
 revoke all on table public.bridge_owner_submission_events from public, anon, authenticated;
 grant all on table public.bridge_owner_submission_events to postgres, service_role;
+grant all on sequence public.bridge_owner_submission_events_id_seq to postgres, service_role;
 
 create or replace function public.bridge_reject_owner_submission_event_mutation()
 returns trigger language plpgsql set search_path = public, pg_temp as $function$
