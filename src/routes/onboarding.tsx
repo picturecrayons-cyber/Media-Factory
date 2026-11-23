@@ -380,7 +380,7 @@ function Onboarding() {
               {signupAccountType ? (
                 <div className="mt-1.5 rounded-xl border border-line-strong bg-elevated px-3.5 py-3">
                   <p className="font-semibold text-fg">{ACCOUNT_LABELS[signupAccountType]}</p>
-                  <p className="mt-1 text-xs text-muted">Chosen during sign-up. Contact Bridge if this needs correction.</p>
+                  <p className="mt-1 text-xs text-muted">Selected account type. Already selected during sign-up; contact Bridge if this needs correction.</p>
                 </div>
               ) : (
                 <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
