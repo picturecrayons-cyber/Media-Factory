@@ -3,7 +3,7 @@
  * Pattern matches titles.ts (not named *.server.ts).
  */
 
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -60,7 +60,69 @@ function mapConcept(r: ConceptRow): StoryConceptSubmission {
   };
 }
 
-function slugify(name: string, id: string): string {
+const loadBridgeMail = createServerOnlyFn(() => import("./mail.server"));
+
+async function notifyConceptOwner(sql: Awaited<ReturnType<typeof getSql>>, concept: ConceptRow) {
+  const [profiles, titles] = await Promise.all([
+    sql<{ email: string | null }>`
+      select p.email from bridge_profiles p
+      join bridge_titles t on t.owner_user_id = p.user_id
+      where t.id = ${concept.title_id} limit 1
+    `,
+    sql<{ name: string }>`select name from bridge_titles where id = ${concept.title_id} limit 1`,
+  ]);
+  const email = profiles[0]?.email?.trim();
+  if (!email) return;
+  const titleName = titles[0]?.name ?? "your Story / Concept";
+  const labels: Record<string, string> = {
+    PENDING: "Pending review", UNDER_REVIEW: "In review", APPROVED: "Approved",
+    REJECTED: "Rejected", INTRODUCED_TO_BUYERS: "Introduced to buyers",
+  };
+  const subject = `Crayons Bridge concept review update: ${titleName}`;
+  const textBody = `The review status for ${titleName} is now: ${labels[concept.curation_status] ?? concept.curation_status}.${concept.admin_notes ? ` Reviewer feedback: ${concept.admin_notes}` : ""}\n\nOpen your Concept review: https://www.crayonspictures.in/title/${concept.title_id}`;
+  const eventKey = `bridge-story-concept:${concept.id}:${asIso(concept.updated_at)}`;
+  await sql`
+    insert into bridge_notification_outbox (event_key, recipient_email, subject, text_body)
+    values (${eventKey}, ${email}, ${subject}, ${textBody})
+    on conflict (event_key) do nothing
+  `;
+  const claimed = await sql<{ id: string; recipient_email: string; subject: string; text_body: string }>`
+    update bridge_notification_outbox
+    set status = 'sending', attempts = attempts + 1, processing_started_at = now(), updated_at = now()
+    where event_key = ${eventKey} and next_attempt_at <= now()
+      and (status in ('pending','failed') or (status = 'sending' and processing_started_at < now() - interval '10 minutes'))
+    returning id, recipient_email, subject, text_body
+  `;
+  const outbox = claimed[0];
+  if (!outbox) return;
+  try {
+    const { sendTransactionalEmail } = await loadBridgeMail();
+    const sent = await sendTransactionalEmail({
+      to: outbox.recipient_email, subject: outbox.subject, text: outbox.text_body,
+      category: "bridge_story_concept_review_updated",
+    });
+    await sql`
+      update bridge_notification_outbox
+      set status = 'sent', sent_at = now(), provider_message_id = ${sent.messageId ?? null},
+          last_error = null, processing_started_at = null, updated_at = now()
+      where id = ${outbox.id}::uuid
+    `;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "mail_delivery_failed";
+    await sql`
+      update bridge_notification_outbox
+      set status = 'failed', last_error = ${message.slice(0, 500)},
+          next_attempt_at = now() + make_interval(mins => least(60, greatest(1, power(2, least(attempts, 6))::int))),
+          processing_started_at = null, updated_at = now()
+      where id = ${outbox.id}::uuid
+    `;
+    console.warn("Bridge Story / Concept notification failed; retained in outbox", {
+      conceptId: concept.id, error: message,
+    });
+  }
+}
+
+function slugify(name: string, id: string) {
   const base = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -299,6 +361,14 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
         entityId: concept.id,
         metadata: { from, status: data.status },
       });
+      try {
+        await notifyConceptOwner(sql, concept);
+      } catch (notificationError) {
+        console.warn("Bridge Story / Concept notification enqueue failed", {
+          conceptId: concept.id,
+          error: notificationError instanceof Error ? notificationError.message : "unknown",
+        });
+      }
 
       return { concept: mapConcept(concept) };
     } catch (err) {
