@@ -5,7 +5,6 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { listBridgeAdminOwnerSubmissionQueue } from "@/lib/bridge/owner-submission-intake";
-import type { BridgeActor } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -17,7 +16,7 @@ function Dashboard() {
     <RequireBridge allow="super_admin">
       {(actor) => (
         <BridgeShell actor={actor} title="Founder Centre">
-          <DashboardBody actor={actor} />
+          <DashboardBody />
         </BridgeShell>
       )}
     </RequireBridge>
@@ -38,7 +37,7 @@ function getIndiaGreeting() {
   return "Good night";
 }
 
-function DashboardBody({ actor }: { actor: BridgeActor }) {
+function DashboardBody() {
   const [greeting, setGreeting] = useState("Good morning");
   useEffect(() => {
     const refresh = () => setGreeting(getIndiaGreeting());
