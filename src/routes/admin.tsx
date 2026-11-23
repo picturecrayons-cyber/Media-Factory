@@ -8,6 +8,7 @@ import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
+import { TitleFinanceWorkspace } from "@/components/bridge/title-finance-workspace";
 
 
 export const Route = createFileRoute("/admin")({
@@ -68,6 +69,8 @@ function AdminBody({ actor }: { actor: any }) {
             <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Loop ↗</Button></a>
           </div>
         </section>
+
+        {actor.internalRole === "super_admin" ? <TitleFinanceWorkspace actor={actor} /> : null}
 
         <section aria-label="Title overview" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="All titles" value={loading ? "—" : String(titles.length)} detail="Canonical catalog" />
