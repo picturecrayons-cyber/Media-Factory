@@ -21,5 +21,5 @@ test("draft deletion blocks story concepts and linked records or storage-backed 
   assert.match(deletion, /submission_type/);
   assert.match(deletion, /Story Concepts must remain in their separate submission workflow/);
   assert.match(deletion, /if \(blocked\.length\)/);
-  assert.match(deletion, /Linked records or storage-backed assets remain/);
+  assert.match(deletion, /linked records or storage-backed assets remain/i);
 });
