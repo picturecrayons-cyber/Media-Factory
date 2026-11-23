@@ -40,8 +40,8 @@ create index if not exists bridge_owner_submission_events_title_created_idx
   on public.bridge_owner_submission_events(title_id, created_at desc);
 
 alter table public.bridge_title_owner_submissions enable row level security;
-revoke all on table public.bridge_title_owner_submissions from public, anon, authenticated;
-grant select, insert, update on table public.bridge_title_owner_submissions to postgres, service_role;
+revoke all on table public.bridge_title_owner_submissions from public, anon, authenticated, service_role;
+grant select, insert, update on table public.bridge_title_owner_submissions to service_role;
 
 alter table public.bridge_owner_submission_events enable row level security;
 revoke all on table public.bridge_owner_submission_events from public, anon, authenticated, service_role;
