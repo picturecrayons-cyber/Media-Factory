@@ -17,7 +17,7 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_PRODUCTION_MIGRATIONS = 70;
+const EXPECTED_PRODUCTION_MIGRATIONS = 71;
 // Additive lifecycle migrations are Testing candidates and are not part of
 // the immutable historical Production manifest. Keep every exclusion explicit.
 const NON_PRODUCTION_MIGRATIONS = new Set([
