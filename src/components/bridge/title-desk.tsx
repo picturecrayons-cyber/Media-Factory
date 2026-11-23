@@ -4,10 +4,21 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { createTitle, deleteDraftTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({
+  empty,
+  query = "",
+  showSubmissionFilters = false,
+  allowDraftDelete = false,
+}: {
+  empty: string;
+  query?: string;
+  showSubmissionFilters?: boolean;
+  allowDraftDelete?: boolean;
+}) {
+  const [sourceFilter, setSourceFilter] = useState<"all" | "independent_creator" | "studio">("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const titlesQ = useQuery({
@@ -18,32 +29,82 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
     refetchOnWindowFocus: false,
     retry: 1,
   });
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteDraftTitle({ data: { id, confirmation: "DELETE DRAFT" } }),
+    onSuccess: () => { toast.success("Draft title deleted."); void titlesQ.refetch(); },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Draft deletion blocked."),
+  });
   const allTitles = titlesQ.data?.titles ?? [];
   const titles = allTitles
+    .filter((t) => sourceFilter === "all" || t.ownerAccountType === sourceFilter)
     .filter((t) => !query || (t.name + " " + t.language + " " + (t.year ?? "")).toLowerCase().includes(query.toLowerCase()))
     .filter((t) => statusFilter === "all" || t.status === statusFilter)
     .filter((t) => typeFilter === "all" || (t.contentType ?? "other").toLowerCase() === typeFilter)
     .sort((a, b) => a.name.localeCompare(b.name));
+
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
-  if (titlesQ.isError) return <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent"><p>Could not load titles.</p><Button type="button" onClick={() => void titlesQ.refetch()}>Retry</Button></div>;
+  if (titlesQ.isError) {
+    return (
+      <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
+        <p>Could not load titles.</p>
+        <Button type="button" onClick={() => void titlesQ.refetch()}>Retry</Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted">{titles.length} of {allTitles.length} titles</p>
         <div className="flex flex-wrap gap-3">
-          <label className="text-xs text-muted">Status<select aria-label="Filter titles by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="ml-2 h-9 rounded-lg border border-line bg-elevated px-2 text-sm text-fg"><option value="all">All statuses</option>{[...new Set(allTitles.map((t) => t.status))].sort().map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>
-          <label className="text-xs text-muted">Type<select aria-label="Filter titles by type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="ml-2 h-9 rounded-lg border border-line bg-elevated px-2 text-sm text-fg"><option value="all">All types</option>{[...new Set(allTitles.map((t) => (t.contentType ?? "other").toLowerCase()))].sort().map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+          {showSubmissionFilters ? (
+            <label className="text-xs text-muted">Source
+              <select aria-label="Filter titles by submission source" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as typeof sourceFilter)} className="ml-2 h-9 rounded-lg border border-line bg-elevated px-2 text-sm text-fg">
+                <option value="all">All sources</option>
+                <option value="independent_creator">Creator submissions</option>
+                <option value="studio">Studio submissions</option>
+              </select>
+            </label>
+          ) : null}
+          <label className="text-xs text-muted">Status
+            <select aria-label="Filter titles by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="ml-2 h-9 rounded-lg border border-line bg-elevated px-2 text-sm text-fg">
+              <option value="all">All statuses</option>
+              {[...new Set(allTitles.map((t) => t.status))].sort().map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}
+            </select>
+          </label>
+          <label className="text-xs text-muted">Type
+            <select aria-label="Filter titles by type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="ml-2 h-9 rounded-lg border border-line bg-elevated px-2 text-sm text-fg">
+              <option value="all">All types</option>
+              {[...new Set(allTitles.map((t) => (t.contentType ?? "other").toLowerCase()))].sort().map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </label>
         </div>
       </div>
       {!titles.length ? <p className="rounded-xl border border-dashed border-line p-6 text-sm text-muted">{empty}</p> : (
         <ul className="divide-y divide-line rounded-xl border border-line">
-          {titles.map((t) => <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"><Link to="/title/$id" params={{ id: t.id }} className="min-w-0 flex-1 rounded-md py-1 hover:text-accent"><p className="font-medium">{t.name}</p><p className="text-sm text-muted">{t.contentType ? t.contentType + " · " : ""}{t.language}{t.year ? " · " + t.year : ""}</p></Link><div className="flex shrink-0 items-center gap-3"><StatusChip status={t.status} /></div></li>)}
+          {titles.map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <Link to="/title/$id" params={{ id: t.id }} className="min-w-0 flex-1 rounded-md py-1 hover:text-accent">
+                <p className="font-medium">{t.name}</p>
+                <p className="text-sm text-muted">{t.contentType ? t.contentType + " · " : ""}{t.language}{t.year ? " · " + t.year : ""}</p>
+              </Link>
+              <div className="flex shrink-0 items-center gap-3">
+                <StatusChip status={t.status} />
+                {allowDraftDelete && t.status === "DRAFT" ? (
+                  <Button type="button" size="sm" variant="outline" disabled={deleteMutation.isPending} onClick={() => {
+                    if (window.confirm("Permanently delete this DRAFT title? This cannot be undone. Linked assets or records will block deletion.")) deleteMutation.mutate(t.id);
+                  }}>Delete draft</Button>
+                ) : null}
+              </div>
+            </li>
+          ))}
         </ul>
       )}
-      <p className="text-xs text-muted">View-only filters and alphabetical ordering. No title records, aliases, assets or history are changed.</p>
+      <p className="text-xs text-muted">Filters only change the displayed list. Draft deletion is server-authorized, transactional, audited and blocked when linked records or assets remain.</p>
     </div>
   );
 }
+
 export function CreateTitleForm({ concise = false }: { concise?: boolean } = {}) {
   const qc = useQueryClient();
   const navigate = useNavigate();

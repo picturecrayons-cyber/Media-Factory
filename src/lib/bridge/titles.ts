@@ -723,3 +723,64 @@ export const listAuditLogs = createServerFn({ method: "GET" })
       })),
     };
   });
+
+
+export const deleteDraftTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ id: z.string().min(8).max(100), confirmation: z.literal("DELETE DRAFT") }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const title = await loadTitle(data.id);
+    if (!title || title.status !== "DRAFT" || !canMutateTitle(actor, title, "title.update_own", "title.approve")) {
+      throw new Error("Only a DRAFT title that you are authorized to manage can be deleted");
+    }
+
+    const sql = await getSql();
+    await sql.transaction(async (tx) => {
+      const locked = await tx.query<{ status: string; name: string; submission_type: string | null }>(
+        "select status,name,submission_type from public.bridge_titles where id=$1 for update",
+        [data.id],
+      );
+      if (!locked[0] || locked[0].status !== "DRAFT") {
+        throw new Error("Title is no longer a DRAFT; deletion is blocked");
+      }
+      if (locked[0].submission_type && locked[0].submission_type !== "finished_film") {
+        throw new Error("Story Concepts must remain in their separate submission workflow");
+      }
+
+      const references = await tx.query<{ table_name: string; column_name: string }>(
+        "select kcu.table_name,kcu.column_name from information_schema.table_constraints tc join information_schema.key_column_usage kcu on tc.constraint_name=kcu.constraint_name and tc.constraint_schema=kcu.constraint_schema join information_schema.constraint_column_usage ccu on ccu.constraint_name=tc.constraint_name and ccu.constraint_schema=tc.constraint_schema where tc.constraint_type='FOREIGN KEY' and tc.constraint_schema='public' and ccu.table_schema='public' and ccu.table_name='bridge_titles' and ccu.column_name='id'",
+      );
+      const blocked: string[] = [];
+      for (const ref of references) {
+        if (ref.table_name === "bridge_title_events") {
+          await tx.query("delete from public.bridge_title_events where title_id=$1", [data.id]);
+          continue;
+        }
+        const count = await tx.query<{ count: number }>(
+          'select count(*)::int as count from public."' + ref.table_name.replaceAll('"', '""') + '" where "' + ref.column_name.replaceAll('"', '""') + '"=$1',
+          [data.id],
+        );
+        if (Number(count[0]?.count ?? 0) > 0) blocked.push(ref.table_name);
+      }
+      if (blocked.length) {
+        throw new Error("Deletion blocked: linked records or storage-backed assets remain (" + [...new Set(blocked)].join(", ") + "). Use the verified asset cleanup workflow first.");
+      }
+
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.draft_deleted",
+        entityType: "bridge_title",
+        entityId: data.id,
+        metadata: { titleName: locked[0].name, priorStatus: "DRAFT", relatedRowsChecked: references.length },
+      }, tx);
+      const deleted = await tx.query<{ id: string }>(
+        "delete from public.bridge_titles where id=$1 and status='DRAFT' returning id",
+        [data.id],
+      );
+      if (!deleted[0]) throw new Error("Draft changed during deletion; no record was removed");
+    });
+    return { id: data.id, deleted: true as const };
+  });
+
