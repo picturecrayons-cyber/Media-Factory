@@ -11,6 +11,11 @@ const STATUS_LABEL: Record<string, string> = {
   INTRODUCED_TO_BUYERS: "Introduced",
 };
 
+function formatConceptDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "date unavailable" : date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
 function listLogline(value: string | null | undefined) {
   const text = value?.trim() ?? "";
   if (!text.includes(" ") || !/[a-zA-Z]{3,}/.test(text)) return "";
@@ -22,6 +27,7 @@ export function MyStoryConcepts() {
     queryKey: ["my-story-concepts"],
     queryFn: () => listMyStoryConcepts(),
     enabled: STORY_CONCEPT_ENABLED,
+    refetchInterval: 60_000,
   });
 
   if (!STORY_CONCEPT_ENABLED) return null;
@@ -49,6 +55,10 @@ export function MyStoryConcepts() {
                   <p className="text-sm text-muted">
                     {STATUS_LABEL[c.curation_status] ?? c.curation_status}
                     {logline ? ` · ${logline}` : ""}
+                    {` · Updated ${formatConceptDate(c.updated_at)}`}
+                  </p>
+                  {c.admin_notes ? <p className="mt-2 text-xs leading-relaxed text-muted">Review update: {c.admin_notes}</p> : null}
+                  <p className="sr-only" aria-live="polite">{STATUS_LABEL[c.curation_status] ?? c.curation_status}
                   </p>
                 </div>
               </Link>
