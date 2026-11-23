@@ -156,11 +156,13 @@ export const submitTitleOwnerInterests = createServerFn({ method: "POST" })
     return sql.transaction(async (tx) => {
       const created: string[] = [];
       for (const interest of data.interests) {
-        const profile = await tx.query<{ user_id: string; account_type: string }>(
-          "select user_id,account_type from public.bridge_profiles where user_id=$1 limit 1",
+        const profile = await tx.query<{ user_id: string; account_type: string; organization_id: string | null }>(
+          "select user_id,account_type,organization_id from public.bridge_profiles where user_id=$1 limit 1",
           [interest.ownerUserId],
         );
         if (!profile[0] || profile[0].account_type !== interest.ownerAccountType) throw new Error("Owner profile/account type could not be verified.");
+        if (interest.ownerAccountType === "studio" && (!interest.ownerOrganizationId || profile[0].organization_id !== interest.ownerOrganizationId)) throw new Error("Studio ownership must match the verified profile organization.");
+        if (interest.ownerAccountType === "independent_creator" && interest.ownerOrganizationId) throw new Error("Independent Creator ownership cannot claim a Studio organization.");
         const row = await tx.query<{ id: string }>(
           "insert into public.bridge_title_owner_interests(title_id,owner_user_id,owner_account_type,owner_organization_id,share_bps,agreement_reference,evidence_url,created_by) values($1,$2,$3,$4,$5,$6,$7,$8) returning id",
           [data.titleId,interest.ownerUserId,interest.ownerAccountType,interest.ownerOrganizationId ?? null,interest.shareBps,interest.agreementReference,interest.evidenceUrl,actor.userId],
@@ -247,7 +249,14 @@ export const createLicensingAllocations = createServerFn({ method: "POST" })
       );
       const receipt = receiptRows[0];
       if (!receipt || receipt.verification_status !== "VERIFIED") throw new Error("Allocations require a verified licensing receipt.");
-      assertAllocationsWithinNetRevenue(Number(receipt.net_amount_paise), data.allocations);
+      const existingTotals = await tx.query<{ amount_paise: number }>(
+        "select coalesce(sum(amount_paise),0)::bigint as amount_paise from public.bridge_licensing_allocations where receipt_id=$1 and status<>'CANCELLED'",
+        [data.receiptId],
+      );
+      const alreadyAllocated = Number(existingTotals[0]?.amount_paise ?? 0);
+      const requested = assertAllocationsWithinNetRevenue(Number(receipt.net_amount_paise) - alreadyAllocated, data.allocations);
+      const beneficiaries = data.allocations.map((item) => item.beneficiaryType + ":" + (item.beneficiaryType === "BRIDGE" ? "bridge" : item.beneficiaryUserId));
+      if (new Set(beneficiaries).size !== beneficiaries.length) throw new Error("Each beneficiary may receive only one allocation per receipt.");
       const created: string[] = [];
       for (const item of data.allocations) {
         if (item.beneficiaryType === "OWNER") {
@@ -257,7 +266,12 @@ export const createLicensingAllocations = createServerFn({ method: "POST" })
           );
           const interest = interestRows[0];
           if (!interest || interest.status !== "VERIFIED" || interest.owner_user_id !== item.beneficiaryUserId) throw new Error("Owner allocation requires a matching verified title ownership interest.");
-          if (item.amountPaise > ownerEntitlementPaise(Number(receipt.net_amount_paise), Number(interest.share_bps))) throw new Error("Owner allocation exceeds the verified ownership share.");
+          const priorOwnerRows = await tx.query<{ amount_paise: number }>(
+            "select coalesce(sum(amount_paise),0)::bigint as amount_paise from public.bridge_licensing_allocations where receipt_id=$1 and owner_interest_id=$2 and status<>'CANCELLED'",
+            [data.receiptId,item.ownerInterestId],
+          );
+          const ownerRemaining = Math.max(0, ownerEntitlementPaise(Number(receipt.net_amount_paise), Number(interest.share_bps)) - Number(priorOwnerRows[0]?.amount_paise ?? 0));
+          if (item.amountPaise > ownerRemaining) throw new Error("Owner allocation exceeds the remaining verified ownership share.");
         } else if (item.beneficiaryType === "INVESTOR") {
           const agreementRows = await tx.query<{ investor_user_id: string; share_bps: number; cap_amount_paise: number | null; return_model: string; status: string; effective_from: string; effective_to: string | null }>(
             "select investor_user_id,share_bps,cap_amount_paise,return_model,status,effective_from,effective_to from public.bridge_investment_agreements where id=$1 and title_id=$2 limit 1",
