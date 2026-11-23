@@ -24,7 +24,7 @@ const buttonClass = "rounded-full border border-line px-3 py-2 text-sm font-semi
 export function TitleFinanceWorkspace({ actor }: Props) {
   const qc = useQueryClient();
   const isSuperAdmin = actor.internalRole === "super_admin";
-  const ownQuery = useQuery({ queryKey: ["title-finance-own", actor.userId], queryFn: () => getOwnTitleFinancialStatements(), enabled: !actor.internalRole && ["independent_creator", "studio"].includes(actor.accountType) });
+  const ownQuery = useQuery({ queryKey: ["title-finance-own", actor.userId], queryFn: () => getOwnTitleFinancialStatements(), enabled: !actor.internalRole && ["independent_creator", "studio", "investor"].includes(actor.accountType) });
   const financeQuery = useQuery({ queryKey: ["title-finance-control-centre"], queryFn: () => getTitleFinanceControlCentre(), enabled: isSuperAdmin });
   const [notice, setNotice] = useState("");
   const [receipt, setReceipt] = useState({ titleId: "", rightsGrantId: "", buyerUserId: "", contractReference: "", paymentReference: "", gross: "", tax: "0", deductions: "0", evidenceUrl: "" });
