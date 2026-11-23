@@ -380,8 +380,7 @@ function Onboarding() {
               {signupAccountType ? (
                 <div className="mt-1.5 rounded-xl border border-line-strong bg-elevated px-3.5 py-3">
                   <p className="font-semibold text-fg">{ACCOUNT_LABELS[signupAccountType]}</p>
-                  <p className="mt-1 text-xs text-muted">Selected account type</p>
-                  <p className="mt-1 text-xs text-muted">Already selected during sign-up. Contact Bridge if this needs correction.</p>
+                  <p className="mt-1 text-xs text-muted">Chosen during sign-up. Contact Bridge if this needs correction.</p>
                 </div>
               ) : (
                 <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
@@ -535,7 +534,7 @@ function Onboarding() {
             <section className="rounded-2xl border border-line bg-elevated p-5 space-y-3">
               <h2 className="font-display text-xl font-semibold">Your workspace starts here</h2>
               <p className="text-sm leading-relaxed text-muted">No title details or distribution mandate are needed to create your workspace. Signup does not approve a title or grant buyer visibility.</p>
-              <Button type="button" variant="outline" disabled={busy} onClick={() => setShowTitleIntake(true)} className="h-11 rounded-full px-6 font-semibold">Start a title submission instead</Button>
+              <Button type="button" variant="outline" disabled={busy} onClick={() => setShowTitleIntake(true)} className="h-11 rounded-full px-6 font-semibold">Continue to title submission</Button>
             </section>
           )}
 
