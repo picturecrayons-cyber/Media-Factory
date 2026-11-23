@@ -1,6 +1,8 @@
-import { Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
-export function NotFound() {
+export const Route = createFileRoute("/not-found")({ component: NotFound });
+
+function NotFound() {
   return (
     <main className="grid min-h-screen place-items-center bg-white p-6 text-fg">
       <section className="w-full max-w-lg rounded-3xl border border-line bg-surface p-8 text-center">
