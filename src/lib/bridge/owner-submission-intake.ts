@@ -217,7 +217,7 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
           ${adminEventKey} || ':' || p.user_id,
           p.email,
           ${`New Crayons Bridge submission: ${row.name}`},
-          ${`A new title submission "${row.name}" is awaiting Super Admin intake review. Reference: ${eventId}. Open the Super Admin dashboard: https://www.crayonspictures.in/admin`
+          ${`A new title submission "${row.name}" is awaiting Super Admin intake review. Reference: ${eventId}. Open the Super Admin dashboard: https://www.crayonspictures.in/admin`}
         from bridge_profiles p
         where p.internal_role = 'super_admin' and nullif(trim(p.email), '') is not null
         on conflict (event_key) do nothing
