@@ -282,6 +282,14 @@ it("reserves final approval, duplicate merge, and Loop publication to Super Admi
 });
 
 
+describe("Title finance statement authorization", () => {
+  it("allows Creator, Studio and Investor accounts to read only their own statements", () => {
+    for (const owner of [creator(), studio(), investor()]) assert.equal(hasPermission(owner, "finance.read_own"), true);
+    for (const denied of [buyer(), admin(), viewer(), qc, legal, finance]) assert.equal(hasPermission(denied, "finance.read_own"), false);
+    assert.equal(hasPermission(superAdmin(), "finance.read_own"), true);
+  });
+});
+
 describe("Creator / Studio service request authorization", () => {
   it("isolates Creator requests to the authenticated Creator's own title", () => {
     const owner = creator();
