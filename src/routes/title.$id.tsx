@@ -383,7 +383,7 @@ function ProductionAssetsPanel({
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Production</p>
           <h2 className="mt-1 font-display text-xl font-semibold">Linked production assets</h2>
-          <p className="mt-1 text-sm text-muted">References to verified files already stored in Bridge. Originals remain in their existing OCI locations.</p>
+          <p className="mt-1 text-sm text-muted">Only rows linked to an active, restored Bridge asset are verified. Unlinked legacy entries remain visible as references and do not count as ready files. Originals remain in their existing OCI locations.</p>
         </div>
         <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
           {assets.length} linked
@@ -444,7 +444,7 @@ function ProductionAssetsPanel({
                           </p>
                         </div>
                         <span className="rounded-full border border-line px-2 py-1 text-[10px] font-semibold">
-                          {asset.verifiedSource ? "Verified source" : "Reference"}
+                          {asset.verifiedSource ? "Verified source" : "Reference only · not verified"}
                         </span>
                       </div>
                     </article>
