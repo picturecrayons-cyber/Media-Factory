@@ -6,6 +6,9 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
+import { ProductsServicesCatalogue } from "@/components/bridge/products-services-catalogue";
+import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import { listTitles } from "@/lib/bridge/titles";
 import { listMyOwnerSubmissionStatuses } from "@/lib/bridge/owner-submission-intake";
 
@@ -147,6 +150,21 @@ function CreatorDashboard({
       </section>
 
       <OwnerSubmissionStatus />
+
+      <section id="creator-artwork" className="scroll-mt-20 space-y-3">
+        <div>
+          <h2 className="font-display text-2xl font-semibold">Verified artwork gallery</h2>
+          <p className="mt-1 text-sm text-muted">Only verified image assets from your server-authorized Creator catalogue are previewed.</p>
+        </div>
+        <TitleAssetGallery userId={actor.userId} scopeLabel="Creator" />
+      </section>
+
+      <section id="creator-services" className="scroll-mt-20 space-y-3">
+        <h2 className="font-display text-2xl font-semibold">Products & Services</h2>
+        <ProductsServicesCatalogue audience="Creator" />
+      </section>
+
+      <CreatorDocumentVault userId={actor.userId} />
 
       <section id="my-titles" className="scroll-mt-20 space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
