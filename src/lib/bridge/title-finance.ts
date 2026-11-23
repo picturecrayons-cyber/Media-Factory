@@ -28,7 +28,7 @@ const ownerInterestInput = z.object({
     ownerOrganizationId: z.string().max(200).nullable().optional(),
     shareBps: z.number().int().min(1).max(10000),
     agreementReference: z.string().min(2).max(200),
-    evidenceUrl: httpsUrl,
+    evidenceDocumentId: z.string().min(1).max(200),
   })).min(1).max(20),
 });
 const investorAgreementInput = z.object({
@@ -92,7 +92,7 @@ export const getTitleFinanceControlCentre = createServerFn({ method: "GET" })
     const sql = await getSql();
     const [receipts, owners, investors, allocations, reconciliations] = await Promise.all([
       sql.query("select r.id,r.title_id,t.name as title_name,r.contract_reference,r.payment_reference,r.gross_amount_paise,r.tax_amount_paise,r.deduction_amount_paise,r.net_amount_paise,r.verification_status,r.recorded_at from public.bridge_licensing_receipts r join public.bridge_titles t on t.id=r.title_id order by r.recorded_at desc limit 200"),
-      sql.query("select o.id,o.title_id,t.name as title_name,o.owner_user_id,o.owner_account_type,o.share_bps,o.agreement_reference,o.status,o.evidence_url from public.bridge_title_owner_interests o join public.bridge_titles t on t.id=o.title_id order by o.created_at desc limit 200"),
+      sql.query("select o.id,o.title_id,t.name as title_name,o.owner_user_id,o.owner_account_type,o.share_bps,o.agreement_reference,o.status,o.evidence_document_id from public.bridge_title_owner_interests o join public.bridge_titles t on t.id=o.title_id order by o.created_at desc limit 200"),
       sql.query("select i.id,i.title_id,t.name as title_name,i.investor_user_id,i.agreement_reference,i.return_model,i.share_bps,i.cap_amount_paise,i.status,i.evidence_url from public.bridge_investment_agreements i join public.bridge_titles t on t.id=i.title_id order by i.created_at desc limit 200"),
       sql.query("select a.id,a.receipt_id,a.title_id,t.name as title_name,a.beneficiary_type,a.beneficiary_user_id,a.amount_paise,a.status,a.settlement_reference from public.bridge_licensing_allocations a join public.bridge_titles t on t.id=a.title_id order by a.created_at desc limit 300"),
       sql.query("select id,reconciliation_number,period_start,period_end,receipt_count,verified_receipts_paise,allocated_paise,variance_paise,status,created_at from public.bridge_finance_reconciliations order by created_at desc limit 100"),
@@ -170,9 +170,14 @@ export const submitTitleOwnerInterests = createServerFn({ method: "POST" })
           if (!membership[0]) throw new Error("Studio owner must have an active membership in the submitted organization.");
         }
         if (interest.ownerAccountType === "independent_creator" && interest.ownerOrganizationId) throw new Error("Independent Creator ownership cannot claim a Studio organization.");
+        const evidence = await tx.query<{ id: string }>(
+          "select d.id from public.bridge_creator_documents d join public.bridge_title_document_links l on l.document_id=d.id and l.title_id=$2 where d.id=$1 and d.owner_user_id=$3 and d.owner_account_type=$4 and d.status='VERIFIED' and d.document_type in ('OWNERSHIP_CHAIN_OF_TITLE','AUTHOR_ASSIGNMENT','FINISHED_FILM_AGREEMENT','DISTRIBUTION_AGREEMENT') limit 1",
+          [interest.evidenceDocumentId,data.titleId,interest.ownerUserId,interest.ownerAccountType],
+        );
+        if (!evidence[0]) throw new Error("Owner interest requires a verified, title-linked private ownership document belonging to that owner.");
         const row = await tx.query<{ id: string }>(
-          "insert into public.bridge_title_owner_interests(title_id,owner_user_id,owner_account_type,owner_organization_id,share_bps,agreement_reference,evidence_url,created_by) values($1,$2,$3,$4,$5,$6,$7,$8) returning id",
-          [data.titleId,interest.ownerUserId,interest.ownerAccountType,interest.ownerOrganizationId ?? null,interest.shareBps,interest.agreementReference,interest.evidenceUrl,actor.userId],
+          "insert into public.bridge_title_owner_interests(title_id,owner_user_id,owner_account_type,owner_organization_id,share_bps,agreement_reference,evidence_document_id,created_by) values($1,$2,$3,$4,$5,$6,$7,$8) returning id",
+          [data.titleId,interest.ownerUserId,interest.ownerAccountType,interest.ownerOrganizationId ?? null,interest.shareBps,interest.agreementReference,interest.evidenceDocumentId,actor.userId],
         );
         if (row[0]) created.push(row[0].id);
       }
