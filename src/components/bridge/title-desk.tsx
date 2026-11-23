@@ -4,10 +4,10 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { archiveDraftTitle, createTitle, listArchivedDraftTitles, listTitles, restoreArchivedDraftTitle } from "@/lib/bridge/titles";
+import { archiveDraftTitle, createTitle, listArchivedDraftTitles, listTitleOwnerTitles, listTitles, restoreArchivedDraftTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", ownerOnly = false, scopeKey = "workspace" }: { empty: string; query?: string; ownerOnly?: boolean; scopeKey?: string }) {
   const qc = useQueryClient();
   const [archiveTarget, setArchiveTarget] = useState<{id:string;name:string}|null>(null);
   const [archiveReason, setArchiveReason] = useState("");
@@ -23,6 +23,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
       toast.success("Draft restored");
       setRestoreTarget(null);setRestoreReason("");
       void qc.invalidateQueries({queryKey:["bridge-titles"]});
+      void qc.invalidateQueries({queryKey:["bridge-owner-titles"]});
       void qc.invalidateQueries({queryKey:["bridge-archived-titles"]});
     },
     onError:(error)=>toast.error(error instanceof Error?error.message:"Restore blocked"),
@@ -36,11 +37,12 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
       toast.success("Draft archived. It can be restored by an authorized owner or Super Admin.");
       setArchiveTarget(null); setArchiveReason("");
       void qc.invalidateQueries({queryKey:["bridge-titles"]});
+      void qc.invalidateQueries({queryKey:["bridge-owner-titles"]});
       void qc.invalidateQueries({queryKey:["bridge-archived-titles"]});
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Archive blocked"),
   });
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const titlesQ = useQuery({ queryKey: ownerOnly ? ["bridge-owner-titles", scopeKey] : ["bridge-titles", scopeKey], queryFn: () => ownerOnly ? listTitleOwnerTitles() : listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
