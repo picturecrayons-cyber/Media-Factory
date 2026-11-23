@@ -525,6 +525,13 @@ test("service request migration enforces immutable history and server-synchroniz
     await db.query("update public.bridge_service_orders set status='PAID' where id=$1", [orderId]);
     const paid = await db.query<{ status: string }>("select status from public.bridge_service_requests where id=$1", [requestId]);
     assert.equal(paid.rows[0].status, "PAID");
+    await db.query("update public.bridge_service_orders set status='PAID' where id=$1", [orderId]);
+    const replayCount = await db.query<{ count: number }>(
+      "select count(*)::int as count from public.bridge_service_request_events where request_id=$1 and to_status='PAID'",
+      [requestId],
+    );
+    assert.equal(replayCount.rows[0].count, 1, "replayed payment event must not duplicate the paid transition");
+
     await assert.rejects(
       db.query("update public.bridge_service_requests set status='COMPLETED' where id=$1", [requestId]),
       /Invalid service request transition/,
