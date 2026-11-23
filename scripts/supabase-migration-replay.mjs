@@ -71,6 +71,10 @@ const featureNames = names.filter((name) => name >= "20261118130000_");
 const supportedFeatureMigrations = new Set([
   "20261118130000_loop_tvod_payment_fulfillment.sql",
   "20261118150000_bridge_exclusive_sublicensing_authority.sql",
+  "20261123120000_bridge_homepage_carousel.sql",
+  "20261123170000_bridge_legal_acceptances.sql",
+  "20261123190000_bridge_service_request_workflow.sql",
+  "20261123200000_bridge_title_finance_and_reconciliation.sql",
 ]);
 for (const name of featureNames) {
   if (!supportedFeatureMigrations.has(name)) {
@@ -666,6 +670,75 @@ try {
   }
 
 
+  // bridge_creator_documents is a verified pre-ledger Production baseline
+  // table. It exists in the Testing project, but is intentionally absent from
+  // the 69-row historical migration manifest. Recreate its empty schema only
+  // in this disposable local replay DB so the later sublicensing migration can
+  // safely add its evidence-document foreign key. Never copy live document rows.
+  await client.query(`
+    create table if not exists public.bridge_creator_documents (
+      id text primary key,
+      owner_user_id text not null references public.bridge_profiles(user_id) on delete restrict,
+      owner_account_type text not null
+        constraint bridge_creator_documents_owner_account_type_check
+        check (owner_account_type in ('independent_creator', 'studio')),
+      owner_organization_id text,
+      document_type text not null
+        constraint bridge_creator_documents_document_type_check
+        check (document_type in (
+          'FINISHED_FILM_AGREEMENT', 'STORY_CONCEPT_AGREEMENT',
+          'DISTRIBUTION_AGREEMENT', 'OWNERSHIP_CHAIN_OF_TITLE',
+          'AUTHOR_ASSIGNMENT', 'MUSIC_RIGHTS', 'OTHER'
+        )),
+      file_name text not null,
+      content_type text not null,
+      byte_size bigint,
+      storage_key text not null unique,
+      status text not null default 'PENDING_UPLOAD'
+        constraint bridge_creator_documents_status_check
+        check (status in ('PENDING_UPLOAD', 'VERIFIED', 'REVOKED')),
+      created_by text not null references public.bridge_profiles(user_id) on delete restrict,
+      verified_at timestamptz,
+      revoked_at timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      constraint bridge_creator_documents_check
+        check (
+          (owner_account_type = 'independent_creator' and owner_organization_id is null)
+          or owner_account_type = 'studio'
+        )
+    );
+    create index if not exists bridge_creator_documents_owner_idx
+      on public.bridge_creator_documents(owner_user_id, created_at desc);
+    create index if not exists bridge_creator_documents_org_idx
+      on public.bridge_creator_documents(owner_organization_id, created_at desc)
+      where owner_organization_id is not null;
+    alter table public.bridge_creator_documents enable row level security;
+    revoke all on table public.bridge_creator_documents from public, anon, authenticated;
+    grant all on table public.bridge_creator_documents to postgres, service_role;
+
+    create table if not exists public.bridge_title_document_links (
+      id text primary key,
+      title_id text not null references public.bridge_titles(id) on delete cascade,
+      document_id text not null references public.bridge_creator_documents(id) on delete restrict,
+      evidence_type text not null
+        constraint bridge_title_document_links_evidence_type_check
+        check (evidence_type in (
+          'FINISHED_FILM_AGREEMENT','STORY_CONCEPT_AGREEMENT','DISTRIBUTION_AGREEMENT',
+          'OWNERSHIP_CHAIN_OF_TITLE','AUTHOR_ASSIGNMENT','MUSIC_RIGHTS','OTHER'
+        )),
+      linked_by text not null references public.bridge_profiles(user_id) on delete restrict,
+      created_at timestamptz not null default now(),
+      unique(title_id,document_id,evidence_type)
+    );
+    create index if not exists bridge_title_document_links_title_idx
+      on public.bridge_title_document_links(title_id,created_at desc);
+    alter table public.bridge_title_document_links enable row level security;
+    revoke all on table public.bridge_title_document_links from public,anon,authenticated;
+    grant all on table public.bridge_title_document_links to postgres,service_role;
+  `);
+  console.log("[migration-replay] restored verified empty pre-ledger creator-document schema and title links locally; no Production rows copied");
+
   // Replay newly introduced feature migrations only after the historical
   // production-ledger baseline has replayed successfully. They are not part
   // of the 69-row 2026-11-16 reconciliation manifest.
@@ -682,7 +755,34 @@ try {
     }
   }
 
-  const baselineRls = await client.query(`
+  const financeRls = await client.query(`
+    select c.relname,c.relrowsecurity as rls_enabled,
+      exists(select 1 from pg_policy p where p.polrelid=c.oid
+        and p.polname=c.relname || '_deny_client' and p.polcmd='*'
+        and coalesce(pg_get_expr(p.polqual,p.polrelid),'')='false'
+        and coalesce(pg_get_expr(p.polwithcheck,p.polrelid),'')='false') as deny_policy_valid,
+      has_table_privilege('anon',c.oid,'SELECT') as anon_select,
+      has_table_privilege('authenticated',c.oid,'SELECT') as authenticated_select,
+      has_table_privilege('service_role',c.oid,'SELECT') as service_select,
+      has_table_privilege('service_role',c.oid,'INSERT') as service_insert,
+      has_table_privilege('service_role',c.oid,'UPDATE') as service_update
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and c.relname=any($1::text[])
+    order by c.relname
+  `, [[
+    "bridge_title_owner_interests","bridge_investment_agreements",
+    "bridge_licensing_receipts","bridge_licensing_allocations",
+    "bridge_finance_reconciliations","bridge_finance_reconciliation_items"
+  ]]);
+  if (financeRls.rows.length !== 6 || financeRls.rows.some((row) =>
+    !row.rls_enabled || !row.deny_policy_valid || row.anon_select ||
+    row.authenticated_select || !row.service_select || !row.service_insert || !row.service_update
+  )) {
+    throw new Error("Title finance server-only RLS/grants verification failed: " + JSON.stringify(financeRls.rows));
+  }
+  console.log("[migration-replay] PASS: all six title-finance tables enforce deny-client RLS and server-role grants");
+
+  const baselineRls = await client.query(`;
     select
       c.relname,
       c.relrowsecurity as rls_enabled,

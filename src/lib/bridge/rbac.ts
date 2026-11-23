@@ -48,11 +48,15 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "title.advance_upload",
     "service.quote_create",
     "service.order_create",
+    "service.request_create",
+    "service.request_read",
+    "service.quote_accept",
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
     "delivery.read",
     "delivery.read_finance",
+    "finance.read_own",
   ],
   studio: [
     "title.create",
@@ -61,11 +65,15 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "title.advance_upload",
     "service.quote_create",
     "service.order_create",
+    "service.request_create",
+    "service.request_read",
+    "service.quote_accept",
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
     "delivery.read",
     "delivery.read_finance",
+    "finance.read_own",
   ],
   buyer: [
     "title.read_catalog",
@@ -75,6 +83,7 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
   ],
   investor: [
     "entitlement.read_own",
+    "finance.read_own",
   ],
 };
 
@@ -152,8 +161,9 @@ const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
   qc_reviewer: [],
   legal_reviewer: [],
   finance: [],
-  admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
-  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin", "super_admin"],
+  admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance"],
+  // The designated Super Admin may grant operational roles, but cannot mint another Super Admin invite.
+  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
 };
 
 export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {

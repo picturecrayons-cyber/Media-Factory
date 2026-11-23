@@ -26,7 +26,7 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : "The request could not be completed.";
 }
 
-export function CreatorDocumentVault() {
+export function CreatorDocumentVault({ userId }: { userId: string }) {
   const queryClient = useQueryClient();
   const [documentType, setDocumentType] = useState<DocumentType>("FINISHED_FILM_AGREEMENT");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -36,18 +36,18 @@ export function CreatorDocumentVault() {
   const [errorText, setErrorText] = useState("");
 
   const documentsQ = useQuery({
-    queryKey: ["bridge-creator-documents"],
+    queryKey: ["bridge-creator-documents", userId],
     queryFn: () => listCreatorDocuments(),
     retry: 1,
   });
   const titlesQ = useQuery({
-    queryKey: ["bridge-titles-for-document-vault"],
+    queryKey: ["bridge-titles-for-document-vault", userId],
     queryFn: () => listTitles(),
     retry: 1,
   });
   const titles = useMemo(() => titlesQ.data?.titles ?? [], [titlesQ.data]);
   const evidenceQ = useQuery({
-    queryKey: ["bridge-title-document-evidence", selectedTitle],
+    queryKey: ["bridge-title-document-evidence", userId, selectedTitle],
     queryFn: () => listTitleDocumentEvidence({ data: { titleId: selectedTitle } }),
     enabled: Boolean(selectedTitle),
     retry: 1,
@@ -80,7 +80,7 @@ export function CreatorDocumentVault() {
       setSelectedFile(null);
       setNotice("Document uploaded and verified. It can now be linked to an eligible title.");
       setErrorText("");
-      await queryClient.invalidateQueries({ queryKey: ["bridge-creator-documents"] });
+      await queryClient.invalidateQueries({ queryKey: ["bridge-creator-documents", userId] });
     },
     onError: (error) => {
       setErrorText(message(error));
@@ -100,7 +100,7 @@ export function CreatorDocumentVault() {
       setNotice("Verified evidence linked to the selected title. Legal review remains separate.");
       setErrorText("");
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["bridge-title-document-evidence", selectedTitle] }),
+        queryClient.invalidateQueries({ queryKey: ["bridge-title-document-evidence", userId, selectedTitle] }),
         queryClient.invalidateQueries({ queryKey: ["title-document-evidence", selectedTitle] }),
         queryClient.invalidateQueries({ queryKey: ["title-workflow", selectedTitle] }),
       ]);
@@ -156,7 +156,7 @@ export function CreatorDocumentVault() {
             className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg disabled:opacity-50">
             {uploadMutation.isPending ? "Uploading and verifying…" : "Upload & verify"}
           </button>
-          <p className="text-xs text-muted">A document appears as reusable evidence only after private-storage verification succeeds.</p>
+          <p className="text-xs text-muted">Bridge authorizes the private upload, verifies the stored PDF server-side, and only then makes it available for linking. If the list fails, use Retry; upload success alone is not proof that the evidence list loaded.</p>
         </div>
 
         <div className="rounded-xl border border-line p-4 space-y-3">
@@ -201,7 +201,15 @@ export function CreatorDocumentVault() {
           <span className="text-xs text-muted">Only your Creator account or Studio organization documents</span>
         </div>
         {documentsQ.isPending ? <p className="text-sm text-muted">Loading documents…</p> : null}
-        {documentsQ.isError ? <p role="alert" className="text-sm text-muted">Documents could not be loaded. Refresh and retry.</p> : null}
+        {documentsQ.isError ? (
+          <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-muted">
+            <p>Documents could not be loaded.</p>
+            <button type="button" onClick={() => void documentsQ.refetch()} disabled={documentsQ.isFetching}
+              className="rounded-lg border border-line px-3 py-2 font-semibold disabled:opacity-50">
+              {documentsQ.isFetching ? "Retrying…" : "Retry"}
+            </button>
+          </div>
+        ) : null}
         {!documentsQ.isPending && !documentsQ.isError && !documentsQ.data?.documents.length
           ? <p className="rounded-lg border border-dashed border-line p-4 text-sm text-muted">No documents uploaded yet.</p>
           : null}

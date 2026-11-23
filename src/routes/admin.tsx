@@ -7,6 +7,9 @@ import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
+import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
+import { TitleFinanceWorkspace } from "@/components/bridge/title-finance-workspace";
+
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -58,7 +61,7 @@ function AdminBody({ actor }: { actor: any }) {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-accent">Crayons Pictures · Operations</p>
             <h2 className="mt-1 font-display text-2xl font-semibold">Good overview. Clear next steps.</h2>
-            <p className="mt-1 max-w-2xl text-sm text-muted">Review titles, complete QC and rights checks, and authorize delivery only when required gates pass.</p>
+            <p className="mt-1 max-w-2xl text-sm text-muted">Manage rights, licensing and distribution authorization across independent Buyers and approved destinations. Crayons Loop is one consumer streaming destination—not the entire Bridge market.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <a href="/admin/workstations" aria-label="Open workspace"><Button>Open workspace</Button></a>
@@ -67,11 +70,57 @@ function AdminBody({ actor }: { actor: any }) {
           </div>
         </section>
 
+        {actor.internalRole === "super_admin" ? <TitleFinanceWorkspace actor={actor} /> : null}
+
         <section aria-label="Title overview" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="All titles" value={loading ? "—" : String(titles.length)} detail="Canonical catalog" />
           <Metric label="QC / intake" value={loading ? "—" : String(qcQueue)} detail="Awaiting review" />
           <Metric label="Rights review" value={loading ? "—" : String(rightsQueue)} detail="Clearance queue" />
           <Metric label="Buyer-ready" value={loading ? "—" : String(buyerReady)} detail="Licensing stages" />
+        </section>
+
+        <section aria-label="Administration workspaces" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Link to="/admin/team" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+            <h3 className="font-semibold">Team & Permissions</h3>
+            <p className="mt-1 text-sm text-muted">Invite internal reviewers and assign permitted staff roles.</p>
+            <span className="mt-3 inline-block text-xs font-semibold text-accent">Manage team →</span>
+          </Link>
+          <Link to="/admin-cms" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+            <h3 className="font-semibold">Website CMS</h3>
+            <p className="mt-1 text-sm text-muted">Manage public homepage copy and Super Admin carousel images.</p>
+            <span className="mt-3 inline-block text-xs font-semibold text-accent">Open CMS →</span>
+          </Link>
+          {actor.internalRole === "super_admin" ? (
+            <>
+              <Link to="/admin/services" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+                <h3 className="font-semibold">Founder Centre · Services</h3>
+                <p className="mt-1 text-sm text-muted">Review Creator and Studio service requests, quotes and fulfilment.</p>
+                <span className="mt-3 inline-block text-xs font-semibold text-accent">Open service queue →</span>
+              </Link>
+              <Link to="/admin/buyers" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+                <h3 className="font-semibold">Buyer Management</h3>
+                <p className="mt-1 text-sm text-muted">Review Bridge Buyer profiles, organization grouping and role-gated Buyer dashboards.</p>
+                <span className="mt-3 inline-block text-xs font-semibold text-accent">Manage Buyers →</span>
+              </Link>
+              <Link to="/admin/users" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+                <h3 className="font-semibold">Users & Access</h3>
+                <p className="mt-1 text-sm text-muted">Review verified Bridge profiles and internal access assignments.</p>
+                <span className="mt-3 inline-block text-xs font-semibold text-accent">Review access →</span>
+              </Link>
+              <Link to="/admin/audit" className="rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+                <h3 className="font-semibold">Audit & Security</h3>
+                <p className="mt-1 text-sm text-muted">Inspect persisted operational audit events.</p>
+                <span className="mt-3 inline-block text-xs font-semibold text-accent">Open audit →</span>
+              </Link>
+            </>
+          ) : null}
+        </section>
+
+        <section aria-labelledby="admin-gallery-heading" className="rounded-2xl border border-line bg-surface p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-accent">Asset review</p>
+          <h3 id="admin-gallery-heading" className="mt-1 font-display text-xl font-semibold">Admin / Super Admin Gallery</h3>
+          <p className="mt-1 mb-4 text-sm text-muted">Server-authorized artwork previews for titles this internal account can read. Private masters and legal documents are not rendered here.</p>
+          <TitleAssetGallery userId={actor.userId} scopeLabel="internal review" />
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4">

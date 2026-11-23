@@ -54,7 +54,9 @@ function Buyer() {
       {(actor) => (
         <BridgeShell actor={actor} title="Buyer dashboard">
           <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
-            Discover licensing-ready titles, open a listing, then license only after captured payment.
+            Your individual Buyer workspace for discovering Bridge-authorized titles, reviewing
+            commercial terms and managing your own captured-payment licenses. Each Buyer account has
+            its own login, permissions and entitlement history.
           </p>
           <BuyerBody userId={actor.userId} />
         </BridgeShell>
@@ -279,10 +281,10 @@ function BuyerBody({ userId }: { userId: string }) {
       {!titles.length ? (
         <BuyerEmptyState />
       ) : tab === "licenses" ? (
-        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
+        <TitleList userId={userId} titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
       ) : view === "gallery" ? (
         <div className="space-y-4">
-          <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
+          <TitleGallery userId={userId} titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
           {visible.length > BUYER_GALLERY_PAGE_SIZE ? (
             <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
               <button
@@ -306,7 +308,7 @@ function BuyerBody({ userId }: { userId: string }) {
           ) : null}
         </div>
       ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
+        <TitleList userId={userId} titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
       )}
       {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
         <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>
@@ -359,11 +361,13 @@ function BuyerEmptyState() {
 }
 
 function TitleGallery({
+  userId,
   titles,
   artworkByTitle,
   entitled,
   order,
 }: {
+  userId: string;
   titles: BuyerTitleCard[];
   artworkByTitle: Map<string, Blob>;
   entitled: Set<string>;
@@ -404,16 +408,19 @@ function TitleGallery({
                     ? `${formatLicensingFeePaise(title.licensingFeePaise)} licensing fee`
                     : "Commercial terms on request"}
                 </p>
-                {entitled.has(title.id) ? (
-                  <span className="shrink-0 text-sm font-semibold text-accent">Licensed</span>
-                ) : (
-                  <Button
-                    disabled={order.isPending || title.licensingFeePaise <= 0}
-                    onClick={() => order.mutate(title.id)}
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    href={`mailto:abijithasokan@crayonspictures.com?subject=${encodeURIComponent(`Crayons Bridge title enquiry — ${title.name}`)}&body=${encodeURIComponent(`Title: ${title.name}\\nBridge Title ID: ${title.id}\\nBuyer account: ${userId}\\n\\nPlease contact me regarding availability, rights, territory, language, commercial terms or licensing.`)}`}
+                    className="rounded-lg border border-line px-3 py-2 text-xs font-semibold hover:border-accent hover:text-accent"
                   >
-                    License
-                  </Button>
-                )}
+                    Enquire
+                  </a>
+                  {entitled.has(title.id) ? (
+                    <span className="shrink-0 text-sm font-semibold text-accent">Licensed</span>
+                  ) : (
+                    <Button disabled={order.isPending || title.licensingFeePaise <= 0} onClick={() => order.mutate(title.id)}>License</Button>
+                  )}
+                </div>
               </div>
             </div>
           </article>
@@ -458,7 +465,7 @@ function BuyerPosterImage({ blob, title }: { blob: Blob | undefined; title: stri
   );
 }
 
-function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
+function TitleList({ userId, titles, entitled, order, empty }: { userId: string; titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
@@ -470,6 +477,7 @@ function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[
           </div>
           <div className="flex items-center gap-3">
             <StatusChip status={t.status as never} />
+            <a href={`mailto:abijithasokan@crayonspictures.com?subject=${encodeURIComponent(`Crayons Bridge title enquiry — ${t.name}`)}&body=${encodeURIComponent(`Title: ${t.name}\\nBridge Title ID: ${t.id}\\nBuyer account: ${userId}\\n\\nPlease contact me regarding this title.`)}`} className="text-xs font-semibold text-accent underline">Enquire</a>
             {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
           </div>
         </li>

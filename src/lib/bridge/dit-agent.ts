@@ -96,8 +96,22 @@ async function requireDitOperator(userId: string) {
   return actor;
 }
 
+async function hasTitleMergeColumn(sql: Awaited<ReturnType<typeof getSql>>): Promise<boolean> {
+  const rows = await sql<{ exists: boolean }>`
+    select exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'bridge_titles'
+        and column_name = 'merged_into_title_id'
+    ) as exists
+  `;
+  return Boolean(rows[0]?.exists);
+}
+
 async function requireStudioTitle(sql: Awaited<ReturnType<typeof getSql>>, titleId: string, organizationId: string) {
-  const rows = await sql<{ id: string; name: string }>`
+  const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+  const rows = mergeColumnAvailable
+    ? await sql<{ id: string; name: string }>`
     select id, name
     from bridge_titles
     where id = ${titleId}
@@ -117,8 +131,28 @@ async function requireStudioTitle(sql: Awaited<ReturnType<typeof getSql>>, title
       and submission_type = 'finished_film'
       and merged_into_title_id is null
     limit 1
-  `;
-  if (!rows[0]) throw new Error("Finished film was not found in the active Studio organization");
+  `
+    : await sql<{ id: string; name: string }>`
+      select id, name
+      from bridge_titles
+      where id = ${titleId}
+        and owner_account_type = 'studio'
+        and (
+          owner_organization_id = ${organizationId}
+          or (
+            owner_organization_id is null
+            and exists (
+              select 1 from bridge_profiles owner_profile
+              where owner_profile.user_id = bridge_titles.owner_user_id
+                and owner_profile.account_type = 'studio'
+                and owner_profile.organization_id = ${organizationId}
+            )
+          )
+        )
+        and submission_type = 'finished_film'
+      limit 1
+    `;
+  if (!rows[0]) throw new Error("Production title was not found in the active Studio organization");
   return rows[0];
 }
 
@@ -148,27 +182,49 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireDitOperator(context.userId);
     const sql = await getSql();
-    const titles = await sql<{ id: string; name: string; status: string; year: number | null }>`
-      select id, name, status, year
-      from bridge_titles
-      where owner_account_type = 'studio'
-        and (
-        owner_organization_id = ${actor.organizationId}
-        or (
-          owner_organization_id is null
-          and exists (
-            select 1 from bridge_profiles owner_profile
-            where owner_profile.user_id = bridge_titles.owner_user_id
-              and owner_profile.account_type = 'studio'
-              and owner_profile.organization_id = ${actor.organizationId}
-          )
-        )
-      )
-        and submission_type = 'finished_film'
-        and merged_into_title_id is null
-      order by updated_at desc
-      limit 200
-    `;
+    const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+    const titles = mergeColumnAvailable
+      ? await sql<{ id: string; name: string; status: string; year: number | null }>`
+          select id, name, status, year
+          from bridge_titles
+          where owner_account_type = 'studio'
+            and (
+              owner_organization_id = ${actor.organizationId}
+              or (
+                owner_organization_id is null
+                and exists (
+                  select 1 from bridge_profiles owner_profile
+                  where owner_profile.user_id = bridge_titles.owner_user_id
+                    and owner_profile.account_type = 'studio'
+                    and owner_profile.organization_id = ${actor.organizationId}
+                )
+              )
+            )
+            and submission_type = 'finished_film'
+            and merged_into_title_id is null
+          order by updated_at desc
+          limit 200
+        `
+      : await sql<{ id: string; name: string; status: string; year: number | null }>`
+          select id, name, status, year
+          from bridge_titles
+          where owner_account_type = 'studio'
+            and (
+              owner_organization_id = ${actor.organizationId}
+              or (
+                owner_organization_id is null
+                and exists (
+                  select 1 from bridge_profiles owner_profile
+                  where owner_profile.user_id = bridge_titles.owner_user_id
+                    and owner_profile.account_type = 'studio'
+                    and owner_profile.organization_id = ${actor.organizationId}
+                )
+              )
+            )
+            and submission_type = 'finished_film'
+          order by updated_at desc
+          limit 200
+        `;
     const sessions = await sql<SessionRow>`
       select s.id, s.title_id, s.organization_id, s.camera_unit, s.camera_label, s.card_label,
         s.shoot_date::text as shoot_date, s.source_volume, s.source_root,

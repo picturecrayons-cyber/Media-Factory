@@ -42,6 +42,7 @@ export async function signUpWithEmail(input: {
   password: string;
   name: string;
   accountType?: "independent_creator" | "studio" | "buyer" | "investor";
+  legalAcknowledgement?: { termsVersion: string; privacyVersion: string; acknowledgedAt: string };
 }) {
   const callbackUrl = bridgeCallbackUrl(undefined);
 
@@ -53,6 +54,9 @@ export async function signUpWithEmail(input: {
         name: input.name,
         full_name: input.name,
         account_type: input.accountType || "independent_creator",
+        bridge_terms_version: input.legalAcknowledgement?.termsVersion ?? null,
+        bridge_privacy_version: input.legalAcknowledgement?.privacyVersion ?? null,
+        bridge_legal_acknowledged_at: input.legalAcknowledgement?.acknowledgedAt ?? null,
       },
       emailRedirectTo: callbackUrl,
     },

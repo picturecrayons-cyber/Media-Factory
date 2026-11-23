@@ -12,10 +12,39 @@ export function NewSubmissionPanel() {
 
   if (path === "none") {
     return (
-      <div className="flex justify-end">
-        <Button type="button" onClick={() => setPath("finished_film")} className="rounded-full px-6">
-          + New submission
-        </Button>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => setPath("finished_film")}
+          className="rounded-2xl border border-line bg-surface p-5 text-left transition hover:border-accent hover:bg-fg/5"
+        >
+          <p className="text-xs font-semibold uppercase tracking-widest text-accent">01 · Finished Film</p>
+          <p className="mt-2 text-lg font-semibold">Submit a completed film</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Create your film record, add metadata and assets, then follow Bridge QC, rights and authorized delivery.
+          </p>
+          <span className="mt-4 inline-flex text-sm font-semibold text-accent">Start finished-film submission →</span>
+        </button>
+        {STORY_CONCEPT_ENABLED ? (
+          <button
+            type="button"
+            onClick={() => setPath("story_concept")}
+            className="rounded-2xl border border-line bg-surface p-5 text-left transition hover:border-accent hover:bg-fg/5"
+          >
+            <p className="text-xs font-semibold uppercase tracking-widest text-accent">02 · Story Concept</p>
+            <p className="mt-2 text-lg font-semibold">Submit a story or screenplay</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              Send a concept for separate curation and buyer introduction. It is never treated as a finished film.
+            </p>
+            <span className="mt-4 inline-flex text-sm font-semibold text-accent">Start concept submission →</span>
+          </button>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-line p-5 opacity-70">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted">02 · Story Concept</p>
+            <p className="mt-2 text-lg font-semibold">Concept submissions unavailable</p>
+            <p className="mt-2 text-sm text-muted">This path will appear when its feature and database readiness gates are enabled.</p>
+          </div>
+        )}
       </div>
     );
   }

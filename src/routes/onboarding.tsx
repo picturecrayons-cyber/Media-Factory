@@ -103,6 +103,7 @@ function Onboarding() {
   const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
   const [organizationName, setOrganizationName] = useState("");
   const [mandateAccepted, setMandateAccepted] = useState(false);
+  const [showTitleIntake, setShowTitleIntake] = useState(false);
 
   const [titleName, setTitleName] = useState("");
   const [originalTitle, setOriginalTitle] = useState("");
@@ -229,7 +230,11 @@ function Onboarding() {
       return;
     }
     if (!displayName.trim()) {
-      setError("Enter your name to create your Creator workspace.");
+      setError(`Enter your name to create your ${ACCOUNT_LABELS[accountType]} workspace.`);
+      return;
+    }
+    if (accountType === "studio" && !organizationName.trim()) {
+      setError("Enter your studio or company name.");
       return;
     }
     if (submitInFlight.current) return;
@@ -245,11 +250,11 @@ function Onboarding() {
           accountType,
           organizationName: accountType === "studio" ? organizationName.trim() : undefined,
           inviteToken,
-          creatorMandateAccepted: accountType === "independent_creator" || accountType === "studio" ? mandateAccepted : undefined,
+          creatorMandateAccepted: undefined,
         },
       });
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
-      void navigate({ to: accountType === "buyer" ? "/buyer" : "/creator", replace: true });
+      void navigate({ to: accountType === "buyer" ? "/buyer" : accountType === "studio" ? "/studio" : "/creator", replace: true });
     } catch (err) {
       setError(publicOnboardingError(err));
     } finally {
@@ -344,13 +349,13 @@ function Onboarding() {
 
   return (
     <main className="min-h-screen bg-bg p-5 sm:p-8">
-      <form onSubmit={(e) => void onSubmit(e)} className="mx-auto max-w-4xl space-y-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
+      <form onSubmit={(e) => { if (!showTitleIntake && accountType !== "buyer") { e.preventDefault(); return; } void onSubmit(e); }} className="mx-auto max-w-4xl space-y-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
         <div className="flex items-start justify-between gap-5">
           <div>
             <BrandMark />
-            <h1 className="mt-5 font-display text-3xl font-semibold tracking-tight">Submit a title to Crayons Bridge</h1>
+            <h1 className="mt-5 font-display text-3xl font-semibold tracking-tight">{showTitleIntake ? "Submit a title to Crayons Bridge" : "Welcome to Crayons Bridge"}</h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-              Upload → Prepare → License → Earn. This intake captures the minimum structured information needed to start rights review and buyer preparation.
+              {showTitleIntake ? "Upload → Prepare → License → Earn. Add your title details and rights information to begin independent review." : "Create your secure workspace first. You can add titles, rights information and distribution preferences when you are ready."}
             </p>
           </div>
           <span className="hidden rounded-full border border-line bg-elevated px-3 py-1 text-xs text-muted sm:inline-flex">StreamVista OPC Pvt Ltd.</span>
@@ -370,11 +375,19 @@ function Onboarding() {
             <label className="text-sm font-medium">Your name *
               <input required value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
             </label>
-            <label className="text-sm font-medium">Account type *
-              <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
-              </select>
-            </label>
+            <div className="text-sm font-medium">
+              <span>Account type *</span>
+              {signupAccountType ? (
+                <div className="mt-1.5 rounded-xl border border-line-strong bg-elevated px-3.5 py-3">
+                  <p className="font-semibold text-fg">{ACCOUNT_LABELS[signupAccountType]}</p>
+                  <p className="mt-1 text-xs text-muted">Selected account type. Already selected during sign-up; contact Bridge if this needs correction.</p>
+                </div>
+              ) : (
+                <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
+                  {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
+                </select>
+              )}
+            </div>
           </div>
           {accountType === "studio" ? (
             <label className="block text-sm font-medium">Studio / company name *
@@ -383,147 +396,159 @@ function Onboarding() {
           ) : null}
         </section>
 
-          {accountType !== "buyer" ? (
-            <section className="space-y-3 rounded-2xl border border-line p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="font-display text-xl font-semibold">Multiplatform Distribution Mandate</h2>
-                  <p className="mt-1 text-xs text-muted">Default enabled after your one-time acceptance. Managed centrally in Crayons Bridge.</p>
-                </div>
-                <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">DEFAULT ON</span>
-              </div>
-              <p className="text-sm leading-relaxed text-muted">
-                You authorize Bridge to administer distribution requests for Crayons Loop, external OTT, broadcast/TV, TVOD/EST, FAST, festival/educational and buyer delivery within your recorded scope. Each title still needs its own rights evidence, territory, language, media, time window and independent Legal approval. This mandate does not transfer ownership or automatically approve a title.
-              </p>
-              <p className="text-sm text-muted">Sublicensing is OFF by default. It is permitted only when both this mandate and the individual title's approved rights grant explicitly allow it.</p>
-              <label className="flex items-start gap-3 rounded-xl border border-line bg-elevated p-4 text-sm">
-                <input required type="checkbox" checked={mandateAccepted} onChange={(e) => setMandateAccepted(e.target.checked)} className="mt-0.5 accent-current" />
-                <span>I have read and accept the Creator Distribution Mandate (version 1). I understand I can manage or revoke it and that title-level approvals remain separate.</span>
-              </label>
+          {showTitleIntake || accountType === "buyer" ? (
+            <>
+              {accountType !== "buyer" ? (
+                <section className="space-y-3 rounded-2xl border border-line p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="font-display text-xl font-semibold">Multiplatform Distribution Mandate</h2>
+                      <p className="mt-1 text-xs text-muted">Default enabled after your one-time acceptance. Managed centrally in Crayons Bridge.</p>
+                    </div>
+                    <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">DEFAULT ON</span>
+                  </div>
+                  <p className="text-sm leading-relaxed text-muted">
+                    You authorize Bridge to administer distribution requests for Crayons Loop, external OTT, broadcast/TV, TVOD/EST, FAST, festival/educational and buyer delivery within your recorded scope. Each title still needs its own rights evidence, territory, language, media, time window and independent Legal approval. This mandate does not transfer ownership or automatically approve a title.
+                  </p>
+                  <p className="text-sm text-muted">Sublicensing is OFF by default. It is permitted only when both this mandate and the individual title's approved rights grant explicitly allow it.</p>
+                  <label className="flex items-start gap-3 rounded-xl border border-line bg-elevated p-4 text-sm">
+                    <input required type="checkbox" checked={mandateAccepted} onChange={(e) => setMandateAccepted(e.target.checked)} className="mt-0.5 accent-current" />
+                    <span>I have read and accept the Creator Distribution Mandate (version 1). I understand I can manage or revoke it and that title-level approvals remain separate.</span>
+                  </label>
+                </section>
+              ) : null}
+                      {accountType === "buyer" ? (
+              <section className="rounded-2xl border border-line bg-elevated p-5">
+                <h2 className="font-display text-xl font-semibold">Buyer access</h2>
+                <p className="mt-2 text-sm text-muted">Buyer accounts discover and license titles. Rights-holder submissions are limited to Independent Creator and Studio / Company accounts.</p>
+              </section>
+                      ) : (
+              <>
+                <section className="space-y-4 rounded-2xl border border-line p-5">
+                  <div><h2 className="font-display text-xl font-semibold">2. Title</h2><p className="mt-1 text-xs text-muted">Use structured fields; only the title synopsis remains free text.</p></div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="text-sm font-medium">Title name *
+                      <input required value={titleName} onChange={(e) => setTitleName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                    </label>
+                    <label className="text-sm font-medium">Original / local title
+                      <input value={originalTitle} onChange={(e) => setOriginalTitle(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                    </label>
+                    <label className="text-sm font-medium">Content type *
+                      <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
+                        {BRIDGE_LOOP_LANES.map((lane) => <option key={lane.id} value={lane.loopType}>{lane.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-sm font-medium">Original language *
+                      <select value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">{LANGUAGES.map((item) => <option key={item}>{item}</option>)}</select>
+                    </label>
+                    <label className="text-sm font-medium">Release year
+                      <input type="number" min="1895" max="2100" value={year} onChange={(e) => setYear(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                    </label>
+                    <label className="text-sm font-medium">Runtime (minutes)
+                      <input type="number" min="1" max="600" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                    </label>
+                  </div>
+                  <CheckGroup label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={(v, c) => toggle(setAdditionalLanguages, additionalLanguages, v, c)} />
+                  <label className="block text-sm font-medium">Synopsis *
+                    <textarea required minLength={20} maxLength={4000} rows={5} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1.5 w-full rounded-xl border border-line-strong bg-elevated px-3.5 py-3" />
+                  </label>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <label className="text-sm font-medium">Country of origin
+                      <input value={countryOfOrigin} onChange={(e) => setCountryOfOrigin(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                    </label>
+                    <label className="text-sm font-medium">Release date
+                      <input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                    </label>
+                    <label className="text-sm font-medium">Director
+                      <input value={director} onChange={(e) => setDirector(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                    </label>
+                  </div>
+                  <label className="block text-sm font-medium">Producer
+                    <input value={producer} onChange={(e) => setProducer(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  </label>
+                </section>
+              
+                <section className="space-y-4 rounded-2xl border border-line p-5">
+                  <div><h2 className="font-display text-xl font-semibold">3. Rights package</h2><p className="mt-1 text-xs text-muted">These controls define what a buyer may license. No open-ended rights description is accepted.</p></div>
+                  <CheckGroup label="Territories" values={TERRITORIES} selected={territories} onChange={(v, c) => toggle(setTerritories, territories, v, c)} required />
+                  <CheckGroup label="Rights languages" values={LANGUAGES} selected={rightsLanguages} onChange={(v, c) => toggle(setRightsLanguages, rightsLanguages, v, c)} required />
+                  <CheckGroup label="Exploitation / media" values={MEDIA} selected={media} onChange={(v, c) => toggle(setMedia, media, v, c)} required />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="text-sm font-medium">Rights window starts *
+                      <input required type="datetime-local" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                    </label>
+                    <label className="text-sm font-medium">Rights window ends *
+                      <input required type="datetime-local" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                    </label>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <label className="text-sm font-medium">Exclusivity *
+                      <select value={exclusivity} onChange={(e) => setExclusivity(e.target.value as "EXCLUSIVE" | "NON_EXCLUSIVE")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="NON_EXCLUSIVE">Non-exclusive</option><option value="EXCLUSIVE">Exclusive</option></select>
+                    </label>
+                    <label className="text-sm font-medium">Sublicensing *
+                      <select value={String(sublicensingAllowed)} onChange={(e) => setSublicensingAllowed(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="false">Not allowed</option><option value="true">Allowed</option></select>
+                    </label>
+                    <label className="text-sm font-medium">Promotional rights *
+                      <select value={String(promotionalRights)} onChange={(e) => setPromotionalRights(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="true">Included</option><option value="false">Not included</option></select>
+                    </label>
+                  </div>
+                </section>
+              
+                <section className="space-y-4 rounded-2xl border border-line p-5">
+                  <div><h2 className="font-display text-xl font-semibold">4. Authorization & access</h2><p className="mt-1 text-xs text-muted">Attestation starts the legal review. It does not replace documentary evidence.</p></div>
+                  <label className="text-sm font-medium">Rights basis *
+                    <select value={rightsBasis} onChange={(e) => setRightsBasis(e.target.value as typeof rightsBasis)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
+                      <option value="OWNER">I am the rights owner</option>
+                      <option value="EXCLUSIVE_LICENSEE">Exclusive licensee</option>
+                      <option value="AUTHORIZED_DISTRIBUTOR">Authorized distributor</option>
+                      <option value="PRODUCER_AUTHORITY">Producer authority</option>
+                    </select>
+                  </label>
+                  <label className="block text-sm font-medium">Authorization evidence to provide *
+                    <select required value={authorizationEvidenceType} onChange={(e) => setAuthorizationEvidenceType(e.target.value as typeof authorizationEvidenceType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
+                      <option value="">Choose evidence type</option>
+                      <option value="RIGHTS_AGREEMENT">Rights agreement</option>
+                      <option value="CHAIN_OF_TITLE">Chain-of-title documents</option>
+                      <option value="AUTHORIZATION_LETTER">Authorization letter</option>
+                      <option value="DISTRIBUTION_AGREEMENT">Distribution agreement</option>
+                      <option value="OTHER">Other supporting evidence</option>
+                    </select>
+                    <span className="mt-1 block text-xs text-muted">This records the evidence type you intend to provide; it does not mark the document as uploaded or verified.</span>
+                  </label>
+                  <label className="flex items-start gap-3 rounded-xl border border-line bg-elevated p-4 text-sm">
+                    <input required type="checkbox" checked={authorizationAttested} onChange={(e) => setAuthorizationAttested(e.target.checked)} className="mt-0.5 accent-current" />
+                    <span>I confirm that I am authorized to submit and license the selected rights. I understand Bridge will require supporting authorization / chain-of-title evidence before Licensing Ready.</span>
+                  </label>
+                  <label className="text-sm font-medium">Screener upload
+                    <select value="SCREENER_PENDING" disabled className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
+                      <option value="SCREENER_PENDING">Upload after submission in the private title workspace</option>
+                    </select>
+                    <span className="mt-1 block text-xs text-muted">No screener file is uploaded by this form. The submission remains pending until a private asset is uploaded and verified.</span>
+                  </label>
+                  <CheckGroup label="Intended delivery destinations" values={DESTINATIONS} selected={destinations} onChange={(v, c) => toggle(setDestinations, destinations, v, c)} required />
+                </section>
+              </>
+                      )}
+            </>
+          ) : (
+            <section className="rounded-2xl border border-line bg-elevated p-5 space-y-3">
+              <h2 className="font-display text-xl font-semibold">Your workspace starts here</h2>
+              <p className="text-sm leading-relaxed text-muted">No title details or distribution mandate are needed to create your workspace. Signup does not approve a title or grant buyer visibility.</p>
+              <Button type="button" variant="outline" disabled={busy} onClick={() => setShowTitleIntake(true)} className="h-11 rounded-full px-6 font-semibold">Continue to title submission</Button>
             </section>
-          ) : null}
-        {accountType === "buyer" ? (
-          <section className="rounded-2xl border border-line bg-elevated p-5">
-            <h2 className="font-display text-xl font-semibold">Buyer access</h2>
-            <p className="mt-2 text-sm text-muted">Buyer accounts discover and license titles. Rights-holder submissions are limited to Independent Creator and Studio / Company accounts.</p>
-          </section>
-        ) : (
-          <>
-            <section className="space-y-4 rounded-2xl border border-line p-5">
-              <div><h2 className="font-display text-xl font-semibold">2. Title</h2><p className="mt-1 text-xs text-muted">Use structured fields; only the title synopsis remains free text.</p></div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-sm font-medium">Title name *
-                  <input required value={titleName} onChange={(e) => setTitleName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Original / local title
-                  <input value={originalTitle} onChange={(e) => setOriginalTitle(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Content type *
-                  <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                    {BRIDGE_LOOP_LANES.map((lane) => <option key={lane.id} value={lane.loopType}>{lane.label}</option>)}
-                  </select>
-                </label>
-                <label className="text-sm font-medium">Original language *
-                  <select value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">{LANGUAGES.map((item) => <option key={item}>{item}</option>)}</select>
-                </label>
-                <label className="text-sm font-medium">Release year
-                  <input type="number" min="1895" max="2100" value={year} onChange={(e) => setYear(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Runtime (minutes)
-                  <input type="number" min="1" max="600" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-              </div>
-              <CheckGroup label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={(v, c) => toggle(setAdditionalLanguages, additionalLanguages, v, c)} />
-              <label className="block text-sm font-medium">Synopsis *
-                <textarea required minLength={20} maxLength={4000} rows={5} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1.5 w-full rounded-xl border border-line-strong bg-elevated px-3.5 py-3" />
-              </label>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <label className="text-sm font-medium">Country of origin
-                  <input value={countryOfOrigin} onChange={(e) => setCountryOfOrigin(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Release date
-                  <input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Director
-                  <input value={director} onChange={(e) => setDirector(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-              </div>
-              <label className="block text-sm font-medium">Producer
-                <input value={producer} onChange={(e) => setProducer(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-              </label>
-            </section>
-
-            <section className="space-y-4 rounded-2xl border border-line p-5">
-              <div><h2 className="font-display text-xl font-semibold">3. Rights package</h2><p className="mt-1 text-xs text-muted">These controls define what a buyer may license. No open-ended rights description is accepted.</p></div>
-              <CheckGroup label="Territories" values={TERRITORIES} selected={territories} onChange={(v, c) => toggle(setTerritories, territories, v, c)} required />
-              <CheckGroup label="Rights languages" values={LANGUAGES} selected={rightsLanguages} onChange={(v, c) => toggle(setRightsLanguages, rightsLanguages, v, c)} required />
-              <CheckGroup label="Exploitation / media" values={MEDIA} selected={media} onChange={(v, c) => toggle(setMedia, media, v, c)} required />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-sm font-medium">Rights window starts *
-                  <input required type="datetime-local" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Rights window ends *
-                  <input required type="datetime-local" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <label className="text-sm font-medium">Exclusivity *
-                  <select value={exclusivity} onChange={(e) => setExclusivity(e.target.value as "EXCLUSIVE" | "NON_EXCLUSIVE")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="NON_EXCLUSIVE">Non-exclusive</option><option value="EXCLUSIVE">Exclusive</option></select>
-                </label>
-                <label className="text-sm font-medium">Sublicensing *
-                  <select value={String(sublicensingAllowed)} onChange={(e) => setSublicensingAllowed(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="false">Not allowed</option><option value="true">Allowed</option></select>
-                </label>
-                <label className="text-sm font-medium">Promotional rights *
-                  <select value={String(promotionalRights)} onChange={(e) => setPromotionalRights(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="true">Included</option><option value="false">Not included</option></select>
-                </label>
-              </div>
-            </section>
-
-            <section className="space-y-4 rounded-2xl border border-line p-5">
-              <div><h2 className="font-display text-xl font-semibold">4. Authorization & access</h2><p className="mt-1 text-xs text-muted">Attestation starts the legal review. It does not replace documentary evidence.</p></div>
-              <label className="text-sm font-medium">Rights basis *
-                <select value={rightsBasis} onChange={(e) => setRightsBasis(e.target.value as typeof rightsBasis)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                  <option value="OWNER">I am the rights owner</option>
-                  <option value="EXCLUSIVE_LICENSEE">Exclusive licensee</option>
-                  <option value="AUTHORIZED_DISTRIBUTOR">Authorized distributor</option>
-                  <option value="PRODUCER_AUTHORITY">Producer authority</option>
-                </select>
-              </label>
-              <label className="block text-sm font-medium">Authorization evidence to provide *
-                <select required value={authorizationEvidenceType} onChange={(e) => setAuthorizationEvidenceType(e.target.value as typeof authorizationEvidenceType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                  <option value="">Choose evidence type</option>
-                  <option value="RIGHTS_AGREEMENT">Rights agreement</option>
-                  <option value="CHAIN_OF_TITLE">Chain-of-title documents</option>
-                  <option value="AUTHORIZATION_LETTER">Authorization letter</option>
-                  <option value="DISTRIBUTION_AGREEMENT">Distribution agreement</option>
-                  <option value="OTHER">Other supporting evidence</option>
-                </select>
-                <span className="mt-1 block text-xs text-muted">This records the evidence type you intend to provide; it does not mark the document as uploaded or verified.</span>
-              </label>
-              <label className="flex items-start gap-3 rounded-xl border border-line bg-elevated p-4 text-sm">
-                <input required type="checkbox" checked={authorizationAttested} onChange={(e) => setAuthorizationAttested(e.target.checked)} className="mt-0.5 accent-current" />
-                <span>I confirm that I am authorized to submit and license the selected rights. I understand Bridge will require supporting authorization / chain-of-title evidence before Licensing Ready.</span>
-              </label>
-              <label className="text-sm font-medium">Screener upload
-                <select value="SCREENER_PENDING" disabled className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                  <option value="SCREENER_PENDING">Upload after submission in the private title workspace</option>
-                </select>
-                <span className="mt-1 block text-xs text-muted">No screener file is uploaded by this form. The submission remains pending until a private asset is uploaded and verified.</span>
-              </label>
-              <CheckGroup label="Intended delivery destinations" values={DESTINATIONS} selected={destinations} onChange={(v, c) => toggle(setDestinations, destinations, v, c)} required />
-            </section>
-          </>
-        )}
+          )}
 
         {error ? <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">{error}</div> : null}
         <div className="flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs leading-relaxed text-muted">© 2026 StreamVista OPC Pvt Ltd. Crayons Bridge is the media supply chain, rights and licensing control plane.</p>
           {accountType !== "buyer" ? (
-            <Button type="button" variant="outline" disabled={busy} onClick={() => void onCreateWorkspaceOnly()} className="h-11 rounded-full px-6 font-semibold">
-              {busy ? "Creating…" : "Create workspace without submitting a title"}
+            <Button type="button" variant={showTitleIntake ? "outline" : "primary"} disabled={busy} onClick={() => void onCreateWorkspaceOnly()} className="h-11 rounded-full px-6 font-semibold">
+              {busy ? "Creating…" : "Create workspace"}
             </Button>
           ) : null}
-          <Button type="submit" disabled={busy} className="h-11 rounded-full px-6 font-semibold">{busy ? "Submitting…" : accountType === "buyer" ? "Enter Bridge" : "Submit title for review"}</Button>
+          {accountType === "buyer" || showTitleIntake ? (
+            <Button type="submit" disabled={busy} className="h-11 rounded-full px-6 font-semibold">{busy ? "Submitting…" : accountType === "buyer" ? "Enter Bridge" : "Submit title for review"}</Button>
+          ) : null}
         </div>
       </form>
     </main>

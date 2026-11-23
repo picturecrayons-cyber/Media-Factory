@@ -4,12 +4,20 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
-import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
+import { createTitle, deleteDraftTitle, listTitles } from "@/lib/bridge/titles";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", showSubmissionFilters = false, allowDraftDelete = false }: { empty: string; query?: string; showSubmissionFilters?: boolean; allowDraftDelete?: boolean }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const [sourceFilter, setSourceFilter] = useState<"all" | "independent_creator" | "studio">("all");
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteDraftTitle({ data: { id, confirmation: "DELETE DRAFT" } }),
+    onSuccess: () => { toast.success("Draft title deleted."); void titlesQ.refetch(); },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Draft deletion blocked."),
+  });
+  const titles = (titlesQ.data?.titles ?? []).filter((t) =>
+    (sourceFilter === "all" || t.ownerAccountType === sourceFilter) &&
+    (!query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase())),
+  );
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
@@ -19,8 +27,21 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
       </div>
     );
   }
-  if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
+  if (!titles.length && !showSubmissionFilters) return <p className="text-sm text-muted">{empty}</p>;
   return (
+    <>
+      {showSubmissionFilters ? (
+        <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Filter title submissions">
+          {([{ id: "all", label: "All titles" }, { id: "independent_creator", label: "Creator submissions" }, { id: "studio", label: "Studio submissions" }] as const).map((item) => (
+            <button key={item.id} type="button" aria-pressed={sourceFilter === item.id} onClick={() => setSourceFilter(item.id)} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${sourceFilter === item.id ? "border-accent bg-accent-soft text-accent" : "border-line text-muted"}`}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {!titles.length ? <p className="text-sm text-muted">{empty}</p> : null}
+      {titles.length ? (
+
     <ul className="divide-y divide-line rounded-sm border border-line">
       {titles.map((t) => (
         <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -38,11 +59,17 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           </Link>
           <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-            
+            {allowDraftDelete && t.status === "DRAFT" ? (
+              <Button type="button" size="sm" variant="outline" disabled={deleteMutation.isPending} onClick={() => {
+                if (window.confirm("Permanently delete this DRAFT title? This cannot be undone. Linked assets or records will block deletion.")) deleteMutation.mutate(t.id);
+              }}>Delete draft</Button>
+            ) : null}
           </div>
         </li>
       ))}
     </ul>
+      ) : null}
+    </>
   );
 }
 
@@ -103,9 +130,9 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
     <form onSubmit={onSubmit} className="grid gap-3 rounded-xl border border-line bg-surface p-4 sm:grid-cols-2">
       <label className="text-sm sm:col-span-2">Title<input required value={name} onChange={(e) => setName(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
       <label className="text-sm">Language<input value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
-      <label className="text-sm">Loop lane
+      <label className="text-sm">Content format
         <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">
-          {BRIDGE_LOOP_LANES.map((lane) => <option key={lane.id} value={lane.loopType}>{lane.label}</option>)}
+          {["Film", "Series", "Vertical drama", "Shorts"].map((format) => <option key={format} value={format}>{format}</option>)}
         </select>
       </label>
       {!concise && <>

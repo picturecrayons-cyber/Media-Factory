@@ -11,6 +11,7 @@ import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { assertPermission } from "./rbac";
 import { writeAudit } from "./audit";
+import { recordStoryConceptReviewUpdate, notifyStoryConceptSuperAdmin } from "./story-concept-review";
 import { assertNotDevUser } from "./guards";
 import {
   STORY_CONCEPT_ENABLED,
@@ -163,6 +164,21 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
       const concept = conceptRows[0];
       if (!concept) throw new Error("Story concept create failed");
 
+      await recordStoryConceptReviewUpdate({
+        conceptId: concept.id,
+        titleId,
+        actorUserId: actor.userId,
+        fromStatus: null,
+        toStatus: "PENDING",
+        note: "Your Story / Concept submission was received and is awaiting review.",
+        recipientUserId: actor.userId,
+      });
+      await notifyStoryConceptSuperAdmin({
+        conceptId: concept.id,
+        titleId,
+        message: "A new Story / Concept submission is waiting in the Founder Centre.",
+      });
+
       await writeAudit({
         actorUserId: actor.userId,
         action: "story_concept.create",
@@ -291,6 +307,19 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
 
       const concept = rows[0];
       if (!concept) throw new Error("Not found");
+      const ownerRows = await sql.query<{ owner_user_id: string }>(
+        "select owner_user_id from bridge_titles where id=$1 limit 1",
+        [concept.title_id],
+      );
+      await recordStoryConceptReviewUpdate({
+        conceptId: concept.id,
+        titleId: concept.title_id,
+        actorUserId: actor.userId,
+        fromStatus: from,
+        toStatus: data.status,
+        note: data.adminNotes?.trim() || ("Super Admin updated Story / Concept status to " + data.status + "."),
+        recipientUserId: ownerRows[0]?.owner_user_id ?? null,
+      });
 
       await writeAudit({
         actorUserId: actor.userId,

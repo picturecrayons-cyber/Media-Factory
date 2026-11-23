@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 import { PERMISSIONS } from "./types.ts";
+import { canTransitionServiceRequest, assertServiceRequestTransition, serviceQuoteAcceptanceInput } from "./service-request-workflow.ts";
 
 const actor = (
   userId: string,
@@ -39,6 +40,13 @@ describe("PRD authorization matrix", () => {
       );
       assert.equal(hasPermission(owner, "title.qc_review"), false);
       assert.equal(hasPermission(owner, "title.license"), false);
+      assert.equal(hasPermission(owner, "service.order_create"), true);
+      assert.equal(hasPermission(owner, "service.request_create"), true);
+      assert.equal(hasPermission(owner, "service.request_read"), true);
+      assert.equal(hasPermission(owner, "service.request_manage"), false);
+      assert.equal(hasPermission(owner, "delivery.assign_vendor"), false);
+      assert.equal(hasPermission(owner, "delivery.record_receipt"), false);
+      assert.equal(hasPermission(owner, "delivery.sign_off"), false);
     }
   });
 
@@ -61,6 +69,7 @@ describe("PRD authorization matrix", () => {
   it("admin receives only explicit staff permissions, not account-type mutation powers", () => {
     const a = admin();
     assert.equal(hasPermission(a, "title.read_catalog"), true);
+    assert.equal(hasPermission(a, "service.request_manage"), false);
     assert.equal(hasPermission(a, "title.qc_review"), false);
     assert.equal(hasPermission(a, "title.rights_review"), false);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
@@ -68,6 +77,9 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(a, "title.update_own"), false);
     assert.equal(hasPermission(a, "title.advance_upload"), false);
     assert.equal(hasPermission(a, "asset.sign_upload"), false);
+    assert.equal(hasPermission(a, "delivery.assign_vendor"), false);
+    assert.equal(hasPermission(a, "delivery.record_receipt"), false);
+    assert.equal(hasPermission(a, "delivery.sign_off"), false);
     assert.equal(canReadTitle(a, { ownerUserId: "other-org-user", status: "DRAFT" }), true);
     assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
   });
@@ -124,9 +136,9 @@ describe("PRD authorization matrix", () => {
 
   it("ordinary admins cannot grant super admin while super admin has an explicit grant matrix", () => {
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
-    assert.equal(canGrantInternalRole(admin(), "admin"), true);
+    assert.equal(canGrantInternalRole(admin(), "admin"), false);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
-    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), false);
     assert.equal(canGrantInternalRole(qc, "viewer"), false);
     assert.equal(canGrantInternalRole(actor("unverified", "independent_creator", "admin", false), "viewer"), false);
   });
@@ -176,7 +188,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(canAccessDashboard(viewer()), false);
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
-    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), false);
     assert.equal(
       canAccessDashboard(actor("super-u", "independent_creator", "super_admin", false)),
       false,
@@ -267,4 +279,70 @@ it("reserves final approval, duplicate merge, and Loop publication to Super Admi
   assert.equal(hasPermission(admin(), "title.rights_review"), false);
   assert.equal(hasPermission(qc, "title.rights_review"), false);
   assert.equal(hasPermission(legal, "title.qc_review"), false);
+});
+
+
+describe("Title finance statement authorization", () => {
+  it("allows Creator, Studio and Investor accounts to read only their own statements", () => {
+    for (const owner of [creator(), studio(), investor()]) assert.equal(hasPermission(owner, "finance.read_own"), true);
+    for (const denied of [buyer(), admin(), viewer(), qc, legal, finance]) assert.equal(hasPermission(denied, "finance.read_own"), false);
+    assert.equal(hasPermission(superAdmin(), "finance.read_own"), true);
+  });
+});
+
+describe("Creator / Studio service request authorization", () => {
+  it("isolates Creator requests to the authenticated Creator's own title", () => {
+    const owner = creator();
+    const ownTitle = { ownerUserId: owner.userId, ownerAccountType: "independent_creator" as const };
+    const foreignTitle = { ownerUserId: "creator-b", ownerAccountType: "independent_creator" as const };
+    assert.equal(canOperateOnTitle(owner, ownTitle, "service.request_create"), true);
+    assert.equal(canOperateOnTitle(owner, foreignTitle, "service.request_create"), false);
+  });
+
+  it("isolates Studio requests to the same active organization scope", () => {
+    const member: Actor = { ...studio(), organizationId: "11111111-1111-4111-8111-111111111111" };
+    const ownOrgTitle = { ownerUserId: "studio-owner", ownerAccountType: "studio" as const, ownerOrganizationId: member.organizationId };
+    const foreignOrgTitle = { ...ownOrgTitle, ownerOrganizationId: "22222222-2222-4222-8222-222222222222" };
+    assert.equal(canOperateOnTitle(member, ownOrgTitle, "service.request_create"), true);
+    assert.equal(canOperateOnTitle(member, foreignOrgTitle, "service.request_create"), false);
+    assert.equal(canOperateOnTitle({ ...member, organizationId: null }, ownOrgTitle, "service.request_create"), false);
+  });
+
+  it("denies Buyers, Investors and ordinary Admin from creating or managing service requests", () => {
+    for (const actorUnderTest of [buyer(), investor(), admin(), viewer(), qc, legal, finance]) {
+      assert.equal(hasPermission(actorUnderTest, "service.request_create"), false);
+      assert.equal(hasPermission(actorUnderTest, "service.request_read"), false);
+      assert.equal(hasPermission(actorUnderTest, "service.request_manage"), false);
+    }
+    assert.equal(hasPermission(superAdmin(), "service.request_manage"), true);
+  });
+});
+
+describe("Service request state machine", () => {
+  it("permits only the intended forward transitions", () => {
+    assert.equal(canTransitionServiceRequest("SUBMITTED", "UNDER_REVIEW"), true);
+    assert.equal(canTransitionServiceRequest("UNDER_REVIEW", "QUOTE_READY"), true);
+    assert.equal(canTransitionServiceRequest("QUOTE_READY", "AWAITING_PAYMENT"), false);
+    assert.equal(canTransitionServiceRequest("AWAITING_PAYMENT", "PAID"), false);
+    assert.equal(canTransitionServiceRequest("PAID", "ASSIGNED"), true);
+    assert.equal(canTransitionServiceRequest("ASSIGNED", "IN_PROGRESS"), true);
+    assert.equal(canTransitionServiceRequest("IN_PROGRESS", "REVIEW"), true);
+    assert.equal(canTransitionServiceRequest("REVIEW", "COMPLETED"), true);
+    assert.equal(canTransitionServiceRequest("COMPLETED", "IN_PROGRESS"), false);
+    assert.equal(canTransitionServiceRequest("REFUNDED", "ASSIGNED"), false);
+  });
+
+  it("rejects skipped or backwards status transitions", () => {
+    assert.throws(() => assertServiceRequestTransition("SUBMITTED", "PAID"), /Invalid service request transition/);
+    assert.throws(() => assertServiceRequestTransition("COMPLETED", "REVIEW"), /Invalid service request transition/);
+    assert.throws(() => assertServiceRequestTransition("CANCELLED", "UNDER_REVIEW"), /Invalid service request transition/);
+  });
+});
+
+
+it("quote acceptance rejects client-supplied amount and currency overrides", () => {
+  const quoteId = "11111111-1111-4111-8111-111111111111";
+  assert.equal(serviceQuoteAcceptanceInput.safeParse({ quoteId }).success, true);
+  assert.equal(serviceQuoteAcceptanceInput.safeParse({ quoteId, totalPaise: 1 }).success, false);
+  assert.equal(serviceQuoteAcceptanceInput.safeParse({ quoteId, currency: "USD" }).success, false);
 });

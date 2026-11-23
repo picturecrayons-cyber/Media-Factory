@@ -6,6 +6,7 @@ import { assertPermission } from "@/lib/bridge/rbac";
 import { requireVerifiedActor } from "@/lib/bridge/session";
 import { fetchObjectResponse } from "@/lib/bridge/oci-object-storage.server";
 import { getSql } from "@/lib/db";
+import { buyerHasExplicitTitleAccess } from "@/lib/bridge/buyer-visibility";
 
 const MAX_POSTER_BYTES = 20 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
@@ -38,6 +39,10 @@ export const Route = createFileRoute("/api/buyer/poster")({
           const titleId = new URL(request.url).searchParams.get("titleId");
           if (!titleId || titleId.length > 128) {
             return Response.json({ error: "Invalid title" }, { status: 400 });
+          }
+
+          if (!(await buyerHasExplicitTitleAccess(titleId, actor.userId))) {
+            return new Response(null, { status: 404 });
           }
 
           const sql = await getSql();

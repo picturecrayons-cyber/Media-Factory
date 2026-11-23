@@ -12,7 +12,7 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
-import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { assertBuyerPublishable, buyerHasExplicitTitleAccess, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
 
 type TitleRow = {
@@ -93,15 +93,16 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
   const orgId = organizationId || null;
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+  let rows: TitleRow[];
   if (!orgId) {
-    return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
-  }
-  return mergeColumnAvailable
-    ? sql<TitleRow>`
+    rows = mergeColumnAvailable
+      ? await sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and submission_type = 'finished_film' and merged_into_title_id is null order by updated_at desc limit 200`
+      : await sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and submission_type = 'finished_film' order by updated_at desc limit 200`;
+  } else if (mergeColumnAvailable) {
+    rows = await sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.merged_into_title_id is null
+        where t.submission_type = 'finished_film'
+          and t.merged_into_title_id is null
           and (
             t.owner_user_id = ${userId}
             or (
@@ -116,22 +117,46 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
             )
           )
         order by t.updated_at desc limit 200
-      `
-    : sql<TitleRow>`
+      `;
+  } else {
+    rows = await sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
-          or (
-            t.owner_account_type = 'studio'
-            and t.owner_organization_id = ${orgId}
-            and exists (
-              select 1 from bridge_organization_memberships m
-              where m.organization_id = ${orgId}
-                and m.user_id = ${userId}
-                and m.status = 'active'
+        where t.submission_type = 'finished_film'
+          and (
+            t.owner_user_id = ${userId}
+            or (
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id = ${orgId}
+              and exists (
+                select 1 from bridge_organization_memberships m
+                where m.organization_id = ${orgId}
+                  and m.user_id = ${userId}
+                  and m.status = 'active'
+              )
             )
           )
         order by t.updated_at desc limit 200
       `;
+  }
+
+  // Fail-safe against legacy/misclassified concepts: a title linked to a
+  // concept submission must never also appear in the Finished Films catalogue.
+  if (!rows.length) return rows;
+  const conceptTable = await sql<{ exists: boolean }>`
+    select exists (
+      select 1 from information_schema.tables
+      where table_schema = 'public'
+        and table_name = 'bridge_story_concept_submissions'
+    ) as exists
+  `;
+  if (!conceptTable[0]?.exists) return rows;
+  const conceptRows = await sql<{ title_id: string }>`
+    select title_id::text as title_id
+    from bridge_story_concept_submissions
+    where title_id::text = any(${rows.map((row) => row.id)}::text[])
+  `;
+  const conceptTitleIds = new Set(conceptRows.map((row) => row.title_id));
+  return rows.filter((row) => !conceptTitleIds.has(row.id));
 }
 
 function slugify(name: string, id: string): string {
@@ -306,7 +331,7 @@ export const createTitle = createServerFn({ method: "POST" })
         insert into bridge_titles (
           id, slug, name, name_ml, owner_user_id, owner_account_type, status,
           synopsis, language, year, runtime_minutes, licensing_fee_paise,
-          content_type, country_of_origin, release_date, credits, owner_organization_id
+          content_type, country_of_origin, release_date, credits, owner_organization_id, submission_type
         ) values (
           ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
           ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
@@ -316,7 +341,7 @@ export const createTitle = createServerFn({ method: "POST" })
             ...(data.director ? [{ role: "Director", name: data.director }] : []),
             ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
             ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
-          ])}::jsonb, ${actor.accountType === "studio" ? actor.organizationId ?? null : null}
+          ])}::jsonb, ${actor.accountType === "studio" ? actor.organizationId ?? null : null}, 'finished_film'
         )
       `;
 
@@ -387,19 +412,35 @@ export const listTitles = createServerFn({ method: "GET" })
       rows = await listCatalog(sql);
     } else if (actor.accountType === "buyer") {
       assertPermission(actor, "title.read_catalog");
-      if (await hasTitleMergeColumn(sql)) {
+      const accessSchema = await sql<{ available: boolean }>`select to_regclass('public.bridge_buyer_title_access') is not null as available`;
+      // No buyer-specific access schema means no catalogue access: fail closed.
+      if (accessSchema[0]?.available && await hasTitleMergeColumn(sql)) {
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
           where t.merged_into_title_id is null
             and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
+            and exists (
+              select 1 from bridge_buyer_title_access ba
+              where ba.title_id = t.id
+                and ba.buyer_user_id = ${actor.userId}
+                and ba.revoked_at is null
+                and (ba.expires_at is null or ba.expires_at > now())
+            )
           order by t.updated_at desc limit 200
         `;
-      } else {
+      } else if (accessSchema[0]?.available) {
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
           where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
+            and exists (
+              select 1 from bridge_buyer_title_access ba
+              where ba.title_id = t.id
+                and ba.buyer_user_id = ${actor.userId}
+                and ba.revoked_at is null
+                and (ba.expires_at is null or ba.expires_at > now())
+            )
           order by t.updated_at desc limit 200
         `;
       }
@@ -428,8 +469,8 @@ export const getTitle = createServerFn({ method: "GET" })
     const sql = await getSql();
     const buyerView = actor.accountType === "buyer" && !actor.internalRole;
     if (buyerView) {
-      // A published status alone is not enough: re-check every publication gate
-      // on direct listing access, not only when the catalogue is queried.
+      // Require a live, explicit grant to this Buyer before checking publication gates.
+      if (!(await buyerHasExplicitTitleAccess(title.id, actor.userId))) throw new Error("Not found");
       await assertBuyerPublishable(title.id);
     } else if (actor.accountType === "investor" && !actor.internalRole) {
       const assigned = await sql<{ id: string }>
@@ -718,4 +759,66 @@ export const listAuditLogs = createServerFn({ method: "GET" })
         createdAt: asIso(r.created_at),
       })),
     };
+  });
+
+
+/**
+ * Permanently deletes a DRAFT title only when no storage-backed or other
+ * relational records depend on it. Storage objects are never guessed/deleted
+ * here; titles with registered assets fail closed for a separate cleanup flow.
+ */
+export const deleteDraftTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ id: z.string().min(8).max(100), confirmation: z.literal("DELETE DRAFT") }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const title = await loadTitle(data.id);
+    if (!title || title.status !== "DRAFT" || !canMutateTitle(actor, title, "title.update_own", "title.approve")) {
+      throw new Error("Only a DRAFT title that you are authorized to manage can be deleted");
+    }
+
+    const sql = await getSql();
+    await sql.transaction(async (tx) => {
+      const locked = await tx.query<{ status: string; name: string }>(
+        "select status,name from public.bridge_titles where id=$1 for update",
+        [data.id],
+      );
+      if (!locked[0] || locked[0].status !== "DRAFT") {
+        throw new Error("Title is no longer a DRAFT; deletion is blocked");
+      }
+
+      const references = await tx.query<{ table_name: string; column_name: string }>(
+        "select kcu.table_name,kcu.column_name from information_schema.table_constraints tc join information_schema.key_column_usage kcu on tc.constraint_name=kcu.constraint_name and tc.constraint_schema=kcu.constraint_schema join information_schema.constraint_column_usage ccu on ccu.constraint_name=tc.constraint_name and ccu.constraint_schema=tc.constraint_schema where tc.constraint_type='FOREIGN KEY' and tc.constraint_schema='public' and ccu.table_schema='public' and ccu.table_name='bridge_titles' and ccu.column_name='id'",
+      );
+      const blocked: string[] = [];
+      for (const ref of references) {
+        if (ref.table_name === "bridge_title_events") {
+          await tx.query("delete from public.bridge_title_events where title_id=$1", [data.id]);
+          continue;
+        }
+        const count = await tx.query<{ count: number }>(
+          'select count(*)::int as count from public."' + ref.table_name.replaceAll('"', '""') + '" where "' + ref.column_name.replaceAll('"', '""') + '"=$1',
+          [data.id],
+        );
+        if (Number(count[0]?.count ?? 0) > 0) blocked.push(ref.table_name);
+      }
+      if (blocked.length) {
+        throw new Error("Deletion blocked: linked records or storage-backed assets remain (" + [...new Set(blocked)].join(", ") + "). Use the verified asset cleanup workflow first.");
+      }
+
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.draft_deleted",
+        entityType: "bridge_title",
+        entityId: data.id,
+        metadata: { titleName: locked[0].name, priorStatus: "DRAFT", relatedRowsChecked: references.length },
+      }, tx);
+      const deleted = await tx.query<{ id: string }>(
+        "delete from public.bridge_titles where id=$1 and status='DRAFT' returning id",
+        [data.id],
+      );
+      if (!deleted[0]) throw new Error("Draft changed during deletion; no record was removed");
+    });
+    return { id: data.id, deleted: true as const };
   });

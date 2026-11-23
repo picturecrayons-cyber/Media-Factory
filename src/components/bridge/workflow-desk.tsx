@@ -40,6 +40,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [settlementAmount, setSettlementAmount] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const qc = useQueryClient();
   const workflow = useQuery({
     queryKey: ["title-workflow", title.id],
@@ -76,6 +77,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     mutationFn: async (run: () => Promise<unknown>) => run(),
     onSuccess: async () => {
       setError("");
+      setSuccess("Action completed successfully. The title workflow is refreshing.");
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["title-workflow", title.id] }),
         qc.invalidateQueries({ queryKey: ["bridge-title", title.id] }),
@@ -88,7 +90,10 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         qc.invalidateQueries({ queryKey: ["title-revenue", title.id] }),
       ]);
     },
-    onError: (e) => setError(e instanceof Error ? e.message : "Action failed"),
+    onError: (e) => {
+      setSuccess("");
+      setError(e instanceof Error ? e.message : "Action failed");
+    },
   });
   const [start, setStart] = useState(() => toLocalDateTimeInput(new Date()));
   const [end, setEnd] = useState(() => {
@@ -154,7 +159,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
       type="button"
       className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50"
       disabled={action.isPending || disabled}
-      onClick={() => action.mutate(run)}
+      onClick={() => {
+        setError("");
+        setSuccess("");
+        action.mutate(run);
+      }}
     >
       {label}
     </button>
@@ -193,6 +202,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           {error}
         </p>
       ) : null}
+      {success ? (
+        <p role="status" aria-live="polite" className="text-sm text-green-700">
+          {success}
+        </p>
+      ) : null}
       {workflow.isPending ? (
         <p>Loading workflow…</p>
       ) : workflow.isError ? (
@@ -205,7 +219,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-3">
               <p>
                 {title.status === "PREPARING" || title.status === "UPLOADING" || title.status === "DRAFT"
-                  ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit for QC. QC is not reviewed yet."
+                  ? "Prepare the film package here. When the master, vertical poster, horizontal artwork and thumbnail are storage-verified, Submit to Bridge sends the title into the Super Admin QC queue. Bridge then handles QC → Rights → Legal → Licensing readiness. Buyer access is granted separately only after authorization. Business, Distribution and Revenue remain separate steps after intake."
                   : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
@@ -215,7 +229,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       ? "Start ingest"
                       : title.status === "UPLOADING"
                         ? "Prepare package"
-                        : "Submit for QC",
+                        : "Submit to Bridge",
                     () =>
                       advanceTitle({
                         data: {

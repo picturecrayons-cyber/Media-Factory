@@ -17,9 +17,9 @@ function listLogline(value: string | null | undefined) {
   return text.length > 80 ? `${text.slice(0, 80)}…` : text;
 }
 
-export function MyStoryConcepts() {
+export function MyStoryConcepts({ userId }: { userId: string }) {
   const query = useQuery({
-    queryKey: ["my-story-concepts"],
+    queryKey: ["my-story-concepts", userId],
     queryFn: () => listMyStoryConcepts(),
     enabled: STORY_CONCEPT_ENABLED,
   });
@@ -40,8 +40,8 @@ export function MyStoryConcepts() {
           return (
             <li key={c.id}>
               <Link
-                to="/title/$id"
-                params={{ id: c.title_id }}
+                to="/story/$id"
+                params={{ id: c.id }}
                 className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
               >
                 <div>

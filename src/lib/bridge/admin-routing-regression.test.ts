@@ -97,3 +97,73 @@ test("Open Titles permits authorised internal catalog readers without weakening 
   assert.match(rbac, /if \(actor\.internalRole\) return hasPermission\(actor, "title\.read_catalog"\)/);
   assert.match(rbac, /actor\.internalRole === "super_admin"/);
 });
+
+
+test("signup-selected account type is shown once and not re-selected during onboarding", () => {
+  const onboarding = read("../../routes/onboarding.tsx");
+  assert.match(onboarding, /\{signupAccountType \? \(/);
+  assert.match(onboarding, /Selected account type/);
+  assert.match(onboarding, /Already selected during sign-up/);
+  assert.match(onboarding, /\) : \(\s*<select value=\{accountType\}/);
+});
+
+
+test("Buyer Management is Super Admin-only and reads Bridge Buyer profiles without mutating access", () => {
+  const buyers = read("../../routes/admin/buyers.tsx");
+  const dashboard = read("../../routes/dashboard.tsx");
+  const shell = read("../../components/bridge/shell.tsx");
+  assert.match(buyers, /<RequireBridge allow="super_admin">/);
+  assert.match(buyers, /listAdminProfiles\(\)/);
+  assert.match(buyers, /profile\.accountType === "buyer"/);
+  assert.match(buyers, /profile\.emailVerified/);
+  assert.match(buyers, /BOOKMYSHOW_CONTACTS/);
+  assert.match(buyers, /does not import legacy accounts or change roles/);
+  assert.match(dashboard, /to="\/admin\/buyers"/);
+  assert.match(shell, /to: "\/admin\/buyers", label: "Buyers"/);
+  assert.doesNotMatch(buyers, /inviteInternalRole|update bridge_profiles|insert into bridge_profiles|delete from bridge_profiles/);
+});
+
+
+test("Super Admin primary tabs expose the simplified Bridge workspaces without changing RBAC", () => {
+  const shell = read("../../components/bridge/shell.tsx");
+  for (const path of ["/dashboard", "/workspace", "/admin/workstations", "/internal", "/admin/buyers", "/admin/users", "/admin/services", "/admin-cms", "/admin/audit", "/account"]) {
+    assert.ok(shell.includes(`to: "${path}"`), `missing Super Admin tab ${path}`);
+  }
+  const superAdminNavigation = shell.split('if (actor.internalRole === "super_admin") {')[1]?.split('if (actor.internalRole) {')[0] ?? "";
+  assert.ok(superAdminNavigation, "Super Admin navigation branch must exist");
+  assert.doesNotMatch(superAdminNavigation, /to: "\/cms"|to: "\/admin\/team"/);
+  assert.match(shell, /actor\.internalRole === "super_admin"/);
+});
+
+test("homepage and Buyer surfaces describe multiple independent Buyers, not Loop as the only market", () => {
+  const home = read("../../routes/index.tsx");
+  const defaults = read("./site-content.ts");
+  const buyer = read("../../routes/buyer.tsx");
+  const buyerRegister = read("../../routes/admin/buyers.tsx");
+  assert.match(home, /multiple independent Buyers/);
+  assert.match(home, /not the only destination or Buyer/);
+  assert.match(defaults, /multiple independent Buyers/);
+  assert.match(buyer, /Each Buyer account has/);
+  assert.match(buyerRegister, /LEGACY_BUYER_REGISTER/);
+  assert.match(buyerRegister, /Verify Buyer category/);
+  assert.match(buyerRegister, /ID 55/);
+});
+
+
+test("Buyer catalogue, direct title, checkout and poster access require an explicit live per-user grant", () => {
+  const titles = read("./titles.ts");
+  const buyerAccess = read("./buyer-visibility.ts");
+  const payments = read("./payments.ts");
+  const poster = read("../../routes/api/buyer/poster.ts");
+  const accessMigration = read("../../../migrations/0009_buyer_title_access.sql");
+  assert.match(buyerAccess, /buyerHasExplicitTitleAccess/);
+  assert.match(buyerAccess, /revoked_at is null/);
+  assert.match(buyerAccess, /expires_at is null or expires_at > now\(\)/);
+  assert.match(buyerAccess, /to_regclass\('public\.bridge_buyer_title_access'\)/);
+  assert.match(titles, /ba\.buyer_user_id = \$\{actor\.userId\}/);
+  assert.match(titles, /buyerHasExplicitTitleAccess\(title\.id, actor\.userId\)/);
+  assert.match(payments, /buyerHasExplicitTitleAccess\(title\.id, actor\.userId\)/);
+  assert.match(poster, /buyerHasExplicitTitleAccess\(titleId, actor\.userId\)/);
+  assert.match(accessMigration, /primary key \(title_id, buyer_user_id\)/);
+  assert.match(accessMigration, /revoked_at/);
+});

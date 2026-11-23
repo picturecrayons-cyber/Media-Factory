@@ -20,6 +20,33 @@ function tokenPair() {
   return { token, hash };
 }
 
+
+
+async function recordSignupLegalAcceptance(tx: Sql, bridgeUserId: string, authUserId: string): Promise<boolean> {
+  const rows = await tx<{ raw_user_meta_data: unknown }>`
+    select raw_user_meta_data from auth.users where id = ${authUserId}::uuid limit 1
+  `;
+  const metadata = rows[0]?.raw_user_meta_data;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return false;
+  const values = metadata as Record<string, unknown>;
+  const termsVersion = values.bridge_terms_version;
+  const privacyVersion = values.bridge_privacy_version;
+  const acknowledgedAt = values.bridge_legal_acknowledged_at;
+  if (termsVersion !== "1.0-draft" || privacyVersion !== "1.0-draft" || typeof acknowledgedAt !== "string") return false;
+  const parsedAcknowledgedAt = Date.parse(acknowledgedAt);
+  if (!Number.isFinite(parsedAcknowledgedAt)) return false;
+  await tx`
+    insert into bridge_legal_acceptances (
+      bridge_user_id, auth_user_id, terms_version, privacy_version, client_acknowledged_at
+    ) values (
+      ${bridgeUserId}, ${authUserId}::uuid, ${termsVersion}, ${privacyVersion},
+      ${new Date(parsedAcknowledgedAt).toISOString()}
+    )
+    on conflict (bridge_user_id, terms_version, privacy_version) do nothing
+  `;
+  return true;
+}
+
 async function mail(opts: { to: string; subject: string; text: string }) {
   const { sendBridgeMail } = await import("./mail.server");
   return sendBridgeMail(opts);
@@ -104,28 +131,43 @@ async function persistSupabaseIdentityLink(sql: Sql, bridgeUserId: string, authU
     throw new Error("Authenticated identity is already bound to another Bridge profile");
   }
 
-  // Supabase Auth users are not necessarily present in the legacy Better Auth
-  // public.user table. Mirror only the verified Bridge identity needed by the
-  // identity-link FK; never take over an email already owned by another ID.
-  const bridgeUsers = await sql<{ id: string }>`
-    select id from public."user" where id = ${bridgeUserId} limit 1
+  // The canonical identity-link FK differs between legacy Better Auth and
+  // current Supabase Testing schemas. Inspect the actual FK target rather than
+  // assuming public.user exists in every environment.
+  const references = await sql<{ referenced_table: string }>`
+    select confrelid::regclass::text as referenced_table
+    from pg_constraint
+    where conrelid = 'public.bridge_loop_identity_links'::regclass
+      and conname = 'bridge_loop_identity_links_bridge_user_id_fkey'
+      and contype = 'f'
+    limit 1
   `;
-  if (!bridgeUsers[0]) {
-    const emailOwners = await sql<{ id: string }>`
-      select id from public."user" where lower(email) = lower(${identity.auth_email}) limit 1
+  const referencedTable = references[0]?.referenced_table;
+  if (referencedTable === "user" || referencedTable === "public.user") {
+    // Legacy installations still point at Better Auth's public.user table.
+    // Mirror only the verified identity and never take over another user's email.
+    const bridgeUsers = await sql<{ id: string }>`
+      select id from public."user" where id = ${bridgeUserId} limit 1
     `;
-    if (emailOwners[0] && emailOwners[0].id !== bridgeUserId) {
-      throw new Error("Verified email is already attached to a different legacy Bridge identity");
+    if (!bridgeUsers[0]) {
+      const emailOwners = await sql<{ id: string }>`
+        select id from public."user" where lower(email) = lower(${identity.auth_email}) limit 1
+      `;
+      if (emailOwners[0] && emailOwners[0].id !== bridgeUserId) {
+        throw new Error("Verified email is already attached to a different legacy Bridge identity");
+      }
+      await sql`
+        insert into public."user" (id, name, email, "emailVerified")
+        values (${bridgeUserId}, ${identity.display_name}, ${identity.auth_email}, true)
+        on conflict (id) do update set
+          name = excluded.name,
+          email = excluded.email,
+          "emailVerified" = true,
+          "updatedAt" = now()
+      `;
     }
-    await sql`
-      insert into public."user" (id, name, email, "emailVerified")
-      values (${bridgeUserId}, ${identity.display_name}, ${identity.auth_email}, true)
-      on conflict (id) do update set
-        name = excluded.name,
-        email = excluded.email,
-        "emailVerified" = true,
-        "updatedAt" = now()
-    `;
+  } else if (referencedTable !== "bridge_profiles" && referencedTable !== "public.bridge_profiles") {
+    throw new Error("Bridge identity-link foreign-key schema is not supported");
   }
 
   await sql`
@@ -193,6 +235,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       await sql.transaction(async (tx) => {
         await persistSupabaseIdentityLink(tx, existing.userId, context.userId);
         await claimLegacyCreatorIntake(tx, email, existing.userId);
+        await recordSignupLegalAcceptance(tx, existing.userId, context.userId);
         if (
           data.creatorMandateAccepted === true &&
           (existing.accountType === "independent_creator" || existing.accountType === "studio")
@@ -232,16 +275,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       throw new Error("Investor access requires a reviewed access request.");
     }
 
-    // Creator/Studio accounts must explicitly accept the reusable account-level mandate.
-    // This mandate is not a title-specific legal approval or blanket rights grant.
-    if (
-      (data.accountType === "independent_creator" || data.accountType === "studio") &&
-      data.creatorMandateAccepted !== true
-    ) {
-      throw new Error("Accept the Creator Distribution Mandate to create this workspace.");
-    }
-
-    const email = context.userEmail;
+        const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
     const verified = true;
 
@@ -276,6 +310,9 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       }
       if (inv.email.toLowerCase() !== email.toLowerCase()) {
         throw new Error("Invite email does not match this account");
+      }
+      if (inv.internal_role === "super_admin") {
+        throw new Error("Super Admin invitations are disabled; owner-level assignment must be provisioned separately");
       }
       internalRole = inv.internal_role;
       invitedBy = inv.invited_by;
@@ -374,7 +411,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
             `;
           }
         }
-        if (data.accountType === "independent_creator" || data.accountType === "studio") {
+        if ((data.accountType === "independent_creator" || data.accountType === "studio") && data.creatorMandateAccepted === true) {
           const mandate = createDefaultDistributionMandate(new Date().toISOString());
           await tx`
             insert into bridge_creator_distribution_mandates
@@ -389,6 +426,8 @@ export const completeOnboarding = createServerFn({ method: "POST" })
 
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
         await claimLegacyCreatorIntake(tx, email, bridgeUserId);
+        const legalRecorded = await recordSignupLegalAcceptance(tx, bridgeUserId, context.userId);
+        if (!legalRecorded) throw new Error("B2B Terms and Privacy acknowledgement is required before onboarding.");
         const roleForTransaction: string | null = internalRole;
         return roleForTransaction;
       });
@@ -542,6 +581,9 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "users.invite_internal");
+    if (data.role === "super_admin") {
+      throw new Error("Super Admin is a reserved owner-level assignment and cannot be granted by invitation");
+    }
     if (!canGrantInternalRole(actor, data.role)) {
       throw new Error("Role grant is not permitted");
     }
