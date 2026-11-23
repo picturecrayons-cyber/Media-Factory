@@ -369,7 +369,7 @@ export const updateMyStoryConceptSubmission = createServerFn({ method: "POST" })
         action: "story_concept.resubmit",
         entityType: "bridge_story_concept_submission",
         entityId: concept.id,
-        metadata: { from, status: "PENDING", previousFeedbackPreservedInAudit: Boolean(current.admin_notes) },
+        metadata: { from, status: "PENDING", previousFeedback: current.admin_notes },
       });
       return { concept: mapConcept(concept) };
     } catch (err) {
