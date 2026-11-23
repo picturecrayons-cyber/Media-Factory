@@ -15,15 +15,11 @@ const LIVE = new Set(["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERE
 const IN_PROGRESS = new Set(["UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVIEW"]);
 
 const SECTIONS = [
-  ["Overview", "#overview"],
+  ["Home", "#overview"],
   ["My Titles", "#my-titles"],
-  ["Add New Title", "#add-title"],
-  ["Metadata & Credits", "#metadata"],
-  ["Rights & Ownership", "#rights"],
-  ["Document Vault", "#document-vault"],
-  ["My Assets", "#assets"],
-  ["Review & Corrections", "#review"],
-  ["Delivery Status", "#delivery"],
+  ["Submit", "#add-title"],
+  ["Documents", "#document-vault"],
+  ["Updates", "#updates"],
   ["Statements", "#statements"],
 ] as const;
 
@@ -70,14 +66,14 @@ function CreatorDashboard({
         <div className="relative flex flex-wrap items-end justify-between gap-5">
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-              Crayons Bridge · Creator Desk
+              Crayons Bridge · Creator OS
             </p>
             <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-              Your films. Your rights. Your workspace.
+              Your Creator workspace, made simple.
             </h1>
             <p className="mt-3 text-sm leading-relaxed text-muted sm:text-base">
-              Manage your own submissions from first details and secure assets through review,
-              rights clearance and authorized delivery.
+              One place to submit films, manage your titles and documents, and follow review and delivery.
+              Open any title for its metadata, secure assets, rights and workflow details.
             </p>
           </div>
           <Link
@@ -150,7 +146,7 @@ function CreatorDashboard({
       <section id="my-titles" className="scroll-mt-20 space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-accent">Your catalogue</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-accent">Workspace · Titles</p>
             <h2 className="mt-1 font-display text-2xl font-semibold">My Titles</h2>
             <p className="mt-1 text-sm text-muted">
               Only records returned by the authenticated, server-scoped Creator title query are shown.
@@ -167,7 +163,7 @@ function CreatorDashboard({
 
       <section id="add-title" className="scroll-mt-20 grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
         <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-widest text-accent">Start here</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-accent">Workspace · Submit</p>
           <h2 className="font-display text-2xl font-semibold">Add New Title</h2>
           <p className="max-w-2xl text-sm leading-relaxed text-muted">
             Submit a finished film through the existing Bridge form. Submission creates a record; it does
@@ -246,7 +242,7 @@ function CreatorDashboard({
 
       <section id="updates" className="scroll-mt-20 space-y-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-accent">Activity</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-accent">Workspace · Updates</p>
           <h2 className="mt-1 font-display text-2xl font-semibold">Recent Title Updates</h2>
         </div>
         {titlesQ.isPending ? (
