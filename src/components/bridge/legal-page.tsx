@@ -93,7 +93,6 @@ export function LegalPage({ document }: { document: LegalDocument }) {
       <nav aria-label="Other legal documents" className="mt-10 flex flex-wrap gap-x-5 gap-y-3 border-t border-line pt-5 text-sm">
         <Link to="/privacy" className="text-accent hover:underline">Privacy Policy</Link>
         <Link to="/terms" className="text-accent hover:underline">B2B Terms</Link>
-        <Link to="/legal" className="text-accent hover:underline">Legal Centre</Link>
         <Link to="/contact" className="text-accent hover:underline">Contact</Link>
       </nav>
       <p className="mt-6 text-xs leading-6 text-muted">Draft policy text for operational use; final legal wording, statutory designations, addresses, retention periods and effective dates require review and approval by the Company’s legal adviser. No page is represented as legally certified.</p>
