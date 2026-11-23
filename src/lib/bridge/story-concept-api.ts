@@ -341,7 +341,7 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
         update bridge_story_concept_submissions
         set
           curation_status = ${data.status},
-          admin_notes = ${data.adminNotes ?? null},
+          admin_notes = ${data.adminNotes ?? current.admin_notes},
           updated_at = now(),
           introduced_to_buyers_at = case
             when ${data.status} = 'INTRODUCED_TO_BUYERS' then coalesce(introduced_to_buyers_at, now())
