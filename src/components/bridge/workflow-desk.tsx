@@ -168,7 +168,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal")) ||
                 (title.status === "PREPARING" &&
                   ["admin", "super_admin"].includes(actor.internalRole ?? "") &&
-                  hasPermission(actor, "title.ingest_internal"))
+                  hasPermission(actor, "title.read_catalog"))
               )
                 ? button(
                     title.status === "DRAFT"
