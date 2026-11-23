@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   canResubmitOwnerAdminSubmission,
   evaluateOwnerAdminSubmissionReadiness,
-} from "./owner-admin-submission-policy";
+} from "./owner-admin-submission-policy.ts";
 
 const ready = {
   titleStatus: "PREPARING",
