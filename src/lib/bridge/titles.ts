@@ -12,7 +12,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
-import { submitTitleForQc } from "./title-submission";
+import { isAdminAcceptedOwnerIntake, submitTitleForQc } from "./title-submission";
 
 type TitleRow = {
   id: string;
@@ -622,7 +622,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
         select submission_status from bridge_title_owner_submissions
         where title_id = ${title.id} limit 1
       `;
-      if (intake[0]?.submission_status !== "ACCEPTED_INTAKE") {
+      if (!isAdminAcceptedOwnerIntake(intake[0]?.submission_status)) {
         throw new Error("Submit to Bridge Admin and receive Admin acceptance before QC handoff");
       }
       return submitTitleForQc(sql, title, actor.userId, data.note, true);
