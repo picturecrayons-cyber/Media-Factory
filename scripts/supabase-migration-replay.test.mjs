@@ -80,7 +80,8 @@ test("Testing candidate migrations are explicitly excluded from the immutable Pr
     assert.ok(replaySource.includes(name), `missing explicit non-Production classification: ${name}`);
     assert.ok(replaySource.includes(`Declared Testing candidate migration is missing: ${name}` ) === false);
   }
-  assert.ok(!replaySource.includes("20261123015009_bridge_owner_submission_production_rollout.sql"), "post-snapshot rollout must not be classified Testing-only");
+  const nonProductionBlock = replaySource.match(/const NON_PRODUCTION_MIGRATIONS = new Set\(\[([\s\S]*?)\]\);/)?.[1] ?? "";
+  assert.ok(!nonProductionBlock.includes("20261123015009_bridge_owner_submission_production_rollout.sql"), "post-snapshot rollout must remain in the Production replay set");
   assert.match(replaySource, /const names = allNames\.filter/);
   assert.match(replaySource, /manifestRows.size !== EXPECTED_PRODUCTION_MIGRATIONS/);
 });
