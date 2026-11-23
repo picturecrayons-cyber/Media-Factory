@@ -246,7 +246,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 {title.status === "PREPARING" ? (
                   <button
                     type="button"
-                    disabled={submitQcMutation.isPending || !qcReady}
+                    disabled={submitQcMutation.isPending}
                     onClick={() => submitQcMutation.mutate()}
                     className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-[#041018] disabled:cursor-not-allowed disabled:opacity-50"
                   >
