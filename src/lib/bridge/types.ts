@@ -54,6 +54,7 @@ export type BridgeTitle = {
   posterKey: string | null;
   masterKey: string | null;
   contentType: string;
+  submissionType?: "finished_film" | "story_concept";
   countryOfOrigin: string | null;
   releaseDate: string | null;
   credits: Array<{ role: string; name: string }>;
