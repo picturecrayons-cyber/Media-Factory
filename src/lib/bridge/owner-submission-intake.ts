@@ -80,7 +80,16 @@ export const getOwnerSubmissionReadiness = createServerFn({ method: "GET" })
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Title not found");
     await assertOwnerOrActiveStudio(actor, title);
-    const assets = await readiness(await getSql(), title);
+    const db = await getSql();
+    const assets = await readiness(db, title);
+    const existingRows = await db<{ submission_status: string }>`
+      select submission_status
+      from bridge_title_owner_submissions
+      where title_id = ${title.id}
+      limit 1
+    `;
+    const existingStatus = existingRows[0]?.submission_status ?? null;
+    const submissionAvailable = canResubmitOwnerAdminSubmission(existingStatus);
     const statusReady = title.status === "PREPARING";
     const evaluated = evaluateOwnerAdminSubmissionReadiness({
       titleStatus: title.status,
@@ -94,8 +103,10 @@ export const getOwnerSubmissionReadiness = createServerFn({ method: "GET" })
     return {
       titleStatus: title.status,
       ...assets,
-      canSubmit: evaluated.eligible,
+      submissionStatus: existingStatus,
+      canSubmit: evaluated.eligible && submissionAvailable,
       blockers: [
+        ...(!submissionAvailable ? [`Submission already ${existingStatus?.toLowerCase().replaceAll("_", " ")}`] : []),
         ...(!statusReady ? ["Title must remain PREPARING"] : []),
         ...(!evaluated.masterReady ? ["Canonical verified master is missing or not independently verified"] : []),
         ...(!evaluated.artworkReady ? ["Canonical verified poster artwork is missing or not independently verified"] : []),
