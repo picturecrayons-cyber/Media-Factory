@@ -10,7 +10,7 @@ create table if not exists public.bridge_title_owner_interests (
   owner_organization_id text,
   share_bps integer not null check (share_bps > 0 and share_bps <= 10000),
   agreement_reference text not null,
-  evidence_url text not null check (evidence_url like 'https://%'),
+  evidence_document_id text not null references public.bridge_creator_documents(id) on delete restrict,
   status text not null default 'PENDING_VERIFICATION'
     check (status in ('PENDING_VERIFICATION','VERIFIED','REJECTED','SUPERSEDED')),
   verified_by text,
