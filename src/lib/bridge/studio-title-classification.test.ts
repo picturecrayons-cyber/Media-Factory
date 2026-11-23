@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { isFinishedFilmSubmission } from "./studio-title-classification";
+import { isFinishedFilmSubmission } from "./studio-title-classification.ts";
 
 const titlesSource = readFileSync(new URL("./titles.ts", import.meta.url), "utf8");
 
