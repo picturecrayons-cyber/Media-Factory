@@ -156,12 +156,19 @@ export const submitTitleOwnerInterests = createServerFn({ method: "POST" })
     return sql.transaction(async (tx) => {
       const created: string[] = [];
       for (const interest of data.interests) {
-        const profile = await tx.query<{ user_id: string; account_type: string; organization_id: string | null }>(
-          "select user_id,account_type,organization_id from public.bridge_profiles where user_id=$1 limit 1",
+        const profile = await tx.query<{ user_id: string; account_type: string }>(
+          "select user_id,account_type from public.bridge_profiles where user_id=$1 limit 1",
           [interest.ownerUserId],
         );
         if (!profile[0] || profile[0].account_type !== interest.ownerAccountType) throw new Error("Owner profile/account type could not be verified.");
-        if (interest.ownerAccountType === "studio" && (!interest.ownerOrganizationId || profile[0].organization_id !== interest.ownerOrganizationId)) throw new Error("Studio ownership must match the verified profile organization.");
+        if (interest.ownerAccountType === "studio") {
+          if (!interest.ownerOrganizationId) throw new Error("Studio ownership requires a verified organization ID.");
+          const membership = await tx.query<{ organization_id: string }>(
+            "select m.organization_id from public.bridge_organization_memberships m join public.bridge_organizations o on o.id=m.organization_id and o.status='active' where m.user_id=$1 and m.organization_id=$2 and m.status='active' limit 1",
+            [interest.ownerUserId,interest.ownerOrganizationId],
+          );
+          if (!membership[0]) throw new Error("Studio owner must have an active membership in the submitted organization.");
+        }
         if (interest.ownerAccountType === "independent_creator" && interest.ownerOrganizationId) throw new Error("Independent Creator ownership cannot claim a Studio organization.");
         const row = await tx.query<{ id: string }>(
           "insert into public.bridge_title_owner_interests(title_id,owner_user_id,owner_account_type,owner_organization_id,share_bps,agreement_reference,evidence_url,created_by) values($1,$2,$3,$4,$5,$6,$7,$8) returning id",
