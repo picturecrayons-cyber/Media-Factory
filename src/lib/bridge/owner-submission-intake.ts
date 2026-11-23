@@ -2,15 +2,16 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
+import type { Sql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
-import { requireVerifiedActor } from "./session";
+import { requireVerifiedActor, type BridgeActor } from "./session";
 import { loadTitle } from "./titles";
 import { canMutateTitle } from "./rbac";
 import { writeAudit } from "./audit";
 
 type IntakeTitle = NonNullable<Awaited<ReturnType<typeof loadTitle>>>;
 
-async function assertOwnerOrActiveStudio(actor: Awaited<ReturnType<typeof requireVerifiedActor>>, title: IntakeTitle, tx?: Awaited<ReturnType<typeof getSql>>) {
+async function assertOwnerOrActiveStudio(actor: BridgeActor, title: IntakeTitle, tx?: Sql) {
   if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
     throw new Error("Verified Creator or Studio owner access required");
   }
