@@ -56,6 +56,7 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "entitlement.read_own",
     "delivery.read",
     "delivery.read_finance",
+    "finance.read_own",
   ],
   studio: [
     "title.create",
@@ -72,6 +73,7 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "entitlement.read_own",
     "delivery.read",
     "delivery.read_finance",
+    "finance.read_own",
   ],
   buyer: [
     "title.read_catalog",
