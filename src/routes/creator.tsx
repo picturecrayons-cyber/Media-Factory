@@ -8,6 +8,7 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import { listTitles } from "@/lib/bridge/titles";
+import type { TitleStatus } from "@/lib/bridge/types";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -167,7 +168,7 @@ function Metric({ label, value }: { label: string; value: number }) {
   return <article className="rounded-xl border border-line bg-surface p-4"><p className="text-sm text-muted">{label}</p><p className="mt-1 font-display text-2xl font-semibold tabular-nums">{value}</p></article>;
 }
 
-function TitleRows({ titles, empty, showDate = false }: { titles: Array<{ id: string; name: string; language: string; year: number | null; contentType: string; status: string; updatedAt: string }>; empty: string; showDate?: boolean }) {
+function TitleRows({ titles, empty, showDate = false }: { titles: Array<{ id: string; name: string; language: string; year: number | null; contentType: string; status: TitleStatus; updatedAt: string }>; empty: string; showDate?: boolean }) {
   if (!titles.length) return <p className="mt-3 text-sm text-muted">{empty}</p>;
   return (
     <ul className="mt-3 divide-y divide-line">
