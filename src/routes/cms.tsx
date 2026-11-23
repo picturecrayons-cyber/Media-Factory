@@ -212,61 +212,113 @@ function LicensingDesk({ titles }: { titles: Array<any> }) {
 }
 
 function PublishingDesk({ publications }: { publications: Array<any> }) {
+  const liveCount = publications.filter((item) => item.publication?.published && item.publication?.listed).length;
+  const readyCount = publications.filter((item) => item.ready && !item.publication?.published).length;
+  const blockedCount = publications.filter((item) => !item.ready).length;
+
   return (
     <section className="rounded-3xl border border-line bg-surface p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-            Publishing desk
+            Publishing desk · Backend verified
           </p>
           <h3 className="mt-1 font-display text-2xl font-semibold">
-            Crayons Loop authorization queue
+            Crayons Loop publishing readiness
           </h3>
-          <p className="mt-2 text-sm text-muted">
-            Publication remains gated by active rights coverage, title status and required
-            master/artwork readiness.
+          <p className="mt-2 max-w-3xl text-sm text-muted">
+            These checks are read-only results from Bridge records. No manual checkbox can certify
+            rights, QC, master delivery, playback or public listing. Final release remains a separate
+            authorized decision.
           </p>
         </div>
         <Link to="/internal">
-          <Button>Open distribution controls</Button>
+          <Button variant="outline">Open distribution controls</Button>
         </Link>
       </div>
-      <div className="mt-5 space-y-3">
+
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-line p-3">
+          <p className="text-xs text-muted">Live and listed</p>
+          <p className="mt-1 text-2xl font-semibold">{liveCount}</p>
+        </div>
+        <div className="rounded-xl border border-line p-3">
+          <p className="text-xs text-muted">Ready for founder review</p>
+          <p className="mt-1 text-2xl font-semibold">{readyCount}</p>
+        </div>
+        <div className="rounded-xl border border-line p-3">
+          <p className="text-xs text-muted">Blocked / incomplete</p>
+          <p className="mt-1 text-2xl font-semibold">{blockedCount}</p>
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-4">
         {publications.map((item) => (
           <article key={item.id} className="rounded-2xl border border-line bg-elevated p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <h4 className="font-semibold">{item.name}</h4>
                 <p className="mt-1 text-xs text-muted">
-                  {item.language} · {String(item.bridgeStatus).replaceAll("_", " ")}
+                  Bridge ID: <span className="font-mono">{item.id}</span>
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  {item.language || "Language not set"} · {String(item.bridgeStatus).replaceAll("_", " ")}
+                  {item.submittedAt ? ` · Submitted ${new Date(item.submittedAt).toLocaleString()}` : " · Submission timestamp unavailable"}
                 </p>
               </div>
               <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
-                {item.publication?.published ? "LIVE" : item.ready ? "READY" : "BLOCKED"}
+                {item.publication?.published && item.publication?.listed
+                  ? "LIVE"
+                  : item.ready
+                    ? "READY FOR REVIEW"
+                    : "BLOCKED"}
               </span>
             </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {(item.checks ?? []).map((check: { key: string; label: string; status: string }) => (
+                <div key={check.key} className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface px-3 py-2">
+                  <span className="text-sm">{check.label}</span>
+                  <span className={`shrink-0 text-[11px] font-semibold uppercase tracking-wide ${
+                    check.status === "PASS"
+                      ? "text-emerald-500"
+                      : check.status === "BLOCKED"
+                        ? "text-red-500"
+                        : "text-amber-500"
+                  }`}>
+                    {check.status.replaceAll("_", " ")}
+                  </span>
+                </div>
+              ))}
+            </div>
+
             {!item.ready && item.blockers?.length ? (
-              <ul className="mt-3 space-y-1 text-xs text-muted">
-                {item.blockers.map((b: string) => (
-                  <li key={b}>• {b}</li>
-                ))}
-              </ul>
+              <details className="mt-4 rounded-lg border border-line">
+                <summary className="cursor-pointer px-3 py-2 text-xs font-semibold">
+                  Backend findings ({item.blockers.length})
+                </summary>
+                <ul className="space-y-1 px-3 pb-3 text-xs text-muted">
+                  {item.blockers.map((blocker: string) => (
+                    <li key={blocker}>• {blocker}</li>
+                  ))}
+                </ul>
+              </details>
             ) : null}
+
             <div className="mt-3">
-              <Link to="/internal" className="text-sm font-semibold text-accent hover:underline">
-                {item.publication?.published
-                  ? "Manage publication"
-                  : item.ready
-                    ? "Authorize publication"
-                    : "Review blockers"}{" "}
-                →
+              <Link
+                to="/title/$id"
+                params={{ id: item.id }}
+                className="text-sm font-semibold text-accent hover:underline"
+              >
+                Open Bridge title record →
               </Link>
             </div>
           </article>
         ))}
         {!publications.length ? (
           <p className="py-8 text-center text-sm text-muted">
-            No publication candidates available.
+            No Bridge titles were returned by the readiness service. This is not interpreted as an empty or certified catalogue.
           </p>
         ) : null}
       </div>
