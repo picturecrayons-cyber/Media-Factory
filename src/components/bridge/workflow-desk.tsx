@@ -158,7 +158,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-3">
               <p>
                 {title.status === "PREPARING" || title.status === "UPLOADING" || title.status === "DRAFT"
-                  ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit for QC. QC is not reviewed yet."
+                  ? actor.internalRole
+                    ? "Prepare the package, then send an Admin-submitted title to the independent QC review queue. QC approval remains a separate reviewer decision."
+                    : "Prepare the main film and artwork, then submit to Bridge Admin. Admin intake is not QC approval; QC review remains a separate workflow."
                   : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
               {(
