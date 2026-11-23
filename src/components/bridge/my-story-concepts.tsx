@@ -22,9 +22,9 @@ function listLogline(value: string | null | undefined) {
   return text.length > 80 ? `${text.slice(0, 80)}…` : text;
 }
 
-export function MyStoryConcepts() {
+export function MyStoryConcepts({ actor }: { actor: { userId: string; organizationId?: string | null } }) {
   const query = useQuery({
-    queryKey: ["my-story-concepts"],
+    queryKey: ["my-story-concepts", actor.userId, actor.organizationId ?? null],
     queryFn: () => listMyStoryConcepts(),
     enabled: STORY_CONCEPT_ENABLED,
     refetchInterval: 60_000,
