@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   listPendingStoryConcepts,
@@ -17,6 +18,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function StoryConceptDesk() {
   const qc = useQueryClient();
+  const [feedback, setFeedback] = useState<Record<string, string>>({});
   const query = useQuery({
     queryKey: ["admin-story-concepts"],
     queryFn: () => listPendingStoryConcepts(),
@@ -90,13 +92,25 @@ export function StoryConceptDesk() {
                 </Link>
               </div>
 
+              <label className="mt-4 block text-sm">
+                Reviewer feedback for Creator
+                <textarea
+                  rows={3}
+                  maxLength={2000}
+                  value={feedback[c.id] ?? c.admin_notes ?? ""}
+                  onChange={(event) => setFeedback((current) => ({ ...current, [c.id]: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-line bg-elevated px-3 py-2"
+                  placeholder="Record clear review feedback or requested changes"
+                />
+              </label>
+
               <div className="mt-4 flex flex-wrap gap-2">
                 {c.curation_status === "PENDING" && (
                   <Button
                     size="sm"
                     disabled={update.isPending}
                     onClick={() =>
-                      update.mutate({ id: c.id, status: "UNDER_REVIEW" })
+                      update.mutate({ id: c.id, status: "UNDER_REVIEW", adminNotes: feedback[c.id] ?? c.admin_notes ?? undefined })
                     }
                   >
                     Start review
@@ -109,7 +123,7 @@ export function StoryConceptDesk() {
                       size="sm"
                       disabled={update.isPending}
                       onClick={() =>
-                        update.mutate({ id: c.id, status: "APPROVED" })
+                        update.mutate({ id: c.id, status: "APPROVED", adminNotes: feedback[c.id] ?? c.admin_notes ?? undefined })
                       }
                     >
                       Approve
@@ -119,7 +133,7 @@ export function StoryConceptDesk() {
                       variant="outline"
                       disabled={update.isPending}
                       onClick={() =>
-                        update.mutate({ id: c.id, status: "REJECTED" })
+                        update.mutate({ id: c.id, status: "REJECTED", adminNotes: feedback[c.id] ?? c.admin_notes ?? undefined })
                       }
                     >
                       Reject
@@ -134,6 +148,7 @@ export function StoryConceptDesk() {
                       update.mutate({
                         id: c.id,
                         status: "INTRODUCED_TO_BUYERS",
+                        adminNotes: feedback[c.id] ?? c.admin_notes ?? undefined,
                       })
                     }
                   >
