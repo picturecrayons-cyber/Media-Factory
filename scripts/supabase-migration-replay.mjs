@@ -50,9 +50,23 @@ if (
   );
 }
 
-const names = (await readdir(MIGRATIONS_DIR))
+const allMigrationNames = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
+
+// The owner-submission migration is a new PR candidate, not part of the
+// recovered Production migration ledger. Replay the 70 ledger files first,
+// then apply this candidate only to the disposable local replay database.
+const candidateMigrations = new Set([
+  "20261123220000_bridge_owner_submission_intake_only.sql",
+]);
+const candidateNames = allMigrationNames.filter((name) => candidateMigrations.has(name));
+const names = allMigrationNames.filter((name) => !candidateMigrations.has(name));
+if (candidateNames.length !== candidateMigrations.size) {
+  throw new Error(
+    `Expected ${candidateMigrations.size} owner-submission candidate migration; found ${candidateNames.length}`,
+  );
+}
 
 if (names.length !== EXPECTED_MIGRATIONS) {
   throw new Error(
@@ -445,6 +459,21 @@ try {
       throw new Error(`Migration failed: ${name}: ${error?.message || error}`);
     }
     console.log(`[migration-replay] applied ${name}`);
+  }
+
+  // Apply candidate-only migrations after the recovered Production ledger.
+  // This is an isolated local replay database, never a hosted STAGING/PRODUCTION DB.
+  for (const name of candidateNames) {
+    const sql = await readFile(join(MIGRATIONS_DIR, name), "utf8");
+    await client.query("BEGIN");
+    try {
+      await client.query(sql);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw new Error(`Candidate migration failed: ${name}: ${error?.message || error}`);
+    }
+    console.log(`[migration-replay] applied candidate-only migration ${name}`);
   }
 
   // Production's current Bridge Data API security baseline is not fully
