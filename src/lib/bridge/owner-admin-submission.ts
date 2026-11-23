@@ -23,7 +23,7 @@ async function ownerReadiness(actor: Awaited<ReturnType<typeof requireVerifiedAc
   const isOwnerAccount = !actor.internalRole &&
     (actor.accountType === "independent_creator" || actor.accountType === "studio") &&
     title.ownerAccountType === actor.accountType &&
-    canMutateTitle(actor, title, "title.update_own");
+    canMutateTitle(actor, title, "title.update_own", "title.license");
   if (!isOwnerAccount) throw new Error("Only the verified Creator or Studio title owner can submit to Bridge Admin");
 
   const sql = await getSql();
@@ -131,7 +131,7 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
         ownerUserId: title.owner_user_id,
         ownerAccountType: title.owner_account_type as "independent_creator" | "studio",
         ownerOrganizationId: title.owner_organization_id,
-      }, "title.update_own")) {
+      }, "title.update_own", "title.license")) {
         throw new Error("You are not authorized to submit this title");
       }
       if (actor.accountType === "independent_creator" && title.owner_user_id !== actor.userId) {
