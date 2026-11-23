@@ -12,6 +12,7 @@ import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
+import { isCanonicalGalleryAsset } from "./asset-roles";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
@@ -316,6 +317,16 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    const verificationColumns = await sql<{ available: boolean }>`
+      select count(*) = 2 as available
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'bridge_assets'
+        and column_name in ('storage_business_state', 'restore_state')
+    `;
+    // Fail closed on older schemas: byte_size alone is not proof that a stored
+    // object is active, restored and safe to preview.
+    if (!verificationColumns[0]?.available) return { assets: [] };
     const rows = await sql<{
       id: string;
       kind: string;
@@ -324,11 +335,18 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       byte_size: number | null;
       created_at: string | Date;
     }>`
-      select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      select a.id, a.kind, a.s3_key, a.content_type, a.byte_size, a.created_at
+      from bridge_assets a
+      join bridge_titles t on t.id = a.title_id
+      where a.title_id = ${title.id}
+        and a.byte_size > 0
+        and a.storage_business_state = 'ACTIVE'
+        and a.restore_state = 'READY'
+      order by a.created_at desc, a.id
     `;
     return {
       assets: rows
+        .filter((r) => isCanonicalGalleryAsset(r, title.masterKey))
         .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
         .map((r) => ({
           id: r.id,
@@ -360,38 +378,41 @@ export const listProductionAssets = createServerFn({ method: "GET" })
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
 
     const sql = await getSql();
-    const rows = await sql<{
-      id: string;
-      category: string;
-      file_name: string;
-      file_size: number | string;
-      content_type: string | null;
-      source_kind: string | null;
-      verified_source: boolean;
-    }>`
-      select
-        production_asset.id,
-        production_asset.category,
-        production_asset.file_name,
-        production_asset.file_size,
-        production_asset.content_type,
-        production_asset.tags->>'source_kind' as source_kind,
-        case
-          when nullif(production_asset.tags->>'source_asset_id', '') is null then false
-          else coalesce(
-            source_asset.byte_size > 0
-            and source_asset.storage_business_state = 'ACTIVE'
-            and source_asset.restore_state = 'READY',
-            false
-          )
-        end as verified_source
-      from bridge_production_assets production_asset
-      left join bridge_assets source_asset
-        on source_asset.id = production_asset.tags->>'source_asset_id'
-      where production_asset.title_id = ${title.id}
-      order by production_asset.created_at desc, production_asset.id
-      limit 500
+    const verificationColumns = await sql<{ available: boolean }>`
+      select count(*) = 2 as available
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'bridge_assets'
+        and column_name in ('storage_business_state', 'restore_state')
     `;
+    const verifiedSchema = Boolean(verificationColumns[0]?.available);
+    const rows = verifiedSchema
+      ? await sql<{
+          id: string; category: string; file_name: string; file_size: number | string;
+          content_type: string | null; source_kind: string | null; verified_source: boolean;
+        }>`
+          select production_asset.id, production_asset.category, production_asset.file_name,
+            production_asset.file_size, production_asset.content_type,
+            production_asset.tags->>'source_kind' as source_kind,
+            coalesce(source_asset.byte_size > 0
+              and source_asset.storage_business_state = 'ACTIVE'
+              and source_asset.restore_state = 'READY', false) as verified_source
+          from bridge_production_assets production_asset
+          left join bridge_assets source_asset
+            on source_asset.id = production_asset.tags->>'source_asset_id'
+          where production_asset.title_id = ${title.id}
+          order by production_asset.created_at desc, production_asset.id limit 500
+        `
+      : await sql<{
+          id: string; category: string; file_name: string; file_size: number | string;
+          content_type: string | null; source_kind: string | null; verified_source: boolean;
+        }>`
+          select id, category, file_name, file_size, content_type,
+            tags->>'source_kind' as source_kind, false as verified_source
+          from bridge_production_assets
+          where title_id = ${title.id}
+          order by created_at desc, id limit 500
+        `;
 
     return {
       assets: rows.map((row) => ({
