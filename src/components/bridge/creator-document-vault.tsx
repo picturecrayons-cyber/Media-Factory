@@ -201,7 +201,12 @@ export function CreatorDocumentVault({ actor }: { actor: { userId: string; organ
           <span className="text-xs text-muted">Only your Creator account or Studio organization documents</span>
         </div>
         {documentsQ.isPending ? <p className="text-sm text-muted">Loading documents…</p> : null}
-        {documentsQ.isError ? <p role="alert" className="text-sm text-muted">Documents could not be loaded. Refresh and retry.</p> : null}
+        {documentsQ.isError ? (
+          <div role="alert" className="rounded-lg border border-line p-3 text-sm">
+            <p>Documents could not be loaded: {message(documentsQ.error)}</p>
+            <button type="button" onClick={() => void documentsQ.refetch()} className="mt-2 font-semibold text-accent underline">Retry</button>
+          </div>
+        ) : null}
         {!documentsQ.isPending && !documentsQ.isError && !documentsQ.data?.documents.length
           ? <p className="rounded-lg border border-dashed border-line p-4 text-sm text-muted">No documents uploaded yet.</p>
           : null}
