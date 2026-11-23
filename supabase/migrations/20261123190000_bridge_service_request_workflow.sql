@@ -175,38 +175,6 @@ CREATE TRIGGER bridge_service_request_events_immutable
 BEFORE UPDATE OR DELETE ON public.bridge_service_request_events
 FOR EACH ROW EXECUTE FUNCTION public.bridge_reject_service_request_event_mutation();
 
--- Enforce lifecycle transitions in the database as well as server actions.
-CREATE OR REPLACE FUNCTION public.bridge_guard_service_request_transition()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  IF NEW.status IS NOT DISTINCT FROM OLD.status THEN
-    RETURN NEW;
-  END IF;
-
-  IF NOT (
-    (OLD.status = 'SUBMITTED' AND NEW.status IN ('UNDER_REVIEW','CANCELLED'))
-    OR (OLD.status = 'UNDER_REVIEW' AND NEW.status IN ('QUOTE_READY','CANCELLED'))
-    OR (OLD.status = 'QUOTE_READY' AND NEW.status IN ('AWAITING_PAYMENT','CANCELLED'))
-    OR (OLD.status = 'AWAITING_PAYMENT' AND NEW.status IN ('PAID','CANCELLED'))
-    OR (OLD.status = 'PAID' AND NEW.status IN ('ASSIGNED','REFUNDED'))
-    OR (OLD.status = 'ASSIGNED' AND NEW.status IN ('IN_PROGRESS','REFUNDED'))
-    OR (OLD.status = 'IN_PROGRESS' AND NEW.status IN ('REVIEW','REFUNDED'))
-    OR (OLD.status = 'REVIEW' AND NEW.status IN ('COMPLETED','REFUNDED'))
-  ) THEN
-    RAISE EXCEPTION 'Invalid service request transition: % -> %', OLD.status, NEW.status;
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS bridge_service_request_transition_guard ON public.bridge_service_requests;
-CREATE TRIGGER bridge_service_request_transition_guard
-BEFORE UPDATE OF status ON public.bridge_service_requests
-FOR EACH ROW EXECUTE FUNCTION public.bridge_guard_service_request_transition();
-
-
 -- Story Concept review history and requester notifications are kept separate
 -- from finished-film title events and the service-request notification stream.
 CREATE TABLE IF NOT EXISTS public.bridge_story_concept_review_events (
@@ -278,16 +246,3 @@ CREATE TRIGGER bridge_service_request_status_guard
 BEFORE UPDATE OF status ON public.bridge_service_requests
 FOR EACH ROW EXECUTE FUNCTION public.bridge_validate_service_request_status();
 
-CREATE OR REPLACE FUNCTION public.bridge_reject_service_request_event_mutation()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  RAISE EXCEPTION 'Service request event history is immutable';
-END;
-$$;
-
-DROP TRIGGER IF EXISTS bridge_service_request_events_immutable ON public.bridge_service_request_events;
-CREATE TRIGGER bridge_service_request_events_immutable
-BEFORE UPDATE OR DELETE ON public.bridge_service_request_events
-FOR EACH ROW EXECUTE FUNCTION public.bridge_reject_service_request_event_mutation();
