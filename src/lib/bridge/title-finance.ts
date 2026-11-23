@@ -56,7 +56,7 @@ const reconciliationInput = z.object({
   notes: z.string().max(2000).default(""),
 });
 
-function requireSuperAdmin(actor: Awaited<ReturnType<typeof requireVerifiedActor>>, permission: "finance.licensing_record" | "finance.ownership_manage" | "finance.investment_manage" | "finance.allocate" | "finance.reconcile") {
+function requireSuperAdmin(actor: Awaited<ReturnType<typeof requireVerifiedActor>>, permission: "finance.read" | "finance.licensing_record" | "finance.ownership_manage" | "finance.investment_manage" | "finance.allocate" | "finance.reconcile") {
   if (actor.internalRole !== "super_admin") throw new Error("Designated Super Admin access required.");
   assertPermission(actor, permission);
 }
@@ -88,7 +88,7 @@ export const getTitleFinanceControlCentre = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    requireSuperAdmin(actor, "finance.read" as never);
+    requireSuperAdmin(actor, "finance.read");
     const sql = await getSql();
     const [receipts, owners, investors, allocations, reconciliations] = await Promise.all([
       sql.query("select r.id,r.title_id,t.name as title_name,r.contract_reference,r.payment_reference,r.gross_amount_paise,r.tax_amount_paise,r.deduction_amount_paise,r.net_amount_paise,r.verification_status,r.recorded_at from public.bridge_licensing_receipts r join public.bridge_titles t on t.id=r.title_id order by r.recorded_at desc limit 200"),
