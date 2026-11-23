@@ -49,7 +49,7 @@ function Creator() {
 function CreatorDashboard({
   actor,
 }: {
-  actor: { userId: string; organizationId?: string | null };
+  actor: { userId: string; organizationId?: string | null; accountType: string; internalRole: string | null };
 }) {
   const titlesQ = useQuery({
     queryKey: ["bridge-titles", actor.userId, actor.organizationId],
