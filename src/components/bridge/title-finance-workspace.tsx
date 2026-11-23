@@ -28,7 +28,7 @@ export function TitleFinanceWorkspace({ actor }: Props) {
   const financeQuery = useQuery({ queryKey: ["title-finance-control-centre"], queryFn: () => getTitleFinanceControlCentre(), enabled: isSuperAdmin });
   const [notice, setNotice] = useState("");
   const [receipt, setReceipt] = useState({ titleId: "", rightsGrantId: "", buyerUserId: "", contractReference: "", paymentReference: "", gross: "", tax: "0", deductions: "0", evidenceUrl: "" });
-  const [ownerJson, setOwnerJson] = useState('[{"ownerUserId":"","ownerAccountType":"independent_creator","ownerOrganizationId":null,"shareBps":10000,"agreementReference":"","evidenceUrl":"https://"}]');
+  const [ownerJson, setOwnerJson] = useState('[{"ownerUserId":"","ownerAccountType":"independent_creator","ownerOrganizationId":null,"shareBps":10000,"agreementReference":"","evidenceDocumentId":""}]');
   const [ownerVerifyIds, setOwnerVerifyIds] = useState("");
   const [investorJson, setInvestorJson] = useState('{"titleId":"","investorUserId":"","agreementReference":"","returnModel":"REVENUE_SHARE","shareBps":10000,"capAmountPaise":null,"evidenceUrl":"https://","effectiveFrom":"2026-11-23T00:00:00.000Z","effectiveTo":null}');
   const [allocationJson, setAllocationJson] = useState('{"receiptId":"","allocations":[{"beneficiaryType":"OWNER","beneficiaryUserId":"","ownerInterestId":"","amountPaise":100}]}');
@@ -74,7 +74,7 @@ export function TitleFinanceWorkspace({ actor }: Props) {
         <button className={buttonClass+" mt-3"} disabled={isBusy || !receipt.titleId || !receipt.rightsGrantId || !receipt.contractReference || !receipt.paymentReference || !(Number(receipt.gross)>0) || !receipt.evidenceUrl.startsWith("https://")} onClick={() => recordReceipt.mutate()}>Record pending receipt</button>
       </details>
       <details className="rounded-lg border border-line p-3"><summary className="cursor-pointer font-semibold">Submit title ownership interests</summary>
-        <p className="mt-2 text-xs text-muted">JSON array. Each entry must identify a real Creator / Studio profile, its share in basis points, signed agreement reference and HTTPS evidence. Total must equal 10000 bps.</p>
+        <p className="mt-2 text-xs text-muted">JSON array. Each entry must identify a real Creator / Studio profile, its share in basis points, signed agreement reference and a verified title-linked private Document Vault document ID. Total must equal 10000 bps.</p>
         <textarea className={inputClass+" mt-2 min-h-28 font-mono"} value={ownerJson} onChange={(e) => setOwnerJson(e.target.value)} />
         <button className={buttonClass+" mt-2"} disabled={isBusy} onClick={() => submitOwners.mutate()}>Submit owner interests</button>
         <label className="mt-3 block text-xs text-muted">Title ID<input className={inputClass} value={receipt.titleId} onChange={(e) => setReceipt((old) => ({ ...old, titleId: e.target.value }))} /></label>
