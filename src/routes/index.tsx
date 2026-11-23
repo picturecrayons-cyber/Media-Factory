@@ -1,10 +1,12 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession } from "@/lib/bridge/session";
+import { DEFAULT_BRIDGE_SITE_CONTENT, getPublicSiteContent } from "@/lib/bridge/site-content";
 
 
 export const Route = createFileRoute("/")({ component: Home });
@@ -44,6 +46,13 @@ const WORKFLOW_STEPS = [
 
 function Home() {
   const { user, isPending } = useCurrentUserState();
+  const buyersTrackRef = useRef<HTMLDivElement>(null);
+  const siteContentQ = useQuery({
+    queryKey: ["bridge-public-site-content"],
+    queryFn: () => getPublicSiteContent(),
+    retry: 1,
+  });
+  const siteContent = siteContentQ.data ?? DEFAULT_BRIDGE_SITE_CONTENT;
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
     queryFn: () => getBridgeSession(),
@@ -59,9 +68,8 @@ function Home() {
     );
   }
 
-  if (user) {
-    if (sessionQ.data?.home) return <Navigate to={sessionQ.data.home as any} replace />;
-    if (!sessionQ.data?.profile) return <Navigate to="/onboarding" replace />;
+  if (user && sessionQ.data?.profile && sessionQ.data.home) {
+    return <Navigate to={sessionQ.data.home as any} replace />;
   }
 
   return (
@@ -89,22 +97,54 @@ function Home() {
           <div className="mx-auto max-w-7xl px-5 py-14 text-center sm:px-6 sm:py-16 lg:py-20">
             <div className="mx-auto max-w-5xl">
               <div className="mx-auto flex justify-center">
-                <BrandMark className="text-3xl sm:text-4xl lg:text-5xl" />
+                <BrandMark size="large" />
               </div>
               <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
-                One bridge from content to market.
+                {siteContent.heroTitle}
               </h1>
               <p className="bridge-hero-subcopy mx-auto mt-4 max-w-2xl text-base leading-7 text-muted sm:text-lg">
-                Prepare. Protect. License. Deliver.
+                {siteContent.heroBody}
               </p>
 
+              <HeroCarousel slides={siteContent.carouselSlides ?? []} />
+
+              <section aria-labelledby="our-buyers-heading" className="mx-auto mt-10 max-w-5xl border-t border-line pt-7">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 id="our-buyers-heading" className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Our Buyers</h2>
+                  <div className="flex gap-2">
+                    <button type="button" aria-label="Previous buyer slide" onClick={() => buyersTrackRef.current?.scrollBy({ left: -260, behavior: "smooth" })} className="grid h-8 w-8 place-items-center rounded-full border border-line text-sm text-muted hover:border-accent hover:text-fg">←</button>
+                    <button type="button" aria-label="Next buyer slide" onClick={() => buyersTrackRef.current?.scrollBy({ left: 260, behavior: "smooth" })} className="grid h-8 w-8 place-items-center rounded-full border border-line text-sm text-muted hover:border-accent hover:text-fg">→</button>
+                  </div>
+                </div>
+                <div ref={buyersTrackRef} role="region" aria-roledescription="carousel" aria-label="Buyer and distribution partners" className="mt-4 flex snap-x gap-3 overflow-x-auto scroll-smooth pb-2 text-left">
+                  <article className="flex min-w-[250px] snap-start items-center gap-4 rounded-2xl border border-line bg-surface px-5 py-4">
+                    
+                    <div>
+                      <p className="font-display text-xl font-semibold tracking-tight text-fg">Crayons Loop</p>
+                      <p className="mt-1 text-xs text-muted">Consumer streaming destination</p>
+                      <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-accent underline">Visit Loop ↗</a>
+                    </div>
+                  </article>
+                  <article className="flex min-w-[230px] snap-start items-center rounded-2xl border border-dashed border-line px-5 py-4">
+                    <div>
+                      <p className="font-semibold text-fg">Buyer & distribution partners</p>
+                      <p className="mt-1 text-xs leading-5 text-muted">Official partner marks will appear after approved logo assets are supplied and verified.</p>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
               <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
-                <Link to="/signup">
-                  <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
-                    Create account
-                  </Button>
-                </Link>
-                <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link>
+                {user ? (
+                  <Link to="/onboarding">
+                    <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">Continue setup</Button>
+                  </Link>
+                ) : (
+                  <Link to="/signup">
+                    <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">Create account</Button>
+                  </Link>
+                )}
+                {!user ? <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link> : null}
               </div>
             </div>
           </div>
@@ -114,7 +154,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                From upload to delivery.
+                {siteContent.workflowHeading}
               </h2>
             </div>
 
@@ -248,8 +288,10 @@ function Home() {
                   From rights to audience.
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-muted max-w-2xl">
-                  Crayons Bridge manages rights, licensing and distribution authorization. Crayons
-                  Loop is the consumer streaming experience.
+                  Crayons Bridge manages rights, licensing and distribution authorization for
+                  multiple independent Buyers—including OTT platforms, broadcasters, satellite,
+                  airline and territory partners. Crayons Loop is our consumer streaming experience,
+                  not the only destination or Buyer.
                 </p>
               </div>
 
@@ -262,7 +304,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                Ready to move your content forward?
+                {siteContent.finalCtaHeading}
               </h2>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <Link to="/signup">
@@ -296,18 +338,52 @@ function Home() {
             aria-label="Footer Legal and External Links"
             className="flex flex-wrap items-center gap-5 text-xs text-muted"
           >
-            <Link to="/privacy" className="hover:text-fg transition-colors">
-              Privacy
-            </Link>
-            <Link to="/terms" className="hover:text-fg transition-colors">
-              Terms
-            </Link>
-            <Link to="/contact" className="hover:text-fg transition-colors">
-              Contact
-            </Link>
+            <Link to="/contact" className="hover:text-fg transition-colors">Contact</Link>
+            <Link to="/legal" className="hover:text-fg transition-colors">Legal & Compliance</Link>
+            <Link to="/privacy" className="hover:text-fg transition-colors">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-fg transition-colors">B2B Terms of Use</Link>
+            <a href="/legal/content-rights" className="hover:text-fg transition-colors">Content Rights Declaration</a>
+            <a href="/legal/licensing-deals" className="hover:text-fg transition-colors">Licensing &amp; Deal Terms</a>
+            <a href="/legal/acceptable-use" className="hover:text-fg transition-colors">Acceptable Use &amp; Security</a>
+            <a href="/legal/copyright-disputes" className="hover:text-fg transition-colors">Copyright &amp; Content Disputes</a>
+            <a href="/legal/grievance" className="hover:text-fg transition-colors">Grievance &amp; Legal Contact</a>
           </nav>
         </div>
       </footer>
     </div>
+  );
+}
+
+
+function HeroCarousel({ slides }: { slides: Array<{ imageUrl: string; alt: string; caption: string }> }) {
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    if (slides.length < 2) return;
+    const timer = window.setInterval(() => setActive((current) => (current + 1) % slides.length), 6000);
+    return () => window.clearInterval(timer);
+  }, [slides.length]);
+
+  if (!slides.length) return null;
+  const current = slides[active] ?? slides[0]!;
+  return (
+    <section aria-label="Featured Crayons Bridge images" className="mx-auto mt-8 max-w-5xl overflow-hidden rounded-3xl border border-line bg-surface text-left shadow-sm">
+      <div className="relative aspect-[16/7] min-h-48 w-full bg-elevated">
+        <img key={current.imageUrl} src={current.imageUrl} alt={current.alt} className="h-full w-full object-cover" />
+        {slides.length > 1 ? (
+          <>
+            <button type="button" aria-label="Previous image" onClick={() => setActive((active - 1 + slides.length) % slides.length)} className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/60 text-xl text-white hover:bg-black/80">‹</button>
+            <button type="button" aria-label="Next image" onClick={() => setActive((active + 1) % slides.length)} className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/60 text-xl text-white hover:bg-black/80">›</button>
+          </>
+        ) : null}
+      </div>
+      {current.caption ? <div className="flex items-center justify-between gap-4 px-4 py-3"><p className="text-sm font-medium text-fg">{current.caption}</p><span className="shrink-0 text-xs text-muted">{active + 1} / {slides.length}</span></div> : slides.length > 1 ? <div className="px-4 py-2 text-right text-xs text-muted">{active + 1} / {slides.length}</div> : null}
+      {slides.length > 1 ? (
+        <div className="flex items-center justify-center gap-2 border-t border-line px-4 py-3" aria-label="Choose carousel image">
+          {slides.map((slide, index) => (
+            <button key={slide.imageUrl + index} type="button" aria-label={`Show image ${index + 1}`} aria-current={index === active ? "true" : undefined} onClick={() => setActive(index)} className={`h-2.5 rounded-full transition-all ${index === active ? "w-7 bg-accent" : "w-2.5 bg-line-strong hover:bg-muted"}`} />
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }

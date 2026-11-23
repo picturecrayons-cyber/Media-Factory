@@ -11,6 +11,7 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
+import { isFinishedFilmSubmission } from "./studio-title-classification";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 import { isAdminAcceptedOwnerIntake, submitTitleForQc } from "./title-submission";
 
@@ -22,6 +23,7 @@ type TitleRow = {
   owner_user_id: string;
   owner_account_type: string;
   owner_organization_id?: string | null;
+  submission_type?: string | null;
   status: string;
   synopsis: string;
   language: string;
@@ -94,15 +96,16 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
   const orgId = organizationId || null;
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+  let rows: TitleRow[];
   if (!orgId) {
-    return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
-  }
-  return mergeColumnAvailable
-    ? sql<TitleRow>`
+    rows = mergeColumnAvailable
+      ? await sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and submission_type = 'finished_film' and merged_into_title_id is null order by updated_at desc limit 200`
+      : await sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and submission_type = 'finished_film' order by updated_at desc limit 200`;
+  } else if (mergeColumnAvailable) {
+    rows = await sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.merged_into_title_id is null
+        where t.submission_type = 'finished_film'
+          and t.merged_into_title_id is null
           and (
             t.owner_user_id = ${userId}
             or (
@@ -117,22 +120,46 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
             )
           )
         order by t.updated_at desc limit 200
-      `
-    : sql<TitleRow>`
+      `;
+  } else {
+    rows = await sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
-          or (
-            t.owner_account_type = 'studio'
-            and t.owner_organization_id = ${orgId}
-            and exists (
-              select 1 from bridge_organization_memberships m
-              where m.organization_id = ${orgId}
-                and m.user_id = ${userId}
-                and m.status = 'active'
+        where t.submission_type = 'finished_film'
+          and (
+            t.owner_user_id = ${userId}
+            or (
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id = ${orgId}
+              and exists (
+                select 1 from bridge_organization_memberships m
+                where m.organization_id = ${orgId}
+                  and m.user_id = ${userId}
+                  and m.status = 'active'
+              )
             )
           )
         order by t.updated_at desc limit 200
       `;
+  }
+
+  // Fail-safe against legacy/misclassified concepts: a title linked to a
+  // concept submission must never also appear in the Finished Films catalogue.
+  if (!rows.length) return rows;
+  const conceptTable = await sql<{ exists: boolean }>`
+    select exists (
+      select 1 from information_schema.tables
+      where table_schema = 'public'
+        and table_name = 'bridge_story_concept_submissions'
+    ) as exists
+  `;
+  if (!conceptTable[0]?.exists) return rows;
+  const conceptRows = await sql<{ title_id: string }>`
+    select title_id::text as title_id
+    from bridge_story_concept_submissions
+    where title_id::text = any(${rows.map((row) => row.id)}::text[])
+  `;
+  const conceptTitleIds = new Set(conceptRows.map((row) => row.title_id));
+  return rows.filter((row) => isFinishedFilmSubmission(row, conceptTitleIds));
 }
 
 function slugify(name: string, id: string): string {

@@ -60,3 +60,30 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
 }
+
+const carouselMigration = readFileSync(new URL("../supabase/migrations/20261123120000_bridge_homepage_carousel.sql", import.meta.url), "utf8");
+const legalMigration = readFileSync(new URL("../supabase/migrations/20261123170000_bridge_legal_acceptances.sql", import.meta.url), "utf8");
+const serviceMigration = readFileSync(new URL("../supabase/migrations/20261123190000_bridge_service_request_workflow.sql", import.meta.url), "utf8");
+const siteContentSource = readFileSync(new URL("../src/lib/bridge/site-content.ts", import.meta.url), "utf8");
+const homepageSource = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
+
+test("canonical Preview candidate replays CMS, legal acceptance and service workflow migrations", () => {
+  for (const migration of [
+    "20261123120000_bridge_homepage_carousel.sql",
+    "20261123170000_bridge_legal_acceptances.sql",
+    "20261123190000_bridge_service_request_workflow.sql",
+  ]) assert.ok(replaySource.includes(migration), `candidate replay missing ${migration}`);
+  assert.match(carouselMigration, /ADD COLUMN IF NOT EXISTS carousel_slides/);
+  assert.match(carouselMigration, /jsonb_array_length\(carousel_slides\) <= 5/);
+  assert.match(legalMigration, /deny_browser_access/);
+  assert.match(serviceMigration, /ON DELETE RESTRICT/);
+  assert.match(serviceMigration, /FOR UPDATE/);
+  assert.match(serviceMigration, /SET search_path TO 'pg_catalog', 'public'/);
+  assert.match(serviceMigration, /deny_browser_access/);
+});
+
+test("homepage carousel is Super Admin controlled and has no unverified logo placeholder", () => {
+  assert.match(siteContentSource, /actor\.internalRole !== "super_admin"/);
+  assert.equal(homepageSource.includes("\\n            <Link"), false);
+  assert.doesNotMatch(homepageSource, /crayons-loop-logo\.png/);
+});
