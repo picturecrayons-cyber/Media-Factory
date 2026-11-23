@@ -61,13 +61,14 @@ const candidateMigrations = new Set([
   "20261123120000_bridge_homepage_carousel.sql",
   "20261123170000_bridge_legal_acceptances.sql",
   "20261123190000_bridge_service_request_workflow.sql",
+  "20261123200000_bridge_title_finance_and_reconciliation.sql",
   "20261123220000_bridge_owner_submission_intake_only.sql",
 ]);
 const candidateNames = allMigrationNames.filter((name) => candidateMigrations.has(name));
 const names = allMigrationNames.filter((name) => !candidateMigrations.has(name));
 if (candidateNames.length !== candidateMigrations.size) {
   throw new Error(
-    `Expected ${candidateMigrations.size} owner-submission candidate migration; found ${candidateNames.length}`,
+    `Expected ${candidateMigrations.size} candidate migrations; found ${candidateNames.length}`,
   );
 }
 
@@ -742,6 +743,14 @@ try {
     "public.bridge_service_requests",
     "public.bridge_service_request_events",
     "public.bridge_service_request_notifications",
+    "public.bridge_story_concept_review_events",
+    "public.bridge_story_concept_notifications",
+    "public.bridge_title_owner_interests",
+    "public.bridge_investment_agreements",
+    "public.bridge_licensing_receipts",
+    "public.bridge_licensing_allocations",
+    "public.bridge_finance_reconciliations",
+    "public.bridge_finance_reconciliation_items",
   ];
   const tableCheck = await client.query(
     "select name, to_regclass(name) is not null as exists from unnest($1::text[]) as t(name)",
@@ -754,6 +763,33 @@ try {
         missingTables.map((row) => row.name).join(", "),
     );
   }
+
+  const financeRls = await client.query(`
+    select c.relname,c.relrowsecurity as rls_enabled,
+      exists(select 1 from pg_policy p where p.polrelid=c.oid
+        and p.polname=c.relname || '_deny_client' and p.polcmd='*'
+        and coalesce(pg_get_expr(p.polqual,p.polrelid),'')='false'
+        and coalesce(pg_get_expr(p.polwithcheck,p.polrelid),'')='false') as deny_policy_valid,
+      has_table_privilege('anon',c.oid,'SELECT') as anon_select,
+      has_table_privilege('authenticated',c.oid,'SELECT') as authenticated_select,
+      has_table_privilege('service_role',c.oid,'SELECT') as service_select,
+      has_table_privilege('service_role',c.oid,'INSERT') as service_insert,
+      has_table_privilege('service_role',c.oid,'UPDATE') as service_update
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and c.relname=any($1::text[])
+    order by c.relname
+  `, [[
+    "bridge_title_owner_interests","bridge_investment_agreements",
+    "bridge_licensing_receipts","bridge_licensing_allocations",
+    "bridge_finance_reconciliations","bridge_finance_reconciliation_items"
+  ]]);
+  if (financeRls.rows.length !== 6 || financeRls.rows.some((row) =>
+    !row.rls_enabled || !row.deny_policy_valid || row.anon_select ||
+    row.authenticated_select || !row.service_select || !row.service_insert || !row.service_update
+  )) {
+    throw new Error("Title finance server-only RLS/grants verification failed: " + JSON.stringify(financeRls.rows));
+  }
+  console.log("[migration-replay] PASS: all six title-finance tables enforce deny-client RLS and server-role grants");
 
   const baselineRls = await client.query(`
     select
@@ -797,7 +833,8 @@ try {
         )
         when c.relname in (
           'bridge_creator_documents','bridge_title_document_links','bridge_legal_acceptances',
-          'bridge_service_requests','bridge_service_request_events','bridge_service_request_notifications'
+          'bridge_service_requests','bridge_service_request_events','bridge_service_request_notifications',
+          'bridge_story_concept_review_events','bridge_story_concept_notifications'
         ) then exists (
           select 1 from pg_policy p
           where p.polrelid = c.oid
@@ -828,9 +865,11 @@ try {
     "bridge_service_requests",
     "bridge_service_request_events",
     "bridge_service_request_notifications",
+    "bridge_story_concept_review_events",
+    "bridge_story_concept_notifications",
   ]]);
   if (
-    baselineRls.rows.length !== 12 ||
+    baselineRls.rows.length !== 14 ||
     baselineRls.rows.some((row) => !row.rls_enabled || !row.policy_state_valid)
   ) {
     throw new Error(

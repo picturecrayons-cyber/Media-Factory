@@ -87,3 +87,18 @@ test("homepage carousel is Super Admin controlled and has no unverified logo pla
   assert.equal(homepageSource.includes("\\n            <Link"), false);
   assert.doesNotMatch(homepageSource, /crayons-loop-logo\.png/);
 });
+
+const financeMigration = readFileSync(new URL("../supabase/migrations/20261123200000_bridge_title_finance_and_reconciliation.sql", import.meta.url), "utf8");
+const storyReviewMigrationSource = readFileSync(new URL("../supabase/migrations/20261123190000_bridge_service_request_workflow.sql", import.meta.url), "utf8");
+
+test("canonical Preview candidate replays finance, reconciliation and Story Concept review tables", () => {
+  assert.ok(replaySource.includes("20261123200000_bridge_title_finance_and_reconciliation.sql"));
+  for (const table of [
+    "bridge_title_owner_interests","bridge_investment_agreements","bridge_licensing_receipts",
+    "bridge_licensing_allocations","bridge_finance_reconciliations","bridge_finance_reconciliation_items",
+  ]) assert.ok(financeMigration.includes(`public.${table}`), `missing finance table ${table}`);
+  assert.match(financeMigration, /REVOKE ALL/);
+  assert.match(financeMigration, /TO anon, authenticated USING \(false\) WITH CHECK \(false\)/);
+  assert.match(storyReviewMigrationSource, /bridge_story_concept_review_events/);
+  assert.match(storyReviewMigrationSource, /bridge_story_concept_notifications/);
+});

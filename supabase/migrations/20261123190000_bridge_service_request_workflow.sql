@@ -211,3 +211,35 @@ COMMENT ON TABLE public.bridge_service_request_events IS
   'Append-only status history for service requests.';
 COMMENT ON TABLE public.bridge_service_request_notifications IS
   'Server-side notifications for service request status, quote, payment and delivery events.';
+
+
+-- Story Concept review events and requester notifications.
+CREATE TABLE IF NOT EXISTS public.bridge_story_concept_review_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  concept_id uuid NOT NULL,
+  title_id text NOT NULL REFERENCES public.bridge_titles(id) ON DELETE RESTRICT,
+  from_status text,
+  to_status text NOT NULL,
+  actor_user_id text,
+  note text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS bridge_story_concept_review_events_concept_idx ON public.bridge_story_concept_review_events(concept_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS public.bridge_story_concept_notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  concept_id uuid NOT NULL,
+  title_id text NOT NULL REFERENCES public.bridge_titles(id) ON DELETE RESTRICT,
+  recipient_user_id text NOT NULL,
+  message text NOT NULL,
+  read_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS bridge_story_concept_notifications_user_idx ON public.bridge_story_concept_notifications(recipient_user_id,created_at DESC);
+ALTER TABLE public.bridge_story_concept_review_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bridge_story_concept_notifications ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.bridge_story_concept_review_events,public.bridge_story_concept_notifications FROM PUBLIC,anon,authenticated;
+GRANT ALL ON public.bridge_story_concept_review_events,public.bridge_story_concept_notifications TO postgres,service_role;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='public.bridge_story_concept_review_events'::regclass AND polname='deny_browser_access') THEN CREATE POLICY deny_browser_access ON public.bridge_story_concept_review_events FOR ALL TO anon,authenticated USING(false) WITH CHECK(false); END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='public.bridge_story_concept_notifications'::regclass AND polname='deny_browser_access') THEN CREATE POLICY deny_browser_access ON public.bridge_story_concept_notifications FOR ALL TO anon,authenticated USING(false) WITH CHECK(false); END IF;
+END $$;
