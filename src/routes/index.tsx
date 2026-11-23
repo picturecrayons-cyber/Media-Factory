@@ -97,7 +97,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-5 py-14 text-center sm:px-6 sm:py-16 lg:py-20">
             <div className="mx-auto max-w-5xl">
               <div className="mx-auto flex justify-center">
-                <BrandMark size="large" />
+                <BrandMark className="scale-125" />
               </div>
               <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
                 {siteContent.heroTitle}
@@ -339,7 +339,7 @@ function Home() {
             className="flex flex-wrap items-center gap-5 text-xs text-muted"
           >
             <Link to="/contact" className="hover:text-fg transition-colors">Contact</Link>
-            <Link to="/legal" className="hover:text-fg transition-colors">Legal & Compliance</Link>
+            <Link to="/terms" className="hover:text-fg transition-colors">Legal & Compliance</Link>
             <Link to="/privacy" className="hover:text-fg transition-colors">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-fg transition-colors">B2B Terms of Use</Link>
             <a href="/legal/content-rights" className="hover:text-fg transition-colors">Content Rights Declaration</a>
