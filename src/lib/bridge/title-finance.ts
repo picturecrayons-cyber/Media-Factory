@@ -264,6 +264,12 @@ export const createLicensingAllocations = createServerFn({ method: "POST" })
       const requested = assertAllocationsWithinNetRevenue(Number(receipt.net_amount_paise) - alreadyAllocated, data.allocations);
       const beneficiaries = data.allocations.map((item) => item.beneficiaryType + ":" + (item.beneficiaryType === "BRIDGE" ? "bridge" : item.beneficiaryUserId));
       if (new Set(beneficiaries).size !== beneficiaries.length) throw new Error("Each beneficiary may receive only one allocation per receipt.");
+      const existingBeneficiaries = await tx.query<{ beneficiary_type: string; beneficiary_user_id: string | null }>(
+        "select beneficiary_type,beneficiary_user_id from public.bridge_licensing_allocations where receipt_id=$1 and status<>'CANCELLED'",
+        [data.receiptId],
+      );
+      const existingKeys = new Set(existingBeneficiaries.map((row) => row.beneficiary_type + ":" + (row.beneficiary_type === "BRIDGE" ? "bridge" : row.beneficiary_user_id)));
+      if (beneficiaries.some((key) => existingKeys.has(key))) throw new Error("A beneficiary already has an active allocation for this receipt.");
       const created: string[] = [];
       for (const item of data.allocations) {
         if (item.beneficiaryType === "OWNER") {
