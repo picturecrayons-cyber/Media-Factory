@@ -74,6 +74,7 @@ const supportedFeatureMigrations = new Set([
   "20261123120000_bridge_homepage_carousel.sql",
   "20261123170000_bridge_legal_acceptances.sql",
   "20261123190000_bridge_service_request_workflow.sql",
+  "20261123200000_bridge_title_finance_and_reconciliation.sql",
 ]);
 for (const name of featureNames) {
   if (!supportedFeatureMigrations.has(name)) {
@@ -715,8 +716,28 @@ try {
     alter table public.bridge_creator_documents enable row level security;
     revoke all on table public.bridge_creator_documents from public, anon, authenticated;
     grant all on table public.bridge_creator_documents to postgres, service_role;
+
+    create table if not exists public.bridge_title_document_links (
+      id text primary key,
+      title_id text not null references public.bridge_titles(id) on delete cascade,
+      document_id text not null references public.bridge_creator_documents(id) on delete restrict,
+      evidence_type text not null
+        constraint bridge_title_document_links_evidence_type_check
+        check (evidence_type in (
+          'FINISHED_FILM_AGREEMENT','STORY_CONCEPT_AGREEMENT','DISTRIBUTION_AGREEMENT',
+          'OWNERSHIP_CHAIN_OF_TITLE','AUTHOR_ASSIGNMENT','MUSIC_RIGHTS','OTHER'
+        )),
+      linked_by text not null references public.bridge_profiles(user_id) on delete restrict,
+      created_at timestamptz not null default now(),
+      unique(title_id,document_id,evidence_type)
+    );
+    create index if not exists bridge_title_document_links_title_idx
+      on public.bridge_title_document_links(title_id,created_at desc);
+    alter table public.bridge_title_document_links enable row level security;
+    revoke all on table public.bridge_title_document_links from public,anon,authenticated;
+    grant all on table public.bridge_title_document_links to postgres,service_role;
   `);
-  console.log("[migration-replay] restored verified empty pre-ledger creator-document schema locally; no Production rows copied");
+  console.log("[migration-replay] restored verified empty pre-ledger creator-document schema and title links locally; no Production rows copied");
 
   // Replay newly introduced feature migrations only after the historical
   // production-ledger baseline has replayed successfully. They are not part
