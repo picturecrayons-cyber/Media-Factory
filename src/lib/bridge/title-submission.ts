@@ -12,6 +12,7 @@ export async function submitTitleForQc(
   title: Pick<BridgeTitle, "id" | "status" | "masterKey" | "posterKey">,
   actorUserId: string,
   note?: string,
+  requireAdminIntake = false,
 ): Promise<{ title: Pick<BridgeTitle, "id" | "status"> & { status: TitleStatus } }> {
   if (title.status !== "PREPARING") throw new Error("Title is not ready for QC submission");
   const assets = await sql<{ kind: string; s3_key: string }>`
@@ -29,6 +30,15 @@ export async function submitTitleForQc(
     `;
     if (!locked || locked.status !== title.status) {
       throw new Error("Title changed; refresh before retrying");
+    }
+    if (requireAdminIntake) {
+      const intake = await tx<{ submission_status: string }>`
+        select submission_status from bridge_title_owner_submissions
+        where title_id = ${title.id} for update
+      `;
+      if (intake[0]?.submission_status !== "SUBMITTED") {
+        throw new Error("Admin intake submission is required before QC handoff");
+      }
     }
     await tx`
       update bridge_titles set status = 'QC_REVIEW', updated_at = now()
