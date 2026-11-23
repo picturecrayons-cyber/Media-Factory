@@ -226,11 +226,6 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
       select event_key from bridge_notification_outbox
       where event_key like ${`owner-submission:${notificationEventId}:%`}
         and status in ('pending','failed')
-        and created_at >= now() - interval '2 minutes'
-        and (
-          recipient_email = (select email from bridge_profiles where user_id = ${actor.userId})
-          or event_key like 'owner-submission:%:super-admin:%'
-        )
       order by created_at asc
       limit 10
     `;
