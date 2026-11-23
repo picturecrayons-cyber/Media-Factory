@@ -135,7 +135,8 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
   const [selected, setSelected] = useState<PreviewAsset | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [failedId, setFailedId] = useState<string | null>(null);\n  const [filter, setFilter] = useState<"all" | "images" | "videos">("all");
+  const [failedId, setFailedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "images" | "videos">("all");
 
   async function openPreview(asset: PreviewAsset) {
     if (!asset.verified || loadingId) return;
