@@ -309,6 +309,74 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
     }
   });
 
+
+const updateConceptPayloadSchema = z.object({
+  titleId: z.string().min(1).max(128),
+  logline: z.string().min(10).max(500),
+  synopsis: z.string().min(40).max(8000),
+  treatmentUrl: z.string().url().max(500).optional().or(z.literal("")),
+  screenplayUrl: z.string().url().max(500).optional().or(z.literal("")),
+});
+
+export const updateMyStoryConceptSubmission = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(updateConceptPayloadSchema)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.update_own");
+    const sql = await getSql();
+    try {
+      const rows = await sql<ConceptRow & {
+        owner_user_id: string;
+        owner_account_type: string;
+        owner_organization_id: string | null;
+      }>`
+        select c.*, t.owner_user_id, t.owner_account_type, t.owner_organization_id
+        from bridge_story_concept_submissions c
+        join bridge_titles t on t.id = c.title_id
+        where c.title_id = ${data.titleId}
+        limit 1
+      `;
+      const current = rows[0];
+      if (!current) throw new Error("Concept submission not found");
+      const isOwner = current.owner_user_id === actor.userId;
+      const isStudioMember =
+        current.owner_account_type === "studio" &&
+        Boolean(actor.organizationId) &&
+        current.owner_organization_id === actor.organizationId;
+      if (!isOwner && !isStudioMember) throw new Error("Forbidden");
+      if (!["PENDING", "REJECTED"].includes(current.curation_status)) {
+        throw new Error("This concept can only be edited while pending review or after a recorded rejection.");
+      }
+      const from = current.curation_status;
+      const updated = await sql<ConceptRow>`
+        update bridge_story_concept_submissions
+        set logline = ${data.logline},
+            synopsis = ${data.synopsis},
+            treatment_url = ${data.treatmentUrl || null},
+            screenplay_url = ${data.screenplayUrl || null},
+            curation_status = 'PENDING',
+            admin_notes = null,
+            updated_at = now()
+        where id = ${current.id}
+        returning *
+      `;
+      const concept = updated[0];
+      if (!concept) throw new Error("Concept update failed");
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "story_concept.resubmit",
+        entityType: "bridge_story_concept_submission",
+        entityId: concept.id,
+        metadata: { from, status: "PENDING", previousFeedbackPreservedInAudit: Boolean(current.admin_notes) },
+      });
+      return { concept: mapConcept(concept) };
+    } catch (err) {
+      migrationHint(err);
+    }
+  });
+
 export const updateStoryConceptCuration = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
