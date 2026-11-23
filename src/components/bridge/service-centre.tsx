@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listTitles } from "@/lib/bridge/titles";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
+import { listCreatorDocuments } from "@/lib/bridge/creator-documents";
 import {
   createBridgeServiceRequest,
   listMyBridgeServiceRequests,
@@ -111,7 +112,8 @@ export function ServiceCentre({ audience, userId }: { audience: Audience; userId
   const [titleId, setTitleId] = useState("");
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [description, setDescription] = useState("");
-  const [documentIds, setDocumentIds] = useState("");
+  const [documentIds, setDocumentIds] = useState<string[]>([]);
+  const documentsQuery = useQuery({ queryKey: ["service-centre-documents", userId], queryFn: () => listCreatorDocuments() });
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const refresh = async () => {
@@ -123,13 +125,13 @@ export function ServiceCentre({ audience, userId }: { audience: Audience; userId
         titleId,
         category,
         description: description.trim(),
-        documentIds: documentIds.split(",").map((value) => value.trim()).filter(Boolean),
+        documentIds,
       },
     }),
     onSuccess: async () => {
       setTitleId("");
       setDescription("");
-      setDocumentIds("");
+      setDocumentIds([]);
       setError("");
       setNotice("Service request submitted to the Super Admin review queue.");
       await refresh();
@@ -239,10 +241,18 @@ export function ServiceCentre({ audience, userId }: { audience: Audience; userId
             <span>Scope / requirement</span>
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} maxLength={4000} placeholder="Describe the work required, delivery format, destination, language, schedule and any constraints." className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm text-fg" />
           </label>
-          <label className="space-y-1 text-xs text-muted md:col-span-2">
-            <span>Verified Document Vault IDs (optional, comma-separated)</span>
-            <input value={documentIds} onChange={(event) => setDocumentIds(event.target.value)} placeholder="Paste verified document record IDs only" className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm text-fg" />
-          </label>
+          <div className="space-y-2 text-xs text-muted md:col-span-2">
+            <span className="block">Attach verified private documents (optional)</span>
+            {documentsQuery.isPending ? <p>Loading verified documents…</p> : null}
+            {documentsQuery.isError ? <p role="alert">Document list unavailable. You can still submit without attachments.</p> : null}
+            {(documentsQuery.data?.documents ?? []).filter((doc: any) => doc.status === "VERIFIED").map((doc: any) => (
+              <label key={doc.id} className="flex items-center gap-2 rounded-lg border border-line p-2">
+                <input type="checkbox" checked={documentIds.includes(doc.id)} onChange={(event) => setDocumentIds((old) => event.target.checked ? [...old, doc.id] : old.filter((id) => id !== doc.id))} />
+                <span>{doc.file_name} · verified</span>
+              </label>
+            ))}
+            {!documentsQuery.isPending && !documentsQuery.isError && !(documentsQuery.data?.documents ?? []).some((doc: any) => doc.status === "VERIFIED") ? <p>No verified documents available yet. Use the secure upload panel above.</p> : null}
+          </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button type="button" disabled={requestMutation.isPending || !titleId || description.trim().length < 10} onClick={() => requestMutation.mutate()} className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg disabled:opacity-50">
