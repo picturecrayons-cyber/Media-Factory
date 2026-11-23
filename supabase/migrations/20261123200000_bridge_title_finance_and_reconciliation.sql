@@ -118,6 +118,12 @@ create index if not exists bridge_licensing_allocations_receipt_idx
   on public.bridge_licensing_allocations(receipt_id,status,created_at);
 create index if not exists bridge_licensing_allocations_beneficiary_idx
   on public.bridge_licensing_allocations(beneficiary_user_id,status,title_id);
+create unique index if not exists bridge_licensing_allocations_beneficiary_uq
+  on public.bridge_licensing_allocations(receipt_id,beneficiary_type,beneficiary_user_id)
+  where beneficiary_user_id is not null and status <> 'CANCELLED';
+create unique index if not exists bridge_licensing_allocations_bridge_uq
+  on public.bridge_licensing_allocations(receipt_id)
+  where beneficiary_type='BRIDGE' and status <> 'CANCELLED';
 
 create table if not exists public.bridge_finance_reconciliations (
   id uuid primary key default gen_random_uuid(),
