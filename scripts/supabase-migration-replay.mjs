@@ -27,6 +27,7 @@ const NON_PRODUCTION_MIGRATIONS = new Set([
   "20261122150000_bridge_delivery_jobs_testing_reconciliation.sql",
   "20261122153000_bridge_delivery_jobs_no_cascade_hardening_20261122.sql",
   "20261122180000_bridge_archive_fail_closed_contract.sql",
+  "20261123210000_bridge_owner_submission_status_constraints_repair.sql",
 ]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
