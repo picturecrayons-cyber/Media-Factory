@@ -16,6 +16,10 @@ const productionRolloutMigration = readFileSync(
   new URL("../supabase/migrations/20261123015009_bridge_owner_submission_production_rollout.sql", import.meta.url),
   "utf8",
 );
+const ownerSubmissionBaseline = readFileSync(
+  new URL("./fixtures/bridge-title-owner-submissions-pre-ledger.sql", import.meta.url),
+  "utf8",
+);
 
 test("local replay restores Production Bridge RLS on every public Bridge table", () => {
   assert.match(replaySource, /substring\(c\.relname from 1 for 7\) = 'bridge_'/);
@@ -81,6 +85,13 @@ test("Testing candidate migrations are explicitly excluded from the immutable Pr
   assert.match(replaySource, /manifestRows.size !== EXPECTED_PRODUCTION_MIGRATIONS/);
 });
 
+
+test("local replay restores the verified pre-ledger owner-submission table before rollout", () => {
+  assert.match(replaySource, /restored verified pre-ledger owner-submission table baseline locally/);
+  assert.match(replaySource, /20261123015009_bridge_owner_submission_production_rollout\.sql/);
+  assert.match(ownerSubmissionBaseline, /create table if not exists public\.bridge_title_owner_submissions/);
+  assert.match(ownerSubmissionBaseline, /revoke all on table public\.bridge_title_owner_submissions from anon,authenticated/);
+});
 
 test("Production owner-submission rollout is additive and does not rewrite title rows", () => {
   assert.match(productionRolloutMigration, /add column if not exists owner_submission_status/);
