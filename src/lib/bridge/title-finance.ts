@@ -171,8 +171,8 @@ export const submitTitleOwnerInterests = createServerFn({ method: "POST" })
         }
         if (interest.ownerAccountType === "independent_creator" && interest.ownerOrganizationId) throw new Error("Independent Creator ownership cannot claim a Studio organization.");
         const evidence = await tx.query<{ id: string }>(
-          "select d.id from public.bridge_creator_documents d join public.bridge_title_document_links l on l.document_id=d.id and l.title_id=$2 where d.id=$1 and d.owner_user_id=$3 and d.owner_account_type=$4 and d.status='VERIFIED' and d.document_type in ('OWNERSHIP_CHAIN_OF_TITLE','AUTHOR_ASSIGNMENT','FINISHED_FILM_AGREEMENT','DISTRIBUTION_AGREEMENT') limit 1",
-          [interest.evidenceDocumentId,data.titleId,interest.ownerUserId,interest.ownerAccountType],
+          "select d.id from public.bridge_creator_documents d join public.bridge_title_document_links l on l.document_id=d.id and l.title_id=$2 where d.id=$1 and d.owner_user_id=$3 and d.owner_account_type=$4 and coalesce(d.owner_organization_id,'')=coalesce($5,'') and d.status='VERIFIED' and d.document_type in ('OWNERSHIP_CHAIN_OF_TITLE','AUTHOR_ASSIGNMENT','FINISHED_FILM_AGREEMENT','DISTRIBUTION_AGREEMENT') and l.evidence_type in ('OWNERSHIP_CHAIN_OF_TITLE','AUTHOR_ASSIGNMENT','FINISHED_FILM_AGREEMENT','DISTRIBUTION_AGREEMENT') limit 1",
+          [interest.evidenceDocumentId,data.titleId,interest.ownerUserId,interest.ownerAccountType,interest.ownerOrganizationId ?? null],
         );
         if (!evidence[0]) throw new Error("Owner interest requires a verified, title-linked private ownership document belonging to that owner.");
         const row = await tx.query<{ id: string }>(
