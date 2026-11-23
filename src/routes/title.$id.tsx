@@ -39,7 +39,7 @@ import {
   sessionStorageKey,
 } from "@/lib/bridge/multipart-upload";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
-import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
+import { listMyStoryConcepts, updateMyStoryConceptSubmission } from "@/lib/bridge/story-concept-api";
 
 export const Route = createFileRoute("/title/$id")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -152,6 +152,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         loading={conceptQ.isPending}
         error={conceptQ.error instanceof Error ? conceptQ.error.message : null}
         onRetry={() => void conceptQ.refetch()}
+        onResubmitted={() => void conceptQ.refetch()}
       />
     );
   }
@@ -315,12 +316,15 @@ function StoryConceptWorkspace({
   loading,
   error,
   onRetry,
+  onResubmitted,
 }: {
-  title: { name: string; language: string; synopsis: string; createdAt: string };
+  title: { id: string; name: string; language: string; synopsis: string; createdAt: string };
   concept?: {
     curation_status: string;
     logline: string | null;
     synopsis: string | null;
+    treatment_url: string | null;
+    screenplay_url: string | null;
     admin_notes: string | null;
     updated_at: string;
     introduced_to_buyers_at: string | null;
@@ -328,7 +332,29 @@ function StoryConceptWorkspace({
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  onResubmitted: () => void;
 }) {
+  const [logline, setLogline] = useState(concept?.logline ?? "");
+  const [synopsis, setSynopsis] = useState(concept?.synopsis ?? title.synopsis ?? "");
+  const [treatmentUrl, setTreatmentUrl] = useState(concept?.treatment_url ?? "");
+  const [screenplayUrl, setScreenplayUrl] = useState(concept?.screenplay_url ?? "");
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  useEffect(() => {
+    setLogline(concept?.logline ?? "");
+    setSynopsis(concept?.synopsis ?? title.synopsis ?? "");
+    setTreatmentUrl(concept?.treatment_url ?? "");
+    setScreenplayUrl(concept?.screenplay_url ?? "");
+  }, [concept?.id, concept?.updated_at]);
+  const resubmit = useMutation({
+    mutationFn: () => updateMyStoryConceptSubmission({ data: {
+      titleId: title.id, logline, synopsis,
+      treatmentUrl, screenplayUrl,
+    } }),
+    onSuccess: () => {
+      setSaveMessage("Your updated concept has been resubmitted and is pending review.");
+      onResubmitted();
+    },
+  });
   const labels: Record<string, string> = {
     PENDING: "Received · Awaiting review",
     UNDER_REVIEW: "Under review",
@@ -395,6 +421,21 @@ function StoryConceptWorkspace({
             {concept.logline ? <p className="mt-3 text-sm leading-7">{concept.logline}</p> : null}
             {concept.synopsis || title.synopsis ? <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted">{concept.synopsis || title.synopsis}</p> : null}
           </section>
+          {["PENDING", "REJECTED"].includes(concept.curation_status) ? (
+            <section className="rounded-3xl border border-line bg-surface p-6 shadow-sm">
+              <h2 className="text-lg font-bold">Update / resubmit concept</h2>
+              <p className="mt-1 text-sm text-muted">You can revise a pending concept or respond to a recorded rejection. A concept under active review or already approved cannot be edited here.</p>
+              <form className="mt-4 grid gap-3" onSubmit={(event) => { event.preventDefault(); resubmit.mutate(); }}>
+                <label className="grid gap-1 text-sm">Logline<textarea required minLength={10} maxLength={500} rows={2} value={logline} onChange={(event) => setLogline(event.target.value)} className="rounded-lg border border-line bg-elevated px-3 py-2" /></label>
+                <label className="grid gap-1 text-sm">Synopsis<textarea required minLength={40} maxLength={8000} rows={5} value={synopsis} onChange={(event) => setSynopsis(event.target.value)} className="rounded-lg border border-line bg-elevated px-3 py-2" /></label>
+                <label className="grid gap-1 text-sm">Treatment URL (optional)<input type="url" value={treatmentUrl} onChange={(event) => setTreatmentUrl(event.target.value)} className="h-10 rounded-lg border border-line bg-elevated px-3" /></label>
+                <label className="grid gap-1 text-sm">Screenplay URL (optional)<input type="url" value={screenplayUrl} onChange={(event) => setScreenplayUrl(event.target.value)} className="h-10 rounded-lg border border-line bg-elevated px-3" /></label>
+                {resubmit.isError ? <p role="alert" className="text-sm text-red-600">{resubmit.error.message}</p> : null}
+                {saveMessage ? <p role="status" className="text-sm text-muted">{saveMessage}</p> : null}
+                <button type="submit" disabled={resubmit.isPending || logline.trim().length < 10 || synopsis.trim().length < 40} className="w-fit rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50">{resubmit.isPending ? "Saving…" : concept.curation_status === "REJECTED" ? "Update & resubmit for review" : "Save concept update"}</button>
+              </form>
+            </section>
+          ) : null}
         </>
       ) : !loading && !error ? (
         <div role="alert" className="rounded-2xl border border-line p-5 text-sm">
