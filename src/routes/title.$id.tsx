@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
+import { getOwnerAdminSubmission, submitTitleToBridgeAdmin } from "@/lib/bridge/owner-admin-submission";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   abortAssetMultipart,
@@ -119,6 +120,24 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     enabled: !buyerView,
   });
 
+  const ownerAccount = !actor.internalRole && (actor.accountType === "independent_creator" || actor.accountType === "studio");
+  const ownerSubmissionQ = useQuery({
+    queryKey: ["owner-admin-submission", id, actor.userId],
+    queryFn: () => getOwnerAdminSubmission({ data: { titleId: id } }),
+    enabled: ownerAccount && !buyerView,
+  });
+  const ownerSubmissionMutation = useMutation({
+    mutationFn: () => submitTitleToBridgeAdmin({ data: { titleId: id } }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["owner-admin-submission", id] }),
+        queryClient.invalidateQueries({ queryKey: ["bridge-title", id] }),
+        queryClient.invalidateQueries({ queryKey: ["bridge-titles"] }),
+        queryClient.invalidateQueries({ queryKey: ["bridge-audit"] }),
+      ]);
+    },
+  });
+
   const reviewQ = useQuery({
     queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
@@ -159,6 +178,42 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   return (
     <div className="space-y-5">
       <WorkflowDesk title={title} actor={actor} />
+      {ownerAccount ? (
+        <section aria-labelledby="title-operations-heading" className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Title operations</p>
+              <h2 id="title-operations-heading" className="mt-1 font-display text-xl font-semibold">Submit to Bridge Admin</h2>
+              <p className="mt-1 max-w-2xl text-sm text-muted">This sends the title package to the Bridge Admin intake queue only. It does not approve QC, rights, legal clearance, licensing or Loop publication. Title status remains PREPARING.</p>
+            </div>
+            <div className="flex min-w-[220px] flex-col gap-2">
+              {ownerSubmissionQ.data?.submission?.status === "SUBMITTED" ? (
+                <span className="rounded-full border border-line px-4 py-2 text-center text-sm font-semibold">Submitted to Bridge Admin</span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={title.status !== "PREPARING" || !ownerSubmissionQ.data?.readiness.eligible || ownerSubmissionMutation.isPending || ownerSubmissionQ.isPending || ownerSubmissionQ.isError}
+                  onClick={() => ownerSubmissionMutation.mutate()}
+                  className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {ownerSubmissionMutation.isPending ? "Submitting…" : "Submit to Bridge Admin"}
+                </button>
+              )}
+              {ownerSubmissionQ.isPending ? <p className="text-xs text-muted">Checking server-verified readiness…</p> : null}
+              {ownerSubmissionQ.isError ? <p role="alert" className="text-xs text-red-700">Readiness unavailable: {ownerSubmissionQ.error.message}</p> : null}
+              {ownerSubmissionQ.data ? (
+                <div className="space-y-1 text-xs text-muted" aria-live="polite">
+                  <p>Verified master: {ownerSubmissionQ.data.readiness.masterReady ? "PASS" : "BLOCKED"}</p>
+                  <p>Canonical artwork: {ownerSubmissionQ.data.readiness.artworkReady ? "PASS" : "BLOCKED"}</p>
+                  {actor.accountType === "studio" ? <p>Active Studio membership: {ownerSubmissionQ.data.readiness.activeStudioMembership ? "PASS" : "BLOCKED"}</p> : null}
+                  {title.status !== "PREPARING" ? <p>Title status must be PREPARING.</p> : null}
+                </div>
+              ) : null}
+              {ownerSubmissionMutation.isError ? <p role="alert" className="text-xs text-red-700">{ownerSubmissionMutation.error.message}</p> : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
