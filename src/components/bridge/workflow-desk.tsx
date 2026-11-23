@@ -69,6 +69,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] }),
         qc.invalidateQueries({ queryKey: ["bridge-audit"] }),
         qc.invalidateQueries({ queryKey: ["title-revenue", title.id] }),
+        qc.invalidateQueries({ queryKey: ["owner-submission-readiness", title.id] }),
+        qc.invalidateQueries({ queryKey: ["bridge-owner-submission-queue"] }),
       ]);
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Action failed"),
@@ -225,6 +227,16 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     button("Submit to Bridge", () =>
                       submitTitleToBridgeAdmin({ data: { titleId: title.id } }),
                     )
+                  ) : null}
+                  {ownerSubmission.data?.submissionStatus ? (
+                    <p role="status" className="text-sm font-medium text-muted">
+                      Submission status: {ownerSubmission.data.submissionStatus.replaceAll("_", " ")}
+                    </p>
+                  ) : null}
+                  {action.isSuccess ? (
+                    <p role="status" className="text-sm font-medium text-emerald-700">
+                      Submission recorded. Bridge intake has received this title; QC and rights decisions remain separate.
+                    </p>
                   ) : null}
                 </div>
               ) : null}
