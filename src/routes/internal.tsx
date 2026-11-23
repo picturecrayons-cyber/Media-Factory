@@ -159,7 +159,7 @@ function OwnerSubmissionQueue() {
     mutationFn: (input: { titleId: string; decision: "ACCEPT" | "REQUEST_CORRECTIONS"; reason?: string }) =>
       decideBridgeOwnerSubmission({ data: input }),
     onSuccess: async (result) => {
-      toast.success(result.submissionStatus === "ACCEPTED" ? "Owner submission accepted" : "Corrections requested");
+      toast.success(result.submissionStatus === "ACCEPTED_INTAKE" ? "Owner submission accepted" : "Corrections requested");
       await qc.invalidateQueries({ queryKey: ["bridge-admin-owner-submission-queue"] });
       await qc.invalidateQueries({ queryKey: ["bridge-titles"] });
     },
