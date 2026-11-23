@@ -50,7 +50,7 @@ function Studio() {
                 <h3 className="font-display text-xl font-semibold">Add a studio title</h3>
                 <p className="mt-1 text-sm text-muted">Finished films and story concepts remain separate. A title upload does not bypass QC, rights or licensing approvals.</p>
               </div>
-              <NewSubmissionPanel actor={actor} />
+              <NewSubmissionPanel />
             </section>
 
             <section id="studio-titles" className="space-y-4">
