@@ -168,6 +168,10 @@ revoke all on public.bridge_title_owner_interests,public.bridge_investment_agree
   public.bridge_licensing_receipts,public.bridge_licensing_allocations,
   public.bridge_finance_reconciliations,public.bridge_finance_reconciliation_items
 from public,anon,authenticated;
+grant all on public.bridge_title_owner_interests,public.bridge_investment_agreements,
+  public.bridge_licensing_receipts,public.bridge_licensing_allocations,
+  public.bridge_finance_reconciliations,public.bridge_finance_reconciliation_items
+to postgres,service_role;
 
 create policy bridge_title_owner_interests_deny_client on public.bridge_title_owner_interests
   for all to anon,authenticated using(false) with check(false);
