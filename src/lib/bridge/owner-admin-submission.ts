@@ -8,6 +8,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { canMutateTitle, canReadTitle } from "./rbac";
 import { writeAudit } from "./audit";
+import { canResubmitOwnerAdminSubmission, evaluateOwnerAdminSubmissionReadiness } from "./owner-admin-submission-policy";
 
 type Readiness = {
   masterReady: boolean;
@@ -64,12 +65,14 @@ async function ownerReadiness(actor: Awaited<ReturnType<typeof requireVerifiedAc
   `;
   const masterReady = Boolean(assets[0]?.master_ready);
   const artworkReady = Boolean(assets[0]?.artwork_ready);
-  return {
-    masterReady,
-    artworkReady,
+  return evaluateOwnerAdminSubmissionReadiness({
+    titleStatus: title.status,
+    masterKey: title.masterKey,
+    posterKey: title.posterKey,
+    masterAssetVerified: masterReady,
+    artworkAssetVerified: artworkReady,
     activeStudioMembership,
-    eligible: title.status === "PREPARING" && masterReady && artworkReady && activeStudioMembership,
-  };
+  });
 }
 
 /** Read-only readiness and latest submission state for the authenticated title owner. */
@@ -173,7 +176,7 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
       `;
       const current = existing[0]?.submission_status;
       if (current === "SUBMITTED") throw new Error("This title is already submitted to Bridge Admin");
-      if (current && !["DRAFT", "NEEDS_CORRECTION"].includes(current)) {
+      if (!canResubmitOwnerAdminSubmission(current)) {
         throw new Error("This owner submission is not eligible for resubmission");
       }
       const id = randomBytes(16).toString("hex");
