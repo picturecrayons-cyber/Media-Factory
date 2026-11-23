@@ -67,7 +67,7 @@ for (const [label, databaseUrl] of rejectedTargets) {
 
 
 test("Testing candidate migrations are explicitly excluded from the immutable Production ledger replay", () => {
-  assert.match(replaySource, /const EXPECTED_PRODUCTION_MIGRATIONS = 70;/);
+  assert.match(replaySource, /const EXPECTED_PRODUCTION_MIGRATIONS = 71;/);
   for (const name of ["20261122100000_bridge_title_owner_submissions.sql","20261122125255_owner_submission_lifecycle_20261122.sql","20261122141000_reversible_archive_owner_submission_repair_20261122.sql","20261122150000_bridge_delivery_jobs_testing_reconciliation.sql","20261122153000_bridge_delivery_jobs_no_cascade_hardening_20261122.sql","20261122180000_bridge_archive_fail_closed_contract.sql","20261123210000_bridge_owner_submission_status_constraints_repair.sql"]) {
     assert.ok(replaySource.includes(name), `missing explicit non-Production classification: ${name}`);
     assert.ok(replaySource.includes(`Declared Testing candidate migration is missing: ${name}` ) === false);
