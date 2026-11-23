@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { dispatchOwnerSubmissionNotification } from "./owner-submission-notifications";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
@@ -168,10 +169,45 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
       `;
       if (!saved[0]) throw new Error("Duplicate submission blocked; refresh the title workspace");
 
-      await tx`
+      const eventRows = await tx<{ id: string }>`
         insert into bridge_owner_submission_events
           (title_id, submission_kind, action, from_status, to_status, actor_user_id)
         values (${row.id}, 'finished_film', ${action}, ${current ?? "DRAFT"}, 'SUBMITTED', ${actor.userId})
+        returning id::text as id
+      `;
+      const eventId = eventRows[0]?.id;
+      if (!eventId) throw new Error("Submission event could not be recorded");
+
+      const creatorEmailRows = await tx<{ email: string | null }>`
+        select email from bridge_profiles where user_id = ${row.owner_user_id} limit 1
+      `;
+      const creatorEmail = creatorEmailRows[0]?.email?.trim();
+      const creatorEventKey = `owner-submission:${eventId}:creator`;
+      if (creatorEmail) {
+        await tx`
+          insert into bridge_notification_outbox
+            (event_key, recipient_email, subject, text_body)
+          values (
+            ${creatorEventKey}, ${creatorEmail},
+            ${`Crayons Bridge received: ${row.name}`},
+            ${`We received your title submission "${row.name}" for Crayons Bridge intake. Submission reference: ${eventId}. This confirms receipt only; QC, Rights, Legal, Licensing and Marketplace decisions remain separate. View your workspace: https://www.crayonspictures.in/creator`}
+          )
+          on conflict (event_key) do nothing
+        `;
+      }
+
+      const adminEventKey = `owner-submission:${eventId}:super-admin`;
+      await tx`
+        insert into bridge_notification_outbox
+          (event_key, recipient_email, subject, text_body)
+        select
+          ${adminEventKey} || ':' || p.user_id,
+          p.email,
+          ${`New Crayons Bridge submission: ${row.name}`},
+          ${`A new title submission "${row.name}" is awaiting Super Admin intake review. Reference: ${eventId}. Open the Super Admin dashboard: https://www.crayonspictures.in/admin`
+        from bridge_profiles p
+        where p.internal_role = 'super_admin' and nullif(trim(p.email), '') is not null
+        on conflict (event_key) do nothing
       `;
       await writeAudit({
         actorUserId: actor.userId,
@@ -182,8 +218,32 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
       }, tx);
     });
 
+    // Dispatch is best-effort after the durable outbox rows have committed. A delivery
+    // failure leaves the submission intact and the notification retryable.
+    const dispatchKeys = await sql<{ event_key: string }>`
+      select event_key from bridge_notification_outbox
+      where event_key like ${`owner-submission:%`}
+        and status in ('pending','failed')
+        and created_at >= now() - interval '2 minutes'
+        and (
+          recipient_email = (select email from bridge_profiles where user_id = ${actor.userId})
+          or event_key like 'owner-submission:%:super-admin:%'
+        )
+      order by created_at asc
+      limit 10
+    `;
+    const notificationResults = await Promise.all(dispatchKeys.map(({ event_key }) =>
+      dispatchOwnerSubmissionNotification(event_key).catch(() => ({ sent: false as const }))
+    ));
+
     // Admin intake is deliberately not a QC, rights, legal, licensing, or Loop publication transition.
-    return { submitted: true as const, submissionStatus: submittedStatus, titleStatus: "PREPARING" as const };
+    return {
+      submitted: true as const,
+      submissionStatus: submittedStatus,
+      titleStatus: "PREPARING" as const,
+      notificationsQueued: dispatchKeys.length,
+      notificationsSent: notificationResults.filter((result) => result.sent).length,
+    };
   });
 
 export const listBridgeAdminOwnerSubmissionQueue = createServerFn({ method: "GET" })
