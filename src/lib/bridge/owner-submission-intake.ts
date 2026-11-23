@@ -8,6 +8,7 @@ import { requireVerifiedActor, type BridgeActor } from "./session";
 import { loadTitle } from "./titles";
 import { canMutateTitle } from "./rbac";
 import { writeAudit } from "./audit";
+import { canResubmitOwnerAdminSubmission, evaluateOwnerAdminSubmissionReadiness } from "./owner-admin-submission-policy";
 
 type IntakeTitle = NonNullable<Awaited<ReturnType<typeof loadTitle>>>;
 
@@ -80,14 +81,23 @@ export const getOwnerSubmissionReadiness = createServerFn({ method: "GET" })
     await assertOwnerOrActiveStudio(actor, title);
     const assets = await readiness(await getSql(), title);
     const statusReady = title.status === "PREPARING";
+    const evaluated = evaluateOwnerAdminSubmissionReadiness({
+      titleStatus: title.status,
+      masterKey: title.masterKey,
+      posterKey: title.posterKey,
+      masterAssetVerified: assets.masterVerified,
+      artworkAssetVerified: assets.artworkVerified,
+      // assertOwnerOrActiveStudio has already verified the active Studio membership.
+      activeStudioMembership: true,
+    });
     return {
       titleStatus: title.status,
       ...assets,
-      canSubmit: statusReady && assets.masterVerified && assets.artworkVerified,
+      canSubmit: evaluated.eligible,
       blockers: [
         ...(!statusReady ? ["Title must remain PREPARING"] : []),
-        ...(!assets.masterVerified ? ["Canonical verified master is missing or not independently verified"] : []),
-        ...(!assets.artworkVerified ? ["Canonical verified poster artwork is missing or not independently verified"] : []),
+        ...(!evaluated.masterReady ? ["Canonical verified master is missing or not independently verified"] : []),
+        ...(!evaluated.artworkReady ? ["Canonical verified poster artwork is missing or not independently verified"] : []),
       ],
     };
   });
@@ -134,7 +144,7 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
         where title_id = ${row.id} for update
       `;
       const current = existing[0]?.submission_status;
-      if (current && !["DRAFT", "NEEDS_CORRECTION"].includes(current)) {
+      if (!canResubmitOwnerAdminSubmission(current)) {
         throw new Error("This title already has an active or completed Admin submission");
       }
       const action = current === "NEEDS_CORRECTION" ? "RESUBMITTED" : "SUBMITTED";
