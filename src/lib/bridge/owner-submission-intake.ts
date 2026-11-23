@@ -181,8 +181,8 @@ export const listBridgeAdminOwnerSubmissionQueue = createServerFn({ method: "GET
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (!actor.internalRole || !["admin", "super_admin"].includes(actor.internalRole)) {
-      throw new Error("Bridge Admin access required");
+    if (actor.internalRole !== "super_admin") {
+      throw new Error("Super Admin access required");
     }
     const sql = await getSql();
     const rows = await sql<{
