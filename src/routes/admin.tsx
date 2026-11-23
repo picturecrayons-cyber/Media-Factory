@@ -7,6 +7,7 @@ import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
+import { listBridgeAdminOwnerSubmissions } from "@/lib/bridge/owner-admin-submission";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -39,6 +40,7 @@ function AdminBody({ actor }: { actor: any }) {
   const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
   const profilesQ = useQuery({ queryKey: ["bridge-admin-profiles"], queryFn: () => listAdminProfiles() });
+  const ownerIntakeQ = useQuery({ queryKey: ["bridge-admin-owner-intake"], queryFn: () => listBridgeAdminOwnerSubmissions() });
 
   const titles = titlesQ.data?.titles ?? [];
   const distribution = distQ.data?.titles ?? [];
@@ -83,6 +85,36 @@ function AdminBody({ actor }: { actor: any }) {
             <CompactMetric label="Loop publications" value={distQ.isPending ? "—" : String(live)} />
             <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "—" : String(profiles.length)} />
             <CompactMetric label="Organizations" value={profilesQ.isPending ? "—" : String(organizations.size)} />
+          </div>
+        </section>
+
+        <section aria-labelledby="owner-intake-heading" className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 id="owner-intake-heading" className="font-display text-xl font-semibold">Creator &amp; Studio submissions</h3>
+              <p className="mt-1 text-sm text-muted">Owner intake only. QC, rights and legal decisions remain separate review actions.</p>
+            </div>
+            <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
+              {ownerIntakeQ.isPending ? "Loading…" : ownerIntakeQ.data?.submissions.length ?? 0} pending
+            </span>
+          </div>
+          {ownerIntakeQ.isError ? <p role="alert" className="mt-3 text-sm text-red-700">Owner submission queue unavailable: {ownerIntakeQ.error.message}</p> : null}
+          <div className="mt-3 divide-y divide-line">
+            {ownerIntakeQ.data?.submissions.map((submission) => (
+              <div key={submission.titleId} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{submission.titleName}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {submission.ownerName} · {submission.ownerAccountType === "studio" ? submission.organizationName ?? "Studio" : "Creator"} · Title status: {submission.titleStatus}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">Submitted: {submission.submittedAt ? new Date(submission.submittedAt).toLocaleString() : "Date unavailable"}</p>
+                </div>
+                <Link to="/title/$id" params={{ id: submission.titleId }} className="shrink-0 text-sm font-semibold text-accent hover:underline">Review intake →</Link>
+              </div>
+            ))}
+            {!ownerIntakeQ.isPending && !ownerIntakeQ.isError && (ownerIntakeQ.data?.submissions.length ?? 0) === 0 ? (
+              <p className="py-5 text-sm text-muted">No Creator or Studio submissions are awaiting Admin intake.</p>
+            ) : null}
           </div>
         </section>
 
