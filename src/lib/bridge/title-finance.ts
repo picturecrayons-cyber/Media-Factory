@@ -66,14 +66,14 @@ export const getOwnTitleFinancialStatements = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) throw new Error("Creator or Studio account required.");
+    if (actor.internalRole || !["independent_creator", "studio", "investor"].includes(actor.accountType)) throw new Error("Creator, Studio or Investor account required.");
     assertPermission(actor, "finance.read_own");
     const sql = await getSql();
     const rows = await sql.query<{
       title_id: string; title_name: string; title_status: string; owner_organization_id: string | null;
       gross_allocated_paise: number; approved_paise: number; paid_paise: number; pending_paise: number;
     }>(
-      "select t.id as title_id,t.name as title_name,t.status as title_status,t.owner_organization_id,coalesce(sum(a.amount_paise) filter (where a.status in ('PENDING_APPROVAL','APPROVED','ON_HOLD','PAID')),0)::bigint as gross_allocated_paise,coalesce(sum(a.amount_paise) filter (where a.status='APPROVED'),0)::bigint as approved_paise,coalesce(sum(a.amount_paise) filter (where a.status='PAID'),0)::bigint as paid_paise,coalesce(sum(a.amount_paise) filter (where a.status in ('PENDING_APPROVAL','ON_HOLD')),0)::bigint as pending_paise from public.bridge_titles t left join public.bridge_licensing_allocations a on a.title_id=t.id and a.beneficiary_user_id=$1 and a.status<>'CANCELLED' where t.owner_user_id=$1 or ($2::text is not null and t.owner_account_type='studio' and t.owner_organization_id=$2) group by t.id,t.name,t.status,t.owner_organization_id order by t.name",
+      "select t.id as title_id,t.name as title_name,t.status as title_status,t.owner_organization_id,coalesce(sum(a.amount_paise) filter (where a.status in ('PENDING_APPROVAL','APPROVED','ON_HOLD','PAID')),0)::bigint as gross_allocated_paise,coalesce(sum(a.amount_paise) filter (where a.status='APPROVED'),0)::bigint as approved_paise,coalesce(sum(a.amount_paise) filter (where a.status='PAID'),0)::bigint as paid_paise,coalesce(sum(a.amount_paise) filter (where a.status in ('PENDING_APPROVAL','ON_HOLD')),0)::bigint as pending_paise from public.bridge_titles t left join public.bridge_licensing_allocations a on a.title_id=t.id and a.status<>'CANCELLED' and (a.beneficiary_user_id=$1 or ($2::text is not null and exists(select 1 from public.bridge_title_owner_interests oi where oi.id=a.owner_interest_id and oi.owner_organization_id=$2 and oi.status='VERIFIED'))) where t.owner_user_id=$1 or ($2::text is not null and t.owner_account_type='studio' and t.owner_organization_id=$2) or exists(select 1 from public.bridge_title_owner_interests oi where oi.title_id=t.id and oi.owner_user_id=$1 and oi.status='VERIFIED') or exists(select 1 from public.bridge_licensing_allocations own_a where own_a.title_id=t.id and own_a.beneficiary_user_id=$1 and own_a.status<>'CANCELLED') group by t.id,t.name,t.status,t.owner_organization_id order by t.name",
       [actor.userId, actor.accountType === "studio" ? actor.organizationId ?? null : null],
     );
     return { statements: rows.map((row) => ({
