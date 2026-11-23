@@ -6,6 +6,9 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
+import { CreatorEvidenceDesk } from "@/components/bridge/creator-evidence-desk";
+import { useQuery } from "@tanstack/react-query";
+import { listTitles } from "@/lib/bridge/titles";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -26,6 +29,21 @@ function Studio() {
     <RequireBridge allow="studio">
       {(actor) => (
         <BridgeShell actor={actor} title="Studio dashboard">
+          <StudioDashboard actor={actor} />
+        </BridgeShell>
+      )}
+    </RequireBridge>
+  );
+}
+
+function StudioDashboard({ actor }: { actor: { userId: string; organizationId?: string | null; organizationName: string | null; displayName: string } }) {
+  const titlesQ = useQuery({
+    queryKey: ["bridge-titles", `${actor.userId}:${actor.organizationId ?? "none"}`],
+    queryFn: () => listTitles(),
+    retry: 1,
+  });
+  const titles = titlesQ.data?.titles ?? [];
+  return (
           <div className="mx-auto max-w-5xl space-y-8 px-1 pb-16">
             <section id="home" className="flex flex-wrap items-end justify-between gap-4">
               <div>
@@ -56,10 +74,20 @@ function Studio() {
                 <h3 className="font-display text-xl font-semibold">Finished films</h3>
                 <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
               </div>
-              <TitleList empty="No finished films are currently returned for this studio account." />
+              <TitleList scopeKey={`${actor.userId}:${actor.organizationId ?? "none"}`} empty="No finished films are currently returned for this studio account." />
               <MyStoryConcepts />
             </section>
 
+
+            <section id="studio-legal" className="space-y-3">
+              <div>
+                <h3 className="font-display text-xl font-semibold">Rights Clearance & Legal Documents</h3>
+                <p className="mt-1 text-sm text-muted">Manage legal evidence for titles owned by this Studio. Access is limited by the authenticated active Studio organization membership; staff approvals remain separate.</p>
+              </div>
+              {titlesQ.isPending ? <p className="text-sm text-muted">Loading Studio titles…</p> : null}
+              {titlesQ.isError ? <p role="alert" className="text-sm text-red-600">Studio titles are unavailable. Refresh and retry.</p> : null}
+              <CreatorEvidenceDesk ownerType="studio" titles={titles.filter((title) => title.ownerAccountType === "studio" && Boolean(actor.organizationId) && title.ownerOrganizationId === actor.organizationId).map(({ id, name, status }) => ({ id, name, status }))} />
+            </section>
 
             <section id="studio-members" className="space-y-3">
               <div>
@@ -93,8 +121,5 @@ function Studio() {
               </div>
             </section>
           </div>
-        </BridgeShell>
-      )}
-    </RequireBridge>
   );
 }
