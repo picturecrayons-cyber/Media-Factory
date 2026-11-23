@@ -62,6 +62,7 @@ function AdminBody({ actor }: { actor: any }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <a href="/admin/workstations" aria-label="Open workspace"><Button>Open workspace</Button></a>
+            {actor.internalRole === "super_admin" ? <Link to="/admin/services"><Button variant="outline">Service requests</Button></Link> : null}
             <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
             <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Loop ↗</Button></a>
           </div>
