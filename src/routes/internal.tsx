@@ -67,7 +67,10 @@ function InternalBody({
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
 
-      {/* Owner submissions are a distinct Admin intake queue; they do not advance QC or rights. */}\n      {canManageOwnerSubmission ? <OwnerSubmissionQueue /> : null}\n\n      {/* 3. Catalog Queue */}
+      {/* Owner submissions are a distinct Admin intake queue; they do not advance QC or rights. */}
+      {canManageOwnerSubmission ? <OwnerSubmissionQueue /> : null}
+
+      {/* 3. Catalog Queue */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
