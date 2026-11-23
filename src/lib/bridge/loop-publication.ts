@@ -227,21 +227,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
+    // Read-only status endpoint: expiry is derived below and never written by a GET request.
     const rows = await sql<{
       id: string;
       slug: string;
@@ -264,6 +250,16 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       listed: boolean | null;
       published: boolean | null;
       playback_path: string | null;
+      loop_synopsis: string | null;
+      loop_language: string | null;
+      loop_year: number | null;
+      loop_duration_minutes: number | null;
+      submitted_at: string | Date | null;
+      master_asset_ready: boolean;
+      poster_asset_ready: boolean;
+      consumer_pricing_ready: boolean;
+      destination_package_ready: boolean;
+      revenue_shares_ready: boolean;
       qc_approved: boolean;
       legal_grant_ids: string[] | null;
       ott_preparation_status: string | null;
@@ -273,9 +269,51 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     }>`
       select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
-             p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
+             coalesce(p.loop_title_id, l.id) as loop_title_id,
+             p.authorization_status, p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
              l.status as loop_status, l.listed, l.published, l.playback_path,
+             l.synopsis as loop_synopsis, l.language as loop_language,
+             l.year as loop_year, l.duration_minutes as loop_duration_minutes,
+             si.submitted_at,
+             exists(
+               select 1 from bridge_assets a
+               where a.title_id=b.id and a.kind='master'
+                 and (a.s3_key=b.master_key or (
+                   position('.verified/' in b.master_key) > 0
+                   and a.id::text = split_part(b.master_key, '.verified/', 2)
+                   and a.s3_key = split_part(b.master_key, '.verified/', 1)
+                 ))
+                 and a.byte_size > 0 and a.storage_business_state='ACTIVE' and a.restore_state='READY'
+             ) as master_asset_ready,
+             exists(
+               select 1 from bridge_assets a
+               where a.title_id=b.id and a.kind in ('poster','poster_vertical')
+                 and (a.s3_key=b.poster_key or (
+                   position('.verified/' in b.poster_key) > 0
+                   and a.id::text = split_part(b.poster_key, '.verified/', 2)
+                   and a.s3_key = split_part(b.poster_key, '.verified/', 1)
+                 ))
+                 and a.byte_size > 0 and a.storage_business_state='ACTIVE' and a.restore_state='READY'
+             ) as poster_asset_ready,
+             (l.access_tier='TVOD' and coalesce(l.tvod_rental_price,0)>0) as consumer_pricing_ready,
+             exists(
+               select 1 from bridge_destination_packages dp
+               where dp.title_id=b.id and dp.destination='CRAYONS_LOOP'
+                 and dp.readiness_state in ('READY','AUTHORIZED','DELIVERED')
+                 and dp.rights_grant_id in (
+                   select rg.id from bridge_rights_grants rg
+                   where rg.title_id=b.id and rg.status='VALID'
+                 )
+             ) as destination_package_ready,
+             exists(
+               select 1 from bridge_rights_grants rg
+               where rg.title_id=b.id and rg.status='VALID'
+                 and (rg.evidence->0->'commercialTerms'->>'rightsOwnerSharePct') ~ '^[0-9]+$'
+                 and (rg.evidence->0->'commercialTerms'->>'distributorSharePct') ~ '^[0-9]+$'
+                 and ((rg.evidence->0->'commercialTerms'->>'rightsOwnerSharePct')::integer
+                   + (rg.evidence->0->'commercialTerms'->>'distributorSharePct')::integer) = 100
+             ) as revenue_shares_ready,
              exists(
                select 1 from bridge_qc_cases q
                where q.title_id=b.id and q.status='PASSED'
@@ -290,7 +328,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
              g.ott_preparation_status, g.packaging_status, g.curation_status, g.delivery_status
       from bridge_titles b
       left join bridge_loop_publications p on p.bridge_title_id = b.id
-      left join loop_titles l on l.id = p.loop_title_id
+      left join loop_titles l on l.bridge_title_id = b.id
+      left join bridge_title_submission_intake si on si.title_id = b.id
       left join bridge_title_gate_certifications g on g.title_id = b.id
       order by b.updated_at desc
       limit 200
@@ -323,10 +362,21 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           r.packaging_status === "COMPLETE" &&
           r.curation_status === "APPROVED" &&
           r.delivery_status === "READY";
+        const loopMetadataReady = Boolean(
+          r.loop_synopsis?.trim() && r.loop_language?.trim() && r.loop_year && r.loop_duration_minutes,
+        );
+        const masterDeliveryReady = Boolean(r.master_asset_ready && r.qc_approved && r.destination_package_ready);
+        const artworkReady = Boolean(r.poster_asset_ready && r.qc_approved);
+        const commercialReady = Boolean(r.consumer_pricing_ready && r.revenue_shares_ready);
         const isReady =
           Boolean(coveringGrant) &&
           legalApproved &&
+          commercialReady &&
           Boolean(r.qc_approved) &&
+          masterDeliveryReady &&
+          artworkReady &&
+          loopMetadataReady &&
+          Boolean(r.playback_path) &&
           gatesReady &&
           [
             "LICENSING_READY",
@@ -343,10 +393,17 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           blockers.push("A matching rights grant and explicit publication dimensions are required");
         if (!r.qc_approved) blockers.push("QC approval for the current master and artwork is required");
         if (!legalApproved) blockers.push("Legal approval must reference the active rights grant");
+        if (!r.consumer_pricing_ready) blockers.push("Super Admin-approved TVOD rental pricing is required");
+        if (!r.revenue_shares_ready) blockers.push("Approved license revenue shares totaling 100% are required");
+        if (!r.destination_package_ready) blockers.push("A certified Crayons Loop destination package is required");
         if (r.ott_preparation_status !== "READY") blockers.push("OTT preparation is not certified READY");
         if (r.packaging_status !== "COMPLETE") blockers.push("Consumer packaging is not certified COMPLETE");
         if (r.curation_status !== "APPROVED") blockers.push("Editorial curation is not APPROVED");
         if (r.delivery_status !== "READY") blockers.push("Final delivery is not certified READY");
+        if (!r.master_asset_ready) blockers.push("Canonical master object, size and storage readiness are not verified");
+        if (!r.poster_asset_ready) blockers.push("Consumer poster object, size and storage readiness are not verified");
+        if (!loopMetadataReady) blockers.push("Loop synopsis, language, year and duration must be complete");
+        if (!r.playback_path) blockers.push("A Loop playback path has not been configured");
         if (
           ![
             "LICENSING_READY",
@@ -369,14 +426,27 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           language: r.language,
           hasMaster: Boolean(r.master_key),
           hasPoster: Boolean(r.poster_key),
+          submittedAt: iso(r.submitted_at),
           ready: isReady,
           blockers,
+          checks: [
+            { key: "identity", label: "Film identity", status: r.id && r.slug && r.name ? "PASS" : "BLOCKED" },
+            { key: "rights", label: "Rights authorization", status: coveringGrant && legalApproved && r.revenue_shares_ready && r.consumer_pricing_ready ? "PASS" : "BLOCKED" },
+            { key: "metadata", label: "Loop metadata", status: loopMetadataReady ? "PASS" : "BLOCKED" },
+            { key: "artwork", label: "Artwork", status: artworkReady ? "PASS" : "BLOCKED" },
+            { key: "master", label: "Master delivery", status: masterDeliveryReady ? "PASS" : "BLOCKED" },
+            { key: "playback", label: "Playback", status: r.playback_path ? "NOT_VERIFIED" : "BLOCKED" },
+            { key: "catalogue", label: "Public catalogue", status: "NOT_VERIFIED" },
+          ],
           publication: r.loop_title_id
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
-                  "PENDING") as DistributionAuthorizationStatus,
+                authorizationStatus: ((r.window_end &&
+                  new Date(r.window_end).getTime() < Date.now() &&
+                  ["AUTHORIZED", "LIVE"].includes(r.authorization_status?.toUpperCase() ?? "")
+                    ? "EXPIRED"
+                    : r.authorization_status?.toUpperCase() || "PENDING") as DistributionAuthorizationStatus),
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
