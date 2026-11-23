@@ -163,7 +163,10 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
     setLoadingId(null);
   }
 
-  const mediaAssets = assets.filter((asset) => asset.verified && (isImage(asset) || isVideo(asset)));\n  const visibleAssets = mediaAssets.filter((asset) => filter === "all" || (filter === "images" ? isImage(asset) : isVideo(asset)));\n  const imageCount = mediaAssets.filter(isImage).length;\n  const videoCount = mediaAssets.filter(isVideo).length;
+  const mediaAssets = assets.filter((asset) => asset.verified && (isImage(asset) || isVideo(asset)));
+  const visibleAssets = mediaAssets.filter((asset) => filter === "all" || (filter === "images" ? isImage(asset) : isVideo(asset)));
+  const imageCount = mediaAssets.filter(isImage).length;
+  const videoCount = mediaAssets.filter(isVideo).length;
 
   if (!mediaAssets.length) {
     return (
