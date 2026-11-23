@@ -409,7 +409,7 @@ export const acceptServiceQuote = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "service.order_create");
+    assertPermission(actor, "service.quote_accept");
 
     const sql = await getSql();
     const result = await sql.transaction(async (tx) => {
