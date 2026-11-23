@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
+import { getTitleOwnerSubmission, saveTitleOwnerSubmission, submitTitleOwnerDetails, withdrawOwnerSubmission } from "@/lib/bridge/title-owner-submissions";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   abortAssetMultipart,
@@ -21,7 +22,6 @@ import {
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
-import { MASTER_LANGUAGES, type MasterLanguage } from "@/lib/bridge/types";
 import {
   OTT_INGEST_SPEC,
   getOttIngestAccept,
@@ -40,13 +40,14 @@ import {
   sessionStorageKey,
 } from "@/lib/bridge/multipart-upload";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
+import { CreatorEvidenceDesk } from "@/components/bridge/creator-evidence-desk";
 
 export const Route = createFileRoute("/title/$id")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
   component: TitlePage,
 });
 
-const WORKSPACE_TABS = ["Overview", "Files", "Production"] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Production", "Submission Details", "Legal Clearance"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -122,6 +123,11 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const reviewQ = useQuery({
     queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
+    enabled: !buyerView,
+  });
+  const ownerSubmissionQ = useQuery({
+    queryKey: ["title-owner-submission", id, actor.userId],
+    queryFn: () => getTitleOwnerSubmission({ data: { titleId: id } }),
     enabled: !buyerView,
   });
   const title = titleQ.data?.title;
@@ -280,19 +286,229 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
         />
+      ) : activeTab === "Submission Details" && !buyerView ? (
+        <OwnerSubmissionPanel
+          titleId={id}
+          title={title}
+          initial={ownerSubmissionQ.data?.submission?.details ?? null}
+          submissionStatus={ownerSubmissionQ.data?.submission?.status ?? "DRAFT"}
+          submissionReason={ownerSubmissionQ.data?.submission?.reason ?? null}
+          loading={ownerSubmissionQ.isPending}
+          error={ownerSubmissionQ.error instanceof Error ? ownerSubmissionQ.error.message : null}
+          canEdit={!actor.internalRole && canOperateOnTitle(actor, title, "title.update_own", "title.license") && ["DRAFT","UPLOADING","PREPARING"].includes(title.status) && ["DRAFT","NEEDS_CORRECTION"].includes(ownerSubmissionQ.data?.submission?.status ?? "DRAFT")}
+          canWithdraw={!actor.internalRole && ["independent_creator","studio"].includes(actor.accountType) && canOperateOnTitle(actor, title, "title.update_own", "title.license")}
+          onSaved={() => ownerSubmissionQ.refetch()}
+        />
       ) : activeTab === "Production" && !buyerView ? (
         <ProductionAssetsPanel
-          titleId={title.id}
-          masterLanguage={title.masterLanguage ?? null}
-          locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)}
           assets={productionAssets}
           loading={productionAssetsQ.isPending}
           error={productionAssetsQ.error instanceof Error ? productionAssetsQ.error.message : null}
+        />
+      ) : activeTab === "Legal Clearance" && !buyerView ? (
+        <CreatorEvidenceDesk
+          ownerType={title.ownerAccountType === "studio" ? "studio" : "independent_creator"}
+          titleId={title.id}
+          titles={[{ id: title.id, name: title.name, status: title.status }]}
         />
       ) : null}
     </div>
   );
 }
+
+type OwnerSubmissionTitle = {
+  status: string;
+  name: string;
+  nameMl: string | null;
+  credits: Array<{ role: string; name: string }>;
+};
+type OwnerSubmissionValues = {
+  originalTitle: string; productionCompany: string; completionDate: string;
+  masterVersion: string; resolution: "SD" | "HD" | "2K" | "4K" | "6K" | "8K" | "OTHER" | ""; codec: string; masterLanguage: string;
+  subtitleLanguages: string[]; rightsBasis: "OWNER" | "EXCLUSIVE_LICENSEE" | "AUTHORIZED_DISTRIBUTOR" | "PRODUCER_AUTHORITY" | ""; territories: string[];
+  rightsLanguages: string[]; media: string[]; rightsStartDate: string;
+  rightsEndDate: string; exclusivity: "EXCLUSIVE" | "NON_EXCLUSIVE"; contactName: string;
+  contactEmail: string; contactPhone: string; credits: Array<{role:"Director"|"Producer"|"Writer"|"Cinematographer"|"Editor"|"Music"|"Cast"|"Other";name:string}>;
+};
+const EMPTY_OWNER_SUBMISSION: OwnerSubmissionValues = {
+  originalTitle:"", productionCompany:"", completionDate:"", masterVersion:"",
+  resolution:"", codec:"", masterLanguage:"Malayalam", subtitleLanguages:[],
+  rightsBasis:"", territories:[], rightsLanguages:["Malayalam"], media:[],
+  rightsStartDate:"", rightsEndDate:"", exclusivity:"NON_EXCLUSIVE",
+  contactName:"", contactEmail:"", contactPhone:"", credits:[]
+};
+
+function OwnerSubmissionPanel(props: {
+  titleId: string; title: OwnerSubmissionTitle; initial: unknown;
+  submissionStatus: string; submissionReason: string | null; loading: boolean; error: string | null;
+  canEdit: boolean; canWithdraw: boolean; onSaved: () => Promise<unknown> | unknown;
+}) {
+  const {titleId,title,initial,submissionStatus,submissionReason,loading,error,canEdit,canWithdraw,onSaved}=props;
+  const [form,setForm]=useState<OwnerSubmissionValues>(()=>({
+    ...EMPTY_OWNER_SUBMISSION,
+    originalTitle:title.nameMl || title.name,
+    credits:title.credits?.map(c=>({role:c.role as OwnerSubmissionValues["credits"][number]["role"],name:c.name})) ?? [],
+    ...(initial && typeof initial==="object" ? initial as Partial<OwnerSubmissionValues> : {})
+  }));
+  useEffect(() => {
+    setForm({
+      ...EMPTY_OWNER_SUBMISSION,
+      originalTitle: title.nameMl || title.name,
+      credits: title.credits?.map(c=>({role:c.role as OwnerSubmissionValues["credits"][number]["role"],name:c.name})) ?? [],
+      ...(initial && typeof initial==="object" ? initial as Partial<OwnerSubmissionValues> : {})
+    });
+  }, [initial, title.name, title.nameMl, title.credits]);
+  const [notice,setNotice]=useState("");
+  const [errorText,setErrorText]=useState("");
+  const save=useMutation({
+    mutationFn:()=>saveTitleOwnerSubmission({data:{titleId,details:form}}),
+    onSuccess:async()=>{setNotice("Owner details saved as draft.");setErrorText("");await onSaved();},
+    onError:(e)=>{setErrorText(e instanceof Error?e.message:"Could not save owner details.");setNotice("");}
+  });
+  const submit=useMutation({
+    mutationFn:()=>submitTitleOwnerDetails({data:{titleId}}),
+    onSuccess:async()=>{setNotice("Owner details submitted. QC and Legal review remain separate.");setErrorText("");await onSaved();},
+    onError:(e)=>{setErrorText(e instanceof Error?e.message:"Could not submit owner details.");setNotice("");}
+  });
+  const [withdrawReason,setWithdrawReason]=useState("");
+  const withdraw=useMutation({
+    mutationFn:()=>withdrawOwnerSubmission({data:{titleId,submissionKind:"finished_film",reason:withdrawReason}}),
+    onSuccess:async()=>{setNotice("Pending submission withdrawn. Its audit history has been retained.");setErrorText("");setWithdrawReason("");await onSaved();},
+    onError:(e)=>{setErrorText(e instanceof Error?e.message:"Could not withdraw submission.");setNotice("");}
+  });
+  const update=(key:keyof OwnerSubmissionValues,value:unknown)=>setForm(old=>({...old,[key]:value}) as OwnerSubmissionValues);
+  const inputClass="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2 text-sm";
+  const textField=(label:string,key:keyof OwnerSubmissionValues,type="text",required=false)=>(
+    <label className="block text-sm">{label}{required?<span className="text-red-600"> *</span>:null}
+      <input className={inputClass} type={type} value={String(form[key]??"")} disabled={!canEdit}
+        onChange={e=>update(key,e.target.value)}/>
+    </label>
+  );
+  const listField=(label:string,key:"territories"|"rightsLanguages"|"media"|"subtitleLanguages",required=false)=>(
+    <label className="block text-sm">{label}{required?<span className="text-red-600"> *</span>:null}
+      <input className={inputClass} value={form[key].join(", ")} disabled={!canEdit}
+        placeholder="Separate items with commas"
+        onChange={e=>update(key,e.target.value.split(",").map(v=>v.trim()).filter(Boolean))}/>
+    </label>
+  );
+  const addCredit=()=>update("credits",[...form.credits,{role:"Cast",name:""}]);
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6 space-y-6">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Owner intake</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Submission Details</h2>
+          <p className="mt-1 text-sm text-muted">Add all required title information before sending the title for QC.</p>
+        </div>
+        <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{submissionStatus}</span>
+      </header>
+      {loading?<p className="text-sm text-muted">Loading saved owner details…</p>:null}
+      {submissionStatus === "NEEDS_CORRECTION" && submissionReason ? <p role="status" className="rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900">Super Admin requested changes: {submissionReason}</p> : null}
+      {submissionStatus === "SUBMITTED" ? <p className="rounded-lg border border-line p-3 text-sm">Submitted / Pending Review. Editing is locked while Super Admin reviews this package.</p> : null}
+      {submissionStatus === "ACCEPTED_INTAKE" ? <p className="rounded-lg border border-line p-3 text-sm">{title.status === "QC_REVIEW" ? "Accepted into intake and queued for Technical QC. QC result, Rights & Legal and publication remain separate gates." : "Accepted into intake. Technical QC queue entry will follow when the title is prepared and its master and artwork are verified."}</p> : null}
+      {error?<p role="alert" className="text-sm text-red-700">{error}</p>:null}
+      <div className="space-y-3">
+        <h3 className="font-semibold">Film identity & production</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {textField("Original / English title","originalTitle","text",true)}
+          {textField("Production house","productionCompany","text",true)}
+          {textField("Completion date","completionDate","date")}
+          {textField("Master language","masterLanguage","text",true)}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="block text-sm">Resolution *
+            <select className={inputClass} value={form.resolution} disabled={!canEdit} onChange={e=>update("resolution",e.target.value)}>
+              <option value="">Select</option>{["SD","HD","2K","4K","6K","8K","OTHER"].map(v=><option key={v}>{v}</option>)}
+            </select>
+          </label>
+          {textField("Master version","masterVersion","text",true)}
+          {textField("Codec","codec","text",true)}
+        </div>
+        {listField("Subtitle languages","subtitleLanguages")}
+      </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between"><h3 className="font-semibold">Credits & cast</h3>
+          <button type="button" disabled={!canEdit} onClick={addCredit} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Add credit</button>
+        </div>
+        {form.credits.map((credit,index)=>(
+          <div key={index} className="grid gap-2 sm:grid-cols-[180px_1fr_auto]">
+            <select className={inputClass} value={credit.role} disabled={!canEdit}
+              onChange={e=>update("credits",form.credits.map((c,i)=>i===index?{...c,role:e.target.value}:c))}>
+              {["Director","Producer","Writer","Cinematographer","Editor","Music","Cast","Other"].map(v=><option key={v}>{v}</option>)}
+            </select>
+            <input className={inputClass} value={credit.name} disabled={!canEdit} placeholder="Name"
+              onChange={e=>update("credits",form.credits.map((c,i)=>i===index?{...c,name:e.target.value}:c))}/>
+            <button type="button" disabled={!canEdit} onClick={()=>update("credits",form.credits.filter((_,i)=>i!==index))}
+              className="rounded-full border border-line px-3 py-1 text-xs">Remove</button>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-3">
+        <h3 className="font-semibold">Rights information — owner declaration</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm">Rights basis *
+            <select className={inputClass} value={form.rightsBasis} disabled={!canEdit} onChange={e=>update("rightsBasis",e.target.value)}>
+              <option value="">Select</option>
+              {["OWNER","EXCLUSIVE_LICENSEE","AUTHORIZED_DISTRIBUTOR","PRODUCER_AUTHORITY"].map(v=><option key={v} value={v}>{v.replaceAll("_"," ")}</option>)}
+            </select>
+          </label>
+          <label className="block text-sm">Exclusivity
+            <select className={inputClass} value={form.exclusivity} disabled={!canEdit} onChange={e=>update("exclusivity",e.target.value)}>
+              <option value="NON_EXCLUSIVE">Non-exclusive</option><option value="EXCLUSIVE">Exclusive</option>
+            </select>
+          </label>
+          {textField("Rights start date","rightsStartDate","date",true)}
+          {textField("Rights end date","rightsEndDate","date",true)}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {listField("Territories","territories",true)}
+          {listField("Rights languages","rightsLanguages",true)}
+          {listField("Media (OTT, TV, Theatrical, etc.)","media",true)}
+        </div>
+        <p className="text-xs text-muted">These are the owner’s declarations only. They do not approve rights, grant a licence or authorize publication.</p>
+      </div>
+      <div className="space-y-3">
+        <h3 className="font-semibold">Authorized contact</h3>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {textField("Contact name","contactName","text",true)}
+          {textField("Email","contactEmail","email",true)}
+          {textField("Phone","contactPhone","tel",true)}
+        </div>
+      </div>
+      {errorText?<p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{errorText}</p>:null}
+      {notice?<p role="status" className="rounded-lg border border-line p-3 text-sm">{notice}</p>:null}
+      <div className="flex flex-wrap gap-3">
+        <button type="button" disabled={!canEdit||save.isPending||loading} onClick={()=>save.mutate()}
+          className="rounded-full border border-line-strong px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
+          {save.isPending?"Saving…":"Save draft"}
+        </button>
+        <button type="button" disabled={!canEdit||submit.isPending||save.isPending||loading} onClick={()=>submit.mutate()}
+          className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50">
+          {submit.isPending?"Submitting…":submissionStatus === "NEEDS_CORRECTION" ? "Resubmit to Super Admin" : "Submit to Super Admin"}
+        </button>
+      </div>
+
+      {canWithdraw && submissionStatus === "SUBMITTED" ? (
+        <div className="rounded-xl border border-line p-4 space-y-3">
+          <div>
+            <h3 className="font-semibold">Withdraw pending submission</h3>
+            <p className="mt-1 text-xs text-muted">Only a pending submission can be withdrawn. Its audit history is retained; no hard deletion occurs.</p>
+          </div>
+          <label className="block text-sm">Withdrawal reason
+            <textarea value={withdrawReason} onChange={e=>setWithdrawReason(e.target.value)} minLength={3} maxLength={2000} required rows={3}
+              className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2"
+              placeholder="Enter a reason (3–2000 characters)" />
+          </label>
+          <button type="button" disabled={withdraw.isPending||loading||withdrawReason.trim().length<3} onClick={()=>withdraw.mutate()}
+            className="rounded-full border border-line-strong px-5 py-2.5 text-sm font-semibold disabled:opacity-50">
+            {withdraw.isPending ? "Withdrawing…" : "Withdraw Submission"}
+          </button>
+        </div>
+      ) : null}
+      {!canEdit?<p className="text-xs text-muted">Editing is locked after QC review begins. QC, Legal and publication remain separate gates.</p>:null}
+    </section>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-elevated/40 p-4">
@@ -320,27 +536,14 @@ type ProductionAssetView = {
 };
 
 function ProductionAssetsPanel({
-  titleId,
-  masterLanguage,
-  locked,
   assets,
   loading,
   error,
 }: {
-  titleId: string;
-  masterLanguage: MasterLanguage | null;
-  locked: boolean;
   assets: ProductionAssetView[];
   loading: boolean;
   error: string | null;
 }) {
-  const qc = useQueryClient();
-  const saveLanguage = useMutation({
-    mutationFn: (nextLanguage: MasterLanguage | null) => updateTitle({ data: { id: titleId, masterLanguage: nextLanguage } }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["bridge-title", titleId] });
-    },
-  });
   const videos = assets.filter((asset) => asset.category === "raw_video");
   const artwork = assets.filter((asset) => asset.category === "stills");
   const documents = assets.filter((asset) => asset.category === "documents");
@@ -356,26 +559,6 @@ function ProductionAssetsPanel({
         <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
           {assets.length} linked
         </span>
-      </div>
-      <div className="mt-5 max-w-md rounded-xl border border-line bg-elevated/30 p-4">
-        <label className="block text-sm font-semibold" htmlFor="bridge-master-language">Master language</label>
-        <select
-          id="bridge-master-language"
-          value={masterLanguage ?? ""}
-          disabled={locked || saveLanguage.isPending}
-          onChange={(event) => saveLanguage.mutate(event.target.value === "" ? null : event.target.value as MasterLanguage)}
-          className="mt-2 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
-        >
-          <option value="">Select master language</option>
-          {MASTER_LANGUAGES.map((item) => (
-            <option key={item} value={item}>{item}</option>
-          ))}
-        </select>
-        <p className="mt-2 text-xs text-muted">
-          Applies to the master language for this title. It does not change or move any stored files.
-          {locked ? " Editing is locked for this title status." : ""}
-          {saveLanguage.isError ? ` ${saveLanguage.error instanceof Error ? saveLanguage.error.message : "Could not save language."}` : ""}
-        </p>
       </div>
       {error ? <p role="alert" className="mt-4 text-sm text-red-600">Production assets unavailable: {error}</p> : null}
       {loading ? <p className="mt-4 text-sm text-muted">Loading Production register…</p> : null}

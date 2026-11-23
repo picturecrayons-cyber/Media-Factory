@@ -3,9 +3,11 @@
 - Source: Supabase Production `supabase_migrations.schema_migrations`.
 - Project ref: `mlmgugivsyoxzdgwkbpu`.
 - Snapshot date: 2026-11-18.
-- Recorded remote migrations restored to active `supabase/migrations/`: **70**.
-- SQL bytes: **144632**.
-- Every active SQL file now preserves the exact stored statement text joined with LF, including all trailing spaces and newline characters. No trailing-whitespace normalization is performed. SHA-256 values are calculated from the same exact stored statement text.
+- Historical Production migrations restored to active `supabase/migrations/`: **70**.
+- Additional post-snapshot Production rollout migration: **1** (`20261123015009_bridge_owner_submission_production_rollout.sql`).
+- Total Production replay migrations: **71**.
+- SQL bytes: **159668**.
+- The 70 historical SQL files preserve the exact stored statement text joined with LF, including trailing spaces and newline characters. The additional Production rollout migration is authored separately and has its own exact byte-count/SHA-256 manifest entry.
 - The additive `bridge_master_language` migration (version `20261118123335`) was applied to canonical Production project `mlmgugivsyoxzdgwkbpu`. Read-back confirmed the column exists; all 42 existing title rows retain `master_language = NULL`. No `language` values, title rows, asset rows, or OCI objects were changed.
 - The local replay temporarily removes the active migrations directory while `supabase start` bootstraps managed services, then restores it for the script's controlled one-by-one replay. The script asserts that the local Supabase migration ledger is still empty before applying the 70 files itself.
 - Production catalog read-back confirms RLS is enabled on every `public.bridge_%` table. Four core client-readable tables also have explicit `authenticated` SELECT-only identity/owner policies: `bridge_profiles_self_select`, `bridge_titles_owner_or_buyer_select`, `bridge_identity_links_self_select`, and `bridge_buyer_title_access_self_select`. Because the 70 SQL statements do not fully capture this current baseline, the local replay reconstructs the verified RLS/GRANT/policy state after the 69 migrations. It enables RLS on all local `public.bridge_%` tables and asserts that none remain unprotected, and verifies that each core policy is restricted to `authenticated`, binds to `auth.uid()`, and enforces the correct self/owner/buyer relation. These statements execute only against the disposable local CI database; they do not change Production.
@@ -88,6 +90,7 @@
 | 20261115165233 | bridge_production_owner_helper_revoke_anon | 155 | `d4a980b33b895324231304f17fbaf912043d5659c6cf43e78421a00ed568a71e` |
 | 20261116090923 | bridge_title_owner_helper_search_path_hardening_20261116 | 824 | `486eba102805b78a28a4509466eecab3f2557cb4093dac20d619f51c6a946fba` |
 | 20261118123335 | bridge_master_language | 459 | `3a22cd57e41d7b0cbf0a40489c9b448981a9540bec672b0be34768213fc6b53c` |
+| 20261123015009 | bridge_owner_submission_production_rollout | 15036 | `a290637b540db3dcd9891db5895f33ef996032c845023a16dd4abc89f7ea121a` |
 
 ## Previously committed files
 
@@ -123,7 +126,7 @@ Seven files did not match a Production ledger statement and remain archived for 
 - The archive folder is outside Supabase CLI's default migration directory; archived SQL is not auto-run.
 - `20261113090535_map_verified_streamvista_studio_owner_20261113` requires exactly one verified, unmapped Studio profile. A clean environment must provide that fixture before replay, or handle this one-time Production mapping separately.
 - After merge, compare local and remote versions using `supabase migration list` and validate a complete replay on a disposable/staging database before any `db push` or `migration repair`.
-- No Production schema, migration ledger, title, asset, payment, entitlement, mail row, or OCI object was modified.
+- The historical reconciliation did not modify Production. The separate post-snapshot rollout migration was applied after Testing validation; it adds lifecycle schema only. No title, asset, rights, payment, entitlement, mail, or OCI data rows were changed.
 
 ## Verified pre-ledger baseline fixtures used only for local replay
 

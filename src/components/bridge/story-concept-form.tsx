@@ -21,7 +21,9 @@ const GENRES = [
 ];
 
 const PLATFORMS = [
-  "OTT",
+  "OTT Original — Commissioning / Development",
+  "OTT Acquisition — Finished Film",
+  "OTT Catalogue / Library Acquisition",
   "Theatrical",
   "Broadcast",
   "Festival",
@@ -161,7 +163,7 @@ export function StoryConceptForm() {
       </div>
 
       <div className="sm:col-span-2">
-        <p className="text-sm font-medium">Target platforms / outcome</p>
+        <p className="text-sm font-medium">Target buyer / platform pathway</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {PLATFORMS.map((p) => (
             <label key={p} className="rounded-full border border-line px-3 py-1.5 text-sm">
@@ -207,7 +209,7 @@ export function StoryConceptForm() {
 
       <div className="sm:col-span-2">
         <Button type="submit" disabled={mut.isPending} className="w-full rounded-full sm:w-auto sm:px-8">
-          {mut.isPending ? "Submitting…" : "Submit to Network"}
+          {mut.isPending ? "Submitting…" : "Submit for Admin Review"}
         </Button>
       </div>
     </form>

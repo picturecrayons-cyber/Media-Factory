@@ -19,9 +19,9 @@ type TestDb = {
   transaction<T>(fn: (tx: Pick<TestDb, "query">) => Promise<T>): Promise<T>;
   close(): Promise<void>;
 };
-async function testDatabase(): Promise<{ db: TestDb; schema: string }> {
+async function testDatabase(): Promise<{ db: TestDb; schema: string; external: boolean }> {
   const binding = process.env.BRIDGE_WORKFLOW_TEST_DATABASE_URL;
-  if (!binding) return { db: new PGlite(), schema: "public" };
+  if (!binding) return { db: new PGlite(), schema: "public", external: false };
   // Static credentials for the disposable CI service only. Never use production bindings.
   const expected = "postgres://workflow_test:workflow_test@127.0.0.1:5432/bridge_workflow_test";
   if (binding !== expected || process.env.CI !== "true")
@@ -68,12 +68,22 @@ async function testDatabase(): Promise<{ db: TestDb; schema: string }> {
       }
     },
   };
-  return { db, schema };
+  return { db, schema, external: true };
 }
 async function fixture() {
-  const { db, schema } = await testDatabase();
+  const { db, schema, external } = await testDatabase();
   try {
-    await db.exec(`create table bridge_titles(
+    if (external) {
+      await db.exec(`do $$ begin
+        if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
+        if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
+        if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
+      end $$;`);
+    } else {
+      await db.exec("create role anon; create role authenticated; create role service_role;");
+    }
+    await db.exec(`    create table bridge_profiles(user_id text primary key);
+    create table bridge_titles(
       id text primary key,
       owner_user_id text,
       owner_account_type text not null default 'independent_creator',
@@ -83,7 +93,7 @@ async function fixture() {
       poster_key text,
       updated_at timestamptz
     );
-    create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint);
+    create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint,storage_business_state text default 'ACTIVE',restore_state text default 'READY');
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
     create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);`);
     await db.exec(
@@ -92,12 +102,34 @@ async function fixture() {
         "utf8",
       ).replaceAll("public.", `${schema}.`),
     );
-    await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
+    await db.exec(
+      readFileSync(
+        new URL("../../../migrations/0025_bridge_rights_grants_submitted_status.sql", import.meta.url),
+        "utf8",
+      ).replaceAll("public.", `${schema}.`),
+    );
+    await db.exec(
+      readFileSync(
+        new URL("../../../migrations/0026_bridge_creator_document_vault.sql", import.meta.url),
+        "utf8",
+      ).replaceAll("public.", `${schema}.`),
+    );
+    await db.exec(`insert into bridge_profiles(user_id) values ('owner'),('legal'),('qc');
+    insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
       values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
-    insert into bridge_assets values
+    insert into bridge_assets (id,title_id,kind,s3_key,byte_size) values
       ('master','title-123','master','sealed/master',100),
       ('legacy-poster','title-123','poster','older/unreferenced-poster',100),
-      ('poster-vertical','title-123','poster_vertical','sealed/poster',100);`);
+      ('poster-vertical','title-123','poster_vertical','sealed/poster',100);
+    insert into bridge_creator_documents
+      (id,owner_user_id,owner_account_type,document_type,file_name,content_type,byte_size,storage_key,status,created_by,verified_at)
+    values
+      ('ownership-doc','owner','independent_creator','OWNERSHIP_CHAIN_OF_TITLE','ownership.pdf','application/pdf',100,'sealed/ownership.pdf','VERIFIED','owner',now()),
+      ('distribution-doc','owner','independent_creator','DISTRIBUTION_AGREEMENT','distribution.pdf','application/pdf',100,'sealed/distribution.pdf','VERIFIED','owner',now());
+    insert into bridge_title_document_links(id,title_id,document_id,evidence_type,linked_by)
+    values
+      ('ownership-link','title-123','ownership-doc','OWNERSHIP_CHAIN_OF_TITLE','owner'),
+      ('distribution-link','title-123','distribution-doc','DISTRIBUTION_AGREEMENT','owner');`);
     function adapter(query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>) {
       const sql = (async (strings: TemplateStringsArray, ...params: unknown[]) => {
         let text = strings[0];
@@ -125,6 +157,7 @@ async function fixture() {
       "./rbac": rbac,
       "./asset-roles": assetRoles,
       "./titles": {},
+      "./sublicensing": {},
     "./env": {bridgeEnv:{}},
       "./workflow-policy": policy,
     };
@@ -160,12 +193,12 @@ const license = {
   territories: ["WORLDWIDE"],
   languages: ["Malayalam"],
   windowStart: "2026-01-01T00:00:00.000Z",
-  windowEnd: "2099-01-01T00:00:00.000Z",
+  windowEnd: "2031-01-01T00:00:00.000Z",
   exclusivity: "NON_EXCLUSIVE",
   agreementReference: "agreement-123",
   ownershipReference: "ownership-123",
-  rightsOwnerSharePct: 80,
-  distributorSharePct: 20,
+  rightsOwnerSharePct: 50,
+  distributorSharePct: 50,
 };
 
 test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
@@ -204,6 +237,29 @@ test("real SQL services persist QC, independently approved license, lifecycle an
     await f.db.close();
   }
 });
+test("Legal approval is blocked until verified ownership and distribution documents are linked", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    await f.sql.query("delete from bridge_title_document_links where title_id='title-123'");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123",
+        stage: "LEGAL",
+        decision: "APPROVE",
+        note: "Legal evidence must be independently checked",
+        grantId: saved.grantId,
+      })),
+      /Verified ownership \/ chain-of-title document is required/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+    assert.equal((await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status, "SUBMITTED");
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("unauthorized review and unverified current assets cannot clear QC", async () => {
   const f = await fixture();
   try {
@@ -271,6 +327,37 @@ test("an audit failure rolls back review records and lifecycle", async () => {
     await f.db.close();
   }
 });
+test("Creator submissions enforce the five-year term and default 50:50 split", async () => {
+  const f = await fixture();
+  try {
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, { ...license, windowEnd: "2032-01-01T00:00:00.000Z" })),
+      /default five-year Bridge term/,
+    );
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, { ...license, rightsOwnerSharePct: 60, distributorSharePct: 40 })),
+      /default revenue split is 50:50/,
+    );
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    assert.ok(saved.grantId);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("Super Admin may set an approved non-default revenue split", async () => {
+  const f = await fixture();
+  try {
+    const superAdmin = { ...owner, userId: "root", internalRole: "super_admin" as const };
+    const saved = await f.sql.transaction((tx) =>
+      f.save(tx, superAdmin, { ...license, rightsOwnerSharePct: 60, distributorSharePct: 40 }),
+    ) as { grantId: string };
+    assert.ok(saved.grantId);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("license constraints reject unsupported territory, bad window and invalid share totals", () => {
   assert.equal(policy.loopLicenseInput.safeParse(license).success, true);
   for (const data of [
@@ -325,7 +412,7 @@ test("license author cannot approve their own agreement", async () => {
     );
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
-      "DRAFT",
+      "SUBMITTED",
     );
   } finally {
     await f.db.close();
@@ -341,7 +428,7 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
       values ('qc-submit-title','owner','PREPARING','sealed/qc-master','sealed/qc-poster',now())
     `);
     await f.sql.query(`
-      insert into bridge_assets values
+      insert into bridge_assets (id,title_id,kind,s3_key,byte_size) values
         ('qc-master','qc-submit-title','master','sealed/qc-master',4096),
         ('qc-old-poster','qc-submit-title','poster','older/unreferenced-poster',512),
         ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster',1024)

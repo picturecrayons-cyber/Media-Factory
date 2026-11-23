@@ -37,7 +37,19 @@ export async function saveLoopLicense(
     )
   )
     throw new Error("Forbidden");
-  if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
+  const windowStart = new Date(data.windowStart);
+  const windowEnd = new Date(data.windowEnd);
+  if (windowEnd <= new Date()) throw new Error("License window has expired");
+  if (actor.internalRole !== "super_admin") {
+    const maximumEnd = new Date(windowStart);
+    maximumEnd.setUTCFullYear(maximumEnd.getUTCFullYear() + 5);
+    if (Math.abs(windowEnd.getTime() - maximumEnd.getTime()) > 60_000) {
+      throw new Error("Creator/Studio submissions use the default five-year Bridge term; only Super Admin may change the period.");
+    }
+    if (data.rightsOwnerSharePct !== 50 || data.distributorSharePct !== 50) {
+      throw new Error("The default revenue split is 50:50. Only Super Admin may approve a different split.");
+    }
+  }
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
     (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
     values (${data.titleId},'DISTRIBUTION',${JSON.stringify(data.territories)}::jsonb,${JSON.stringify(data.languages)}::jsonb,
@@ -51,8 +63,8 @@ export async function saveLoopLicense(
             distributorSharePct: data.distributorSharePct,
           },
         },
-      ])}::jsonb,'DRAFT',${actor.userId}) returning id`;
-  await audit(tx, actor.userId, data.titleId, "license.loop_draft", { grantId: grant.id });
+      ])}::jsonb,'SUBMITTED',${actor.userId}) returning id`;
+  await audit(tx, actor.userId, data.titleId, "license.loop_submitted", { grantId: grant.id });
   return { grantId: grant.id };
 }
 
@@ -85,9 +97,10 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
   if (title.status !== expected) throw new Error(`Title must be in ${expected}`);
   if (data.stage === "QC") {
     const assets = await tx<{
+      id: string;
       kind: string;
       s3_key: string;
-    }>`select kind,s3_key from bridge_assets where title_id=${data.titleId} and byte_size>0`;
+    }>`select id,kind,s3_key from bridge_assets where title_id=${data.titleId} and coalesce(byte_size,0)>0 and storage_business_state='ACTIVE' and restore_state='READY'`;
     if (
       data.decision === "APPROVE" &&
       !hasVerifiedMasterAndArtwork(assets, title.master_key, title.poster_key)
@@ -103,11 +116,26 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       window_end: string;
       created_by: string;
     }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
-    if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
+    if (!grant || !["SUBMITTED", "DRAFT"].includes(grant.status)) throw new Error("Submitted license is unavailable");
     if (grant.created_by === actor.userId)
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
+    if (data.decision === "APPROVE") {
+      const evidence = await tx<{ document_type: string }>`
+        select distinct d.document_type
+        from bridge_title_document_links l
+        join bridge_creator_documents d on d.id=l.document_id
+        where l.title_id=${data.titleId} and d.status='VERIFIED'
+      `;
+      const types = new Set(evidence.map((item) => item.document_type));
+      if (!types.has("OWNERSHIP_CHAIN_OF_TITLE")) {
+        throw new Error("Verified ownership / chain-of-title document is required before Legal approval");
+      }
+      if (!types.has("FINISHED_FILM_AGREEMENT") && !types.has("DISTRIBUTION_AGREEMENT")) {
+        throw new Error("Verified finished-film or distribution agreement is required before Legal approval");
+      }
+    }
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
       ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
@@ -210,11 +238,18 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
       order_id: string | null;
     }>`
       select distinct on(e.razorpay_payment_id) e.razorpay_payment_id as payment_id,coalesce((e.payload->>'purchased_at')::timestamptz,t.purchased_at,e.processed_at,e.received_at) as purchased_at,
-        coalesce(e.payload->>'amount',e.payload#>>'{payment,amount}',e.payload#>>'{payload,payment,entity,amount}') as amount_text,
+        coalesce(e.payload->>'amount_paise',e.payload->>'amount',e.payload#>>'{payment,amount}',e.payload#>>'{payload,payment,entity,amount}') as amount_text,
         coalesce(e.payload->>'currency',e.payload#>>'{payment,currency}',e.payload#>>'{payload,payment,entity,currency}') as currency,
         coalesce(e.payload->>'order_id',e.payload->>'razorpay_order_id',e.payload#>>'{payload,payment,entity,order_id}') as order_id
-      from loop_payment_events e left join loop_user_tvod_entitlements t on t.payment_transaction_id=e.razorpay_payment_id
-      join loop_titles l on l.id::text=coalesce(e.payload->>'title_id',t.title_id::text)
+      from (
+        select event_id,event_name,razorpay_payment_id,status,payload,received_at,processed_at,null::text as loop_title_id
+        from loop_payment_events
+        union all
+        select event_id,event_name,razorpay_payment_id,status,payload,received_at,processed_at,loop_title_id
+        from loop_tvod_payment_events
+      ) e
+      left join loop_user_tvod_entitlements t on t.payment_transaction_id=e.razorpay_payment_id
+      join loop_titles l on l.id::text=coalesce(e.payload->>'title_id',e.loop_title_id,t.title_id::text)
       where l.bridge_title_id=${data.titleId} and e.status in ('captured','processed') and e.razorpay_payment_id is not null
       order by e.razorpay_payment_id,e.received_at desc limit 200`;
     const receipts = rows.map((r) => ({
@@ -372,3 +407,6 @@ export const recordSettlementEvidence = createServerFn({ method: "POST" })
       return { status: "EXTERNAL_EVIDENCE_UNVERIFIED" as const };
     });
   });
+
+
+// Expose the Bridge-only decision commands through the existing workflow module.

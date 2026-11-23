@@ -1,10 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
+import { distributionMandateSchema, isDestinationCovered, isMediaCovered, canSublicenseWithinMandate } from "./distribution-mandate";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
-import type { AccountType, MasterLanguage, TitleStatus } from "./types";
-import { MASTER_LANGUAGES, TITLE_STATUSES, type BridgeTitle } from "./types";
+import type { AccountType, TitleStatus } from "./types";
+import { TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
 import { assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition } from "./rbac";
 import { requireVerifiedActor } from "./session";
@@ -25,7 +26,6 @@ type TitleRow = {
   status: string;
   synopsis: string;
   language: string;
-  master_language?: MasterLanguage | null;
   year: number | null;
   runtime_minutes: number | null;
   licensing_fee_paise: number;
@@ -56,7 +56,6 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     status: r.status as TitleStatus,
     synopsis: r.synopsis,
     language: r.language,
-    masterLanguage: r.master_language ?? null,
     year: r.year,
     runtimeMinutes: r.runtime_minutes,
     licensingFeePaise: Number(r.licensing_fee_paise ?? 0),
@@ -86,9 +85,9 @@ async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
 
 async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   if (!(await hasTitleMergeColumn(sql))) {
-    return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
+    return sql<TitleRow>`select * from bridge_titles where archived_at is null order by updated_at desc limit 200`;
   }
-  return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
+  return sql<TitleRow>`select * from bridge_titles where archived_at is null and merged_into_title_id is null order by updated_at desc limit 200`;
 }
 
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
@@ -96,13 +95,13 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
   if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
+      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and archived_at is null and merged_into_title_id is null order by updated_at desc limit 200`
+      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and archived_at is null order by updated_at desc limit 200`;
   }
   return mergeColumnAvailable
     ? sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.merged_into_title_id is null
+        where t.archived_at is null and t.merged_into_title_id is null
           and (
             t.owner_user_id = ${userId}
             or (
@@ -116,11 +115,12 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
               )
             )
           )
+        )
         order by t.updated_at desc limit 200
       `
     : sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
+        where t.archived_at is null and (t.owner_user_id = ${userId}
           or (
             t.owner_account_type = 'studio'
             and t.owner_organization_id = ${orgId}
@@ -148,7 +148,7 @@ export async function loadTitle(id: string): Promise<BridgeTitle | null> {
   const sql = await getSql();
   const rows = await sql<TitleRow>`
     select t.* from bridge_titles t
-    where t.id = ${id}
+    where t.id = ${id} and t.archived_at is null
     limit 1
   `;
   return rows[0] ? mapTitle(rows[0]) : null;
@@ -172,6 +172,39 @@ export async function recordTransition(
     insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
     values (${opts.titleId}, ${opts.from}, ${opts.to}, ${opts.actorUserId}, ${opts.note ?? null})
   `;
+}
+
+async function assertAccountMandateScope(
+  sql: Sql,
+  actor: { userId: string; accountType: string; internalRole?: string | null },
+  destinations: readonly string[],
+  media: readonly string[],
+  sublicensingRequested: boolean,
+) {
+  if (actor.internalRole || actor.accountType === "buyer") return;
+  if (actor.accountType !== "independent_creator" && actor.accountType !== "studio") {
+    throw new Error("This account cannot submit rights-holder distribution requests.");
+  }
+  const rows = await sql<{ status: string; scope: unknown }>`
+    select status, scope
+    from bridge_creator_distribution_mandates
+    where creator_user_id = ${actor.userId}
+    limit 1
+  `;
+  const row = rows[0];
+  if (!row || row.status !== "ACTIVE") {
+    throw new Error("An active Creator Distribution Mandate is required before submitting a title.");
+  }
+  const scope = distributionMandateSchema.parse(row.scope);
+  if (!isDestinationCovered(scope, destinations)) {
+    throw new Error("The requested distribution destination is outside your account mandate.");
+  }
+  if (!isMediaCovered(scope, media)) {
+    throw new Error("The requested media type is outside your account mandate.");
+  }
+  if (sublicensingRequested && !canSublicenseWithinMandate(scope, true)) {
+    throw new Error("Sublicensing is not authorized by the account mandate.");
+  }
 }
 
 export const createTitle = createServerFn({ method: "POST" })
@@ -232,6 +265,18 @@ export const createTitle = createServerFn({ method: "POST" })
         !data.intendedDestinations?.length
       ) {
         throw new Error("Complete the rights package and authorization evidence details before submitting.");
+      }
+      if (data.sublicensingAllowed === true) {
+        throw new Error("Sublicensing cannot be granted during title submission. A separate Bridge Super Admin decision is required after independent Legal approval and verified agreement evidence.");
+      }
+      if (!actor.internalRole) {
+        await assertAccountMandateScope(
+          sql,
+          actor,
+          data.intendedDestinations!,
+          data.media!,
+          false,
+        );
       }
       const windowStart = new Date(data.windowStart);
       const windowEnd = new Date(data.windowEnd);
@@ -294,7 +339,7 @@ export const createTitle = createServerFn({ method: "POST" })
             ${rightsPackage.windowStart}, ${rightsPackage.windowEnd},
             ${data.exclusivity ?? "NON_EXCLUSIVE"},
             ${JSON.stringify(data.holdbacks ?? [])}::jsonb,
-            ${data.sublicensingAllowed ?? false}, ${data.promotionalRights ?? false},
+            ${false}, ${data.promotionalRights ?? false},
             '[]'::jsonb, ${evidence}::jsonb, 'DRAFT', ${actor.userId}
           )
         `;
@@ -330,6 +375,49 @@ export const createTitle = createServerFn({ method: "POST" })
     const title = await loadTitle(id);
     if (!title) throw new Error("Title create failed");
     return { title, submission: isPublicSubmission };
+  });
+
+/**
+ * Owner dashboard data source. Unlike the internal catalogue list, this
+ * endpoint always returns only the authenticated Creator's own titles or
+ * the Studio titles belonging to the actor's active organization.
+ * A Super Admin whose profile is also the Creator owner may access only
+ * their own Creator-owned titles through this endpoint.
+ */
+export const listTitleOwnerTitles = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const creatorOwnerAdmin =
+      actor.internalRole === "super_admin" && actor.accountType === "independent_creator";
+    if (actor.internalRole && !creatorOwnerAdmin) throw new Error("Owner dashboard access denied");
+    if (!["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Creator or Studio account required");
+    }
+    if (actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("Active Studio organization scope is unavailable");
+    }
+    const sql = await getSql();
+    const rows = await listOwned(
+      sql,
+      actor.userId,
+      actor.accountType === "studio" ? actor.organizationId : null,
+    );
+    const ownerScopedRows = rows.filter((row) =>
+      row.owner_account_type === actor.accountType &&
+      (actor.accountType !== "studio" || row.owner_organization_id === actor.organizationId),
+    );
+    return {
+      titles: ownerScopedRows.flatMap((row) => {
+        try {
+          return [mapTitle(row)];
+        } catch (error) {
+          console.error("[bridge] skipped unreadable owner title", row?.id, error);
+          return [];
+        }
+      }),
+    };
   });
 
 export const listTitles = createServerFn({ method: "GET" })
@@ -429,7 +517,6 @@ export const updateTitle = createServerFn({ method: "POST" })
       nameMl: z.string().max(160).optional(),
       synopsis: z.string().max(4000).optional(),
       language: z.string().min(2).max(40).optional(),
-      masterLanguage: z.enum(MASTER_LANGUAGES).nullable().optional(),
       year: z.number().int().min(1895).max(2100).nullable().optional(),
       runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
       licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
@@ -459,7 +546,6 @@ export const updateTitle = createServerFn({ method: "POST" })
         name_ml = ${data.nameMl ?? title.nameMl},
         synopsis = ${data.synopsis ?? title.synopsis},
         language = ${data.language ?? title.language},
-        master_language = ${data.masterLanguage === undefined ? title.masterLanguage ?? null : data.masterLanguage},
         year = ${data.year === undefined ? title.year : data.year},
         runtime_minutes = ${data.runtimeMinutes === undefined ? title.runtimeMinutes : data.runtimeMinutes},
         licensing_fee_paise = ${data.licensingFeePaise ?? title.licensingFeePaise},
@@ -676,4 +762,133 @@ export const listAuditLogs = createServerFn({ method: "GET" })
         createdAt: asIso(r.created_at),
       })),
     };
+  });
+
+
+export const archiveDraftTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8), reason: z.string().trim().min(3).max(2000) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    await sql.transaction(async (tx) => {
+      const rows = await tx<{ id:string; slug:string; status:string; owner_user_id:string; owner_account_type:string; owner_organization_id:string|null; archived_at:string|Date|null; master_key:string|null; poster_key:string|null }>`
+        select id,slug,status,owner_user_id,owner_account_type,owner_organization_id,archived_at,master_key,poster_key
+        from bridge_titles where id=${data.titleId} for update
+      `;
+      const title=rows[0];
+      if(!title) throw new Error("Title not found");
+      if(["jananam-1947-pranayam-thudarunnu","jananam-1947-pranayam-thudarunnu-7"].includes(title.slug)) throw new Error("Protected title cannot be archived");
+      if(title.status!=="DRAFT" || title.archived_at) throw new Error("Only an active DRAFT can be archived");
+      if (!actor.emailVerified) throw new Error("Email verification required");
+      if (actor.internalRole && actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
+      if(actor.internalRole!=="super_admin") {
+        if(actor.internalRole || !["independent_creator","studio"].includes(actor.accountType)) throw new Error("Owner or Super Admin access required");
+        const direct=title.owner_user_id===actor.userId;
+        const studio=title.owner_account_type==="studio" && title.owner_organization_id===actor.organizationId;
+        if(!direct && !studio) throw new Error("You cannot archive another owner's title");
+        if(studio) {
+          const membership=await tx<{active:boolean}>`
+            select exists(select 1 from bridge_organization_memberships
+              where organization_id=${title.owner_organization_id} and user_id=${actor.userId} and status='active') as active
+          `;
+          if(!membership[0]?.active) throw new Error("Active Studio membership required");
+        }
+      }
+      if(title.master_key || title.poster_key) throw new Error("Archive blocked: master or poster asset exists");
+      const dependency=await tx<{blockers:string[]}>`select public.bridge_title_archive_dependency_blockers(${title.id}) as blockers`;
+      const blockers=dependency[0]?.blockers ?? ["dependency inventory unavailable"];
+      if(blockers.length) throw new Error("Archive blocked by linked records or incomplete schema: "+blockers.join(", "));
+      const reason=data.reason.trim();
+      await tx`
+        update bridge_titles set archived_at=now(),archived_by=${actor.userId},
+          archive_reason=${reason},previous_status=status,updated_at=now()
+        where id=${title.id} and status='DRAFT' and archived_at is null
+      `;
+      await tx`
+        insert into bridge_title_archive_events(title_id,action,actor_user_id,actor_role,organization_id,previous_state,new_state,reason)
+        values(${title.id},'ARCHIVED',${actor.userId},${actor.internalRole ?? actor.accountType},
+          ${actor.organizationId ?? null},'{"status":"DRAFT","archived":false}'::jsonb,
+          ${JSON.stringify({status:"DRAFT",archived:true,reason})}::jsonb,${reason})
+      `;
+      await writeAudit({actorUserId:actor.userId,action:"title.archive",entityType:"bridge_title",entityId:title.id,metadata:{previousStatus:"DRAFT",reason,reversible:true}},tx);
+    });
+    return {archived:true as const};
+  });
+
+export const restoreArchivedDraftTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8), reason: z.string().trim().min(3).max(2000) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    const sql=await getSql();
+    await sql.transaction(async(tx)=>{
+      const rows=await tx<{id:string;slug:string;status:string;previous_status:string|null;owner_user_id:string;owner_account_type:string;owner_organization_id:string|null;archived_at:string|Date|null;master_key:string|null;poster_key:string|null}>`
+        select id,slug,status,previous_status,owner_user_id,owner_account_type,owner_organization_id,archived_at,master_key,poster_key
+        from bridge_titles where id=${data.titleId} for update
+      `;
+      const title=rows[0];
+      if(!title || !title.archived_at) throw new Error("Archived title not found");
+      if(["jananam-1947-pranayam-thudarunnu","jananam-1947-pranayam-thudarunnu-7"].includes(title.slug)) throw new Error("Protected title cannot be restored");
+      if(title.status!=="DRAFT" || title.previous_status!=="DRAFT") throw new Error("Only an archived DRAFT can be restored");
+      if(actor.internalRole!=="super_admin") {
+        if(actor.internalRole || !["independent_creator","studio"].includes(actor.accountType)) throw new Error("Owner or Super Admin access required");
+        const direct=title.owner_user_id===actor.userId;
+        const studio=title.owner_account_type==="studio" && title.owner_organization_id===actor.organizationId;
+        if(!direct && !studio) throw new Error("You cannot restore another owner's title");
+        if(studio) {
+          const membership=await tx<{active:boolean}>`
+            select exists(select 1 from bridge_organization_memberships
+              where organization_id=${title.owner_organization_id} and user_id=${actor.userId} and status='active') as active
+          `;
+          if(!membership[0]?.active) throw new Error("Active Studio membership required");
+        }
+      }
+      if(title.master_key || title.poster_key) throw new Error("Restore blocked: master or poster asset exists");
+      const dependency=await tx<{blockers:string[]}>`select public.bridge_title_archive_dependency_blockers(${title.id}) as blockers`;
+      const blockers=dependency[0]?.blockers ?? ["dependency inventory unavailable"];
+      if(blockers.length) throw new Error("Restore blocked by linked records or incomplete schema: "+blockers.join(", "));
+      const reason=data.reason.trim();
+      await tx`
+        update bridge_titles set archived_at=null,archived_by=null,archive_reason=null,
+          status=previous_status,previous_status=null,updated_at=now()
+        where id=${title.id} and archived_at is not null and previous_status='DRAFT'
+      `;
+      await tx`
+        insert into bridge_title_archive_events(title_id,action,actor_user_id,actor_role,organization_id,previous_state,new_state,reason)
+        values(${title.id},'RESTORED',${actor.userId},${actor.internalRole ?? actor.accountType},
+          ${actor.organizationId ?? null},'{"status":"DRAFT","archived":true}'::jsonb,
+          '{"status":"DRAFT","archived":false}'::jsonb,${reason})
+      `;
+      await writeAudit({actorUserId:actor.userId,action:"title.restore",entityType:"bridge_title",entityId:title.id,metadata:{previousStatus:"DRAFT",reason,reversible:true}},tx);
+    });
+    return {restored:true as const};
+  });
+
+export const listArchivedDraftTitles = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    const sql=await getSql();
+    if(actor.internalRole==="super_admin") {
+      const rows=await sql<{id:string;name:string;archived_at:string|Date;archive_reason:string|null}>`
+        select id,name,archived_at,archive_reason from bridge_titles
+        where archived_at is not null order by archived_at desc limit 200
+      `;
+      return {titles:rows};
+    }
+    if(actor.internalRole || !["independent_creator","studio"].includes(actor.accountType)) throw new Error("Owner access required");
+    const rows=await sql<{id:string;name:string;archived_at:string|Date;archive_reason:string|null}>`
+      select id,name,archived_at,archive_reason from bridge_titles t
+      where t.archived_at is not null and (
+        t.owner_user_id=${actor.userId}
+        or (t.owner_account_type='studio' and t.owner_organization_id=${actor.organizationId}
+          and exists(select 1 from bridge_organization_memberships m
+            where m.organization_id=t.owner_organization_id and m.user_id=${actor.userId} and m.status='active'))
+      ) order by archived_at desc limit 200
+    `;
+    return {titles:rows};
   });

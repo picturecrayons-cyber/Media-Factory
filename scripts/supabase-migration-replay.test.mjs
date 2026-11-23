@@ -8,6 +8,18 @@ const replayScript = fileURLToPath(
   new URL("./supabase-migration-replay.mjs", import.meta.url),
 );
 const replaySource = readFileSync(replayScript, "utf8");
+const archiveMigration = readFileSync(
+  new URL("../supabase/migrations/20261122180000_bridge_archive_fail_closed_contract.sql", import.meta.url),
+  "utf8",
+);
+const productionRolloutMigration = readFileSync(
+  new URL("../supabase/migrations/20261123015009_bridge_owner_submission_production_rollout.sql", import.meta.url),
+  "utf8",
+);
+const ownerSubmissionBaseline = readFileSync(
+  new URL("./fixtures/bridge-title-owner-submissions-pre-ledger.sql", import.meta.url),
+  "utf8",
+);
 
 test("local replay restores Production Bridge RLS on every public Bridge table", () => {
   assert.match(replaySource, /substring\(c\.relname from 1 for 7\) = 'bridge_'/);
@@ -60,3 +72,47 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
 }
+
+
+test("Testing candidate migrations are explicitly excluded from the immutable Production ledger replay", () => {
+  assert.match(replaySource, /const EXPECTED_PRODUCTION_MIGRATIONS = 71;/);
+  for (const name of ["20261122100000_bridge_title_owner_submissions.sql","20261122125255_owner_submission_lifecycle_20261122.sql","20261122141000_reversible_archive_owner_submission_repair_20261122.sql","20261122150000_bridge_delivery_jobs_testing_reconciliation.sql","20261122153000_bridge_delivery_jobs_no_cascade_hardening_20261122.sql","20261122180000_bridge_archive_fail_closed_contract.sql","20261123210000_bridge_owner_submission_status_constraints_repair.sql"]) {
+    assert.ok(replaySource.includes(name), `missing explicit non-Production classification: ${name}`);
+    assert.ok(replaySource.includes(`Declared Testing candidate migration is missing: ${name}` ) === false);
+  }
+  const nonProductionBlock = replaySource.match(/const NON_PRODUCTION_MIGRATIONS = new Set\(\[([\s\S]*?)\]\);/)?.[1] ?? "";
+  assert.ok(!nonProductionBlock.includes("20261123015009_bridge_owner_submission_production_rollout.sql"), "post-snapshot rollout must remain in the Production replay set");
+  assert.match(replaySource, /const names = allNames\.filter/);
+  assert.match(replaySource, /manifestRows.size !== EXPECTED_PRODUCTION_MIGRATIONS/);
+});
+
+
+test("local replay restores the verified pre-ledger owner-submission table before rollout", () => {
+  assert.match(replaySource, /restored verified pre-ledger owner-submission table baseline locally/);
+  assert.match(replaySource, /20261123015009_bridge_owner_submission_production_rollout\.sql/);
+  assert.match(ownerSubmissionBaseline, /create table if not exists public\.bridge_title_owner_submissions/);
+  assert.match(ownerSubmissionBaseline, /revoke all on table public\.bridge_title_owner_submissions from anon,authenticated/);
+});
+
+test("Production owner-submission rollout is additive and does not rewrite title rows", () => {
+  assert.match(productionRolloutMigration, /add column if not exists owner_submission_status/);
+  assert.match(productionRolloutMigration, /create table if not exists public\.bridge_owner_submission_events/);
+  assert.match(productionRolloutMigration, /create table if not exists public\.bridge_title_archive_events/);
+  assert.doesNotMatch(productionRolloutMigration, /\b(update|delete)\s+public\.bridge_titles\b/i);
+});
+
+test("archive dependency scan validates required columns before dynamic SQL", () => {
+  assert.match(archiveMigration, /information_schema\.columns/);
+  assert.match(archiveMigration, /bridge_delivery_jobs','title_id/);
+  assert.match(archiveMigration, /bridge_loop_publications','bridge_title_id/);
+  assert.match(archiveMigration, /bridge_title_events','from_status/);
+  assert.match(archiveMigration, /:missing/);
+  assert.match(archiveMigration, /if cardinality\(blockers\) > 0 then\s+return blockers;/);
+});
+
+
+test("archive migration replaces the weaker lifecycle constraint with DRAFT-only state", () => {
+  assert.match(archiveMigration, /drop constraint if exists bridge_titles_archive_state_check/);
+  assert.match(archiveMigration, /previous_status = 'DRAFT'/);
+  assert.match(archiveMigration, /\) not valid;/);
+});
