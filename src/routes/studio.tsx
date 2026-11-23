@@ -5,6 +5,9 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
+import { ProductsServicesCatalogue } from "@/components/bridge/products-services-catalogue";
+import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 import { listMyOwnerSubmissionStatuses } from "@/lib/bridge/owner-submission-intake";
@@ -46,6 +49,21 @@ function Studio() {
             </section>
 
             <StudioOwnerSubmissionStatus />
+
+            <section id="studio-artwork" className="space-y-3">
+              <div>
+                <h3 className="font-display text-xl font-semibold">Verified artwork gallery</h3>
+                <p className="mt-1 text-sm text-muted">Only verified image assets from the server-authorized Studio catalogue are previewed.</p>
+              </div>
+              <TitleAssetGallery userId={actor.userId} scopeLabel="Studio" />
+            </section>
+
+            <section id="studio-services" className="space-y-3">
+              <h3 className="font-display text-xl font-semibold">Products & Services</h3>
+              <ProductsServicesCatalogue audience="Studio" />
+            </section>
+
+            <CreatorDocumentVault userId={actor.userId} />
 
             <section className="space-y-4">
               <div>
