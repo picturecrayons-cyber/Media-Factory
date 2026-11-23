@@ -223,8 +223,8 @@ export const decideBridgeOwnerSubmission = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (!actor.internalRole || !["admin", "super_admin"].includes(actor.internalRole)) {
-      throw new Error("Only Bridge Admin or Super Admin can decide owner submissions");
+    if (actor.internalRole !== "super_admin") {
+      throw new Error("Only the verified Super Admin can decide owner submissions");
     }
     const reason = data.reason?.trim() ?? "";
     if (data.decision === "REQUEST_CORRECTIONS" && !reason) {
