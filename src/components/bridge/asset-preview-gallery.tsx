@@ -5,9 +5,11 @@ import { previewUrlFor } from "@/lib/bridge/preview-url";
 type PreviewAsset = {
   id: string;
   kind: string;
+  key?: string | null;
   contentType: string | null;
   byteSize: number | null;
   verified: boolean;
+  duplicateRecords?: number;
 };
 
 function isVideo(asset: PreviewAsset) {
@@ -26,6 +28,28 @@ function prettySize(bytes: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function uniqueVerifiedMedia(assets: PreviewAsset[]) {
+  const seen = new Map<string, PreviewAsset>();
+  const result: PreviewAsset[] = [];
+  for (const asset of assets) {
+    if (!asset.verified || (!isImage(asset) && !isVideo(asset))) continue;
+    // Only collapse records when the exact stored object key is identical.
+    // Same-kind or same-size files may be legitimate versions and stay visible.
+    const identity = asset.key ? `${asset.kind}: ${asset.key}` : null;
+    if (!identity) {
+      result.push(asset);
+      continue;
+    }
+    const existing = seen.get(identity);
+    if (existing) {
+      existing.duplicateRecords = (existing.duplicateRecords ?? 1) + 1;
+      continue;
+    }
+    seen.set(identity, asset);
+    result.push(asset);
+  }
+  return result;
+}
 
 export function AssetPosterSlot({ assets }: { assets: PreviewAsset[] }) {
   const poster = assets.find((asset) =>
@@ -97,7 +121,7 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
     setLoadingId(null);
   }
 
-  const mediaAssets = assets.filter((asset) => asset.verified && (isImage(asset) || isVideo(asset)));
+  const mediaAssets = uniqueVerifiedMedia(assets);
 
   if (!mediaAssets.length) {
     return (
@@ -138,6 +162,9 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
                 <div className="p-4">
                   <p className="text-sm font-semibold capitalize">{asset.kind.replaceAll("_", " ")}</p>
                   <p className="mt-1 text-xs text-muted">{prettySize(asset.byteSize)} · Storage verified</p>
+                  {asset.duplicateRecords && asset.duplicateRecords > 1 ? (
+                    <p className="mt-1 text-xs text-muted">{asset.duplicateRecords} asset records point to this same stored object; no records were deleted.</p>
+                  ) : null}
                 </div>
               </button>
             </article>
