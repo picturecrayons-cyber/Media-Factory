@@ -18,6 +18,11 @@ import { Route as AdminUsersRouteImport } from './routes/admin/users'
 import { Route as AdminCmsRouteImport } from './routes/admin-cms'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as BuyerRouteImport } from './routes/buyer'
+import { Route as BuyersRouteImport } from './routes/buyers'
+import { Route as CreatorsRouteImport } from './routes/creators'
+import { Route as DmcaRouteImport } from './routes/dmca'
+import { Route as InvestorsRouteImport } from './routes/investors'
+import { Route as StudiosRouteImport } from './routes/studios'
 import { Route as CmsRouteImport } from './routes/cms'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CreatorRouteImport } from './routes/creator'
@@ -51,6 +56,12 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BuyersRoute = BuyersRouteImport.update({ id: '/buyers', path: '/buyers', getParentRoute: () => rootRouteImport } as any)
+const CreatorsRoute = CreatorsRouteImport.update({ id: '/creators', path: '/creators', getParentRoute: () => rootRouteImport } as any)
+const DmcaRoute = DmcaRouteImport.update({ id: '/dmca', path: '/dmca', getParentRoute: () => rootRouteImport } as any)
+const InvestorsRoute = InvestorsRouteImport.update({ id: '/investors', path: '/investors', getParentRoute: () => rootRouteImport } as any)
+const StudiosRoute = StudiosRouteImport.update({ id: '/studios', path: '/studios', getParentRoute: () => rootRouteImport } as any)
+
 const AccountRoute = AccountRouteImport.update({
   id: '/account',
   path: '/account',
@@ -230,6 +241,11 @@ const ApiRazorpayWebhookRoute = ApiRazorpayWebhookRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/buyers': typeof BuyersRoute
+  '/creators': typeof CreatorsRoute
+  '/dmca': typeof DmcaRoute
+  '/investors': typeof InvestorsRoute
+  '/studios': typeof StudiosRoute
   '/admin': typeof AdminRouteWithChildren
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
@@ -485,6 +501,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/buyers': { id: '/buyers'; path: '/buyers'; fullPath: '/buyers'; preLoaderRoute: typeof BuyersRouteImport; parentRoute: typeof rootRouteImport }
+    '/creators': { id: '/creators'; path: '/creators'; fullPath: '/creators'; preLoaderRoute: typeof CreatorsRouteImport; parentRoute: typeof rootRouteImport }
+    '/dmca': { id: '/dmca'; path: '/dmca'; fullPath: '/dmca'; preLoaderRoute: typeof DmcaRouteImport; parentRoute: typeof rootRouteImport }
+    '/investors': { id: '/investors'; path: '/investors'; fullPath: '/investors'; preLoaderRoute: typeof InvestorsRouteImport; parentRoute: typeof rootRouteImport }
+    '/studios': { id: '/studios'; path: '/studios'; fullPath: '/studios'; preLoaderRoute: typeof StudiosRouteImport; parentRoute: typeof rootRouteImport }
     '/account': {
       id: '/account'
       path: '/account'
@@ -750,6 +771,11 @@ const AdminRouteChildren: AdminRouteChildren = {
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
+  BuyersRoute: BuyersRoute,
+  CreatorsRoute: CreatorsRoute,
+  DmcaRoute: DmcaRoute,
+  InvestorsRoute: InvestorsRoute,
+  StudiosRoute: StudiosRoute,
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
   AdminRoute: AdminRouteWithChildren,
