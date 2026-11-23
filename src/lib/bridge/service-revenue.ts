@@ -1049,12 +1049,20 @@ export const recordServiceActualCost = createServerFn({ method: "POST" })
     assertPermission(actor, "finance.configure");
 
     const sql = await getSql();
-    const orderRows = await sql.query<{ id: string; title_id: string }>(
-      "select id,title_id from public.bridge_service_orders where id=$1 limit 1",
+    const orderRows = await sql.query<{ id: string; title_id: string; status: string }>(
+      "select id,title_id,status from public.bridge_service_orders where id=$1 limit 1",
       [data.orderId],
     );
     const order = orderRows[0];
     if (!order) throw new Error("Service order not found");
+    if (order.status === "PAYMENT_PENDING") throw new Error("Actual costs can only be recorded after verified payment.");
+    const receiptUrl = data.evidence.receiptUrl;
+    if (receiptUrl !== undefined) {
+      if (typeof receiptUrl !== "string") throw new Error("Receipt evidence must be an HTTPS URL.");
+      let parsedReceipt: URL;
+      try { parsedReceipt = new URL(receiptUrl); } catch { throw new Error("Receipt evidence must be an HTTPS URL."); }
+      if (parsedReceipt.protocol !== "https:") throw new Error("Receipt evidence must use HTTPS.");
+    }
 
     const costKey = "cost:" + data.idempotencyKey;
     const result = await sql.transaction(async (tx) => {
