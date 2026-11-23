@@ -45,10 +45,11 @@ function Studio() {
               <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
             </section>
 
+            <StudioOwnerSubmissionStatus />
+
             <section className="space-y-4">
               <div>
-                <StudioOwnerSubmissionStatus />
-              <h3 className="font-display text-xl font-semibold">Add a studio title</h3>
+                <h3 className="font-display text-xl font-semibold">Add a studio title</h3>
                 <p className="mt-1 text-sm text-muted">Finished films and story concepts remain separate. A title upload does not bypass QC, rights or licensing approvals.</p>
               </div>
               <NewSubmissionPanel />
