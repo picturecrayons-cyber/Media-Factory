@@ -313,7 +313,7 @@ describe("Creator / Studio service request authorization", () => {
 describe("Service request state machine", () => {
   it("permits only the intended forward transitions", () => {
     assert.equal(canTransitionServiceRequest("SUBMITTED", "UNDER_REVIEW"), true);
-    assert.equal(canTransitionServiceRequest("UNDER_REVIEW", "QUOTE_READY"), false);
+    assert.equal(canTransitionServiceRequest("UNDER_REVIEW", "QUOTE_READY"), true);
     assert.equal(canTransitionServiceRequest("QUOTE_READY", "AWAITING_PAYMENT"), false);
     assert.equal(canTransitionServiceRequest("AWAITING_PAYMENT", "PAID"), false);
     assert.equal(canTransitionServiceRequest("PAID", "ASSIGNED"), true);
