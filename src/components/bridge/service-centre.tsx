@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listTitles } from "@/lib/bridge/titles";
+import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import {
   createBridgeServiceRequest,
   listMyBridgeServiceRequests,
@@ -210,6 +211,12 @@ export function ServiceCentre({ audience, userId }: { audience: Audience; userId
         <h3 className="font-semibold">Products & Services</h3>
         <p className="mt-1 text-sm text-muted">Production & DIT, post-production, QC, rights support, distribution, localization, accessibility, finishing, marketing and media protection. Availability and prices are confirmed only in a Super Admin quote.</p>
       </section>
+
+      <details className="rounded-xl border border-line p-4">
+        <summary className="cursor-pointer font-semibold">Secure service attachments · upload & verify</summary>
+        <p className="mt-2 text-sm text-muted">Upload supporting PDFs to the existing private Document Vault, where Bridge verifies the stored object. Only verified documents can be attached to a service request. This does not grant rights approval.</p>
+        <div className="mt-3"><CreatorDocumentVault userId={userId} /></div>
+      </details>
 
       <section id="service-request-a-service" className="scroll-mt-24 rounded-xl border border-line p-4">
         <h3 className="font-semibold">Request a Service</h3>
