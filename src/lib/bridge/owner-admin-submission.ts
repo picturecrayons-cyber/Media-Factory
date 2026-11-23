@@ -259,7 +259,7 @@ export const listBridgeAdminOwnerSubmissions = createServerFn({ method: "GET" })
       join bridge_titles t on t.id = s.title_id
       left join bridge_profiles p on p.user_id = s.owner_user_id
       left join bridge_organizations o on o.id = s.owner_organization_id
-      where s.submission_status = 'SUBMITTED'
+      where s.submission_status = 'SUBMITTED' and t.status = 'PREPARING'
       order by s.submitted_at asc nulls last
       limit 200
     `;
