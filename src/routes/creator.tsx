@@ -8,6 +8,7 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 import { ProductsServicesCatalogue } from "@/components/bridge/products-services-catalogue";
+import { ServiceCentre } from "@/components/bridge/service-centre";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import { listTitles } from "@/lib/bridge/titles";
 import { listMyOwnerSubmissionStatuses } from "@/lib/bridge/owner-submission-intake";
@@ -162,6 +163,7 @@ function CreatorDashboard({
       <section id="creator-services" className="scroll-mt-20 space-y-3">
         <h2 className="font-display text-2xl font-semibold">Products & Services</h2>
         <ProductsServicesCatalogue audience="Creator" />
+      <ServiceCentre audience="Creator" userId={actor.userId} />
       </section>
 
       <CreatorDocumentVault userId={actor.userId} />
