@@ -82,13 +82,13 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
         l.content_type, l.language, l.year, l.duration_minutes, l.poster_path,
         l.backdrop_path, l.playback_path, l.maturity_rating, l.genres,
         l.access_tier, l.tvod_rental_price, l.tvod_purchase_price, l.featured,
-        l.published,
+        l.is_published as published,
         p.authorization_status, p.window_start, p.window_end
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
       where p.authorization_status = 'authorized'
-        and l.published = true
-        and l.listed = true
+        and l.is_published = true
+        and l.is_listed = true
         and l.status = 'approved'
         and (p.window_start is null or p.window_start <= now())
         and (p.window_end is null or p.window_end >= now())
