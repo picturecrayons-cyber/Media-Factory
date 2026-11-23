@@ -626,7 +626,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
       if (intake[0]?.submission_status !== "SUBMITTED") {
         throw new Error("Submit to Bridge Admin and complete Admin intake before sending this title to QC");
       }
-      return submitTitleForQc(sql, title, actor.userId, data.note);
+      return submitTitleForQc(sql, title, actor.userId, data.note, true);
     }
     return sql.transaction(async (tx) => {
       const [locked] = await tx<{
