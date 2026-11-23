@@ -46,6 +46,8 @@ export type BridgeTitle = {
   /** Canonical organization UUID used for Studio authorization. */
   ownerOrganizationId?: string | null;
   status: TitleStatus;
+  /** Distinguishes story/concept records from finished-film intake. */
+  submissionType?: string | null;
   synopsis: string;
   language: string;
   year: number | null;
