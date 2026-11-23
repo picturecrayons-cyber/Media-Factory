@@ -18,7 +18,7 @@ export type ServiceRequestStatus = (typeof SERVICE_REQUEST_STATUSES)[number];
 
 const TRANSITIONS: Record<ServiceRequestStatus, readonly ServiceRequestStatus[]> = {
   SUBMITTED: ["UNDER_REVIEW", "CANCELLED"],
-  UNDER_REVIEW: ["CANCELLED"],
+  UNDER_REVIEW: ["QUOTE_READY", "CANCELLED"],
   QUOTE_READY: ["CANCELLED"],
   AWAITING_PAYMENT: ["CANCELLED"],
   PAID: ["ASSIGNED"],
