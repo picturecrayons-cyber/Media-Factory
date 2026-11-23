@@ -144,6 +144,10 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     refetchInterval: 60_000,
   });
   const assets = assetsQ.data?.assets ?? [];
+  const qcAssetsReady = Boolean(
+    assets.some((asset) => asset.kind === "master" && asset.verified && asset.canonical) &&
+    assets.some((asset) => (asset.kind === "poster" || asset.kind === "poster_vertical") && asset.verified && asset.canonical)
+  );
   const productionAssets = productionAssetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
   const activeTab: WorkspaceTab = buyerView
@@ -247,7 +251,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 {title.status === "PREPARING" ? (
                   <button
                     type="button"
-                    disabled={submitQcMutation.isPending}
+                    disabled={submitQcMutation.isPending || !qcAssetsReady}
                     onClick={() => submitQcMutation.mutate()}
                     className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-[#041018] disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -262,7 +266,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
               </p>
             ) : null}
             {title.status === "PREPARING" && !qcReady ? (
-              <p className="mt-3 text-xs text-muted">Submit becomes available when the required master and artwork are storage-verified. QC review is a separate decision.</p>
+              <p className="mt-3 text-xs text-muted">QC submission is blocked until the master and artwork are storage-verified and match the canonical title references. Open Files to see the exact blocker and use Re-verify / Reconcile when offered. QC review remains a separate decision.</p>
             ) : null}
           </div>
         </div>
