@@ -455,6 +455,15 @@ try {
         );
       }
 
+      if (name === "20261123015009_bridge_owner_submission_production_rollout.sql") {
+        const ownerSubmissionBaselineSql = readFileSync(
+          new URL("./fixtures/bridge-title-owner-submissions-pre-ledger.sql", import.meta.url),
+          "utf8",
+        );
+        await client.query(ownerSubmissionBaselineSql);
+        console.log("[migration-replay] restored verified pre-ledger owner-submission table baseline locally; no Production rows copied");
+      }
+
       await client.query(sql);
       await client.query("COMMIT");
     } catch (error) {
