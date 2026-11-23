@@ -97,6 +97,7 @@ function TitlePage() {
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [chosenTab, setChosenTab] = useState<WorkspaceTab | null>(null);
   const buyerView = actor.accountType === "buyer" && !actor.internalRole;
+  const qc = useQueryClient();
 
   const titleQ = useQuery({
     // The same title has a redacted Buyer DTO and a full internal DTO.
