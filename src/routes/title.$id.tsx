@@ -40,13 +40,14 @@ import {
   sessionStorageKey,
 } from "@/lib/bridge/multipart-upload";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
+import { CreatorEvidenceDesk } from "@/components/bridge/creator-evidence-desk";
 
 export const Route = createFileRoute("/title/$id")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
   component: TitlePage,
 });
 
-const WORKSPACE_TABS = ["Overview", "Files", "Production", "Submission Details"] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Production", "Submission Details", "Legal Clearance"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -303,6 +304,12 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           assets={productionAssets}
           loading={productionAssetsQ.isPending}
           error={productionAssetsQ.error instanceof Error ? productionAssetsQ.error.message : null}
+        />
+      ) : activeTab === "Legal Clearance" && !buyerView ? (
+        <CreatorEvidenceDesk
+          ownerType={title.ownerAccountType === "studio" ? "studio" : "independent_creator"}
+          titleId={title.id}
+          titles={[{ id: title.id, name: title.name, status: title.status }]}
         />
       ) : null}
     </div>
