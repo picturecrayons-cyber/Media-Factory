@@ -192,7 +192,7 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
 
       notificationEventId = eventId;
       const creatorEmailRows = await tx<{ email: string | null }>`
-        select email from bridge_profiles where user_id = ${row.owner_user_id} limit 1
+        select email from bridge_profiles where user_id = ${actor.userId} limit 1
       `;
       const creatorEmail = creatorEmailRows[0]?.email?.trim();
       const creatorEventKey = `owner-submission:${eventId}:creator`;
