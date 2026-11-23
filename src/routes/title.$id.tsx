@@ -237,13 +237,13 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                       onClick={() => ownerSubmitMut.mutate()}
                       className="rounded-full border border-line-strong px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {ownerSubmitMut.isPending ? "Submitting…" : ownerSubmitMut.isSuccess ? "Submitted to Bridge Admin" : "Submit to Bridge Admin"}
+                      {ownerSubmitMut.isPending ? "Submitting…" : ownerSubmitMut.isSuccess ? "Submitted to Bridge" : "Submit to Bridge"}
                     </button>
                     {ownerIntakeQ.isPending ? <span className="text-xs text-muted">Checking canonical master and artwork verification…</span> : null}
                     {ownerIntakeQ.data?.blockers?.length ? <span className="max-w-xl text-xs text-muted">{ownerIntakeQ.data.blockers.join(" · ")}</span> : null}
                     {ownerIntakeQ.isError ? <span role="alert" className="text-xs text-accent">Readiness could not be verified. Submission remains blocked.</span> : null}
                     {ownerSubmitMut.isError ? <span role="alert" className="text-xs text-accent">{ownerSubmitMut.error instanceof Error ? ownerSubmitMut.error.message : "Submission failed."}</span> : null}
-                    {ownerSubmitMut.isSuccess ? <span className="text-xs text-muted">Admin intake recorded. Title remains PREPARING; QC is a separate action.</span> : null}
+                    {ownerSubmitMut.isSuccess ? <span className="text-xs text-muted">Bridge intake recorded. Title remains PREPARING; QC is a separate action.</span> : null}
                   </div>
                 ) : null}
                 
