@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 import { TitleFinanceWorkspace } from "@/components/bridge/title-finance-workspace";
+import { decideBridgeOwnerSubmission, listBridgeAdminOwnerSubmissionQueue } from "@/lib/bridge/owner-submission-intake";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -36,6 +38,22 @@ function AdminControlPlane() {
 }
 
 function AdminBody({ actor }: { actor: any }) {
+  const queryClient = useQueryClient();
+  const [correctionReasons, setCorrectionReasons] = useState<Record<string, string>>({});
+  const submissionsQ = useQuery({
+    queryKey: ["bridge-owner-submission-queue"],
+    queryFn: () => listBridgeAdminOwnerSubmissionQueue(),
+    enabled: actor.internalRole === "super_admin",
+    refetchInterval: 30_000,
+  });
+  const submissionDecision = useMutation({
+    mutationFn: (input: { titleId: string; decision: "ACCEPT" | "REQUEST_CORRECTIONS"; reason?: string }) =>
+      decideBridgeOwnerSubmission({ data: input }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["bridge-owner-submission-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["bridge-audit"] });
+    },
+  });
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
@@ -56,6 +74,64 @@ function AdminBody({ actor }: { actor: any }) {
     <BridgeShell actor={actor} title="Admin dashboard">
       <div className="space-y-5">
         {actor.internalRole === "super_admin" ? <TitleFinanceWorkspace actor={actor} /> : null}
+        {actor.internalRole === "super_admin" ? (
+          <section aria-label="New submissions" className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-accent">Super Admin only</p>
+                <h2 className="font-display text-xl font-semibold">New Submissions</h2>
+                <p className="mt-1 text-sm text-muted">Owner intake decisions only. Acceptance does not approve QC, Rights, Legal, Licensing or Marketplace publication.</p>
+              </div>
+              <span className="rounded-full border border-line px-3 py-1 text-xs">{submissionsQ.data?.submissions.length ?? "—"} pending</span>
+            </div>
+            {submissionsQ.isPending ? <p className="py-4 text-sm text-muted">Loading new submissions…</p> : null}
+            {submissionsQ.isError ? <p role="alert" className="py-4 text-sm text-red-600">Submission queue unavailable: {submissionsQ.error.message}</p> : null}
+            <div className="mt-3 divide-y divide-line">
+              {(submissionsQ.data?.submissions ?? []).map((submission) => (
+                <article key={submission.title_id} className="space-y-3 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold">{submission.title_name}</h3>
+                      <p className="mt-1 text-xs text-muted">{submission.owner_display_name ?? submission.owner_email ?? submission.owner_user_id} · {submission.owner_organization_name ?? "Independent Creator"}</p>
+                      <p className="mt-1 text-xs text-muted">Submitted {submission.submitted_at ? new Date(submission.submitted_at).toLocaleString() : "date unavailable"} · {submission.submission_status}</p>
+                    </div>
+                    <Link to="/title/$id" params={{ id: submission.title_id }} className="text-sm font-semibold text-accent hover:underline">Open title →</Link>
+                  </div>
+                  <label className="block text-xs font-medium text-muted">
+                    Correction note (required only when requesting corrections)
+                    <textarea
+                      value={correctionReasons[submission.title_id] ?? ""}
+                      onChange={(event) => setCorrectionReasons((current) => ({ ...current, [submission.title_id]: event.target.value }))}
+                      maxLength={2000}
+                      rows={2}
+                      className="mt-1 w-full rounded-lg border border-line-strong bg-elevated p-2 text-sm text-fg"
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      disabled={submissionDecision.isPending}
+                      onClick={() => submissionDecision.mutate({ titleId: submission.title_id, decision: "ACCEPT" })}
+                    >Accept intake</Button>
+                    <Button
+                      variant="outline"
+                      disabled={submissionDecision.isPending || (correctionReasons[submission.title_id] ?? "").trim().length < 1}
+                      onClick={() => submissionDecision.mutate({
+                        titleId: submission.title_id,
+                        decision: "REQUEST_CORRECTIONS",
+                        reason: correctionReasons[submission.title_id].trim(),
+                      })}
+                    >Request corrections</Button>
+                  </div>
+                </article>
+              ))}
+              {!submissionsQ.isPending && !submissionsQ.isError && !(submissionsQ.data?.submissions ?? []).length ? (
+                <p className="py-5 text-sm text-muted">No new owner submissions are waiting for intake review.</p>
+              ) : null}
+            </div>
+            {submissionDecision.isError ? <p role="alert" className="mt-3 text-sm text-red-600">{submissionDecision.error.message}</p> : null}
+            {submissionDecision.isSuccess ? <p role="status" className="mt-3 text-sm text-muted">Intake decision recorded. QC and rights workflows remain separate.</p> : null}
+          </section>
+        ) : null}
         <section className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-accent">Crayons Pictures · Operations</p>
