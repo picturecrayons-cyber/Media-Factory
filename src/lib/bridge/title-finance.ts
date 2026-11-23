@@ -12,7 +12,7 @@ const httpsUrl = z.string().url().refine((value) => new URL(value).protocol === 
 const receiptInput = z.object({
   titleId: z.string().min(8),
   rightsGrantId: z.string().uuid(),
-  buyerUserId: z.string().min(1).max(200).nullable().optional(),
+  buyerUserId: z.string().min(1).max(200),
   contractReference: z.string().min(2).max(200),
   paymentReference: z.string().min(3).max(200),
   grossAmountPaise: z.number().int().positive(),
@@ -111,8 +111,8 @@ export const recordLicensingReceipt = createServerFn({ method: "POST" })
     if (data.grossAmountPaise < data.taxAmountPaise + data.deductionAmountPaise) throw new Error("Tax and deductions cannot exceed gross receipt.");
     const sql = await getSql();
     const eligible = await sql.query<{ id: string }>(
-      "select t.id from public.bridge_titles t join public.bridge_rights_grants g on g.id=$2 and g.title_id=t.id where t.id=$1 and t.status in ('LICENSED','DELIVERED') and g.status='VALID' and g.window_start<=now() and g.window_end>now() limit 1",
-      [data.titleId, data.rightsGrantId],
+      "select t.id from public.bridge_titles t join public.bridge_rights_grants g on g.id=$2 and g.title_id=t.id join public.bridge_profiles bp on bp.user_id=$3 and bp.account_type='buyer' join public.bridge_buyer_title_access a on a.title_id=t.id and a.buyer_user_id=$3 and a.revoked_at is null and (a.expires_at is null or a.expires_at>now()) where t.id=$1 and t.status in ('LICENSED','DELIVERED') and g.status='VALID' and g.window_start<=now() and g.window_end>now() limit 1",
+      [data.titleId, data.rightsGrantId, data.buyerUserId],
     );
     if (!eligible[0]) throw new Error("A currently valid rights grant and LICENSED/DELIVERED title are required.");
     const inserted = await sql.query<{ id: string }>(
