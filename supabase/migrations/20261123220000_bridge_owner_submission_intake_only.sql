@@ -63,3 +63,58 @@ drop trigger if exists bridge_owner_submission_events_immutable on public.bridge
 create trigger bridge_owner_submission_events_immutable
 before update or delete on public.bridge_owner_submission_events
 for each row execute function public.bridge_reject_owner_submission_event_mutation();
+
+
+-- Extend the intake state machine for Admin decisions. This migration is source-only;
+-- applying it to STAGING or PRODUCTION requires a separate database approval.
+do $migration$
+declare
+  constraint_row record;
+begin
+  for constraint_row in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.bridge_title_owner_submissions'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%submission_status%'
+  loop
+    execute format(
+      'alter table public.bridge_title_owner_submissions drop constraint %I',
+      constraint_row.conname
+    );
+  end loop;
+
+  for constraint_row in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.bridge_owner_submission_events'::regclass
+      and contype = 'c'
+      and (
+        pg_get_constraintdef(oid) ilike '%action%'
+        or pg_get_constraintdef(oid) ilike '%from_status%'
+        or pg_get_constraintdef(oid) ilike '%to_status%'
+      )
+  loop
+    execute format(
+      'alter table public.bridge_owner_submission_events drop constraint %I',
+      constraint_row.conname
+    );
+  end loop;
+end;
+$migration$;
+
+alter table public.bridge_title_owner_submissions
+  add constraint bridge_title_owner_submissions_status_lifecycle_check
+  check (submission_status in ('DRAFT', 'SUBMITTED', 'NEEDS_CORRECTION', 'ACCEPTED'));
+
+alter table public.bridge_owner_submission_events
+  add constraint bridge_owner_submission_events_action_lifecycle_check
+  check (action in ('SUBMITTED', 'RESUBMITTED', 'ACCEPTED', 'REQUESTED_CORRECTIONS'));
+
+alter table public.bridge_owner_submission_events
+  add constraint bridge_owner_submission_events_from_lifecycle_check
+  check (from_status is null or from_status in ('DRAFT', 'NEEDS_CORRECTION', 'SUBMITTED'));
+
+alter table public.bridge_owner_submission_events
+  add constraint bridge_owner_submission_events_to_lifecycle_check
+  check (to_status in ('SUBMITTED', 'ACCEPTED', 'NEEDS_CORRECTION'));
