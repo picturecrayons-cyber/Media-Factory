@@ -97,6 +97,7 @@ function TitlePage() {
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [chosenTab, setChosenTab] = useState<WorkspaceTab | null>(null);
+  const queryClient = useQueryClient();
   const buyerView = actor.accountType === "buyer" && !actor.internalRole;
 
   const titleQ = useQuery({
