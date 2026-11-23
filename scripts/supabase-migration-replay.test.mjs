@@ -12,6 +12,10 @@ const archiveMigration = readFileSync(
   new URL("../supabase/migrations/20261122180000_bridge_archive_fail_closed_contract.sql", import.meta.url),
   "utf8",
 );
+const productionRolloutMigration = readFileSync(
+  new URL("../supabase/migrations/20261123015009_bridge_owner_submission_production_rollout.sql", import.meta.url),
+  "utf8",
+);
 
 test("local replay restores Production Bridge RLS on every public Bridge table", () => {
   assert.match(replaySource, /substring\(c\.relname from 1 for 7\) = 'bridge_'/);
@@ -72,10 +76,18 @@ test("Testing candidate migrations are explicitly excluded from the immutable Pr
     assert.ok(replaySource.includes(name), `missing explicit non-Production classification: ${name}`);
     assert.ok(replaySource.includes(`Declared Testing candidate migration is missing: ${name}` ) === false);
   }
+  assert.ok(!replaySource.includes("20261123015009_bridge_owner_submission_production_rollout.sql"), "post-snapshot rollout must not be classified Testing-only");
   assert.match(replaySource, /const names = allNames\.filter/);
   assert.match(replaySource, /manifestRows.size !== EXPECTED_PRODUCTION_MIGRATIONS/);
 });
 
+
+test("Production owner-submission rollout is additive and does not rewrite title rows", () => {
+  assert.match(productionRolloutMigration, /add column if not exists owner_submission_status/);
+  assert.match(productionRolloutMigration, /create table if not exists public\.bridge_owner_submission_events/);
+  assert.match(productionRolloutMigration, /create table if not exists public\.bridge_title_archive_events/);
+  assert.doesNotMatch(productionRolloutMigration, /\b(update|delete)\s+public\.bridge_titles\b/i);
+});
 
 test("archive dependency scan validates required columns before dynamic SQL", () => {
   assert.match(archiveMigration, /information_schema\.columns/);
