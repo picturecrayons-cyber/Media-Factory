@@ -98,7 +98,8 @@ test("canonical Preview candidate replays finance, reconciliation and Story Conc
     "bridge_licensing_allocations","bridge_finance_reconciliations","bridge_finance_reconciliation_items",
   ]) assert.ok(financeMigration.includes(`public.${table}`), `missing finance table ${table}`);
   assert.match(financeMigration, /revoke all/i);
-  assert.match(financeMigration, /to anon, authenticated using \(false\) with check \(false\)/i);
+  assert.match(financeMigration, /create policy .*_deny_client/i);
+  assert.ok(financeMigration.includes("using(false) with check(false)"));
   assert.match(storyReviewMigrationSource, /bridge_story_concept_review_events/);
   assert.match(storyReviewMigrationSource, /bridge_story_concept_notifications/);
 });
