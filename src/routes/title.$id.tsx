@@ -20,6 +20,7 @@ import {
   requestAssetUpload,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
+import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
 import type { BridgeActor } from "@/lib/bridge/session";
 import {
   OTT_INGEST_SPEC,
@@ -45,8 +46,8 @@ export const Route = createFileRoute("/title/$id")({
   component: TitlePage,
 });
 
-const WORKSPACE_TABS = ["Overview", "Files", "Production"] as const;
-type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
+const FILM_WORKSPACE_TABS = ["Overview", "Files", "Production"] as const;
+type WorkspaceTab = "Overview" | "Files" | "Production" | "Review";
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
   const qc = useQueryClient();
@@ -123,14 +124,23 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
     enabled: !buyerView,
   });
+  const conceptsQ = useQuery({
+    queryKey: ["my-story-concepts", actor.userId],
+    queryFn: () => listMyStoryConcepts(),
+    enabled: !buyerView && titleQ.data?.title?.submissionType === "story_concept",
+  });
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
   const productionAssets = productionAssetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
+  const isStoryConcept = title?.submissionType === "story_concept";
+  const concept = conceptsQ.data?.concepts.find((item) => item.title_id === id);
   const activeTab: WorkspaceTab = buyerView
     ? "Overview"
-    : chosenTab ?? (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Files" : "Overview");
-  const visibleTabs = buyerView ? (["Overview"] as const) : WORKSPACE_TABS;
+    : chosenTab ?? (isStoryConcept ? "Review" : title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Files" : "Overview");
+  const visibleTabs: readonly WorkspaceTab[] = buyerView
+    ? ["Overview"]
+    : isStoryConcept ? ["Overview", "Review"] : FILM_WORKSPACE_TABS;
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
@@ -157,7 +167,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <WorkflowDesk title={title} actor={actor} />
+      {!isStoryConcept ? <WorkflowDesk title={title} actor={actor} /> : null}
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
@@ -204,7 +214,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 </span>
               ) : null}
             </div>
-            {!buyerView ? (
+            {!buyerView && !isStoryConcept ? (
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
@@ -247,7 +257,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="Original title" value={title.nameMl || "—"} />
-            <Metric label="Content type" value={loopStageType(title.contentType)} />
+            <Metric label="Content type" value={isStoryConcept ? "Story / Concept" : loopStageType(title.contentType)} />
             <Metric label="Language" value={title.language || "—"} />
             <Metric label="Year" value={title.year ? String(title.year) : "—"} />
             <Metric label="Runtime" value={title.runtimeMinutes ? `${title.runtimeMinutes} min` : "—"} />
@@ -260,16 +270,35 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <>
               <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
               {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
-                <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
-                <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
-                <Metric label="Publish" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
-              </div>
+              {!isStoryConcept ? (
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
+                  <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
+                  <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
+                  <Metric label="Publish" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
+                </div>
+              ) : null}
             </>
           ) : null}
         </section>
-      ) : activeTab === "Files" && !buyerView ? (
+      ) : activeTab === "Review" && !buyerView && isStoryConcept ? (
+        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Story / Concept review</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Concept Review Status</h2>
+          {conceptsQ.isPending ? <p className="mt-4 text-sm text-muted">Loading review status…</p> : null}
+          {conceptsQ.isError ? <p role="alert" className="mt-4 text-sm text-red-600">Review status unavailable: {conceptsQ.error.message}</p> : null}
+          {!conceptsQ.isPending && !conceptsQ.isError && concept ? (
+            <>
+              <p className="mt-4 inline-flex rounded-full border border-line px-3 py-1.5 text-sm font-semibold">
+                {({ PENDING: "Pending review", UNDER_REVIEW: "In review", APPROVED: "Approved", REJECTED: "Rejected", INTRODUCED_TO_BUYERS: "Introduced to buyers" } as Record<string, string>)[concept.curation_status] ?? concept.curation_status}
+              </p>
+              {concept.admin_notes ? <div className="mt-4 rounded-xl border border-line bg-elevated/40 p-4"><h3 className="text-sm font-semibold">Reviewer feedback</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted">{concept.admin_notes}</p></div> : <p className="mt-4 text-sm text-muted">No reviewer feedback has been recorded yet.</p>}
+              <p className="mt-4 text-xs text-muted">Last updated: {concept.updated_at ? new Date(concept.updated_at).toLocaleString() : "Not available"}</p>
+            </>
+          ) : null}
+          {!conceptsQ.isPending && !conceptsQ.isError && !concept ? <p className="mt-4 text-sm text-muted">Concept review record is not available for this account. No status has been inferred.</p> : null}
+        </section>
+      ) : activeTab === "Files" && !buyerView && !isStoryConcept ? (
         <FilesPanel
           canUpload={
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
@@ -279,7 +308,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
         />
-      ) : activeTab === "Production" && !buyerView ? (
+      ) : activeTab === "Production" && !buyerView && !isStoryConcept ? (
         <ProductionAssetsPanel
           assets={productionAssets}
           loading={productionAssetsQ.isPending}
