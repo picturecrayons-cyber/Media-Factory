@@ -13,6 +13,7 @@ import {
   acceptServiceQuote,
   createServicePaymentOrderFn,
   verifyServicePayment,
+  recordServiceActualCost,
 } from "@/lib/bridge/service-revenue";
 
 type Audience = "Creator" | "Studio";
@@ -319,6 +320,7 @@ export function ServiceRequestQueue() {
   const [quoteInputs, setQuoteInputs] = useState<Record<string, { code: string; description: string; amount: string }>>({});
   const [providers, setProviders] = useState<Record<string, string>>({});
   const [evidence, setEvidence] = useState<Record<string, string>>({});
+  const [actualCosts, setActualCosts] = useState<Record<string, { amount: string; type: "INTERNAL_COST" | "PASS_THROUGH" | "PAYMENT_PROCESSING"; reference: string; evidenceUrl: string }>>({});
   const [error, setError] = useState("");
   const refresh = () => client.invalidateQueries({ queryKey: ["super-admin-service-request-queue"] });
   const transition = useMutation({
@@ -330,6 +332,11 @@ export function ServiceRequestQueue() {
     mutationFn: (data: { requestId: string; serviceCode: string; description: string; subtotalPaise: number }) => createBridgeServiceRequestQuote({ data }),
     onSuccess: refresh,
     onError: (reason) => setError(reason instanceof Error ? reason.message : "Quote creation failed"),
+  });
+  const actualCost = useMutation({
+    mutationFn: (data: { orderId: string; amountPaise: number; costType: "INTERNAL_COST" | "PASS_THROUGH" | "PAYMENT_PROCESSING"; vendorReference: string; evidenceUrl: string }) => recordServiceActualCost({ data: { ...data, evidence: data.evidenceUrl ? { receiptUrl: data.evidenceUrl } : {}, idempotencyKey: "service-cost-" + crypto.randomUUID() } }),
+    onSuccess: refresh,
+    onError: (reason) => setError(reason instanceof Error ? reason.message : "Actual cost could not be recorded"),
   });
   const requests = query.data?.requests ?? [];
   const options = query.data?.serviceOptions ?? [];
@@ -383,6 +390,21 @@ export function ServiceRequestQueue() {
             {["SUBMITTED", "UNDER_REVIEW", "QUOTE_READY", "AWAITING_PAYMENT"].includes(request.status) ? <button type="button" onClick={() => transition.mutate({ requestId: request.id, toStatus: "CANCELLED", note: "Cancelled by Super Admin before payment." })} className="mt-3 ml-2 text-xs text-muted underline">Cancel request</button> : null}
             {request.quote ? <p className="mt-2 text-xs text-muted">Quote {request.quote.number}: {money(request.quote.totalPaise)} · {request.quote.status}</p> : null}
             {request.order ? <p className="mt-1 text-xs text-muted">Order {request.order.id} · {request.order.status}</p> : null}
+            {request.order?.id && ["PAID", "ASSIGNED", "IN_PROGRESS", "REVIEW", "COMPLETED"].includes(request.status) ? (
+              <div className="mt-3 grid gap-2 rounded-lg border border-line p-3 sm:grid-cols-2">
+                <p className="text-sm font-semibold sm:col-span-2">Record actual provider / operating cost</p>
+                {(() => {
+                  const cost = actualCosts[request.id] ?? { amount: "", type: "INTERNAL_COST" as const, reference: "", evidenceUrl: "" };
+                  return <>
+                    <label className="text-xs text-muted">Cost type<select value={cost.type} onChange={(e) => setActualCosts((old) => ({ ...old, [request.id]: { ...cost, type: e.target.value as typeof cost.type } }))} className="mt-1 w-full rounded border border-line bg-bg px-2 py-2 text-sm text-fg"><option value="INTERNAL_COST">Internal / provider cost</option><option value="PASS_THROUGH">Pass-through cost</option><option value="PAYMENT_PROCESSING">Payment processing fee</option></select></label>
+                    <label className="text-xs text-muted">Actual amount (INR)<input inputMode="decimal" value={cost.amount} onChange={(e) => setActualCosts((old) => ({ ...old, [request.id]: { ...cost, amount: e.target.value } }))} className="mt-1 w-full rounded border border-line bg-bg px-2 py-2 text-sm text-fg" placeholder="Actual amount" /></label>
+                    <label className="text-xs text-muted">Provider / invoice reference<input value={cost.reference} onChange={(e) => setActualCosts((old) => ({ ...old, [request.id]: { ...cost, reference: e.target.value } }))} className="mt-1 w-full rounded border border-line bg-bg px-2 py-2 text-sm text-fg" maxLength={200} /></label>
+                    <label className="text-xs text-muted">HTTPS receipt evidence URL (optional)<input value={cost.evidenceUrl} onChange={(e) => setActualCosts((old) => ({ ...old, [request.id]: { ...cost, evidenceUrl: e.target.value } }))} className="mt-1 w-full rounded border border-line bg-bg px-2 py-2 text-sm text-fg" placeholder="https://" /></label>
+                    <button type="button" disabled={actualCost.isPending || !/^\\d+(\\.\\d{1,2})?$/.test(cost.amount) || Number(cost.amount) < 0 || (cost.evidenceUrl !== "" && !cost.evidenceUrl.startsWith("https://"))} onClick={() => actualCost.mutate({ orderId: request.order.id, amountPaise: Math.round(Number(cost.amount) * 100), costType: cost.type, vendorReference: cost.reference, evidenceUrl: cost.evidenceUrl })} className="justify-self-start rounded-full border border-line px-3 py-2 text-sm disabled:opacity-50">Record actual cost</button>
+                  </>;
+                })()}
+              </div>
+            ) : null}
             <details className="mt-3"><summary className="cursor-pointer text-sm font-medium">Audit timeline</summary><ol className="mt-2 space-y-2 border-l border-line pl-4">{request.events.map((event: any) => <li key={event.id} className="text-xs"><strong>{event.toStatus.replaceAll("_", " ")}</strong> · {formatDate(event.createdAt)}<p className="text-muted">{event.note}</p></li>)}</ol></details>
           </article>
         );
