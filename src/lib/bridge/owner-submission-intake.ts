@@ -211,3 +211,126 @@ export const listBridgeAdminOwnerSubmissionQueue = createServerFn({ method: "GET
     `;
     return { submissions: rows };
   });
+
+
+export const decideBridgeOwnerSubmission = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8),
+    decision: z.enum(["ACCEPT", "REQUEST_CORRECTIONS"]),
+    reason: z.string().max(2000).optional(),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!actor.internalRole || !["admin", "super_admin"].includes(actor.internalRole)) {
+      throw new Error("Only Bridge Admin or Super Admin can decide owner submissions");
+    }
+    const reason = data.reason?.trim() ?? "";
+    if (data.decision === "REQUEST_CORRECTIONS" && !reason) {
+      throw new Error("A correction reason is required");
+    }
+    const sql = await getSql();
+    const nextStatus = data.decision === "ACCEPT" ? "ACCEPTED" : "NEEDS_CORRECTION";
+
+    await sql.transaction(async (tx) => {
+      const rows = await tx<{
+        id: string;
+        title_id: string;
+        submission_status: string;
+      }>`
+        select id, title_id, submission_status
+        from bridge_title_owner_submissions
+        where title_id = ${data.titleId}
+        for update
+      `;
+      const submission = rows[0];
+      if (!submission) throw new Error("Owner submission not found");
+      if (submission.submission_status !== "SUBMITTED") {
+        throw new Error("Only a pending SUBMITTED owner package can receive an Admin decision");
+      }
+
+      const updated = await tx<{ id: string }>`
+        update bridge_title_owner_submissions
+        set submission_status = ${nextStatus},
+            updated_by = ${actor.userId},
+            updated_at = now()
+        where id = ${submission.id}
+          and submission_status = 'SUBMITTED'
+        returning id
+      `;
+      if (!updated[0]) throw new Error("Submission changed during review; refresh and retry");
+
+      await tx`
+        insert into bridge_owner_submission_events
+          (title_id, submission_kind, action, from_status, to_status, actor_user_id, reason)
+        values (
+          ${submission.title_id},
+          'finished_film',
+          ${data.decision === "ACCEPT" ? "ACCEPTED" : "REQUESTED_CORRECTIONS"},
+          'SUBMITTED',
+          ${nextStatus},
+          ${actor.userId},
+          ${data.decision === "REQUEST_CORRECTIONS" ? reason : null}
+        )
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: data.decision === "ACCEPT"
+          ? "title.owner_submission_accepted_by_admin"
+          : "title.owner_submission_corrections_requested_by_admin",
+        entityType: "bridge_title",
+        entityId: submission.title_id,
+        metadata: {
+          submissionId: submission.id,
+          fromStatus: "SUBMITTED",
+          toStatus: nextStatus,
+          reason: data.decision === "REQUEST_CORRECTIONS" ? reason : null,
+          titleWorkflowAdvanced: false,
+        },
+      }, tx);
+    });
+
+    // Acceptance is intake acknowledgement only; it never advances QC, Rights, Legal,
+    // Licensing, buyer authorization, or Loop publication.
+    return { decided: true as const, submissionStatus: nextStatus };
+  });
+
+export const listMyOwnerSubmissionStatuses = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Creator or Studio account required");
+    }
+    const sql = await getSql();
+    const rows = await sql<{
+      title_id: string;
+      title_name: string;
+      submission_status: string;
+      submitted_at: string | Date | null;
+      updated_at: string | Date;
+    }>`
+      select s.title_id, t.name as title_name, s.submission_status,
+        s.submitted_at, s.updated_at
+      from bridge_title_owner_submissions s
+      join bridge_titles t on t.id = s.title_id
+      where (
+        (s.owner_user_id = ${actor.userId} and s.owner_organization_id is null)
+        or (
+          ${actor.accountType === "studio" && Boolean(actor.organizationId)}
+          and s.owner_organization_id = ${actor.organizationId ?? null}
+          and exists (
+            select 1 from bridge_organization_memberships m
+            where m.organization_id = s.owner_organization_id
+              and m.user_id = ${actor.userId}
+              and m.status = 'active'
+          )
+        )
+      )
+      order by s.updated_at desc
+      limit 100
+    `;
+    return { submissions: rows };
+  });
