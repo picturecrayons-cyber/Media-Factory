@@ -10,6 +10,7 @@ import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault
 import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
 import { ProductsServicesCatalogue } from "@/components/bridge/products-services-catalogue";
 import { ServiceCentre } from "@/components/bridge/service-centre";
+import { TitleFinanceWorkspace } from "@/components/bridge/title-finance-workspace";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -21,6 +22,7 @@ const workspaceLinks = [
   ["Production & DIT", "#studio-dit", "Camera-card intake and media handover"],
   ["Document Vault", "#studio-documents", "Private rights and ownership evidence"],
   ["Members", "#studio-members", "Studio membership and roles"],
+  ["Statements", "#studio-statements", "Verified title licensing allocations and payouts"],
 ] as const;
 
 const otherModules = [
@@ -122,6 +124,8 @@ function Studio() {
                 <CreatorDocumentVault userId={actor.userId} />
               </div>
             </section>
+
+            <section id="studio-statements" className="scroll-mt-24"><TitleFinanceWorkspace actor={actor} /></section>
 
             <section id="studio-members" className="scroll-mt-24 space-y-3">
               <div>
