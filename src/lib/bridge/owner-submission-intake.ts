@@ -99,7 +99,7 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
-    let submittedStatus: "SUBMITTED" = "SUBMITTED";
+    const submittedStatus = "SUBMITTED" as const;
 
     await sql.transaction(async (tx) => {
       const lockedRows = await tx<{
