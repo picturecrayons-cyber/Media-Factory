@@ -83,6 +83,7 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
   ],
   investor: [
     "entitlement.read_own",
+    "finance.read_own",
   ],
 };
 
