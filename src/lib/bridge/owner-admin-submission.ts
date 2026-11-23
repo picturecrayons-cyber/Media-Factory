@@ -22,6 +22,7 @@ async function ownerReadiness(actor: Awaited<ReturnType<typeof requireVerifiedAc
   if (!title) throw new Error("Title not found");
   const isOwnerAccount = !actor.internalRole &&
     (actor.accountType === "independent_creator" || actor.accountType === "studio") &&
+    title.ownerAccountType === actor.accountType &&
     canMutateTitle(actor, title, "title.update_own");
   if (!isOwnerAccount) throw new Error("Only the verified Creator or Studio title owner can submit to Bridge Admin");
 
@@ -123,6 +124,9 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
       const title = lockedRows[0];
       if (!title) throw new Error("Title not found");
       if (title.status !== "PREPARING") throw new Error("Title must remain in PREPARING before Admin intake");
+      if (title.owner_account_type !== actor.accountType) {
+        throw new Error("The title owner account type does not match the submitting account");
+      }
       if (!canMutateTitle(actor, {
         ownerUserId: title.owner_user_id,
         ownerAccountType: title.owner_account_type as "independent_creator" | "studio",
@@ -170,11 +174,20 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
       if (!assets[0]?.master_ready) throw new Error("Canonical verified master is missing or not storage-verified");
       if (!assets[0]?.artwork_ready) throw new Error("Canonical verified poster/artwork is missing or not storage-verified");
 
-      const existing = await tx<{ submission_status: string }>`
-        select submission_status from bridge_title_owner_submissions
+      const existing = await tx<{
+        submission_status: string; owner_user_id: string; owner_organization_id: string | null;
+      }>`
+        select submission_status, owner_user_id, owner_organization_id
+        from bridge_title_owner_submissions
         where title_id = ${title.id} for update
       `;
       const current = existing[0]?.submission_status;
+      if (existing[0] && (
+        existing[0].owner_user_id !== title.owner_user_id ||
+        existing[0].owner_organization_id !== title.owner_organization_id
+      )) {
+        throw new Error("Existing owner submission identity does not match the canonical title owner");
+      }
       if (current === "SUBMITTED") throw new Error("This title is already submitted to Bridge Admin");
       if (!canResubmitOwnerAdminSubmission(current)) {
         throw new Error("This owner submission is not eligible for resubmission");
