@@ -293,7 +293,7 @@ export const createLicensingAllocations = createServerFn({ method: "POST" })
           if (item.amountPaise > ownerRemaining) throw new Error("Owner allocation exceeds the remaining verified ownership share.");
         } else if (item.beneficiaryType === "INVESTOR") {
           const agreementRows = await tx.query<{ investor_user_id: string; share_bps: number; cap_amount_paise: number | null; return_model: string; status: string; effective_from: string; effective_to: string | null }>(
-            "select investor_user_id,share_bps,cap_amount_paise,return_model,status,effective_from,effective_to from public.bridge_investment_agreements where id=$1 and title_id=$2 limit 1",
+            "select investor_user_id,share_bps,cap_amount_paise,return_model,status,effective_from,effective_to from public.bridge_investment_agreements where id=$1 and title_id=$2 limit 1 for update",
             [item.investmentAgreementId,receipt.title_id],
           );
           const agreement = agreementRows[0];
