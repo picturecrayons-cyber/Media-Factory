@@ -27,7 +27,6 @@ function navigationFor(actor: BridgeActor): NavItem[] {
         { to: "/admin/buyers", label: "Buyers" },
         { to: "/admin/users", label: "People & Organizations" },
         { to: "/admin/services", label: "Services" },
-        { to: "/admin/audit", label: "Audit & Security" },
       );
       items.push(
         { to: "/admin/integrations", label: "Integrations" },

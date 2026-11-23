@@ -492,11 +492,12 @@ export const listAdminProfiles = createServerFn({ method: "GET" })
       display_name: string;
       account_type: string;
       organization_name: string | null;
+      organization_id: string | null;
       internal_role: string | null;
       email_verified: boolean;
       created_at: string | Date;
     }>`
-      select user_id, email, display_name, account_type, organization_name,
+      select user_id, email, display_name, account_type, organization_name, organization_id,
              internal_role, email_verified, created_at
       from bridge_profiles
       order by created_at desc
@@ -509,6 +510,7 @@ export const listAdminProfiles = createServerFn({ method: "GET" })
         displayName: row.display_name,
         accountType: row.account_type,
         organizationName: row.organization_name,
+        organizationId: row.organization_id,
         internalRole: row.internal_role,
         emailVerified: Boolean(row.email_verified),
         createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),

@@ -41,7 +41,7 @@ function TeamAccess() {
               </section>
               <div className="flex flex-wrap gap-4 border-t border-line pt-4 text-sm">
                 <Link to="/admin/users" className="text-accent hover:underline">Verified user inventory →</Link>
-                <Link to="/admin/audit" className="text-accent hover:underline">Audit & security →</Link>
+                <Link to="/admin" className="text-accent hover:underline">Audit & security →</Link>
                 <Link to="/internal" className="text-accent hover:underline">Operations desk →</Link>
               </div>
             </div>
