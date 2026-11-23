@@ -39,6 +39,7 @@ import {
   sessionStorageKey,
 } from "@/lib/bridge/multipart-upload";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
+import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
 
 export const Route = createFileRoute("/title/$id")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -105,25 +106,31 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const assetsQ = useQuery({
     queryKey: ["bridge-assets", id, actor.userId],
     queryFn: () => listTitleAssets({ data: { titleId: id } }),
-    enabled: !buyerView,
+    enabled: !buyerView && titleQ.data?.title?.submissionType !== "story_concept",
   });
   const productionAssetsQ = useQuery({
     queryKey: ["bridge-production-assets", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => listProductionAssets({ data: { titleId: id } }),
-    enabled: !buyerView,
+    enabled: !buyerView && titleQ.data?.title?.submissionType !== "story_concept",
   });
   const pubQ = useQuery({
     queryKey: ["loop-pub", id, actor.userId],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }),
-    enabled: !buyerView,
+    enabled: !buyerView && titleQ.data?.title?.submissionType !== "story_concept",
   });
 
   const reviewQ = useQuery({
     queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
-    enabled: !buyerView,
+    enabled: !buyerView && titleQ.data?.title?.submissionType !== "story_concept",
   });
   const title = titleQ.data?.title;
+  const conceptQ = useQuery({
+    queryKey: ["my-story-concepts", actor.userId, id],
+    queryFn: () => listMyStoryConcepts(),
+    enabled: !buyerView && title?.submissionType === "story_concept",
+    refetchInterval: 60_000,
+  });
   const assets = assetsQ.data?.assets ?? [];
   const productionAssets = productionAssetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
@@ -136,6 +143,18 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   if (titleQ.isError)
     return <p role="alert">Title workspace unavailable: {titleQ.error.message}</p>;
   if (!title) return <p className="text-sm text-muted">Title not found.</p>;
+  if (!buyerView && title.submissionType === "story_concept") {
+    const concept = conceptQ.data?.concepts.find((item) => item.title_id === title.id);
+    return (
+      <StoryConceptWorkspace
+        title={title}
+        concept={concept}
+        loading={conceptQ.isPending}
+        error={conceptQ.error instanceof Error ? conceptQ.error.message : null}
+        onRetry={() => void conceptQ.refetch()}
+      />
+    );
+  }
 
   const qcReady =
     reviewQ.data?.qc?.status === "PASSED" &&
@@ -289,6 +308,104 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     </div>
   );
 }
+
+function StoryConceptWorkspace({
+  title,
+  concept,
+  loading,
+  error,
+  onRetry,
+}: {
+  title: { name: string; language: string; synopsis: string; createdAt: string };
+  concept?: {
+    curation_status: string;
+    logline: string | null;
+    synopsis: string | null;
+    admin_notes: string | null;
+    updated_at: string;
+    introduced_to_buyers_at: string | null;
+  };
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  const labels: Record<string, string> = {
+    PENDING: "Received · Awaiting review",
+    UNDER_REVIEW: "Under review",
+    APPROVED: "Approved for consideration",
+    REJECTED: "Decision recorded",
+    INTRODUCED_TO_BUYERS: "Introduced to buyers",
+  };
+  const explanations: Record<string, string> = {
+    PENDING: "Your concept has been received and is waiting for the curation team.",
+    UNDER_REVIEW: "The curation team is reviewing your concept. Check back for the next update.",
+    APPROVED: "The concept is approved for potential buyer introduction. This is not a license, funding commitment or publication.",
+    REJECTED: "A curation decision has been recorded. Any available feedback is shown below.",
+    INTRODUCED_TO_BUYERS: "The concept has been introduced to buyers. This does not itself create a license or payment.",
+  };
+  const dateLabel = (value: string) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? "Date unavailable"
+      : date.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+  };
+  return (
+    <div className="mx-auto max-w-5xl space-y-5 pb-12">
+      <header className="rounded-3xl border border-line bg-surface p-6 shadow-sm sm:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Story & Concept · Creator workspace</p>
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="font-display text-3xl font-bold tracking-tight">{title.name}</h1>
+            <p className="mt-2 text-sm text-muted">{title.language} · Concept submission</p>
+          </div>
+          {concept ? (
+            <span className="rounded-full border border-line bg-elevated px-3 py-1.5 text-xs font-bold">
+              {labels[concept.curation_status] ?? concept.curation_status.replaceAll("_", " ")}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-4 max-w-3xl text-sm leading-7 text-muted">
+          This is a story/concept submission, not a finished-film ingest. No media package, 7-file checklist or QC upload status is required at this stage.
+        </p>
+      </header>
+      {loading ? <p className="rounded-2xl border border-line p-5 text-sm text-muted">Loading your concept review status…</p> : null}
+      {error ? (
+        <div role="alert" className="rounded-2xl border border-line p-5 text-sm">
+          <p>Concept status could not be loaded. Your submission has not been changed.</p>
+          <p className="mt-1 text-xs text-muted">{error}</p>
+          <button type="button" onClick={onRetry} className="mt-3 font-semibold text-accent underline">Retry status</button>
+        </div>
+      ) : null}
+      {concept ? (
+        <>
+          <section aria-live="polite" className="rounded-3xl border border-line bg-surface p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-widest text-accent">Latest review update</p>
+            <h2 className="mt-2 text-xl font-bold">{labels[concept.curation_status] ?? concept.curation_status.replaceAll("_", " ")}</h2>
+            <p className="mt-2 text-sm leading-7 text-muted">{explanations[concept.curation_status] ?? "Your concept status has been updated."}</p>
+            {concept.admin_notes ? (
+              <div className="mt-5 rounded-2xl border border-line bg-elevated/50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted">Review note</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{concept.admin_notes}</p>
+              </div>
+            ) : null}
+            <p className="mt-4 text-xs text-muted">Last updated: {dateLabel(concept.updated_at)}</p>
+          </section>
+          <section className="rounded-3xl border border-line bg-surface p-6 shadow-sm">
+            <h2 className="text-lg font-bold">Your submission</h2>
+            {concept.logline ? <p className="mt-3 text-sm leading-7">{concept.logline}</p> : null}
+            {concept.synopsis || title.synopsis ? <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted">{concept.synopsis || title.synopsis}</p> : null}
+          </section>
+        </>
+      ) : !loading && !error ? (
+        <div role="alert" className="rounded-2xl border border-line p-5 text-sm">
+          The concept review record is not available for this account. The finished-film upload workflow remains hidden to avoid showing an incorrect 0-of-7 package status.
+        </div>
+      ) : null}
+      <p className="text-xs text-muted">Status refreshes automatically. Email/SMS notifications are not sent by this screen.</p>
+    </div>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-elevated/40 p-4">
