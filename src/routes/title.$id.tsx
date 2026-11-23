@@ -47,7 +47,7 @@ export const Route = createFileRoute("/title/$id")({
   component: TitlePage,
 });
 
-const WORKSPACE_TABS = ["Overview", "Files", "Production"] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Production", "Submission Details"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -151,7 +151,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const activeTab: WorkspaceTab = buyerView
     ? "Overview"
     : chosenTab ?? (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Files" : "Overview");
-  const visibleTabs = buyerView ? (["Overview"] as const) : WORKSPACE_TABS;
+  const visibleTabs = buyerView ? (["Overview"] as const) : ownerAccount ? WORKSPACE_TABS : (["Overview", "Files", "Production"] as const);
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
@@ -345,6 +345,25 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           loading={productionAssetsQ.isPending}
           error={productionAssetsQ.error instanceof Error ? productionAssetsQ.error.message : null}
         />
+      ) : activeTab === "Submission Details" && ownerAccount ? (
+        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Owner submission</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Submission Details</h2>
+          <p className="mt-2 text-sm text-muted">This record tracks delivery of your title package to Bridge Admin. It is separate from QC, rights, legal, licensing and Loop publication decisions.</p>
+          {ownerSubmissionQ.isPending ? <p className="mt-4 text-sm text-muted">Checking submission record…</p> : null}
+          {ownerSubmissionQ.isError ? <p role="alert" className="mt-4 text-sm text-red-700">{ownerSubmissionQ.error.message}</p> : null}
+          {ownerSubmissionQ.data ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <Metric label="Admin submission" value={ownerSubmissionQ.data.submission?.status ?? "NOT SUBMITTED"} />
+              <Metric label="Title lifecycle" value={title.status} />
+              <Metric label="Canonical master" value={ownerSubmissionQ.data.readiness.masterReady ? "VERIFIED" : "BLOCKED"} />
+              <Metric label="Canonical artwork" value={ownerSubmissionQ.data.readiness.artworkReady ? "VERIFIED" : "BLOCKED"} />
+              {actor.accountType === "studio" ? <Metric label="Active Studio membership" value={ownerSubmissionQ.data.readiness.activeStudioMembership ? "VERIFIED" : "BLOCKED"} /> : null}
+              <Metric label="Submitted at" value={ownerSubmissionQ.data.submission?.submittedAt ? new Date(ownerSubmissionQ.data.submission.submittedAt).toLocaleString() : "—"} />
+            </div>
+          ) : null}
+          <p className="mt-4 text-xs text-muted">Submitting to Bridge Admin does not change PREPARING status or grant QC/rights approval.</p>
+        </section>
       ) : null}
     </div>
   );
