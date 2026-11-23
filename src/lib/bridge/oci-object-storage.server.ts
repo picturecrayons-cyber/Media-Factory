@@ -442,3 +442,43 @@ export async function fetchObjectResponse(key: string, bucket?: string) {
   // 15-second control-plane deadline.
   return signedFetch({ cfg, method: "GET", path, timeoutMs: 120_000 });
 }
+
+/** Verify that a private object is a PDF by checking its signature and exact size. */
+export async function verifyPdfObject(
+  key: string,
+  expectedByteSize: number,
+  bucket?: string,
+) {
+  if (!Number.isSafeInteger(expectedByteSize) || expectedByteSize <= 0) {
+    throw new Error("Expected PDF size is invalid");
+  }
+  const cfg = config();
+  const targetBucket = bucket?.trim() || cfg.bucket;
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok || !res.body) throw new Error(`PDF evidence verification failed (${res.status})`);
+  const declaredSize = Number(res.headers.get("content-length") || 0);
+  if (declaredSize !== expectedByteSize) {
+    await res.body.cancel();
+    throw new Error("Uploaded PDF size does not match the selected file");
+  }
+  const reader = res.body.getReader();
+  const prefix: number[] = [];
+  try {
+    while (prefix.length < 5) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const byte of value) {
+        prefix.push(byte);
+        if (prefix.length === 5) break;
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  if (String.fromCharCode(...prefix) !== "%PDF-") {
+    throw new Error("The uploaded file is not a valid PDF document");
+  }
+  return { byteSize: declaredSize, contentType: res.headers.get("content-type") };
+}
