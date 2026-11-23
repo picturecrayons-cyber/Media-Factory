@@ -24,6 +24,7 @@ type TitleRow = {
   owner_account_type: string;
   owner_organization_id?: string | null;
   status: string;
+  submission_type?: string | null;
   synopsis: string;
   language: string;
   year: number | null;
@@ -54,6 +55,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     ownerAccountType: r.owner_account_type as AccountType,
     ownerOrganizationId: r.owner_organization_id ?? null,
     status: r.status as TitleStatus,
+    submissionType: r.submission_type ?? null,
     synopsis: r.synopsis,
     language: r.language,
     year: r.year,
