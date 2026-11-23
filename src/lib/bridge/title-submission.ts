@@ -19,7 +19,10 @@ export async function submitTitleForQcInTransaction(
   const assets = await tx<{ id: string; kind: string; s3_key: string }>`
     select id, kind, s3_key
     from bridge_assets
-    where title_id = ${title.id} and coalesce(byte_size, 0) > 0
+    where title_id = ${title.id}
+      and coalesce(byte_size, 0) > 0
+      and storage_business_state = 'ACTIVE'
+      and restore_state = 'READY'
   `;
   if (!hasVerifiedMasterAndArtwork(assets, title.masterKey, title.posterKey)) {
     throw new Error("Verified master and artwork required before QC");
