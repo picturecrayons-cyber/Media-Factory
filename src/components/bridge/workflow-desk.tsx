@@ -161,8 +161,13 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit for QC. QC is not reviewed yet."
                   : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
-              {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
-              ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
+              {(
+                (["DRAFT", "UPLOADING"].includes(title.status) &&
+                  canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal")) ||
+                (title.status === "PREPARING" &&
+                  ["admin", "super_admin"].includes(actor.internalRole ?? "") &&
+                  hasPermission(actor, "title.ingest_internal"))
+              )
                 ? button(
                     title.status === "DRAFT"
                       ? "Start ingest"
