@@ -587,7 +587,6 @@ function FilesPanel({
     canonical?: boolean;
     reconcileAvailable?: boolean;
   }>;
-  canReconcile: boolean;
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
@@ -1083,7 +1082,7 @@ function FilesPanel({
                     key={kind}
                     kind={kind}
                     label={kindLabel(kind)}
-                    status={verified ? "Ready" : empty}
+                    status={verified ? "Ready" : assets.some((asset) => asset.verified && (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")) && (kind === "master" || kind === "poster_vertical") && asset.canonical !== true) ? "Canonical reference mismatch" : empty}
                     busy={uploading === kind}
                     locked={uploading !== null && uploading !== kind}
                     canUpload={canUpload}
