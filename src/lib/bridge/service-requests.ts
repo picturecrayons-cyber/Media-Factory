@@ -165,7 +165,7 @@ export const createBridgeServiceRequest = createServerFn({ method: "POST" })
     const documentIds = [...new Set(data.documentIds)];
     if (documentIds.length) {
       const documents = await sql.query<{ id: string }>(
-        "select id from public.bridge_creator_documents where id=any($1::text[]) and status='VERIFIED' and (owner_user_id=$2 or ($3::uuid is not null and owner_organization_id=$3::uuid))",
+        "select id from public.bridge_creator_documents where id=any($1::text[]) and status='VERIFIED' and (owner_user_id=$2 or ($3::text is not null and owner_organization_id=$3::text))",
         [documentIds, actor.userId, actor.accountType === "studio" ? actor.organizationId : null],
       );
       if (documents.length !== documentIds.length) {
