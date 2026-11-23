@@ -479,13 +479,14 @@ function ProductionAssetsPanel({
   const artwork = assets.filter((asset) => asset.category === "stills");
   const documents = assets.filter((asset) => asset.category === "documents");
   const other = assets.filter((asset) => !["raw_video", "stills", "documents"].includes(asset.category));
+  const hasVerifiedMaster = assets.some((asset) => asset.verifiedSource && asset.sourceKind === "master");
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Production</p>
           <h2 className="mt-1 font-display text-xl font-semibold">Linked production assets</h2>
-          <p className="mt-1 text-sm text-muted">References to verified files already stored in Bridge. Originals remain in their existing OCI locations.</p>
+          <p className="mt-1 text-sm text-muted">Production references are shown separately from the Files QC checklist. Originals remain in their existing OCI locations.</p>
         </div>
         <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
           {assets.length} linked
@@ -493,6 +494,11 @@ function ProductionAssetsPanel({
       </div>
       {error ? <p role="alert" className="mt-4 text-sm text-red-600">Production assets unavailable: {error}</p> : null}
       {loading ? <p className="mt-4 text-sm text-muted">Loading Production register…</p> : null}
+      {!loading && !error && assets.length > 0 && !hasVerifiedMaster ? (
+        <p className="mt-4 rounded-xl border border-line bg-elevated/40 p-3 text-xs text-muted">
+          No verified main-film master is linked in this Production register. A verified screener or trailer is not a master. Check Files for the canonical master and vertical poster before QC submission.
+        </p>
+      ) : null}
       {!loading && !error && assets.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-line p-5 text-sm text-muted">
           No verified files are linked to the Production register for this title yet. Unverified uploads and legacy migration entries are not presented as ready assets.
@@ -526,7 +532,17 @@ function ProductionAssetsPanel({
                           </p>
                         </div>
                         <span className="rounded-full border border-line px-2 py-1 text-[10px] font-semibold">
-                          {asset.verifiedSource ? "Verified source" : "Reference"}
+                          {asset.verifiedSource
+                            ? asset.sourceKind === "master"
+                              ? "Verified master"
+                              : asset.sourceKind === "screener"
+                                ? "Verified screener · not master"
+                                : asset.sourceKind
+                                  ? `Verified ${asset.sourceKind.replaceAll("_", " ")}`
+                                  : "Verified source"
+                            : asset.fileSize <= 0
+                              ? "Reference · not storage verified"
+                              : "Source not verified"}
                         </span>
                       </div>
                     </article>
