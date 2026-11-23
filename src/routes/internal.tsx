@@ -34,7 +34,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
-            canManageOwnerSubmission={actor.internalRole === "super_admin"}
+            canManageOwnerSubmission={actor.internalRole === "admin" || actor.internalRole === "super_admin"}
           />
         </BridgeShell>
       )}
