@@ -2,6 +2,10 @@ import type { Sql } from "@/lib/db";
 import type { BridgeTitle, TitleStatus } from "./types";
 import { hasVerifiedMasterAndArtwork } from "./asset-roles.ts";
 
+export function isAdminAcceptedOwnerIntake(status: string | null | undefined): boolean {
+  return status === "ACCEPTED_INTAKE";
+}
+
 /**
  * Executes the real Submit-for-QC database path. Authentication and permission
  * checks stay in the server handler; asset validation and all lifecycle writes
@@ -36,7 +40,7 @@ export async function submitTitleForQc(
         select submission_status from bridge_title_owner_submissions
         where title_id = ${title.id} for update
       `;
-      if (intake[0]?.submission_status !== "ACCEPTED_INTAKE") {
+      if (!isAdminAcceptedOwnerIntake(intake[0]?.submission_status)) {
         throw new Error("Bridge Admin must accept the owner intake before QC handoff");
       }
       const readiness = await tx<{ master_ready: boolean; artwork_ready: boolean }>`
