@@ -13,3 +13,8 @@ major_version = 17
 
 [db.pooler]
 enabled = false
+
+[inbucket]
+port = 55433
+smtp_port = 55434
+pop3_port = 55435
