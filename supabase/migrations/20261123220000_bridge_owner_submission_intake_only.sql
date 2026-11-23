@@ -44,8 +44,10 @@ revoke all on table public.bridge_title_owner_submissions from public, anon, aut
 grant select, insert, update on table public.bridge_title_owner_submissions to postgres, service_role;
 
 alter table public.bridge_owner_submission_events enable row level security;
-revoke all on table public.bridge_owner_submission_events from public, anon, authenticated;
-grant all on table public.bridge_owner_submission_events to postgres, service_role;
+revoke all on table public.bridge_owner_submission_events from public, anon, authenticated, service_role;
+grant select, insert on table public.bridge_owner_submission_events to service_role;
+revoke all on sequence public.bridge_owner_submission_events_id_seq from public, anon, authenticated;
+grant usage, select on sequence public.bridge_owner_submission_events_id_seq to service_role;
 
 create or replace function public.bridge_reject_owner_submission_event_mutation()
 returns trigger
