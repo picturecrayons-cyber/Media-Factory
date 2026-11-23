@@ -50,7 +50,7 @@ function Studio() {
                 <h3 className="font-display text-xl font-semibold">Add a studio title</h3>
                 <p className="mt-1 text-sm text-muted">Finished films and story concepts remain separate. A title upload does not bypass QC, rights or licensing approvals.</p>
               </div>
-              <NewSubmissionPanel />
+              <NewSubmissionPanel actor={actor} />
             </section>
 
             <section id="studio-titles" className="space-y-4">
@@ -59,12 +59,12 @@ function Studio() {
                 <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
               </div>
               <TitleList empty="No finished films are currently returned for this studio account." />
-              <MyStoryConcepts />
+              <MyStoryConcepts actor={actor} />
             </section>
 
 
             <section id="studio-documents" className="scroll-mt-20">
-              <CreatorDocumentVault />
+              <CreatorDocumentVault actor={actor} />
             </section>
 
             <section id="studio-members" className="space-y-3">
