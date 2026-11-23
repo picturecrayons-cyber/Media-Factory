@@ -598,6 +598,9 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (data.to === "LICENSED") {
       throw new Error("LICENSED is granted only after a captured Razorpay payment");
     }
+    if (data.to === "QC_REVIEW" && !["admin", "super_admin"].includes(actor.internalRole ?? "")) {
+      throw new Error("Only Bridge Admin can send an Admin-submitted title to QC");
+    }
     if (["RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to))
       throw new Error("Use the recorded QC or legal review action");
     assertTransition(title.status, data.to);
@@ -615,6 +618,13 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (expected !== data.to) throw new Error("Illegal title transition");
     const sql = await getSql();
     if (data.to === "QC_REVIEW") {
+      const intake = await sql<{ submission_status: string }>`
+        select submission_status from bridge_title_owner_submissions
+        where title_id = ${title.id} limit 1
+      `;
+      if (intake[0]?.submission_status !== "SUBMITTED") {
+        throw new Error("Submit to Bridge Admin and complete Admin intake before sending this title to QC");
+      }
       return submitTitleForQc(sql, title, actor.userId, data.note);
     }
     return sql.transaction(async (tx) => {
