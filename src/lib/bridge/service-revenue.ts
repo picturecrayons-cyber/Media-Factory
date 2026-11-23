@@ -523,7 +523,7 @@ export async function createServicePaymentOrder(opts: {
 
   const keyId = bridgeEnv.razorpayKeyId();
   if (!keyId) throw new Error("Razorpay is not configured");
-  if (!keyId.startsWith("rzp" + "_test_")) {
+  if (!isRazorpayTestKeyId(keyId)) {
     throw new Error("Live Razorpay service payments are disabled; configure a Test Mode key before checkout.");
   }
 
