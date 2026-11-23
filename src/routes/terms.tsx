@@ -6,181 +6,41 @@ function Terms() {
   return (
     <main className="min-h-screen bg-white px-5 py-12 text-fg sm:px-6">
       <article className="mx-auto max-w-3xl space-y-7 rounded-3xl border border-line bg-surface p-7 sm:p-10">
-        <Link to="/" className="text-sm font-semibold text-accent">
-          ← Crayons Bridge
-        </Link>
-
+        <Link to="/" className="text-sm font-semibold text-accent">← Crayons Bridge</Link>
         <header>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-            StreamVista OPC Pvt Ltd. · Crayons Bridge
-          </p>
-          <h1 className="mt-2 font-display text-4xl font-semibold">
-            Terms &amp; Conditions
-          </h1>
-          <p className="mt-3 text-sm leading-7 text-muted">
-            These Terms &amp; Conditions govern your access to and use of Crayons
-            Bridge, including its content submission, media workflow, rights
-            management, licensing, delivery, workspace, and related services.
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">StreamVista OPC Pvt Ltd · Crayons Bridge</p>
+          <h1 className="mt-2 font-display text-4xl font-semibold">Platform Terms</h1>
+          <p className="mt-3 text-sm text-muted">Effective publication: 23 November 2026</p>
         </header>
-
-        <section className="space-y-5 text-sm leading-7 text-muted">
-          <div>
-            <h2 className="font-semibold text-fg">1. About the service</h2>
-            <p>
-              Crayons Bridge is operated by StreamVista OPC Pvt Ltd. The service
-              provides tools and workflows for managing media titles, assets,
-              rights information, licensing discussions, and authorized
-              delivery. Features may vary by account, plan, or written agreement.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="font-semibold text-fg">2. Accounts and accurate information</h2>
-            <p>
-              You must provide accurate, current information and keep your
-              account credentials secure. You are responsible for activity
-              carried out through your account and must promptly notify us of
-              suspected unauthorized access.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="font-semibold text-fg">3. Content, rights, and permissions</h2>
-            <p>
-              You may submit or manage only content and materials that you own
-              or are authorized to represent, store, process, or license. You
-              are responsible for obtaining and maintaining the permissions,
-              releases, music clearances, and other rights required for your
-              intended use, and for ensuring that submitted information is
-              accurate.
-            </p>
-            <p>
-              Uploading, listing, previewing, or discussing a title on Crayons
-              Bridge does not by itself transfer ownership or grant a buyer any
-              licence. Any licence, sale, exclusivity, territory, term, or
-              distribution right must be documented in the applicable written
-              agreement and authorized by the relevant rights holder.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="font-semibold text-fg">4. Orders, fees, and payments</h2>
-            <p>
-              Where a paid service or transaction is offered, the applicable
-              price, billing frequency, currency, and taxes will be shown before
-              you confirm payment. You authorize the payment method you select
-              to be charged for the amount presented at checkout. Payments may
-              be processed by a third-party payment provider and are subject to
-              that provider's applicable terms. An order or payment is treated
-              as confirmed only when the service or payment provider confirms
-              its status.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="font-semibold text-fg">5. Refunds and cancellations</h2>
-            <p>
-              Refund and cancellation requests are handled under the applicable
-              Refund Policy and Cancellation Policy shown for the service or
-              transaction, together with any specific written agreement and
-              applicable law. Please review those policies before completing a
-              purchase or subscription. Nothing in these Terms limits rights
-              that cannot lawfully be excluded.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="font-semibold text-fg">6. Acceptable use and service availability</h2>
-            <p>
-              You must not use the service to infringe intellectual property,
-              violate privacy or law, misrepresent ownership, bypass access
-              controls, distribute content without authorization, or interfere
-              with the service or other users. We may restrict or suspend access
-              where reasonably necessary for security, suspected misuse, legal
-              compliance, or protection of users and content.
-            </p>
-            <p>
-              We aim to provide a reliable service but do not guarantee
-              uninterrupted availability, error-free operation, or that a
-              submitted title will receive a buyer, licence, or distribution
-              offer.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="font-semibold text-fg">7. Intellectual property</h2>
-            <p>
-              The platform, its software, branding, and service materials are
-              owned by or licensed to their respective rights holders. Except
-              for the limited access needed to use the service, no ownership or
-              other rights are granted to you in those materials. You retain
-              rights in your content, subject to the permissions needed to
-              provide the service and any separate agreement you accept.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="font-semibold text-fg">8. Third-party services</h2>
-            <p>
-              The service may link to or rely on third-party tools, payment
-              providers, or storage services. Their services are subject to
-              their own terms and availability; we are not responsible for
-              independent third-party services to the extent permitted by law.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="font-semibold text-fg">9. Suspension and termination</h2>
-            <p>
-              You may stop using the service at any time. We may suspend or
-              terminate access for a material breach of these Terms, unlawful
-              activity, security risks, or where required by law or an applicable
-              agreement. Any surviving payment obligations, rights restrictions,
-              and provisions that by their nature continue will remain effective.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="font-semibold text-fg">10. Liability</h2>
-            <p>
-              To the extent permitted by applicable law, the service is provided
-              on an as-available basis, and we exclude warranties that cannot
-              otherwise be implied or that may lawfully be excluded. Nothing in
-              these Terms excludes liability or consumer rights that cannot
-              legally be excluded or limited.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="font-semibold text-fg">11. Privacy and updates</h2>
-            <p>
-              Our handling of personal information is described in the{" "}
-              <Link to="/privacy" className="font-semibold text-accent underline">
-                Privacy Policy
-              </Link>
-              . We may update these Terms from time to time by publishing a
-              revised version on this page. The updated date below indicates
-              when this page was last revised.
-            </p>
-          </div>
-
-          <div>
-            <h2 className="font-semibold text-fg">12. Contact</h2>
-            <p>
-              For questions about these Terms, payments, or the service, use the{" "}
-              <Link to="/contact" className="font-semibold text-accent underline">
-                Contact page
-              </Link>
-              . Specific transactions or licensing arrangements may also be
-              governed by separate written agreements.
-            </p>
-          </div>
+        <section className="space-y-4 text-sm leading-7 text-muted">
+          <h2 className="font-semibold text-fg">1. Scope and acceptance</h2>
+          <p>These terms govern access to Crayons Bridge and related business services operated by StreamVista OPC Pvt Ltd (the Company). By creating an account or using the service, you agree to these terms and applicable transaction-specific agreements. If you act for an organization, you confirm authority to bind it.</p>
+          <h2 className="font-semibold text-fg">2. Account security and eligibility</h2>
+          <p>You must provide accurate information, protect your credentials and promptly report suspected unauthorized access. Access is role-based and may require verification or invitation. Buyer and Investor access may be restricted to approved or invited accounts. The Company may suspend access for security, legal compliance or material breach.</p>
+          <h2 className="font-semibold text-fg">3. IP sovereignty and chain of title</h2>
+          <p>Creators and Studios retain ownership of content they own. Each submitting party represents that it has the authority and necessary rights to submit the content and grant the permissions expressly selected or agreed in writing. Users must provide accurate chain-of-title, music, performer, archive, territory and other supporting evidence when requested. A submission or upload does not constitute verification, QC approval, rights clearance, publication or acceptance by the Company.</p>
+          <h2 className="font-semibold text-fg">4. Bridge authorization and Loop delivery</h2>
+          <p>Crayons Bridge is the business platform for title records, rights evidence, licensing and distribution authorization. Crayons Loop is a separate consumer streaming experience. A title may be made available on Crayons Loop only after the applicable technical QC, rights and ownership checks, legal review and explicit publication authorization are completed. Buyer listing status does not automatically authorize consumer publication.</p>
+          <h2 className="font-semibold text-fg">5. Licence scope and strict non-sublicensing</h2>
+          <p>Every licence is limited by its written grant, including permitted use, media, platform, territory, language, term, exclusivity, delivery method and any other stated restriction. Unless a separate written agreement expressly approved by the rights holder and Company states otherwise, all sublicences are strictly Non-Sublicensable and Non-Transferable. The licensee has “No Right to Deliver to Next Person” and must not assign, sublicense, resell, share or pass access or materials to another person or entity. No broader rights are implied.</p>
+          <h2 className="font-semibold text-fg">6. Buyer screeners and deliveries</h2>
+          <p>Screeners, previews and delivery links are confidential, limited-purpose and may be watermarked, time-bound or restricted to named recipients. Users must not record, redistribute, download or disclose them except as expressly authorized in writing. Access can be revoked if authorization expires or is withdrawn.</p>
+          <h2 className="font-semibold text-fg">7. Payments and revenue</h2>
+          <p>Fees, taxes, commissions, revenue shares and settlement conditions are governed by the relevant order, licence or signed agreement. Payment-provider confirmation is required before an order is treated as paid. No investment, return, financing or payout is promised merely by account access, title listing or dashboard display.</p>
+          <h2 className="font-semibold text-fg">8. User conduct and compliance</h2>
+          <p>You must not upload unlawful or infringing material, misrepresent ownership, evade access controls, interfere with systems, misuse personal data or use the service to violate another person's rights. Users must respond promptly to rights and compliance enquiries and preserve relevant evidence.</p>
+          <h2 className="font-semibold text-fg">9. Copyright and takedowns</h2>
+          <p>Copyright complaints are handled under the Company's copyright and DMCA-style notice procedure described on the <Link to="/dmca" className="font-semibold text-accent underline">Copyright & DMCA Policy</Link>. The Company may restrict access or place content on hold while a good-faith complaint is reviewed. A hold is not a final finding of infringement.</p>
+          <h2 className="font-semibold text-fg">10. Third-party services</h2>
+          <p>The platform may integrate with hosting, storage, authentication, communications and payment providers. Those services are subject to their own terms. Users remain responsible for complying with applicable provider and platform requirements.</p>
+          <h2 className="font-semibold text-fg">11. Availability, suspension and liability</h2>
+          <p>The service is provided on an as-available basis. The Company does not guarantee uninterrupted access, a buyer offer, a licence or distribution outcome. Nothing excludes liability or statutory rights that cannot lawfully be excluded. The Company may suspend or terminate access for material breach, unlawful activity, security risks or legal requirement.</p>
+          <h2 className="font-semibold text-fg">12. Governing law and jurisdiction</h2>
+          <p>These terms are governed by the laws of India. Subject to mandatory law, courts having jurisdiction in Ernakulam, Kerala shall have jurisdiction over disputes.</p>
+          <h2 className="font-semibold text-fg">13. Contact</h2>
+          <p>For questions about these terms, use the <Link to="/contact" className="font-semibold text-accent underline">Contact page</Link> or email <a className="font-semibold text-accent underline" href="mailto:abijithasokan@crayonspictures.com">abijithasokan@crayonspictures.com</a>.</p>
         </section>
-
-        <p className="border-t border-line pt-5 text-xs text-muted">
-          Last updated: 9 October 2026.
-        </p>
+        <p className="border-t border-line pt-5 text-xs text-muted">These platform terms are a draft for operational publication and require review by Indian legal counsel before final adoption.</p>
       </article>
     </main>
   );
