@@ -111,6 +111,7 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
     const submittedStatus = "SUBMITTED";
+    let notificationEventId = "";
 
     await sql.transaction(async (tx) => {
       const lockedRows = await tx<{
@@ -178,6 +179,7 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
       const eventId = eventRows[0]?.id;
       if (!eventId) throw new Error("Submission event could not be recorded");
 
+      notificationEventId = eventId;
       const creatorEmailRows = await tx<{ email: string | null }>`
         select email from bridge_profiles where user_id = ${row.owner_user_id} limit 1
       `;
@@ -222,7 +224,7 @@ export const submitTitleToBridgeAdmin = createServerFn({ method: "POST" })
     // failure leaves the submission intact and the notification retryable.
     const dispatchKeys = await sql<{ event_key: string }>`
       select event_key from bridge_notification_outbox
-      where event_key like ${`owner-submission:%`}
+      where event_key like ${`owner-submission:${notificationEventId}:%`}
         and status in ('pending','failed')
         and created_at >= now() - interval '2 minutes'
         and (
