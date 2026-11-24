@@ -22,7 +22,7 @@ function navigationFor(actor: BridgeActor): NavItem[] {
 
     if (actor.internalRole === "super_admin") {
       items.unshift({ to: "/dashboard", label: "Founder Centre" });
-      items.push({ to: "/cms", label: "Loop Gateway" });
+      items.push({ to: "/cms", label: "Bridge CMS" });
     }
 
     return [...items, { to: "/account", label: "Account" }];
@@ -82,7 +82,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
           <nav aria-label="Primary navigation" className="hidden flex-1 items-center gap-1 overflow-x-auto md:flex">
             {navigationFor(actor).map((item) => <NavLink key={item.to} item={item} />)}
           </nav>
-          <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-semibold text-muted transition hover:text-fg lg:inline">Open Crayons Loop ↗</a>
+          <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-semibold text-muted transition hover:text-fg lg:inline">Open Loop (consumer) ↗</a>
           <div className="ml-auto flex items-center gap-3">
             {actor.internalRole ? <span className="hidden rounded-full border border-line px-3 py-1 text-xs text-muted sm:inline">{actor.internalRole.replaceAll("_", " ")}</span> : null}
             <UserButton />
