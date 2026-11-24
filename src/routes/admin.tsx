@@ -68,7 +68,7 @@ function AdminBody({ actor }: { actor: any }) {
             <p className="mt-1 max-w-2xl text-sm text-muted">Direct the title pipeline, clear operational blockers and authorize commercial delivery only after the required Bridge gates pass.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/admin/workstations"><Button>Open operations workstations</Button></Link>
+            <Link to="/admin/workstations" search={{ tab: "Titles" }}><Button>Open operations workstations</Button></Link>
             <Link to="/cms"><Button variant="outline">Open Bridge CMS</Button></Link>
           </div>
         </section>
@@ -99,7 +99,7 @@ function AdminBody({ actor }: { actor: any }) {
               <h3 className="font-display text-xl font-semibold">Decision queue</h3>
               <p className="mt-1 text-sm text-muted">Titles currently in intake, QC, rights or licensing review.</p>
             </div>
-            <Link to="/admin/workstations" className="text-sm font-semibold text-accent hover:underline">Open full queue →</Link>
+            <Link to="/admin/workstations" search={{ tab: "Titles" }} className="text-sm font-semibold text-accent hover:underline">Open full queue →</Link>
           </div>
           <div className="mt-3 divide-y divide-line">
             {titlesQ.isPending ? <p className="py-5 text-sm text-muted">Loading operational queue…</p> : null}
@@ -123,7 +123,7 @@ function AdminBody({ actor }: { actor: any }) {
               <h3 className="font-semibold">Audit overview</h3>
               <p className="mt-1 text-sm text-muted">Recent activity grouped by action. Raw asset identifiers and duplicate event rows are intentionally omitted from this overview.</p>
             </div>
-            <Link to="/admin/workstations" className="text-sm font-semibold text-accent hover:underline">Open audit workstation →</Link>
+            <Link to="/admin/workstations" search={{ tab: "Titles" }} className="text-sm font-semibold text-accent hover:underline">Open audit workstation →</Link>
           </div>
           {auditQ.isPending ? <p className="py-4 text-sm text-muted">Loading audit summary…</p> : null}
           {auditQ.isError ? <p role="alert" className="py-4 text-sm text-accent">Audit summary is unavailable.</p> : null}
