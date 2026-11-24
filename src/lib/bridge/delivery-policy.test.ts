@@ -54,4 +54,16 @@ describe("master download denial", () => {
       hasLicenseEntitlement: false,
     }).allow, false);
   });
+  it("lets authorized Studio organization members preview every artwork role", () => {
+    for (const kind of ["poster", "poster_vertical", "poster_horizontal", "thumbnail"]) {
+      assert.equal(downloadDecision({
+        kind,
+        actorIsOwner: false,
+        actorIsInternal: false,
+        accountType: "studio",
+        hasLicenseEntitlement: false,
+      }).allow, true, kind);
+    }
+  });
+
 });
