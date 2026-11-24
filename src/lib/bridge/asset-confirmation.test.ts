@@ -157,3 +157,45 @@ test("title owner can confirm an upload when organization tables are absent", as
     await db.close();
   }
 });
+
+test("a previously sized raw asset can be reconciled only with matching verified OCI evidence", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status,master_key)
+      values ('legacy-title','legacy','Legacy','creator','independent_creator','PREPARING','legacy/raw/master.mp4');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by,byte_size)
+      values ('legacy-asset','legacy-title','master','legacy/raw/master.mp4','video/mp4','creator',2492665200);`);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const args = {
+      assetId: "legacy-asset",
+      actorUserId: "creator",
+      internalActor: false,
+      titleId: "legacy-title",
+      kind: "master",
+      byteSize: 2492665200,
+      contentType: "video/mp4",
+      checksum: "etag-legacy-verified",
+      sourceKey: "legacy/raw/master.mp4",
+      sealedKey: "legacy/raw/master.mp4.verified/legacy-asset",
+    };
+    assert.equal(await persistVerifiedAsset(sql, args), true);
+    const row = (await db.query<{ master_key: string; s3_key: string; byte_size: number }>(`
+      select t.master_key, a.s3_key, a.byte_size from bridge_titles t
+      join bridge_assets a on a.title_id=t.id where a.id='legacy-asset'`)).rows[0];
+    assert.deepEqual(row, {
+      master_key: "legacy/raw/master.mp4.verified/legacy-asset",
+      s3_key: "legacy/raw/master.mp4.verified/legacy-asset",
+      byte_size: 2492665200,
+    });
+    assert.equal(await persistVerifiedAsset(sql, { ...args, sourceKey: "unrelated/raw.mp4" }), false);
+    const audits = await db.query("select * from bridge_audit_logs where entity_id='legacy-asset' and action='asset.upload_verified'");
+    assert.equal(audits.rows.length, 1);
+  } finally {
+    await db.close();
+  }
+});
+
