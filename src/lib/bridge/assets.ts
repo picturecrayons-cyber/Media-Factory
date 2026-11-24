@@ -13,7 +13,7 @@ import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
-import { hasVerifiedMasterAndArtwork } from "./asset-roles";
+import { hasVerifiedMasterAndArtwork, pointsToVerifiedAsset } from "./asset-roles";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -287,8 +287,8 @@ export const reconcileAssetReference = createServerFn({ method: "POST" })
       ? title.masterKey
       : (asset.kind === "poster" || asset.kind === "poster_vertical") ? title.posterKey : null;
     if (!pointer) throw new Error("This asset kind has no canonical QC reference");
-    if (asset.s3_key === pointer) {
-      const refs = await sql<{kind:string;s3_key:string}>`select kind,s3_key from bridge_assets where title_id = ${title.id} and coalesce(byte_size,0)>0`;
+    if (pointsToVerifiedAsset(pointer, asset)) {
+      const refs = await sql<{id:string;kind:string;s3_key:string}>`select id,kind,s3_key from bridge_assets where title_id = ${title.id} and coalesce(byte_size,0)>0`;
       return { reconciled: false, alreadyCanonical: true, qcEligible: hasVerifiedMasterAndArtwork(refs, title.masterKey, title.posterKey) };
     }
 
@@ -332,7 +332,7 @@ export const reconcileAssetReference = createServerFn({ method: "POST" })
         metadata: { titleId: title.id, kind: asset.kind, previousKey: asset.s3_key, canonicalKey: pointer, verification: "OCI_HEAD_SIZE_CONTENT_TYPE_ETAG_MATCH" },
       }, tx);
     });
-    const refs = await sql<{kind:string;s3_key:string}>`select kind,s3_key from bridge_assets where title_id = ${title.id} and coalesce(byte_size,0)>0`;
+    const refs = await sql<{id:string;kind:string;s3_key:string}>`select id,kind,s3_key from bridge_assets where title_id = ${title.id} and coalesce(byte_size,0)>0`;
     return { reconciled: true, alreadyCanonical: false, qcEligible: hasVerifiedMasterAndArtwork(refs, title.masterKey, title.posterKey) };
   });
 
@@ -412,8 +412,8 @@ export const listTitleAssets = createServerFn({ method: "GET" })
             id: r.id, kind: r.kind, key: buyer ? null : r.s3_key,
             contentType: r.content_type, byteSize: r.byte_size,
             verified: Number(r.byte_size ?? 0) > 0,
-            canonical: Boolean(canonicalKey && r.s3_key === canonicalKey),
-            reconcileAvailable: !buyer && Boolean(canonicalKey && r.s3_key !== canonicalKey && Number(r.byte_size ?? 0) > 0),
+            canonical: Boolean(canonicalKey && pointsToVerifiedAsset(canonicalKey, r)),
+            reconcileAvailable: !buyer && Boolean(canonicalKey && !pointsToVerifiedAsset(canonicalKey, r) && Number(r.byte_size ?? 0) > 0),
             createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
           };
         }),
