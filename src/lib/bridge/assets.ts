@@ -80,9 +80,9 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     return { assetId: id, ...signed };
   });
 
-async function openUploadAsset(userId: string, assetId: string) {
+async function openUploadAsset(userId: string, assetId: string, aal?: string | null) {
   assertNotDevUser(userId);
-  const actor = await requireVerifiedActor(userId);
+  const actor = await requireVerifiedActor(userId, aal);
   assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
   const sql = await getSql();
   const rows = await sql<{
@@ -111,7 +111,7 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
     byteSize: z.number().int().positive().max(200 * 1024 * 1024 * 1024),
   }))
   .handler(async ({ context, data }) => {
-    const asset = await openUploadAsset(context.userId, data.assetId);
+    const asset = await openUploadAsset(context.userId, data.assetId, context.aal);
     if (asset.byte_size != null) return { assetId: asset.id, alreadyVerified: true as const };
     const { beginMultipartUpload } = await import("./oci-object-storage.server");
     const expiresIn = uploadUrlLifetimeSeconds(data.byteSize);
@@ -133,7 +133,7 @@ export const commitAssetMultipart = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ assetId: z.string().min(8), partBaseUrl: z.string().url().max(2000) }))
   .handler(async ({ context, data }) => {
-    const asset = await openUploadAsset(context.userId, data.assetId);
+    const asset = await openUploadAsset(context.userId, data.assetId, context.aal);
     if (asset.byte_size != null) return { committed: true };
     const { commitMultipartUpload } = await import("./oci-object-storage.server");
     await commitMultipartUpload(data.partBaseUrl, asset.s3_key);
@@ -144,7 +144,7 @@ export const abortAssetMultipart = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ assetId: z.string().min(8), partBaseUrl: z.string().url().max(2000) }))
   .handler(async ({ context, data }) => {
-    const asset = await openUploadAsset(context.userId, data.assetId);
+    const asset = await openUploadAsset(context.userId, data.assetId, context.aal);
     const { abortMultipartUpload } = await import("./oci-object-storage.server");
     await abortMultipartUpload(data.partBaseUrl, asset.s3_key);
     return { aborted: true };
