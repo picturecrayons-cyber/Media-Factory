@@ -46,7 +46,12 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
   const search = Route.useSearch();
-  const [activeTab, setActiveTab] = useState<Tab>(() =>\n    TABS.includes(search.tab as Tab) ? (search.tab as Tab) : "Titles",\n  );\n  useEffect(() => {\n    if (TABS.includes(search.tab as Tab)) setActiveTab(search.tab as Tab);\n  }, [search.tab]);
+  const [activeTab, setActiveTab] = useState<Tab>(() =>
+    TABS.includes(search.tab as Tab) ? (search.tab as Tab) : "Titles",
+  );
+  useEffect(() => {
+    if (TABS.includes(search.tab as Tab)) setActiveTab(search.tab as Tab);
+  }, [search.tab]);
 
   const data = query.data;
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading Admin…</div>;
