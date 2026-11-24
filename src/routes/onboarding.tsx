@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -43,6 +43,7 @@ function Onboarding() {
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [organizationName, setOrganizationName] = useState("");
   const [busy, setBusy] = useState(false);
+  const submitInFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -80,7 +81,7 @@ function Onboarding() {
   }
 
   async function createWorkspace() {
-    if (busy) return;
+    if (submitInFlight.current) return;
     setError(null);
     if (!displayName.trim()) {
       setError("Enter your name.");
@@ -90,6 +91,7 @@ function Onboarding() {
       setError("Enter your studio or company name.");
       return;
     }
+    submitInFlight.current = true;
     setBusy(true);
     try {
       let inviteToken: string | undefined;
@@ -108,6 +110,7 @@ function Onboarding() {
     } catch (err) {
       setError(publicOnboardingError(err));
     } finally {
+      submitInFlight.current = false;
       setBusy(false);
     }
   }
