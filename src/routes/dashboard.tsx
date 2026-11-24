@@ -24,29 +24,44 @@ function Dashboard() {
 
 const ADMIN_MODULES = [
   {
-    title: "Titles & media",
-    description: "Canonical title records, assets, QC and rights evidence.",
+    title: "Titles & Media",
+    description: "Canonical title library, Creator/Studio submissions, assets, metadata and QC.",
     to: "/workspace",
   },
   {
-    title: "Operations & approvals",
-    description: "Review queues, release gates and operational decisions.",
+    title: "Rights & Legal",
+    description: "Rights evidence, agreements, independent reviews and approval decisions.",
     to: "/admin/workstations",
   },
   {
-    title: "Buyer desk & licensing",
-    description: "Buyer access, commercial interest, offers and licensing workflow.",
-    to: "/buyer",
+    title: "Buyer Management",
+    description: "Buyer release gates, licensing pipeline and title-scoped access controls.",
+    to: "/admin/workstations",
   },
   {
-    title: "Delivery operations",
-    description: "Authorized delivery work and service operations.",
+    title: "Services & Operations",
+    description: "Production service requests, vendor jobs and delivery operations.",
     to: "/deliveries",
   },
   {
-    title: "People & access",
-    description: "Internal roles, invitations and organization access.",
+    title: "Revenue & Finance",
+    description: "Commercial pipeline and persisted delivery records. Reconciled cash revenue remains unverified until a finance ledger is connected.",
+    to: "/admin/workstations",
+  },
+  {
+    title: "People & Access",
+    description: "Internal roles, invitations and controlled organization access.",
     to: "/internal",
+  },
+  {
+    title: "Website CMS",
+    description: "Edit the Bridge public website. This does not manage the Loop consumer application.",
+    to: "/admin-cms",
+  },
+  {
+    title: "Audit & Security",
+    description: "Read-only persisted operator history and operational evidence.",
+    to: "/admin/workstations",
   },
 ] as const;
 
@@ -179,9 +194,9 @@ function DashboardBody() {
 
       <section aria-labelledby="workspaces-title" className="space-y-3">
         <div>
-          <h3 id="workspaces-title" className="font-display text-xl font-semibold">Management workspaces</h3>
+          <h3 id="workspaces-title" className="font-display text-xl font-semibold">Business workspaces</h3>
           <p className="mt-1 text-sm text-muted">
-            Open a focused operational area. Every workspace remains subject to server-side role and permission checks.
+            Executive overview stays here; detailed records open in their dedicated, server-authorized Bridge workspaces.
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
