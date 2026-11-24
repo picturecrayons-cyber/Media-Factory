@@ -81,7 +81,8 @@ function Onboarding() {
   }
 
   async function createWorkspace() {
-    if (submitInFlight.current || busy) return;
+    if (submitInFlight.current) return;
+    if (busy) return;
     setError(null);
     if (!displayName.trim()) {
       setError("Enter your name.");
