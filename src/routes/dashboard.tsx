@@ -118,7 +118,7 @@ function DashboardBody() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link to="/admin/workstations" className="rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-[#041018]">
+          <Link to="/admin/workstations" search={{ tab: "Titles" }} className="rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-[#041018]">
             Open operations
           </Link>
           <Link to="/buyer" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">
