@@ -69,7 +69,7 @@ function AdminBody({ actor }: { actor: any }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link to="/admin/workstations"><Button>Open operations workstations</Button></Link>
-            <Link to="/cms"><Button variant="outline">Open Loop Gateway</Button></Link>
+            <Link to="/cms"><Button variant="outline">Open Bridge CMS</Button></Link>
           </div>
         </section>
 
