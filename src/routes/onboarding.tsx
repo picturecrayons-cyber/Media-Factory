@@ -42,6 +42,7 @@ function Onboarding() {
   const [accountType, setAccountType] = useState<PublicAccountType>(roleFromSignup ?? "independent_creator");
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [organizationName, setOrganizationName] = useState("");
+  const [mandateAccepted, setMandateAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,6 +91,10 @@ function Onboarding() {
       setError("Enter your studio or company name.");
       return;
     }
+    if (accountType !== "buyer" && !mandateAccepted) {
+      setError("Accept the Creator Distribution Mandate before creating this workspace.");
+      return;
+    }
     setBusy(true);
     try {
       let inviteToken: string | undefined;
@@ -100,6 +105,7 @@ function Onboarding() {
           accountType,
           organizationName: accountType === "studio" ? organizationName.trim() : undefined,
           inviteToken,
+          creatorMandateAccepted: accountType === "buyer" ? undefined : mandateAccepted,
         },
       });
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
@@ -130,7 +136,7 @@ function Onboarding() {
           <legend className="mb-2 text-sm font-medium">Workspace</legend>
           {(Object.keys(ROLE_LABELS) as PublicAccountType[]).map((role) => (
             <label key={role} className={`flex min-h-12 cursor-pointer items-center justify-center rounded-md border px-2 text-sm font-semibold ${accountType === role ? "border-accent bg-accent-soft text-accent" : "border-line bg-elevated"}`}>
-              <input className="sr-only" type="radio" name="accountType" checked={accountType === role} onChange={() => setAccountType(role)} />
+              <input className="sr-only" type="radio" name="accountType" checked={accountType === role} onChange={() => { setAccountType(role); setMandateAccepted(false); }} />
               {ROLE_LABELS[role]}
             </label>
           ))}
@@ -147,7 +153,22 @@ function Onboarding() {
           <p className="rounded-md border border-line px-3 py-2 text-xs text-muted">Buyer workspace access and title visibility are controlled by Bridge approval and title-level permissions.</p>
         ) : null}
         {accountType === "independent_creator" || accountType === "studio" ? (
-          <p className="rounded-md border border-line px-3 py-2 text-xs text-muted">Creating an account does not approve a title, verify rights, or grant licensing or publication authority.</p>
+          <div className="space-y-3 rounded-xl border border-line bg-elevated p-4">
+            <p className="text-xs leading-relaxed text-muted">
+              The account-level mandate records your permission for Bridge to prepare and route your submitted content through the selected distribution channels. It does not approve title-specific rights, guarantee a license, authorize publication, or transfer ownership. Sublicensing is disabled by default; each title still requires its own rights evidence and approval.
+            </p>
+            <label className="flex cursor-pointer items-start gap-3 text-sm leading-relaxed">
+              <input
+                type="checkbox"
+                checked={mandateAccepted}
+                onChange={(event) => setMandateAccepted(event.target.checked)}
+                className="mt-1"
+              />
+              <span>
+                I have read and accept the Creator Distribution Mandate v1 for my Creator / Studio account.
+              </span>
+            </label>
+          </div>
         ) : null}
 
         {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
