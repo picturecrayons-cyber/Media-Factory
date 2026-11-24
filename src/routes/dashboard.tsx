@@ -201,7 +201,7 @@ function DashboardBody() {
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {ADMIN_MODULES.map((module) => (
-            <Link key={module.title} to={module.to} className="group rounded-sm border border-line p-4 transition-colors hover:border-accent">
+            <Link key={module.title} to={module.to} search={"search" in module ? module.search : undefined} className="group rounded-sm border border-line p-4 transition-colors hover:border-accent">
               <div className="flex items-center justify-between gap-3">
                 <h4 className="font-semibold">{module.title}</h4>
                 <span aria-hidden="true" className="text-accent">→</span>
