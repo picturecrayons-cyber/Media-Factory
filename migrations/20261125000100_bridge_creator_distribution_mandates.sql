@@ -17,6 +17,7 @@ create table public.bridge_creator_distribution_mandates (
 );
 alter table public.bridge_creator_distribution_mandates enable row level security;
 revoke all on table public.bridge_creator_distribution_mandates from anon, authenticated;
+revoke all on table public.bridge_creator_distribution_mandates from service_role;
 grant select, insert on table public.bridge_creator_distribution_mandates to service_role;
 create unique index bridge_creator_distribution_mandates_one_active_idx on public.bridge_creator_distribution_mandates (creator_user_id) where status = 'ACTIVE';
 create index bridge_creator_distribution_mandates_status_idx on public.bridge_creator_distribution_mandates (status);
