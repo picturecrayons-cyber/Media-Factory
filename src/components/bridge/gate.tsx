@@ -112,7 +112,8 @@ export function RequireBridge({
   // Internal surfaces remain protected by the explicit "internal"/"super_admin" checks.
   if (allow === "super_admin" && profile.internalRole !== "super_admin") return <Navigate to={sessionQ.data?.home ?? "/"} />;
   if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;
-  if (allow && allow !== "internal" && allow !== "super_admin" && allow !== "workspace" && (profile.internalRole || profile.accountType !== (
+  const isPlatformSuperAdmin = profile.internalRole === "super_admin";
+  if (allow && allow !== "internal" && allow !== "super_admin" && allow !== "workspace" && !isPlatformSuperAdmin && (profile.internalRole || profile.accountType !== (
     allow === "creator" ? "independent_creator" : allow
   ))) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
