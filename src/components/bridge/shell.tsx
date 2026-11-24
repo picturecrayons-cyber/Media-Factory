@@ -21,7 +21,12 @@ function navigationFor(actor: BridgeActor): NavItem[] {
     }
 
     if (actor.internalRole === "super_admin") {
-      items.unshift({ to: "/dashboard", label: "Founder Centre" });
+      items.unshift(
+        { to: "/dashboard", label: "Platform Control" },
+        { to: "/creator", label: "Creator Dashboard" },
+        { to: "/studio", label: "Studio Dashboard" },
+        { to: "/buyer", label: "Buyer Dashboard" },
+      );
       items.push({ to: "/cms", label: "Loop Gateway" });
     }
 
