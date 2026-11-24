@@ -325,7 +325,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets current_asset\n      where current_asset.title_id = ${title.id} and current_asset.byte_size > 0\n        and not exists (\n          select 1 from bridge_assets replacement\n          where replacement.supersedes_asset_id = current_asset.id\n            and replacement.byte_size > 0\n        )\n      order by current_asset.created_at desc
     `;
     return {
       assets: rows
