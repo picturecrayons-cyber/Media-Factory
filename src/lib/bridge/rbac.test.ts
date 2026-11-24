@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, assertSuperAdminMfa, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 import { PERMISSIONS } from "./types.ts";
 
@@ -92,6 +92,12 @@ describe("PRD authorization matrix", () => {
     assert.equal(canOperateOnTitle(qc, foreign, "asset.sign_upload"), false);
     assert.equal(canMutateTitle(qc, foreign, "title.update_own", "title.qc_review"), true);
     assert.equal(canMutateTitle(viewer(), foreign, "title.update_own", "title.qc_review"), false);
+  });
+
+  it("requires AAL2 for Super Admin server actions", () => {
+    assert.throws(() => assertSuperAdminMfa(superAdmin(), "aal1"), /MFA_REQUIRED/);
+    assert.doesNotThrow(() => assertSuperAdminMfa(superAdmin(), "aal2"));
+    assert.doesNotThrow(() => assertSuperAdminMfa(admin(), "aal1"));
   });
 
   it("platform_admin account type alone grants no privileged permission", () => {
