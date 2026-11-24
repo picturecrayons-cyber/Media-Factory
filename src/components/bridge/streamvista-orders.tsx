@@ -37,8 +37,8 @@ export function StreamVistaOrders() {
 
   return (
     <section>
-      <h2 className="font-display text-xl">Production services</h2>
-      <p className="mt-2 text-sm text-muted">Optional work such as localization. This is not the film master, and it does not pass QC or rights.</p>
+      <h2 className="font-display text-xl">My media service requests</h2>
+      <p className="mt-2 text-sm text-muted">Your requests are validated by Bridge backend services. Human QC, Legal, rights and publication decisions remain with their authorized reviewers.</p>
       <form className="mt-5 flex flex-wrap items-end gap-3" onSubmit={(event: FormEvent) => { event.preventDefault(); create.mutate(); }}>
         <label className="text-sm">Service
           <select className="mt-1 block h-11 rounded-sm border border-line bg-elevated px-3" value={service} onChange={(event) => setService(event.target.value as typeof service)}>
