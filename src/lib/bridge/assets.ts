@@ -13,6 +13,7 @@ import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { hasVerifiedMasterAndArtwork, pointsToVerifiedAsset } from "./asset-roles";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -257,6 +258,84 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     return { assetId: asset.id, byteSize: sealed.byteSize, verified: true };
   });
 
+
+/**
+ * Reconcile a stale asset-row key to the title's already-canonical object.
+ * This never uploads, copies, deletes, or changes a title pointer. Both OCI
+ * objects must exist and have matching size, content type and ETag before a
+ * compare-and-set update is attempted.
+ */
+export const reconcileAssetReference = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; title_id: string; kind: string; s3_key: string;
+      byte_size: number | null; content_type: string | null;
+    }>`select id, title_id, kind, s3_key, byte_size, content_type
+       from bridge_assets where id = ${data.assetId} limit 1`;
+    const asset = rows[0];
+    if (!asset || !asset.byte_size || asset.byte_size <= 0) throw new Error("Only a previously verified asset can be reconciled");
+    const title = await loadTitle(asset.title_id);
+    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", null)) throw new Error("Only the title owner or an authorized Studio member can reconcile this asset");
+    if (!UPLOADABLE.has(title.status)) throw new Error("Asset reconciliation is closed for this title status");
+
+    const pointer = asset.kind === "master"
+      ? title.masterKey
+      : (asset.kind === "poster" || asset.kind === "poster_vertical") ? title.posterKey : null;
+    if (!pointer) throw new Error("This asset kind has no canonical QC reference");
+    if (pointsToVerifiedAsset(pointer, asset)) {
+      const refs = await sql<{id:string;kind:string;s3_key:string}>`select id,kind,s3_key from bridge_assets where title_id = ${title.id} and coalesce(byte_size,0)>0`;
+      return { reconciled: false, alreadyCanonical: true, qcEligible: hasVerifiedMasterAndArtwork(refs, title.masterKey, title.posterKey) };
+    }
+
+    const { verifyObject } = await import("./oci-object-storage.server");
+    const [sourceObject, canonicalObject] = await Promise.all([
+      verifyObject(asset.s3_key, asset.content_type),
+      verifyObject(pointer, asset.content_type),
+    ]);
+    if (sourceObject.byteSize !== Number(asset.byte_size) || canonicalObject.byteSize !== Number(asset.byte_size)) {
+      throw new Error("OCI size verification did not match the recorded asset; no database reference was changed");
+    }
+    if (!sourceObject.etag || !canonicalObject.etag || sourceObject.etag !== canonicalObject.etag) {
+      throw new Error("OCI object identity could not be proven by matching ETags; no database reference was changed");
+    }
+    if (sourceObject.contentType !== canonicalObject.contentType) {
+      throw new Error("OCI content-type verification did not match; no database reference was changed");
+    }
+
+    await sql.transaction(async (tx) => {
+      const lockedTitle = await tx<{master_key:string|null;poster_key:string|null;status:string}>`
+        select master_key, poster_key, status from bridge_titles where id = ${title.id} for update`;
+      const lockedAsset = await tx<{s3_key:string;byte_size:number|null;kind:string;title_id:string}>`
+        select s3_key, byte_size, kind, title_id from bridge_assets where id = ${asset.id} for update`;
+      const current = lockedTitle[0];
+      const currentAsset = lockedAsset[0];
+      const currentPointer = asset.kind === "master" ? current?.master_key
+        : (asset.kind === "poster" || asset.kind === "poster_vertical") ? current?.poster_key : null;
+      if (!current || !currentAsset || current.status !== title.status ||
+          currentAsset.title_id !== title.id || currentAsset.kind !== asset.kind ||
+          currentAsset.s3_key !== asset.s3_key || Number(currentAsset.byte_size) !== Number(asset.byte_size) ||
+          currentPointer !== pointer) {
+        throw new Error("Title or asset changed during verification; refresh and retry. No database reference was changed");
+      }
+      await tx`update bridge_assets set s3_key = ${pointer}
+        where id = ${asset.id} and title_id = ${title.id} and s3_key = ${asset.s3_key}`;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "asset.reference_reconciled",
+        entityType: "bridge_asset",
+        entityId: asset.id,
+        metadata: { titleId: title.id, kind: asset.kind, previousKey: asset.s3_key, canonicalKey: pointer, verification: "OCI_HEAD_SIZE_CONTENT_TYPE_ETAG_MATCH" },
+      }, tx);
+    });
+    const refs = await sql<{id:string;kind:string;s3_key:string}>`select id,kind,s3_key from bridge_assets where title_id = ${title.id} and coalesce(byte_size,0)>0`;
+    return { reconciled: true, alreadyCanonical: false, qcEligible: hasVerifiedMasterAndArtwork(refs, title.masterKey, title.posterKey) };
+  });
+
 export const requestAssetDownload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ assetId: z.string().min(8) }))
@@ -317,29 +396,27 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
     const rows = await sql<{
-      id: string;
-      kind: string;
-      s3_key: string;
-      content_type: string | null;
-      byte_size: number | null;
-      created_at: string | Date;
+      id: string; kind: string; s3_key: string; content_type: string | null;
+      byte_size: number | null; created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets where title_id = ${title.id} order by created_at desc
     `;
     return {
       assets: rows
         .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
-        .map((r) => ({
-          id: r.id,
-          kind: r.kind,
-          key: buyer ? null : r.s3_key,
-          contentType: r.content_type,
-          byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0,
-          createdAt:
-            r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-        })),
+        .map((r) => {
+          const canonicalKey = r.kind === "master" ? title.masterKey
+            : (r.kind === "poster" || r.kind === "poster_vertical") ? title.posterKey : null;
+          return {
+            id: r.id, kind: r.kind, key: buyer ? null : r.s3_key,
+            contentType: r.content_type, byteSize: r.byte_size,
+            verified: Number(r.byte_size ?? 0) > 0,
+            canonical: Boolean(canonicalKey && pointsToVerifiedAsset(canonicalKey, r)),
+            reconcileAvailable: !buyer && Boolean(canonicalKey && !pointsToVerifiedAsset(canonicalKey, r) && Number(r.byte_size ?? 0) > 0),
+            createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+          };
+        }),
     };
   });
 

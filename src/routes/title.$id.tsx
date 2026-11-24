@@ -18,6 +18,7 @@ import {
   listProductionAssets,
   requestAssetDownload,
   requestAssetUpload,
+  reconcileAssetReference,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -143,6 +144,10 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     refetchInterval: 60_000,
   });
   const assets = assetsQ.data?.assets ?? [];
+  const qcAssetsReady = Boolean(
+    assets.some((asset) => asset.kind === "master" && asset.verified && asset.canonical) &&
+    assets.some((asset) => (asset.kind === "poster" || asset.kind === "poster_vertical") && asset.verified && asset.canonical)
+  );
   const productionAssets = productionAssetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
   const activeTab: WorkspaceTab = buyerView
@@ -246,7 +251,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 {title.status === "PREPARING" ? (
                   <button
                     type="button"
-                    disabled={submitQcMutation.isPending}
+                    disabled={submitQcMutation.isPending || !qcAssetsReady}
                     onClick={() => submitQcMutation.mutate()}
                     className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-[#041018] disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -261,7 +266,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
               </p>
             ) : null}
             {title.status === "PREPARING" && !qcReady ? (
-              <p className="mt-3 text-xs text-muted">Submit becomes available when the required master and artwork are storage-verified. QC review is a separate decision.</p>
+              <p className="mt-3 text-xs text-muted">QC submission is blocked until the master and artwork are storage-verified and match the canonical title references. Open Files to see the exact blocker and use Re-verify / Reconcile when offered. QC review remains a separate decision.</p>
             ) : null}
           </div>
         </div>
@@ -322,6 +327,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
             ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
           }
+          canReconcile={canOperateOnTitle(actor, title, "asset.sign_upload", null) && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)}
           titleId={id}
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
@@ -473,13 +479,14 @@ function ProductionAssetsPanel({
   const artwork = assets.filter((asset) => asset.category === "stills");
   const documents = assets.filter((asset) => asset.category === "documents");
   const other = assets.filter((asset) => !["raw_video", "stills", "documents"].includes(asset.category));
+  const hasVerifiedMaster = assets.some((asset) => asset.verifiedSource && asset.sourceKind === "master");
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Production</p>
           <h2 className="mt-1 font-display text-xl font-semibold">Linked production assets</h2>
-          <p className="mt-1 text-sm text-muted">References to verified files already stored in Bridge. Originals remain in their existing OCI locations.</p>
+          <p className="mt-1 text-sm text-muted">Production references are shown separately from the Files QC checklist. Originals remain in their existing OCI locations.</p>
         </div>
         <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
           {assets.length} linked
@@ -487,6 +494,11 @@ function ProductionAssetsPanel({
       </div>
       {error ? <p role="alert" className="mt-4 text-sm text-red-600">Production assets unavailable: {error}</p> : null}
       {loading ? <p className="mt-4 text-sm text-muted">Loading Production register…</p> : null}
+      {!loading && !error && assets.length > 0 && !hasVerifiedMaster ? (
+        <p className="mt-4 rounded-xl border border-line bg-elevated/40 p-3 text-xs text-muted">
+          No verified main-film master is linked in this Production register. A verified screener or trailer is not a master. Check Files for the canonical master and vertical poster before QC submission.
+        </p>
+      ) : null}
       {!loading && !error && assets.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-line p-5 text-sm text-muted">
           No verified files are linked to the Production register for this title yet. Unverified uploads and legacy migration entries are not presented as ready assets.
@@ -520,7 +532,17 @@ function ProductionAssetsPanel({
                           </p>
                         </div>
                         <span className="rounded-full border border-line px-2 py-1 text-[10px] font-semibold">
-                          {asset.verifiedSource ? "Verified source" : "Reference"}
+                          {asset.verifiedSource
+                            ? asset.sourceKind === "master"
+                              ? "Verified master"
+                              : asset.sourceKind === "screener"
+                                ? "Verified screener · not master"
+                                : asset.sourceKind
+                                  ? `Verified ${asset.sourceKind.replaceAll("_", " ")}`
+                                  : "Verified source"
+                            : asset.fileSize <= 0
+                              ? "Reference · not storage verified"
+                              : "Source not verified"}
                         </span>
                       </div>
                     </article>
@@ -571,8 +593,10 @@ function FilesPanel({
   assets,
   onAssetsChanged,
   canUpload,
+  canReconcile,
 }: {
   canUpload: boolean;
+  canReconcile: boolean;
   titleId: string;
   assets: Array<{
     id: string;
@@ -580,10 +604,14 @@ function FilesPanel({
     contentType: string | null;
     byteSize: number | null;
     verified: boolean;
+    canonical?: boolean;
+    reconcileAvailable?: boolean;
   }>;
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
+  const [reconcilingAssetId, setReconcilingAssetId] = useState<string | null>(null);
+  const [qcRecheck, setQcRecheck] = useState<boolean | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageKind, setMessageKind] = useState<"status" | "success" | "error">("status");
   const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied" | "unsupported">(() =>
@@ -909,6 +937,29 @@ function FilesPanel({
     window.open(signed.url, "_blank", "noopener,noreferrer");
   }
 
+  async function reconcile(assetId: string) {
+    if (!canReconcile || reconcilingAssetId) return;
+    setReconcilingAssetId(assetId);
+    setQcRecheck(null);
+    try {
+      const result = await reconcileAssetReference({ data: { assetId } });
+      await onAssetsChanged();
+      setQcRecheck(result.qcEligible);
+      announce(
+        result.alreadyCanonical
+          ? "This asset reference is already canonical. QC eligibility was re-checked."
+          : result.qcEligible
+            ? "Reference reconciled and QC eligibility re-checked: required master and artwork are eligible. This does not submit the title."
+            : "Reference reconciled and QC eligibility re-checked: another required asset reference is still blocked. This does not submit the title.",
+        result.qcEligible ? "success" : "status",
+      );
+    } catch (error) {
+      announce(error instanceof Error ? error.message : "Reconciliation failed. No asset was deleted or uploaded.", "error");
+    } finally {
+      setReconcilingAssetId(null);
+    }
+  }
+
   const groups: { title: string; hint: string; items: [SimpleAssetKind, string][] }[] = [
     {
       title: "1 · Picture",
@@ -1016,6 +1067,26 @@ function FilesPanel({
         </div>
       ) : null}
 
+      {assets.some((asset) => asset.reconcileAvailable) ? (
+        <div className="mt-5 rounded-xl border border-amber-300 bg-amber-50/60 p-4">
+          <h3 className="text-sm font-semibold">Canonical reference mismatch</h3>
+          <p className="mt-1 text-xs leading-5 text-muted">These stored assets have a title-level master/artwork reference mismatch. They are not counted as Ready. Reconcile verifies both OCI objects and stops if object identity cannot be proven. No uploads, deletes or overwrites are performed.</p>
+          <ul className="mt-3 space-y-2">
+            {assets.filter((asset) => asset.reconcileAvailable).map((asset) => (
+              <li key={asset.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-surface p-3">
+                <span className="text-sm font-medium">{displayKind(asset.kind)} · {formatProductionBytes(asset.byteSize ?? 0)}</span>
+                <button type="button" disabled={!canReconcile || reconcilingAssetId !== null}
+                  onClick={() => void reconcile(asset.id)}
+                  className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
+                  {reconcilingAssetId === asset.id ? "Verifying OCI…" : "Re-verify / Reconcile"}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {!canReconcile ? <p className="mt-2 text-xs text-muted">Only the title owner or an authorized Studio member can run recovery.</p> : null}
+          {qcRecheck !== null ? <p className="mt-3 text-xs font-semibold">Post-reconciliation QC eligibility: {qcRecheck ? "ELIGIBLE FOR QC SUBMISSION" : "BLOCKED — another required asset is not canonical and verified"}</p> : null}
+        </div>
+      ) : null}
       <div className="mt-6 space-y-6">
         {groups.map((group) => (
           <div key={group.title}>
@@ -1031,7 +1102,7 @@ function FilesPanel({
                     key={kind}
                     kind={kind}
                     label={kindLabel(kind)}
-                    status={verified ? "Ready" : empty}
+                    status={verified ? "Ready" : assets.some((asset) => asset.verified && (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")) && (kind === "master" || kind === "poster_vertical") && asset.canonical !== true) ? "Canonical reference mismatch" : empty}
                     busy={uploading === kind}
                     locked={uploading !== null && uploading !== kind}
                     canUpload={canUpload}
@@ -1126,10 +1197,14 @@ function kindLabel(kind: SimpleAssetKind) {
 }
 
 function verifiedFor(
-  assets: Array<{ id: string; kind: string; verified: boolean }>,
+  assets: Array<{ id: string; kind: string; verified: boolean; canonical?: boolean }>,
   kind: SimpleAssetKind,
 ) {
-  return assets.find((asset) => asset.verified && (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")));
+  return assets.find((asset) => {
+    const matchesKind = asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster");
+    const requiresCanonical = kind === "master" || kind === "poster_vertical";
+    return matchesKind && asset.verified && (!requiresCanonical || asset.canonical === true);
+  });
 }
 
 function FileTypeCard({
