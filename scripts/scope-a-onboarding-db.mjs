@@ -27,6 +27,7 @@ try {
   const beforeProfiles = await scalar("select count(*)::int as value from bridge_profiles");
   const beforeLinks = await scalar("select count(*)::int as value from bridge_loop_identity_links");
   const beforeInvites = await scalar("select count(*)::int as value from bridge_invites");
+  const beforeMandates = await scalar("select count(*)::int as value from bridge_creator_distribution_mandates");
 
   const userId = randomUUID();
   const email = "scope-a@example.test";
@@ -57,14 +58,54 @@ try {
      values ($1, $2::uuid, 'supabase_auth_onboarding', now(), $1)`,
     [userId, userId],
   );
+  const acceptedAt = new Date().toISOString();
+  const mandateScope = {
+    enabled: true,
+    version: 1,
+    destinations: ["Crayons Loop", "External OTT"],
+    media: ["SVOD", "TVOD"],
+    acceptedAt,
+    consentTextVersion: "creator-distribution-mandate-v1",
+    sublicensingAllowed: false,
+  };
+  await client.query(
+    `insert into bridge_creator_distribution_mandates
+      (creator_user_id, mandate_version, status, scope, accepted_at, consent_text_version)
+     values ($1, 1, 'ACTIVE', $2::jsonb, $3::timestamptz, 'creator-distribution-mandate-v1')`,
+    [userId, JSON.stringify(mandateScope), acceptedAt],
+  );
   await client.query("commit");
 
   const afterProfiles = await scalar("select count(*)::int as value from bridge_profiles");
   const afterLinks = await scalar("select count(*)::int as value from bridge_loop_identity_links");
-  console.log(JSON.stringify({ stage: "identity_setup", beforeProfiles, beforeLinks, afterProfiles, afterLinks }));
+  const afterMandates = await scalar("select count(*)::int as value from bridge_creator_distribution_mandates");
+  console.log(JSON.stringify({ stage: "identity_setup", beforeProfiles, beforeLinks, beforeMandates, afterProfiles, afterLinks, afterMandates }));
 
   await assert(afterProfiles === beforeProfiles + 1, "profile insert assertion failed");
   await assert(afterLinks === beforeLinks + 1, "identity link insert assertion failed");
+  await assert(afterMandates === beforeMandates + 1, "creator mandate insert assertion failed");
+  const mandateRows = await client.query(
+    `select status, scope->>'sublicensingAllowed' as sublicensing_allowed
+     from bridge_creator_distribution_mandates where creator_user_id = $1`,
+    [userId],
+  );
+  await assert(mandateRows.rows[0]?.status === "ACTIVE", "creator mandate status assertion failed");
+  await assert(mandateRows.rows[0]?.sublicensing_allowed === "false", "default mandate sublicensing must remain disabled");
+  const privileges = await client.query(
+    `select
+      has_table_privilege('anon', 'public.bridge_creator_distribution_mandates', 'select') as anon_select,
+      has_table_privilege('authenticated', 'public.bridge_creator_distribution_mandates', 'select') as authenticated_select,
+      has_table_privilege('service_role', 'public.bridge_creator_distribution_mandates', 'insert') as service_insert`,
+  );
+  await assert(privileges.rows[0]?.anon_select === false, "anon must not have direct mandate table access");
+  await assert(privileges.rows[0]?.authenticated_select === false, "authenticated must not have direct mandate table access");
+  await assert(privileges.rows[0]?.service_insert === true, "service_role must be able to persist mandate acceptance");
+  const rls = await client.query(
+    `select c.relrowsecurity as enabled
+     from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relname = 'bridge_creator_distribution_mandates'`,
+  );
+  await assert(rls.rows[0]?.enabled === true, "creator mandate table RLS must be enabled");
 
   let sameEmailBlocked = false;
   try {
@@ -87,6 +128,12 @@ try {
      values ($1, $2, 'Rollback', 'independent_creator', null, null, true)`,
     [rollbackId, "scope-a-rollback@example.test"],
   );
+  await client.query(
+    `insert into bridge_creator_distribution_mandates
+      (creator_user_id, mandate_version, status, scope, accepted_at, consent_text_version)
+     values ($1, 1, 'ACTIVE', $2::jsonb, now(), 'creator-distribution-mandate-v1')`,
+    [rollbackId, JSON.stringify({ enabled: true, version: 1, destinations: ["Crayons Loop"], media: ["SVOD"], acceptedAt: new Date().toISOString(), consentTextVersion: "creator-distribution-mandate-v1", sublicensingAllowed: false })],
+  );
   await client.query("rollback");
 
   const rollbackRows = await scalar(
@@ -97,7 +144,9 @@ try {
   await assert(rollbackRows === 0, "transaction rollback assertion failed");
 
   const finalInvites = await scalar("select count(*)::int as value from bridge_invites");
+  const finalMandates = await scalar("select count(*)::int as value from bridge_creator_distribution_mandates");
   await assert(finalInvites === beforeInvites, "invite row count changed unexpectedly");
+  await assert(finalMandates === afterMandates, "rolled-back mandate must not persist");
 
   console.log(
     JSON.stringify({
@@ -105,11 +154,13 @@ try {
         bridge_profiles: beforeProfiles,
         bridge_loop_identity_links: beforeLinks,
         bridge_invites: beforeInvites,
+        bridge_creator_distribution_mandates: beforeMandates,
       },
       after: {
         bridge_profiles: afterProfiles,
         bridge_loop_identity_links: afterLinks,
         bridge_invites: finalInvites,
+        bridge_creator_distribution_mandates: finalMandates,
       },
       assertions: {
         migration_replay: "passed",
@@ -118,6 +169,9 @@ try {
         same_email_unique_conflict: "passed",
         rollback: "passed",
         invite_count_stable: "passed",
+        creator_mandate_insert: "passed",
+        mandate_rls_and_grants: "passed",
+        mandate_rollback: "passed",
       },
     }),
   );
