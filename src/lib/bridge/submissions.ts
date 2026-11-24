@@ -43,31 +43,32 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-
     if (!["independent_creator", "studio"].includes(actor.accountType)) {
       throw new Error("Only creator and studio accounts can submit titles");
     }
     assertPermission(actor, "title.create");
+    if (actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("Verified Studio organization membership is required before submitting a studio-owned title");
+    }
 
     const id = randomBytes(16).toString("hex");
     const slug = `${data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "title"}-${id.slice(0, 6)}`;
     const sql = await getSql();
-
-    // A submission becomes visible to Bridge review, but it is not approved,
-    // QC-cleared, rights-cleared, buyer-listed, or authorized for LOOP.
     const submittedStatus = "PREPARING";
 
     return sql.begin(async (tx) => {
       await tx`
         insert into bridge_titles (
-          id, slug, name, original_title, owner_user_id, owner_account_type, status,
-          synopsis, long_synopsis, language, original_language, year, runtime_minutes,
-          content_type, country_of_origin, release_date
+          id, slug, name, original_title, owner_user_id, owner_account_type,
+          owner_organization_id, submission_type, status, synopsis, long_synopsis,
+          language, original_language, year, runtime_minutes, content_type,
+          country_of_origin, release_date
         ) values (
-          ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType}, ${submittedStatus},
-          ${data.synopsis}, ${data.synopsis}, ${data.originalLanguage}, ${data.originalLanguage},
-          ${data.releaseYear}, ${data.runtimeMinutes}, ${data.contentType}, ${data.countryOfOrigin},
-          make_date(${data.releaseYear}, 1, 1)
+          ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType},
+          ${actor.accountType === "studio" ? actor.organizationId : null}, 'finished_film',
+          ${submittedStatus}, ${data.synopsis}, ${data.synopsis}, ${data.originalLanguage},
+          ${data.originalLanguage}, ${data.releaseYear}, ${data.runtimeMinutes},
+          ${data.contentType}, ${data.countryOfOrigin}, make_date(${data.releaseYear}, 1, 1)
         )
       `;
 
@@ -124,7 +125,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
           buyerChannels: data.buyerChannels,
           submissionType: "finished_film",
         },
-      });
+      }, tx);
 
       return { titleId: id, status: submittedStatus as const };
     });
