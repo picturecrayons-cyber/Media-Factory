@@ -102,6 +102,7 @@ function Onboarding() {
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
   const [organizationName, setOrganizationName] = useState("");
+  const [mandateAccepted, setMandateAccepted] = useState(false);
 
   const [titleName, setTitleName] = useState("");
   const [originalTitle, setOriginalTitle] = useState("");
@@ -228,7 +229,11 @@ function Onboarding() {
       return;
     }
     if (!displayName.trim()) {
-      setError("Enter your name to create your Creator workspace.");
+      setError("Enter your name to create your workspace.");
+      return;
+    }
+    if (accountType !== "buyer" && !mandateAccepted) {
+      setError("Accept the Creator Distribution Mandate before creating this workspace.");
       return;
     }
     if (submitInFlight.current) return;
@@ -238,16 +243,17 @@ function Onboarding() {
     try {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
-      await completeOnboarding({
+      const completed = await completeOnboarding({
         data: {
           displayName: displayName.trim(),
           accountType,
           organizationName: accountType === "studio" ? organizationName.trim() : undefined,
           inviteToken,
+          creatorMandateAccepted: accountType === "buyer" ? undefined : mandateAccepted,
         },
       });
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
-      void navigate({ to: accountType === "buyer" ? "/buyer" : "/creator", replace: true });
+      void navigate({ to: (completed.home || "/dashboard") as any, replace: true });
     } catch (err) {
       setError(publicOnboardingError(err));
     } finally {
@@ -262,6 +268,10 @@ function Onboarding() {
       setError("This account type needs an invitation or support review. Please contact Crayons Bridge before continuing.");
       return;
     }
+    if (accountType !== "buyer" && !mandateAccepted) {
+      setError("Accept the Creator Distribution Mandate before creating this workspace.");
+      return;
+    }
     if (submitInFlight.current) return;
     submitInFlight.current = true;
     setBusy(true);
@@ -271,17 +281,18 @@ function Onboarding() {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
 
-      await completeOnboarding({
+      const completed = await completeOnboarding({
         data: {
           displayName: displayName.trim(),
           accountType,
           organizationName: accountType === "studio" ? organizationName.trim() : undefined,
           inviteToken,
+          creatorMandateAccepted: accountType === "buyer" ? undefined : mandateAccepted,
         },
       });
 
       if (accountType === "buyer") {
-        void navigate({ to: "/buyer", replace: true });
+        void navigate({ to: (completed.home || "/buyer") as any, replace: true });
         return;
       }
 
@@ -376,6 +387,24 @@ function Onboarding() {
             </label>
           ) : null}
         </section>
+
+        {accountType !== "buyer" ? (
+          <section className="space-y-3 rounded-2xl border border-line bg-elevated p-5">
+            <div>
+              <h2 className="font-display text-xl font-semibold">Creator / Studio Distribution Mandate</h2>
+              <p className="mt-1 text-sm leading-relaxed text-muted">
+                This reusable account-level mandate records the destinations and media you may ask Bridge to evaluate for distribution.
+                It does not approve any title, transfer ownership, establish title-specific rights, or make a title visible to buyers or LOOP.
+                Each title still requires its own authorization evidence, QC, legal review and explicit publication decision.
+                Sublicensing is not included by default.
+              </p>
+            </div>
+            <label className="flex items-start gap-3 rounded-xl border border-line bg-surface p-4 text-sm">
+              <input required type="checkbox" checked={mandateAccepted} onChange={(e) => setMandateAccepted(e.target.checked)} className="mt-0.5 accent-current" />
+              <span>I have read and accept the version 1 Creator / Studio Distribution Mandate for this account.</span>
+            </label>
+          </section>
+        ) : null}
 
         {accountType === "buyer" ? (
           <section className="rounded-2xl border border-line bg-elevated p-5">
