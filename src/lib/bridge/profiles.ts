@@ -236,6 +236,15 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       throw new Error("Investor access requires a reviewed access request.");
     }
 
+    // Creator/Studio workspace creation requires explicit acceptance at the
+    // authenticated server boundary; the client checkbox is not the control.
+    if (
+      (data.accountType === "independent_creator" || data.accountType === "studio") &&
+      data.creatorMandateAccepted !== true
+    ) {
+      throw new Error("Accept the Creator Distribution Mandate to create this workspace.");
+    }
+
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
     const verified = true;
