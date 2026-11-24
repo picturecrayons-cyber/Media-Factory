@@ -45,7 +45,7 @@ test("onboarding preserves the signup-selected role and fails closed for unsuppo
   const onboarding = read("../../routes/onboarding.tsx");
   assert.match(onboarding, /publicAccountTypeFrom\(signupAccountTypeHint\)/);
   assert.match(read("../../lib/auth/use-current-user.ts"), /signupAccountTypeHint/);
-  assert.match(onboarding, /if \(signupAccountType\) setAccountType\(signupAccountType\)/);
+  assert.match(onboarding, /const roleFromSignup = publicAccountTypeFrom\(signupAccountTypeHint\)/);\n  assert.match(onboarding, /if \(roleFromSignup\) setAccountType\(roleFromSignup\)/);
   assert.match(onboarding, /if \(unsupportedSignupRole\)/);
 });
 
