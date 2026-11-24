@@ -214,3 +214,62 @@ test("a previously sized raw asset can be reconciled only with matching verified
   }
 });
 
+test("a newer verified master upload can replace an older asset without allowing stale retries", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(`
+      insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status,master_key)
+      values ('replace-title','replace','Replace','creator','independent_creator','PREPARING','old/master.mp4.verified/old-asset');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by,byte_size,created_at)
+      values ('old-asset','replace-title','master','old/master.mp4.verified/old-asset','video/mp4','creator',100,now() - interval '1 minute');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by,created_at)
+      values ('new-asset','replace-title','master','new/raw/master.mp4','video/mp4','creator',now());
+    `);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const replacement = {
+      assetId: "new-asset",
+      actorUserId: "creator",
+      internalActor: false,
+      titleId: "replace-title",
+      kind: "master",
+      byteSize: 250,
+      contentType: "video/mp4",
+      checksum: "etag-new-master",
+      sourceKey: "new/raw/master.mp4",
+      sealedKey: "new/raw/master.mp4.verified/new-asset",
+    };
+    assert.equal(await persistVerifiedAsset(sql, replacement), true);
+    const state = (await db.query<{ master_key: string; s3_key: string }>(`
+      select t.master_key, a.s3_key from bridge_titles t
+      join bridge_assets a on a.id='new-asset' where t.id='replace-title'
+    `)).rows[0];
+    assert.deepEqual(state, {
+      master_key: "new/raw/master.mp4.verified/new-asset",
+      s3_key: "new/raw/master.mp4.verified/new-asset",
+    });
+
+    // The older asset's retry must not move the title pointer backwards.
+    assert.equal(await persistVerifiedAsset(sql, {
+      ...replacement,
+      assetId: "old-asset",
+      byteSize: 100,
+      checksum: "etag-old-master",
+      sourceKey: "old/master.mp4.verified/old-asset",
+      sealedKey: "old/master.mp4.verified/old-asset",
+    }), false);
+    const pointer = (await db.query<{ master_key: string }>(
+      "select master_key from bridge_titles where id='replace-title'",
+    )).rows[0];
+    assert.equal(pointer?.master_key, "new/raw/master.mp4.verified/new-asset");
+    const audit = await db.query<{ entity_id: string }>(
+      "select entity_id from bridge_audit_logs where action='asset.upload_verified' order by entity_id",
+    );
+    assert.deepEqual(audit.rows.map((row) => row.entity_id), ["new-asset"]);
+  } finally {
+    await db.close();
+  }
+});
