@@ -7,6 +7,7 @@ import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { requireActiveDistributionMandate } from "./distribution-mandate";
 
 const submissionSchema = z.object({
   name: z.string().trim().min(1).max(160),
@@ -65,6 +66,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
     const id = randomBytes(16).toString("hex");
     const slug = `${data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "title"}-${id.slice(0, 6)}`;
     const sql = await getSql();
+    await requireActiveDistributionMandate(sql, actor);
 
     await sql`
       insert into bridge_titles (

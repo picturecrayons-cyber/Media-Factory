@@ -12,6 +12,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission } from "./rbac";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { requireActiveDistributionMandate } from "./distribution-mandate";
 import {
   STORY_CONCEPT_ENABLED,
   CURATION_TRANSITIONS,
@@ -116,6 +117,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     const titleId = randomBytes(16).toString("hex");
     const slug = slugify(data.titleName, titleId);
     const sql = await getSql();
+    await requireActiveDistributionMandate(sql, actor);
 
     try {
       await sql`
