@@ -10,15 +10,18 @@ import { assertNotDevUser } from "./guards";
 
 const submissionSchema = z.object({
   name: z.string().trim().min(1).max(160),
-  synopsis: z.string().trim().min(1).max(4000),
+  synopsis: z.string().trim().min(1).max(2500).refine((value) => value.split(/\s+/).filter(Boolean).length <= 250, "Synopsis must be 250 words or fewer"),
   contentType: z.enum(["FEATURE", "SERIES", "SHORT", "DOCUMENTARY", "OTHER"]),
   originalLanguage: z.string().trim().min(2).max(40),
   countryOfOrigin: z.string().trim().min(2).max(80),
   releaseYear: z.number().int().min(1895).max(2100),
   runtimeMinutes: z.number().int().min(1).max(600),
   rightsLanguages: z.array(z.string().trim().min(2).max(40)).min(1).max(30),
+  dubbedLanguages: z.array(z.string().trim().min(2).max(40)).max(30).default([]),
+  subtitleLanguages: z.array(z.string().trim().min(2).max(40)).max(30).default([]),
+  distributionAppointmentRequested: z.literal(true),
   territories: z.array(z.string().trim().min(2).max(80)).min(1).max(200),
-  exploitation: z.array(z.string().trim().min(2).max(80)).min(1).max(30),
+  exploitation: z.array(z.enum(["OTT", "SVOD", "TVOD", "AVOD", "FAST", "DIGITAL_DOWNLOAD", "SATELLITE", "BROADCAST_TV", "THEATRICAL", "YOUTUBE", "MUSIC_AUDIO", "PHYSICAL_DISTRIBUTION", "EDUCATIONAL", "AIRLINE_ANCILLARY", "FESTIVAL_SCREENING"])).min(1).max(30),
   windowStart: z.string().datetime(),
   windowEnd: z.string().datetime(),
   exclusivity: z.enum(["EXCLUSIVE", "NON_EXCLUSIVE"]),
@@ -96,15 +99,28 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
         `;
       }
 
+      const requestedRights = {
+        territories: data.territories,
+        originalLanguages: data.rightsLanguages,
+        dubbedLanguages: data.dubbedLanguages,
+        subtitleLanguages: data.subtitleLanguages,
+        media: data.exploitation,
+        proposedWindowStart: data.windowStart,
+        proposedWindowEnd: data.windowEnd,
+        exclusivity: data.exclusivity,
+        proposedMasterDistributionTermYears: 5,
+        proposedAppointmentAcceptedForReview: data.distributionAppointmentRequested,
+        status: "PENDING_BRIDGE_ADMIN_AND_LEGAL_REVIEW",
+      };
       const rightsRows = await tx<{ id: string }>`
         insert into bridge_rights_grants (
           title_id, grant_type, territories, languages, media, window_start, window_end,
           exclusivity, evidence, status, created_by
         ) values (
           ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories)}::jsonb,
-          ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(data.exploitation)}::jsonb,
+          ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(["OTT"])}::jsonb,
           ${data.windowStart}, ${data.windowEnd}, ${data.exclusivity},
-          ${JSON.stringify([{ type: data.authorizationEvidenceType, status: "PENDING_REVIEW" }])}::jsonb,
+          ${JSON.stringify([{ type: data.authorizationEvidenceType, status: "PENDING_REVIEW" }, { type: "OWNER_REQUESTED_SCOPE", status: "PENDING_BRIDGE_ADMIN_AND_LEGAL_REVIEW", requestedRights }])}::jsonb,
           'DRAFT', ${actor.userId}
         )
         returning id::text
@@ -145,6 +161,8 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
         entityId: id,
         metadata: {
           rightsGrantId: rightsRows[0]?.id ?? null,
+          intakeStatus: "PENDING_BRIDGE_ADMIN",
+          proposedMasterDistributionTermYears: 5,
           screenerMode: data.screenerMode,
           buyerChannels: data.buyerChannels,
           submissionType: "finished_film",
