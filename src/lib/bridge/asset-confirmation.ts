@@ -77,6 +77,16 @@ async function persistVerifiedAssetScoped(
               or t.owner_user_id = $4
               ${studioPredicate}
             )
+            -- Do not let an older asset confirmation replace a newer title
+            -- master/poster pointer. Only reconcile the raw source or the
+            -- exact sealed key derived from that same source.
+            and (
+              (a.kind in ('poster', 'poster_vertical')
+                and (t.poster_key is null or t.poster_key = $7 or t.poster_key = $6))
+              or (a.kind = 'master'
+                and (t.master_key is null or t.master_key = $7 or t.master_key = $6))
+              or a.kind not in ('master', 'poster', 'poster_vertical')
+            )
         )
       returning a.id, a.title_id, a.kind, a.s3_key
     ), title_set as (
