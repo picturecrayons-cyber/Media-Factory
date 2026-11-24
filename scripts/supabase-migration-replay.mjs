@@ -18,6 +18,12 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
 const EXPECTED_MIGRATIONS = 70;
+// Explicit unmerged migrations added by this Platform Super Admin PR. The
+// recovered Production-ledger set remains independently pinned by its manifest.
+const PENDING_MIGRATIONS = new Set([
+  "20261125093000_platform_super_admin_account_type.sql",
+  "20261125094500_loop_admin_featured_audit.sql",
+]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -54,9 +60,15 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
+const recoveredNames = names.filter((name) => !PENDING_MIGRATIONS.has(name));
+const pendingNames = names.filter((name) => PENDING_MIGRATIONS.has(name));
+if (
+  names.length !== EXPECTED_MIGRATIONS + PENDING_MIGRATIONS.size ||
+  recoveredNames.length !== EXPECTED_MIGRATIONS ||
+  pendingNames.length !== PENDING_MIGRATIONS.size
+) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
+    `Expected ${EXPECTED_MIGRATIONS} recovered migrations plus ${PENDING_MIGRATIONS.size} explicit pending migrations; found ${names.length}`,
   );
 }
 if (new Set(names).size !== names.length) {
@@ -93,9 +105,10 @@ if (manifestRows.size !== EXPECTED_MIGRATIONS) {
 }
 
 for (const name of names) {
+  if (PENDING_MIGRATIONS.has(name)) continue;
   const contents = await readFile(join(MIGRATIONS_DIR, name));
   const expected = manifestRows.get(name);
-  if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
+  if (!expected) throw new Error(`Recovered migration missing from manifest: ${name}`);
   const actualBytes = contents.byteLength;
   const actualSha256 = createHash("sha256").update(contents).digest("hex");
   if (actualBytes !== expected.bytes || actualSha256 !== expected.sha256) {
