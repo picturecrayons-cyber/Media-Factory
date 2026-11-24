@@ -156,7 +156,7 @@ function DashboardBody() {
           <PlatformModule title="Bridge Operations & Ingest" description="Open operational workstations and canonical ingest workflows." to="/admin/workstations" />
           <PlatformModule title="People & Access" description="Internal users, invitations and staff role management." to="/internal" />
           <PlatformModule title="Buyer Desk & Licensing" description="Buyer activity, offers and licensing workflows." to="/buyer" />
-          <PlatformModule title="CMS & Site Content" description="Manage Bridge website content." to="/cms" />
+          <PlatformModule title="CMS & Direct Ingest" description="Manage Bridge site content and the canonical Super Admin direct-ingest workflow." to="/cms" />
         </div>
       </section>
 
