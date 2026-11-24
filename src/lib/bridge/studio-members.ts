@@ -19,7 +19,7 @@ export const listStudioMembers = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<{ members: StudioMember[] }> => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     if (actor.internalRole || actor.accountType !== "studio") {
       throw new Error("Studio account required");
     }
