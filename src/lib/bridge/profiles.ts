@@ -392,7 +392,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     const bridgeUserId = verificationProfileId(actor);
     const email = actor!.email;
     if (!email) throw new Error("No email on account");
@@ -446,7 +446,7 @@ export const listAdminProfiles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") {
       throw new Error("Admin access required");
     }
@@ -485,7 +485,7 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ email: z.string().email(), role: z.enum(INTERNAL_ROLES) }))
   .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "users.invite_internal");
     if (!canGrantInternalRole(actor, data.role)) {
       throw new Error("Role grant is not permitted");
