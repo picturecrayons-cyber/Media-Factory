@@ -16,6 +16,7 @@ function navigationFor(actor: BridgeActor): NavItem[] {
       { to: "/admin/buyers", label: "Buyers" },
       { to: "/admin/users", label: "People & Organizations" },
       { to: "/admin/services", label: "Services" },
+      { to: "/deliveries", label: "Vendor Jobs" },
       { to: "/admin-cms", label: "Website CMS" },
       { to: "/admin/audit", label: "Audit & Security" },
       { to: "/account", label: "Account" },
@@ -27,8 +28,8 @@ function navigationFor(actor: BridgeActor): NavItem[] {
     return [...items, { to: "/account", label: "Account" }];
   }
   const accountNavigation: Record<BridgeActor["accountType"], NavItem[]> = {
-    independent_creator: [{ to: "/creator", label: "My Dashboard" }, { to: "/workspace", label: "My Titles & Submissions" }, { to: "/deliveries", label: "Updates & Deliveries" }],
-    studio: [{ to: "/studio", label: "Studio Dashboard" }, { to: "/workspace", label: "Titles & Submissions" }, { to: "/deliveries", label: "Deliveries" }],
+    independent_creator: [{ to: "/creator", label: "My Dashboard" }, { to: "/workspace", label: "My Titles & Submissions" }],
+    studio: [{ to: "/studio", label: "Studio Dashboard" }, { to: "/workspace", label: "Titles & Submissions" }, { to: "/deliveries", label: "Vendor Services" }],
     buyer: [{ to: "/buyer", label: "Title Marketplace" }],
     investor: [{ to: "/investor", label: "Investment Desk" }],
   };
