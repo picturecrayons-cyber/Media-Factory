@@ -27,6 +27,14 @@ const normalizePostgresUrl = (value) => {
     return value;
   }
 };
+// Preview deployments must never execute hosted migrations. The migration
+// artifact can be reviewed and tested in local disposable databases, then
+// applied only through a separately approved migration operation.
+if (process.env.VERCEL === "1" && process.env.VERCEL_ENV === "preview") {
+  console.log("[migrate] Vercel Preview detected — hosted database migrations are disabled.");
+  process.exit(0);
+}
+
 const databaseUrl = normalizePostgresUrl(
   readEnv("DATABASE_URL") ??
     readEnv("POSTGRES_URL") ??

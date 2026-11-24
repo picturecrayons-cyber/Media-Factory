@@ -12,6 +12,7 @@ import { bridgeEnv } from "./env";
 import { bridgeInvitationUrl, bridgeVerificationUrl } from "./origin";
 import { assertNotDevUser } from "./guards";
 import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
+import { ensureCreatorDistributionMandate } from "./distribution-mandate";
 
 function tokenPair() {
   const token = randomBytes(32).toString("hex");
@@ -179,6 +180,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       accountType: z.enum(ACCOUNT_TYPES),
       organizationName: z.string().max(120).optional(),
       inviteToken: z.string().optional(),
+      creatorMandateAccepted: z.boolean().optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -191,6 +193,9 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       await sql.transaction(async (tx) => {
         await persistSupabaseIdentityLink(tx, existing.userId, context.userId);
         await claimLegacyCreatorIntake(tx, email, existing.userId);
+        if (existing.accountType === "independent_creator" || existing.accountType === "studio") {
+          await ensureCreatorDistributionMandate(tx, existing.userId, data.creatorMandateAccepted === true);
+        }
       });
       return { home: workspaceHome(existing), profile: existing };
     }
@@ -199,6 +204,15 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     // this at the authenticated server endpoint, not only in the signup UI.
     if (data.accountType === "investor") {
       throw new Error("Investor access requires a reviewed access request.");
+    }
+
+    // Creator/Studio workspace creation requires explicit acceptance at the
+    // authenticated server boundary; the client checkbox is not the control.
+    if (
+      (data.accountType === "independent_creator" || data.accountType === "studio") &&
+      data.creatorMandateAccepted !== true
+    ) {
+      throw new Error("Accept the Creator Distribution Mandate to create this workspace.");
     }
 
     const email = context.userEmail;
@@ -336,6 +350,9 @@ export const completeOnboarding = createServerFn({ method: "POST" })
         }
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
         await claimLegacyCreatorIntake(tx, email, bridgeUserId);
+        if (data.accountType === "independent_creator" || data.accountType === "studio") {
+          await ensureCreatorDistributionMandate(tx, bridgeUserId, data.creatorMandateAccepted === true);
+        }
         const roleForTransaction: string | null = internalRole;
         return roleForTransaction;
       });
