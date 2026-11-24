@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
+import { TitleList } from "@/components/bridge/title-desk";
 import { Button } from "@/components/ui/button";
 import { hasPermission } from "@/lib/bridge/rbac";
 import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
