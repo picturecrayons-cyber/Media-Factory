@@ -369,27 +369,59 @@ export const listProductionAssets = createServerFn({ method: "GET" })
       source_kind: string | null;
       verified_source: boolean;
     }>`
-      select
-        production_asset.id,
-        production_asset.category,
-        production_asset.file_name,
-        production_asset.file_size,
-        production_asset.content_type,
-        production_asset.tags->>'source_kind' as source_kind,
-        case
-          when nullif(production_asset.tags->>'source_asset_id', '') is null then false
-          else coalesce(
+      with production_register as (
+        select
+          production_asset.id::text as id,
+          production_asset.category,
+          production_asset.file_name,
+          production_asset.file_size,
+          production_asset.content_type,
+          production_asset.tags->>'source_kind' as source_kind,
+          coalesce(
             source_asset.byte_size > 0
             and source_asset.storage_business_state = 'ACTIVE'
             and source_asset.restore_state = 'READY',
             false
+          ) as verified_source,
+          production_asset.created_at
+        from bridge_production_assets production_asset
+        left join bridge_assets source_asset
+          on source_asset.id = production_asset.tags->>'source_asset_id'
+        where production_asset.title_id = ${title.id}
+
+        union all
+
+        -- The canonical master is already sealed and verified in bridge_assets.
+        -- Surface it in the Production register from the title pointer; do not
+        -- create a second asset or mutate the title/production records.
+        select
+          master_asset.id as id,
+          'raw_video'::text as category,
+          regexp_replace(master_asset.s3_key, '^.*/', '') as file_name,
+          master_asset.byte_size as file_size,
+          master_asset.content_type,
+          'master'::text as source_kind,
+          true as verified_source,
+          master_asset.created_at
+        from bridge_titles canonical_title
+        join bridge_assets master_asset
+          on master_asset.title_id = canonical_title.id
+          and master_asset.kind = 'master'
+          and canonical_title.master_key = master_asset.s3_key || '.verified/' || master_asset.id
+        where canonical_title.id = ${title.id}
+          and master_asset.byte_size > 0
+          and master_asset.storage_business_state = 'ACTIVE'
+          and master_asset.restore_state = 'READY'
+          and not exists (
+            select 1
+            from bridge_production_assets existing
+            where existing.title_id = canonical_title.id
+              and existing.tags->>'source_asset_id' = master_asset.id
           )
-        end as verified_source
-      from bridge_production_assets production_asset
-      left join bridge_assets source_asset
-        on source_asset.id = production_asset.tags->>'source_asset_id'
-      where production_asset.title_id = ${title.id}
-      order by production_asset.created_at desc, production_asset.id
+      )
+      select id, category, file_name, file_size, content_type, source_kind, verified_source
+      from production_register
+      order by created_at desc, id
       limit 500
     `;
 
