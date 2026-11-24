@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { resolveCanonicalSupabaseUrl } from "../supabase-url.ts";
 
 function trimKey(value: string | undefined): string | undefined {
