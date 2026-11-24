@@ -6,7 +6,6 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
-import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -77,12 +76,6 @@ function Studio() {
               </div>
               <DitAgentDesk actor={actor} />
             </section>
-
-            {!actor.internalRole ? (
-              <section id="studio-services" className="rounded-sm border border-line bg-surface p-5">
-                <StreamVistaOrders />
-              </section>
-            ) : null}
 
             <section id="studio-operations" className="space-y-3">
               <div>
