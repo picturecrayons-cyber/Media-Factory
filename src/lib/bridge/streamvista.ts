@@ -23,6 +23,12 @@ type Order = {
   created_at: string | Date;
 };
 
+function assertServiceOwner(actor: Awaited<ReturnType<typeof requireVerifiedActor>>) {
+  if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+    throw new Error("Service requests are available only to Creator and Studio owners. Internal admins make review decisions; backend services handle execution.");
+  }
+}
+
 async function ownedOrder(orderId: string, userId: string) {
   const sql = await getSql();
   const rows = await sql<Order>`select * from streamvista_orders where id = ${orderId} and owner_user_id = ${userId} limit 1`;
@@ -36,12 +42,32 @@ export const createStreamVistaOrder = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId, context.aal);
+    assertServiceOwner(actor);
     assertPermission(actor, "title.create");
     const orderId = randomUUID();
     const sql = await getSql();
-    await sql`insert into streamvista_orders (id, owner_user_id, service, lane)
-      values (${orderId}, ${actor.userId}, ${data.service}, ${data.lane})`;
-    await writeAudit({ actorUserId: actor.userId, action: "streamvista.order.create", entityType: "streamvista_order", entityId: orderId });
+    // Backend performs authenticated intake validation and records completion.
+    // Human QC/legal/publication decisions are separate review tasks.
+    const created = await sql<{ id: string }>`
+      with new_order as (
+        insert into streamvista_orders (id, owner_user_id, service, lane)
+        values (${orderId}, ${actor.userId}, ${data.service}, ${data.lane})
+        returning id
+      )
+      insert into streamvista_jobs
+        (id, order_id, step, status, assigned_to, decision_required)
+      select ${randomUUID()}, id, 'backend_intake', 'passed', 'backend', false
+      from new_order
+      returning order_id as id
+    `;
+    if (!created[0]) throw new Error("Backend intake could not create the service request");
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "streamvista.order.create",
+      entityType: "streamvista_order",
+      entityId: orderId,
+      metadata: { intakeAssignedTo: "backend", intakeStatus: "passed", humanDecisionRequired: false },
+    });
     return { id: orderId, status: "requested" as const };
   });
 
@@ -50,6 +76,7 @@ export const listStreamVistaOrders = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId, context.aal);
+    assertServiceOwner(actor);
     assertPermission(actor, "title.read_own");
     const sql = await getSql();
     const orders = await sql<Order>`select o.*,
@@ -66,6 +93,7 @@ export const requestStreamVistaUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId, context.aal);
+    assertServiceOwner(actor);
     assertPermission(actor, "asset.sign_upload");
     const order = await ownedOrder(data.orderId, actor.userId);
     if (order.status !== "requested" || order.source_s3_key) throw new Error("Upload is closed");
@@ -82,6 +110,7 @@ export const confirmStreamVistaUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId, context.aal);
+    assertServiceOwner(actor);
     assertPermission(actor, "asset.sign_upload");
     await ownedOrder(data.orderId, actor.userId);
     if (!data.key.startsWith(`streamvista/${data.orderId}/source/`)) throw new Error("Invalid asset key");
@@ -94,8 +123,9 @@ export const confirmStreamVistaUpload = createServerFn({ method: "POST" })
       where id = ${data.orderId} and owner_user_id = ${actor.userId}
       and status = 'requested' and source_s3_key is null returning id
     )
-    insert into streamvista_jobs (id, order_id, step, status)
-      select ${jobId}, id, 'source_qc', 'needs_review' from confirmed
+    insert into streamvista_jobs
+      (id, order_id, step, status, assigned_to, decision_required)
+      select ${jobId}, id, 'source_qc', 'needs_review', 'human_review', true from confirmed
       returning id`;
     if (!rows[0]) throw new Error("Upload already confirmed or order changed");
     await writeAudit({ actorUserId: actor.userId, action: "streamvista.source.confirmed", entityType: "streamvista_order", entityId: data.orderId });
