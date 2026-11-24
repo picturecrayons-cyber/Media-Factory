@@ -8,6 +8,7 @@ type PreviewAsset = {
   contentType: string | null;
   byteSize: number | null;
   verified: boolean;
+  canonical?: boolean;
 };
 
 function isVideo(asset: PreviewAsset) {
@@ -97,7 +98,15 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
     setLoadingId(null);
   }
 
-  const mediaAssets = assets.filter((asset) => asset.verified && (isImage(asset) || isVideo(asset)));
+  // Keep the gallery to the title's current master, not every historical master upload.
+  const masters = assets.filter((asset) => asset.kind === "master" && asset.verified);
+  const canonicalMaster = masters.find((asset) => asset.canonical) ??
+    (masters.length === 1 ? masters[0] : null);
+  const mediaAssets = assets.filter((asset) => {
+    if (!asset.verified || (!isImage(asset) && !isVideo(asset))) return false;
+    if (asset.kind === "master") return asset.id === canonicalMaster?.id;
+    return true;
+  });
 
   if (!mediaAssets.length) {
     return (
