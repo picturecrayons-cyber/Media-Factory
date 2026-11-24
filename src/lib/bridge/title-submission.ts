@@ -14,10 +14,20 @@ export async function submitTitleForQc(
   note?: string,
 ): Promise<{ title: Pick<BridgeTitle, "id" | "status"> & { status: TitleStatus } }> {
   if (title.status !== "PREPARING") throw new Error("Title is not ready for QC submission");
-  const assets = await sql<{ kind: string; s3_key: string }>`
-    select kind, s3_key
+  const assets = await sql<{ kind: string; s3_key: string; id: string; byte_size: number | string | null; content_type: string | null; storage_business_state: string | null; restore_state: string | null }>`
+    select
+      kind,
+      s3_key,
+      id,
+      byte_size,
+      content_type,
+      storage_business_state,
+      restore_state
     from bridge_assets
-    where title_id = ${title.id} and coalesce(byte_size, 0) > 0
+    where title_id = ${title.id}
+      and coalesce(byte_size, 0) > 0
+      and storage_business_state = 'ACTIVE'
+      and restore_state = 'READY'
   `;
   if (!hasVerifiedMasterAndArtwork(assets, title.masterKey, title.posterKey)) {
     throw new Error("Verified master and artwork required before QC");
