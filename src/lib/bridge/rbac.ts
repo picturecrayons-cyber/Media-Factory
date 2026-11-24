@@ -113,6 +113,12 @@ export function permissionsFor(actor: Actor): Set<Permission> {
   return new Set<Permission>(ACCOUNT_PERMISSIONS[actor.accountType] ?? []);
 }
 
+export function assertSuperAdminMfa(actor: Actor, aal?: string | null): void {
+  if (actor.internalRole === "super_admin" && aal !== "aal2") {
+    throw new Error("MFA_REQUIRED");
+  }
+}
+
 export function canAccessDashboard(actor: Actor): boolean {
   return actor.emailVerified && actor.internalRole === "super_admin";
 }
