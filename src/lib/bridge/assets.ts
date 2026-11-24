@@ -181,9 +181,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
     }
-    if (asset.byte_size != null)
-      return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
-
+    // Never infer verification from the database byte_size field. Re-check
+    // the source object with OCI on every confirmation request, including
+    // legacy rows that already carry a size but still point at an unsealed key.
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
