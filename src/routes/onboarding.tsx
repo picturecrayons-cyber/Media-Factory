@@ -64,7 +64,8 @@ function Onboarding() {
     if (!displayName && user?.displayName) setDisplayName(user.displayName);
   }, [displayName, user?.displayName]);
 
-  const home = profile && !existingNeedsMandate && !mandateSchemaBlocked && !mandateStatusBlocked && !mandateQ.isError ? sessionQ.data?.home : null;
+  const mandateResolved = !existingRightsHolder || Boolean(mandateQ.data) || mandateQ.isError;
+  const home = profile && mandateResolved && !existingNeedsMandate && !mandateSchemaBlocked && !mandateStatusBlocked && !mandateQ.isError ? sessionQ.data?.home : null;
   useEffect(() => {
     if (home) goHome(home, navigate);
   }, [home, navigate]);

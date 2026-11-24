@@ -29,24 +29,24 @@ test("Creator/Studio onboarding requires explicit versioned mandate acceptance a
   const profiles = readFileSync(new URL("./profiles.ts", import.meta.url), "utf8");
   const mandate = readFileSync(new URL("./distribution-mandate.ts", import.meta.url), "utf8");
   const onboarding = readFileSync(new URL("../../routes/onboarding.tsx", import.meta.url), "utf8");
-  assert.match(profiles, /creatorMandateAccepted: z\\.boolean\\(\\)\\.optional\\(\\)/);
-  assert.match(profiles, /await acceptDistributionMandate\\(tx, bridgeUserId\\)/);
-  assert.match(profiles, /await acceptDistributionMandate\\(tx, existing\\.userId\\)/);
-  assert.match(mandate, /creator\\.distribution_mandate\\.accepted/);
-  assert.match(onboarding, /type="checkbox" checked=\\{mandateAccepted\\}/);
-  assert.match(onboarding, /creatorMandateAccepted:/);
-  assert.match(onboarding, /getDistributionMandateStatus/);
+  assert.ok(profiles.includes("creatorMandateAccepted: z.boolean().optional()"));
+  assert.ok(profiles.includes("await acceptDistributionMandate(tx, bridgeUserId)"));
+  assert.ok(profiles.includes("await acceptDistributionMandate(tx, existing.userId)"));
+  assert.ok(mandate.includes('action: "creator.distribution_mandate.accepted"'));
+  assert.ok(onboarding.includes('type="checkbox" checked={mandateAccepted}'));
+  assert.ok(onboarding.includes("creatorMandateAccepted:"));
+  assert.ok(onboarding.includes("getDistributionMandateStatus"));
 });
 test("all Creator/Studio title creation endpoints require an active mandate", () => {
   for (const path of ["./titles.ts", "./submissions.ts", "./story-concept-api.ts"]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
-    assert.match(source, /requireActiveDistributionMandate/);
+    assert.ok(source.includes("requireActiveDistributionMandate"), path);
   }
 });
 test("mandate migration uses a versioned key, RLS and service-role-only grants", () => {
   const migration = readFileSync(new URL("../../../migrations/0024_bridge_creator_distribution_mandates.sql", import.meta.url), "utf8");
-  assert.match(migration, /primary key \\(creator_user_id, mandate_version\\)/);
-  assert.match(migration, /enable row level security/i);
-  assert.match(migration, /revoke all on table public\\.bridge_creator_distribution_mandates from anon, authenticated/i);
-  assert.match(migration, /grant select, insert, update on table public\\.bridge_creator_distribution_mandates to service_role/i);
+  assert.ok(migration.includes("primary key (creator_user_id, mandate_version)"));
+  assert.ok(migration.includes("enable row level security"));
+  assert.ok(migration.includes("revoke all on table public.bridge_creator_distribution_mandates from anon, authenticated"));
+  assert.ok(migration.includes("grant select, insert, update on table public.bridge_creator_distribution_mandates to service_role"));
 });
