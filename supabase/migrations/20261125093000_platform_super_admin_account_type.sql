@@ -26,16 +26,20 @@ begin
     and internal_role = 'super_admin'
     and email_verified = true;
 
-  if matching_accounts <> 1 then
-    raise exception 'Expected exactly one verified Super Admin profile for platform account classification; found %', matching_accounts;
+  if matching_accounts > 1 then
+    raise exception 'Expected at most one verified Super Admin profile for platform account classification; found %', matching_accounts;
   end if;
 
-  update public.bridge_profiles
-  set account_type = 'platform_admin',
-      updated_at = now()
-  where lower(trim(email)) = 'picturecrayons@gmail.com'
-    and internal_role = 'super_admin'
-    and email_verified = true;
+  -- Clean migration-replay databases do not contain the live account fixture.
+  -- When the verified production/testing profile exists, update that one row.
+  if matching_accounts = 1 then
+    update public.bridge_profiles
+    set account_type = 'platform_admin',
+        updated_at = now()
+    where lower(trim(email)) = 'picturecrayons@gmail.com'
+      and internal_role = 'super_admin'
+      and email_verified = true;
+  end if;
 end;
 $migration$;
 
