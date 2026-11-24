@@ -13,6 +13,7 @@ import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { pointsToVerifiedAsset } from "./asset-roles";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -325,21 +326,35 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets where title_id = ${title.id} order by created_at desc
     `;
     return {
       assets: rows
         .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
-        .map((r) => ({
-          id: r.id,
-          kind: r.kind,
-          key: buyer ? null : r.s3_key,
-          contentType: r.content_type,
-          byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0,
-          createdAt:
-            r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-        })),
+        .map((r) => {
+          const requiredPointer =
+            r.kind === "master"
+              ? title.masterKey
+              : r.kind === "poster" || r.kind === "poster_vertical"
+                ? title.posterKey
+                : null;
+          const verified = Number(r.byte_size ?? 0) > 0;
+          const canonical = Boolean(
+            verified && requiredPointer && pointsToVerifiedAsset(requiredPointer, r),
+          );
+          return {
+            id: r.id,
+            kind: r.kind,
+            key: buyer ? null : r.s3_key,
+            contentType: r.content_type,
+            byteSize: r.byte_size,
+            verified,
+            canonical,
+            reconcileAvailable: !buyer && verified && Boolean(requiredPointer) && !canonical,
+            createdAt:
+              r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+          };
+        }),
     };
   });
 
