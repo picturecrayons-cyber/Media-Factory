@@ -12,7 +12,7 @@ import { bridgeEnv } from "./env";
 import { bridgeInvitationUrl, bridgeVerificationUrl } from "./origin";
 import { assertNotDevUser } from "./guards";
 import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
-import { createDefaultDistributionMandate } from "./distribution-mandate";
+import { ensureCreatorDistributionMandate } from "./distribution-mandate";
 
 function tokenPair() {
   const token = randomBytes(32).toString("hex");
@@ -193,38 +193,8 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       await sql.transaction(async (tx) => {
         await persistSupabaseIdentityLink(tx, existing.userId, context.userId);
         await claimLegacyCreatorIntake(tx, email, existing.userId);
-        if (
-          data.creatorMandateAccepted === true &&
-          (existing.accountType === "independent_creator" || existing.accountType === "studio")
-        ) {
-          const current = await tx<{ status: string }>`
-            select status from bridge_creator_distribution_mandates
-            where creator_user_id = ${existing.userId} for update
-          `;
-          if (current.length === 0) {
-            const mandate = createDefaultDistributionMandate(new Date().toISOString());
-            const inserted = await tx<{ creator_user_id: string }>`
-              insert into bridge_creator_distribution_mandates
-                (creator_user_id, mandate_version, status, scope, accepted_at, consent_text_version)
-              values (
-                ${existing.userId}, ${mandate.version}, 'ACTIVE',
-                ${JSON.stringify(mandate)}::jsonb, ${mandate.acceptedAt}, ${mandate.consentTextVersion}
-              )
-              on conflict (creator_user_id) do nothing
-              returning creator_user_id
-            `;
-            if (inserted.length > 0) {
-              await writeAudit({
-                actorUserId: existing.userId,
-                action: "creator.distribution_mandate.accepted",
-                entityType: "bridge_creator_distribution_mandate",
-                entityId: existing.userId,
-                metadata: { mandateVersion: mandate.version, consentTextVersion: mandate.consentTextVersion },
-              }, tx);
-            }
-          } else if (current[0].status !== "ACTIVE") {
-            throw new Error("This account-level mandate is not active. A Super Admin review is required.");
-          }
+        if (existing.accountType === "independent_creator" || existing.accountType === "studio") {
+          await ensureCreatorDistributionMandate(tx, existing.userId, data.creatorMandateAccepted === true);
         }
       });
       return { home: workspaceHome(existing), profile: existing };
@@ -381,33 +351,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
         await claimLegacyCreatorIntake(tx, email, bridgeUserId);
         if (data.accountType === "independent_creator" || data.accountType === "studio") {
-          const mandate = createDefaultDistributionMandate(new Date().toISOString());
-          const inserted = await tx<{ creator_user_id: string }>`
-            insert into bridge_creator_distribution_mandates
-              (creator_user_id, mandate_version, status, scope, accepted_at, consent_text_version)
-            values (
-              ${bridgeUserId}, ${mandate.version}, 'ACTIVE',
-              ${JSON.stringify(mandate)}::jsonb, ${mandate.acceptedAt}, ${mandate.consentTextVersion}
-            )
-            on conflict (creator_user_id) do nothing
-            returning creator_user_id
-          `;
-          if (inserted.length > 0) {
-            await writeAudit({
-              actorUserId: bridgeUserId,
-              action: "creator.distribution_mandate.accepted",
-              entityType: "bridge_creator_distribution_mandate",
-              entityId: bridgeUserId,
-              metadata: { mandateVersion: mandate.version, consentTextVersion: mandate.consentTextVersion },
-            }, tx);
-          }
-          const mandateState = await tx<{ status: string }>`
-            select status from bridge_creator_distribution_mandates
-            where creator_user_id = ${bridgeUserId} for update
-          `;
-          if (mandateState[0]?.status !== "ACTIVE") {
-            throw new Error("Creator Distribution Mandate could not be activated.");
-          }
+          await ensureCreatorDistributionMandate(tx, bridgeUserId, data.creatorMandateAccepted === true);
         }
         const roleForTransaction: string | null = internalRole;
         return roleForTransaction;
