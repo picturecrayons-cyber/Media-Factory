@@ -82,9 +82,29 @@ async function persistVerifiedAssetScoped(
             -- exact sealed key derived from that same source.
             and (
               (a.kind in ('poster', 'poster_vertical')
-                and (t.poster_key is null or t.poster_key = $7 or t.poster_key = $6))
+                and (
+                  t.poster_key is null or t.poster_key = $7 or t.poster_key = $6
+                  -- Allow a newer upload to replace a pointer owned by an older
+                  -- asset. An older retry cannot move the pointer backwards.
+                  or exists (
+                    select 1 from bridge_assets previous
+                    where previous.title_id = t.id
+                      and previous.kind in ('poster', 'poster_vertical')
+                      and previous.s3_key = t.poster_key
+                      and (a.created_at, a.id) > (previous.created_at, previous.id)
+                  )
+                ))
               or (a.kind = 'master'
-                and (t.master_key is null or t.master_key = $7 or t.master_key = $6))
+                and (
+                  t.master_key is null or t.master_key = $7 or t.master_key = $6
+                  or exists (
+                    select 1 from bridge_assets previous
+                    where previous.title_id = t.id
+                      and previous.kind = 'master'
+                      and previous.s3_key = t.master_key
+                      and (a.created_at, a.id) > (previous.created_at, previous.id)
+                  )
+                ))
               or a.kind not in ('master', 'poster', 'poster_vertical')
             )
         )
