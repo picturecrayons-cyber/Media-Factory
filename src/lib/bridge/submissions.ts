@@ -57,20 +57,44 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
     const submittedStatus = "PREPARING";
 
     return sql.transaction(async (tx) => {
-      await tx`
-        insert into bridge_titles (
-          id, slug, name, original_title, owner_user_id, owner_account_type,
-          owner_organization_id, submission_type, status, synopsis, long_synopsis,
-          language, year, runtime_minutes, content_type, original_language,
-          country_of_origin, release_date
-        ) values (
-          ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType},
-          ${actor.accountType === "studio" ? actor.organizationId : null}::uuid, 'finished_film',
-          ${submittedStatus}, ${data.synopsis}, ${data.synopsis}, ${data.originalLanguage},
-          ${data.releaseYear}, ${data.runtimeMinutes}, ${data.contentType},
-          ${data.originalLanguage}, ${data.countryOfOrigin}, make_date(${data.releaseYear}, 1, 1)
-        )
-      `
+      const organizationColumn = await tx<{ data_type: string }>`
+        select data_type from information_schema.columns
+        where table_schema = 'public' and table_name = 'bridge_titles'
+          and column_name = 'owner_organization_id'
+        limit 1
+      `;
+      const organizationId = actor.accountType === "studio" ? actor.organizationId : null;
+      if (organizationColumn[0]?.data_type === "uuid") {
+        await tx`
+          insert into bridge_titles (
+            id, slug, name, original_title, owner_user_id, owner_account_type,
+            owner_organization_id, submission_type, status, synopsis, long_synopsis,
+            language, year, runtime_minutes, content_type, original_language,
+            country_of_origin, release_date
+          ) values (
+            ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType},
+            ${organizationId}::uuid, 'finished_film', ${submittedStatus}, ${data.synopsis},
+            ${data.synopsis}, ${data.originalLanguage}, ${data.releaseYear}, ${data.runtimeMinutes},
+            ${data.contentType}, ${data.originalLanguage}, ${data.countryOfOrigin},
+            make_date(${data.releaseYear}, 1, 1)
+          )
+        `;
+      } else {
+        await tx`
+          insert into bridge_titles (
+            id, slug, name, original_title, owner_user_id, owner_account_type,
+            owner_organization_id, submission_type, status, synopsis, long_synopsis,
+            language, year, runtime_minutes, content_type, original_language,
+            country_of_origin, release_date
+          ) values (
+            ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType},
+            ${organizationId}::text, 'finished_film', ${submittedStatus}, ${data.synopsis},
+            ${data.synopsis}, ${data.originalLanguage}, ${data.releaseYear}, ${data.runtimeMinutes},
+            ${data.contentType}, ${data.originalLanguage}, ${data.countryOfOrigin},
+            make_date(${data.releaseYear}, 1, 1)
+          )
+        `;
+      }
 
       const rightsRows = await tx<{ id: string }>`
         insert into bridge_rights_grants (
