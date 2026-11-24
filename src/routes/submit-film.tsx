@@ -11,8 +11,27 @@ export const Route = createFileRoute("/submit-film")({ component: RightsReadySub
 
 const LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English"];
 const TERRITORIES = ["IN", "GCC", "US", "CA", "GB", "AU", "Worldwide"];
-const EXPLOITATION = ["OTT / Streaming", "SVOD", "TVOD", "AVOD", "FAST", "Broadcast / TV", "Theatrical", "Educational", "Airline / Ancillary", "Festival / Screening"];
+const MEDIA_RIGHTS = [
+  "OTT / Digital streaming",
+  "SVOD",
+  "TVOD",
+  "AVOD / FAST",
+  "Digital download",
+  "Satellite",
+  "Broadcast television",
+  "Theatrical",
+  "YouTube",
+  "Music / Audio",
+  "Physical distribution",
+  "Educational",
+  "Airline / Ancillary",
+  "Festival / Screening",
+];
 const BUYERS = ["OTT platform", "Broadcaster", "Distributor", "Aggregator", "International buyer", "Educational buyer", "Festival / screening", "Crayons Loop", "Open to qualified buyers"];
+const SYNOPSIS_MAX_WORDS = 250;
+function countWords(value: string) {
+  return value.trim() ? value.trim().split(/\\s+/).length : 0;
+}
 
 function RightsReadySubmission() {
   const { user, isPending } = useCurrentUserState();
@@ -22,11 +41,14 @@ function RightsReadySubmission() {
   const [contentType, setContentType] = useState<BridgeLoopLane>("Film");
   const [originalLanguage, setOriginalLanguage] = useState("Malayalam");
   const [rightsLanguages, setRightsLanguages] = useState<string[]>(["Malayalam"]);
+  const [dubLanguages, setDubLanguages] = useState<string[]>([]);
+  const [subtitleLanguages, setSubtitleLanguages] = useState<string[]>([]);
+  const [bridgeDistributionAccepted, setBridgeDistributionAccepted] = useState(false);
   const [country, setCountry] = useState("India");
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [runtime, setRuntime] = useState("");
   const [territories, setTerritories] = useState<string[]>(["IN"]);
-  const [exploitation, setExploitation] = useState<string[]>(["OTT / Streaming"]);
+  const [exploitation, setExploitation] = useState<string[]>(["OTT / Digital streaming"]);
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
   const [exclusivity, setExclusivity] = useState<"EXCLUSIVE" | "NON_EXCLUSIVE">("NON_EXCLUSIVE");
@@ -59,7 +81,7 @@ function RightsReadySubmission() {
           countryOfOrigin: country,
           releaseYear: Number(year),
           runtimeMinutes: Number(runtime),
-          rightsLanguages,
+          rightsLanguages: [...new Set([...rightsLanguages, ...dubLanguages, ...subtitleLanguages])],
           territories,
           exploitation,
           windowStart,
@@ -67,7 +89,7 @@ function RightsReadySubmission() {
           exclusivity,
           authorityType: authorityType as "RIGHTS_OWNER",
           authorizationEvidenceType: evidenceType as "RIGHTS_AGREEMENT",
-          authorizationConfirmed: true,
+          authorizationConfirmed: confirmed,
           buyerChannels: buyers,
           screenerMode,
           screenerUrl: screenerUrl || undefined,
@@ -82,8 +104,9 @@ function RightsReadySubmission() {
   }
 
   const checks = [
-    ["Title identity", Boolean(name && synopsis && originalLanguage && country && year && runtime)],
+    ["Title identity", Boolean(name && synopsis && countWords(synopsis) <= SYNOPSIS_MAX_WORDS && originalLanguage && country && year && runtime)],
     ["Rights scope", rightsLanguages.length > 0 && territories.length > 0 && exploitation.length > 0 && Boolean(windowStart && windowEnd)],
+    ["Distribution appointment", bridgeDistributionAccepted],
     ["Authorization", Boolean(authorityType && evidenceType && confirmed)],
     ["Buyer intent", buyers.length > 0],
     ["Screener", screenerMode !== "SECURE_EXTERNAL" || Boolean(screenerUrl)],
@@ -95,8 +118,8 @@ function RightsReadySubmission() {
         <BrandMark />
         <header>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Crayons Bridge</p>
-          <h1 className="mt-2 font-display text-3xl">Submit a title for buyer review</h1>
-          <p className="mt-2 text-sm leading-relaxed text-muted">Prepare the rights scope once. Bridge verifies the evidence before a title can become Licensing Ready.</p>
+          <h1 className="mt-2 font-display text-3xl">Submit title to Crayons Bridge</h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted">One simple submission to Bridge Admin. Bridge reviews the title and evidence before any buyer can see or license it.</p>
         </header>
 
         <section className="space-y-4">
@@ -108,16 +131,18 @@ function RightsReadySubmission() {
             <label className="text-sm">Country<select value={country} onChange={(e) => setCountry(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"><option>India</option><option>United Arab Emirates</option><option>United States</option><option>United Kingdom</option><option>Other</option></select></label>
             <label className="text-sm">Release year<input required type="number" min="1895" max="2100" value={year} onChange={(e) => setYear(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
             <label className="text-sm">Runtime (minutes)<input required type="number" min="1" max="600" value={runtime} onChange={(e) => setRuntime(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
-            <label className="text-sm sm:col-span-2">Synopsis<textarea required maxLength={4000} rows={4} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2" /></label>
+            <label className="text-sm sm:col-span-2">Synopsis <span className="text-muted">(maximum 250 words)</span><textarea required maxLength={2500} rows={4} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2" /><span className="mt-1 block text-xs text-muted">{countWords(synopsis)} / {SYNOPSIS_MAX_WORDS} words</span></label>
           </div>
         </section>
 
         <section className="space-y-4">
-          <h2 className="font-display text-xl">02 · Rights scope</h2>
+          <h2 className="font-display text-xl">02 · Rights you want Bridge to handle</h2>
           <div className="space-y-3">
-            <div><p className="text-sm font-medium">Rights languages</p><div className="mt-2 flex flex-wrap gap-2">{LANGUAGES.map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={rightsLanguages.includes(x)} onChange={() => toggle(x, rightsLanguages, setRightsLanguages)} />{x}</label>)}</div></div>
+            <div><p className="text-sm font-medium">Original film audio</p><p className="text-xs text-muted">The language spoken in the supplied master film.</p><div className="mt-2 flex flex-wrap gap-2">{LANGUAGES.map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={rightsLanguages.includes(x)} onChange={() => toggle(x, rightsLanguages, setRightsLanguages)} />{x}</label>)}</div></div>
+            <div><p className="text-sm font-medium">Dubbing / additional audio requested</p><p className="text-xs text-muted">Bridge may coordinate dubbing and post-production as a separate service. Selecting a language does not mean dubbing rights are already owned.</p><div className="mt-2 flex flex-wrap gap-2">{LANGUAGES.filter((x) => !rightsLanguages.includes(x)).map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={dubLanguages.includes(x)} onChange={() => toggle(x, dubLanguages, setDubLanguages)} />{x}</label>)}</div></div>
+            <div><p className="text-sm font-medium">Subtitle languages</p><div className="mt-2 flex flex-wrap gap-2">{LANGUAGES.filter((x) => !rightsLanguages.includes(x)).map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={subtitleLanguages.includes(x)} onChange={() => toggle(x, subtitleLanguages, setSubtitleLanguages)} />{x}</label>)}</div></div>
             <div><p className="text-sm font-medium">Territories</p><div className="mt-2 flex flex-wrap gap-2">{TERRITORIES.map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={territories.includes(x)} onChange={() => toggle(x, territories, setTerritories)} />{x}</label>)}</div></div>
-            <div><p className="text-sm font-medium">Exploitation</p><div className="mt-2 flex flex-wrap gap-2">{EXPLOITATION.map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={exploitation.includes(x)} onChange={() => toggle(x, exploitation, setExploitation)} />{x}</label>)}</div></div>
+            <div><p className="text-sm font-medium">Distribution rights requested</p><p className="text-xs text-muted">Select only the rights you are authorising Crayons Bridge to represent.</p><div className="mt-2 flex flex-wrap gap-2">{MEDIA_RIGHTS.map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={exploitation.includes(x)} onChange={() => toggle(x, exploitation, setExploitation)} />{x}</label>)}</div></div>
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="text-sm">Rights start<input required type="date" value={windowStart.slice(0, 10)} onChange={(e) => setWindowStart(e.target.value + "T00:00:00.000Z")} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
               <label className="text-sm">Rights end<input required type="date" value={windowEnd.slice(0, 10)} onChange={(e) => setWindowEnd(e.target.value + "T23:59:59.999Z")} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
@@ -133,11 +158,12 @@ function RightsReadySubmission() {
             <label className="text-sm">Evidence type<select value={evidenceType} onChange={(e) => setEvidenceType(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"><option value="RIGHTS_AGREEMENT">Rights agreement</option><option value="CHAIN_OF_TITLE">Chain of title</option><option value="AUTHORIZATION_LETTER">Authorization letter</option><option value="DISTRIBUTION_AGREEMENT">Distribution agreement</option><option value="OTHER">Other</option></select></label>
           </div>
           <label className="flex items-start gap-3 rounded-xl border border-line p-3 text-sm"><input required type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-1" /><span>I confirm that I am authorized to submit this title and that the selected rights scope is accurate. Bridge will verify the supporting evidence before licensing.</span></label>
-          <p className="text-xs leading-relaxed text-muted">Authorization evidence remains private and must be attached in the Title Workspace before Rights Review can approve this submission.</p>
+          <p className="text-xs leading-relaxed text-muted">Your contracts and ownership documents stay private in Bridge. Bridge Admin will review this submission and request any missing documents before rights can be cleared.</p>
+          <div className="rounded-xl border border-line p-3 space-y-2"><p className="text-sm font-medium">Bridge distribution appointment</p><p className="text-xs text-muted">Proposed appointment: Crayons Bridge as master distributor for 5 years, limited to the media, languages, territories and rights you explicitly select above. This is a proposal for review, not an automatic grant. The final term becomes effective only after the rights owner accepts the agreement and Bridge verifies the evidence.</p><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={bridgeDistributionAccepted} onChange={(e) => setBridgeDistributionAccepted(e.target.checked)} className="mt-1" /><span>I agree to discuss this proposed five-year master-distribution appointment with Crayons Bridge, subject to a separate written agreement.</span></label></div>
         </section>
 
         <section className="space-y-4">
-          <h2 className="font-display text-xl">04 · Buyer access</h2>
+          <h2 className="font-display text-xl">04 · Intended buyer channels</h2>
           <div><p className="text-sm font-medium">Buyer channels</p><div className="mt-2 flex flex-wrap gap-2">{BUYERS.map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={buyers.includes(x)} onChange={() => toggle(x, buyers, setBuyers)} />{x}</label>)}</div></div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">Screener<select value={screenerMode} onChange={(e) => setScreenerMode(e.target.value as typeof screenerMode)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"><option value="PRIVATE_BRIDGE">Private Bridge screener</option><option value="SECURE_EXTERNAL">Secure external screener</option><option value="NONE">No screener yet</option></select></label>
@@ -149,11 +175,11 @@ function RightsReadySubmission() {
         <section className="rounded-2xl border border-line bg-elevated p-4">
           <h2 className="font-display text-lg">Submission check</h2>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">{checks.map(([label, ok]) => <p key={label as string} className="text-sm">{ok ? "✓" : "○"} {label as string}</p>)}</div>
-          <p className="mt-3 text-xs leading-relaxed text-muted">Submitting creates one canonical Bridge title in DRAFT. It does not make the title Licensing Ready or publish it to buyers or Loop.</p>
+          <p className="mt-3 text-xs leading-relaxed text-muted">Your submission goes to Bridge Admin first. It is not sent directly to buyers, does not grant distribution rights, and does not publish the title to buyers or Crayons Loop.</p>
         </section>
 
         {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
-        <Button type="submit" disabled={busy || !confirmed} className="w-full rounded-full">{busy ? "Creating submission…" : "Submit for Bridge review"}</Button>
+        <Button type="submit" disabled={busy || !confirmed || countWords(synopsis) > SYNOPSIS_MAX_WORDS || !bridgeDistributionAccepted} className="w-full rounded-full">{busy ? "Submitting…" : "Submit to Crayons Bridge"}</Button>
         <p className="text-center text-xs text-muted">Crayons Bridge is operated by StreamVista OPC Pvt Ltd.</p>
       </form>
     </main>
