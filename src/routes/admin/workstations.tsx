@@ -12,7 +12,7 @@ import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Finished Films", "Story / Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -40,12 +40,13 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
     mutationFn: setBuyerPublicationGate,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
-  const [activeTab, setActiveTab] = useState<Tab>("Titles");
+  const [activeTab, setActiveTab] = useState<Tab>("Finished Films");
 
   const data = query.data;
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading Admin…</div>;
   if (query.isError || !data) return <div className="rounded-2xl border border-line bg-surface p-8 text-sm">Unable to load the Bridge operational backend.</div>;
 
+  const finishedFilms = data.titles.filter((t: any) => !t.submission_type || t.submission_type === "finished_film");
   const titleName = new Map(data.titles.map((t: any) => [t.id, t.name]));
   const qcQueue = data.titles.filter((t: any) => t.status === "QC_REVIEW");
   const rightsQueue = data.titles.filter((t: any) => t.status === "RIGHTS_REVIEW");
@@ -111,20 +112,20 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
 function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
   return (
     <section className="space-y-3">
-      <SectionHeader title="Titles" description="One canonical Title ID from intake through delivery." />
+      <SectionHeader title="Finished Film submissions" description="New submissions appear here for intake acceptance. QC, legal, rights and commercial approval remain separate." />
       <div className="overflow-hidden rounded-2xl border border-line bg-surface">
         {titles.length ? titles.slice(0, 100).map((title) => (
           <div key={title.id} className="flex flex-col gap-3 border-b border-line p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium">{title.name}</p>
-              <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language}</p>
+              <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language} · {title.owner_account_type === "studio" ? "Studio" : "Creator"}{title.owner_organization_id ? " · Organization verified" : ""}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
               <Link to="/title/$id" params={{ id: title.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open</Link>
             </div>
           </div>
-        )) : <Empty text="No titles in the Bridge catalog." />}
+        )) : <Empty text="No finished-film submissions are waiting in this queue." />}
       </div>
     </section>
   );
