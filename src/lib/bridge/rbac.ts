@@ -76,6 +76,9 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
   investor: [
     "entitlement.read_own",
   ],
+  // Platform Admin is a privileged identity class; permissions come only from
+  // the separately verified internal_role, never from account_type alone.
+  platform_admin: [],
 };
 
 export type Actor = {
