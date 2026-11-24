@@ -74,9 +74,9 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
         ))}
       </nav>
 
-      {activeTab === "Titles" ? (
+      {activeTab === "Finished Films" ? (
         <TitleQueue titles={data.titles} review={review} />
-      ) : activeTab === "Concepts" ? (
+      ) : activeTab === "Story / Concepts" ? (
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
         <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
