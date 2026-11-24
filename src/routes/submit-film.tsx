@@ -48,7 +48,7 @@ function RightsReadySubmission() {
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [runtime, setRuntime] = useState("");
   const [territories, setTerritories] = useState<string[]>(["IN"]);
-  const [exploitation: [...new Set([...exploitation, ...dubLanguages.map((x) => `DUBBING:${x}`), ...subtitleLanguages.map((x) => `SUBTITLING:${x}`)])], setExploitation] = useState<string[]>(["OTT / Digital streaming"]);
+  const [exploitation, setExploitation] = useState<string[]>(["OTT / Digital streaming"]);
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
   const [exclusivity, setExclusivity] = useState<"EXCLUSIVE" | "NON_EXCLUSIVE">("NON_EXCLUSIVE");
@@ -105,7 +105,7 @@ function RightsReadySubmission() {
 
   const checks = [
     ["Title identity", Boolean(name && synopsis && countWords(synopsis) <= SYNOPSIS_MAX_WORDS && originalLanguage && country && year && runtime)],
-    ["Rights scope", rightsLanguages.includes(originalLanguage) && territories.length > 0 && exploitation.length > 0 && Boolean(windowStart && windowEnd)],
+    ["Rights scope", territories.length > 0 && exploitation.length > 0 && Boolean(windowStart && windowEnd)],
     ["Distribution appointment", bridgeDistributionAccepted],
     ["Authorization", Boolean(authorityType && evidenceType && confirmed)],
     ["Buyer intent", buyers.length > 0],
@@ -138,10 +138,10 @@ function RightsReadySubmission() {
         <section className="space-y-4">
           <h2 className="font-display text-xl">02 · Rights you want Bridge to handle</h2>
           <div className="space-y-3">
-            <div><p className="text-sm font-medium">Original film audio</p><p className="text-xs text-muted">The language spoken in the supplied master film.</p><div className="mt-2 flex flex-wrap gap-2">{LANGUAGES.map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={rightsLanguages.includes(x)} onChange={() => toggle(x, rightsLanguages, setRightsLanguages)} />{x}</label>)}</div></div>
-            <div><p className="text-sm font-medium">Dubbing / additional audio requested</p><p className="text-xs text-muted">Bridge may coordinate dubbing and post-production as a separate service. Selecting a language does not mean dubbing rights are already owned.</p><div className="mt-2 flex flex-wrap gap-2">{LANGUAGES.filter((x) => !rightsLanguages.includes(x)).map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={dubLanguages.includes(x)} onChange={() => toggle(x, dubLanguages, setDubLanguages)} />{x}</label>)}</div></div>
-            <div><p className="text-sm font-medium">Subtitle languages</p><div className="mt-2 flex flex-wrap gap-2">{LANGUAGES.filter((x) => !rightsLanguages.includes(x)).map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={subtitleLanguages.includes(x)} onChange={() => toggle(x, subtitleLanguages, setSubtitleLanguages)} />{x}</label>)}</div></div>
-            <div><p className="text-sm font-medium">Territories</p><div className="mt-2 flex flex-wrap gap-2">{TERRITORIES.map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={territories.includes(x)} onChange={() => toggle(x, territories, setTerritories)} />{x}</label>)}</div></div>
+            <div><p className="text-sm font-medium">Original film audio</p><p className="text-xs text-muted">The language spoken in the supplied master film.</p><div className="mt-2 flex flex-wrap gap-2">{LANGUAGES.map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={x === originalLanguage} disabled />{x}</label>)}</div></div>
+            <div><p className="text-sm font-medium">Dubbing / additional audio requested</p><p className="text-xs text-muted">Bridge may coordinate dubbing and post-production as a separate service. Selecting a language does not mean dubbing rights are already owned.</p><div className="mt-2 flex flex-wrap gap-2">{LANGUAGES.filter((x) => x !== originalLanguage).map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={dubLanguages.includes(x)} onChange={() => toggle(x, dubLanguages, setDubLanguages)} />{x}</label>)}</div></div>
+            <div><p className="text-sm font-medium">Subtitle languages</p><div className="mt-2 flex flex-wrap gap-2">{LANGUAGES.filter((x) => x !== originalLanguage).map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={subtitleLanguages.includes(x)} onChange={() => toggle(x, subtitleLanguages, setSubtitleLanguages)} />{x}</label>)}</div></div>
+            <div><p className="text-sm font-medium">Territories</p><div className="mt-2 flex flex-wrap gap-2">{TERRITORIES.map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={x === "Worldwide" ? territories.includes("WORLDWIDE") : territories.includes(x)} onChange={() => { if (x === "Worldwide") setTerritories(territories.includes("WORLDWIDE") ? [] : ["WORLDWIDE"]); else setTerritories(territories.includes(x) ? territories.filter((v) => v !== x && v !== "WORLDWIDE") : [...territories.filter((v) => v !== "WORLDWIDE"), x]); }} />{x}</label>)}</div></div>
             <div><p className="text-sm font-medium">Distribution rights requested</p><p className="text-xs text-muted">Select only the rights you are authorising Crayons Bridge to represent.</p><div className="mt-2 flex flex-wrap gap-2">{MEDIA_RIGHTS.map((x) => <label key={x} className="rounded-full border border-line px-3 py-2 text-sm"><input className="mr-2" type="checkbox" checked={exploitation.includes(x)} onChange={() => toggle(x, exploitation, setExploitation)} />{x}</label>)}</div></div>
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="text-sm">Rights start<input required type="date" value={windowStart.slice(0, 10)} onChange={(e) => setWindowStart(e.target.value + "T00:00:00.000Z")} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
