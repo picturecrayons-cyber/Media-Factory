@@ -48,7 +48,7 @@ function RightsReadySubmission() {
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [runtime, setRuntime] = useState("");
   const [territories, setTerritories] = useState<string[]>(["IN"]);
-  const [exploitation, setExploitation] = useState<string[]>(["OTT / Digital streaming"]);
+  const [exploitation: [...new Set([...exploitation, ...dubLanguages.map((x) => `DUBBING:${x}`), ...subtitleLanguages.map((x) => `SUBTITLING:${x}`)])], setExploitation] = useState<string[]>(["OTT / Digital streaming"]);
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
   const [exclusivity, setExclusivity] = useState<"EXCLUSIVE" | "NON_EXCLUSIVE">("NON_EXCLUSIVE");
@@ -81,7 +81,7 @@ function RightsReadySubmission() {
           countryOfOrigin: country,
           releaseYear: Number(year),
           runtimeMinutes: Number(runtime),
-          rightsLanguages: [...new Set([...rightsLanguages, ...dubLanguages, ...subtitleLanguages])],
+          rightsLanguages,
           territories,
           exploitation,
           windowStart,
@@ -105,7 +105,7 @@ function RightsReadySubmission() {
 
   const checks = [
     ["Title identity", Boolean(name && synopsis && countWords(synopsis) <= SYNOPSIS_MAX_WORDS && originalLanguage && country && year && runtime)],
-    ["Rights scope", rightsLanguages.length > 0 && territories.length > 0 && exploitation.length > 0 && Boolean(windowStart && windowEnd)],
+    ["Rights scope", rightsLanguages.includes(originalLanguage) && territories.length > 0 && exploitation.length > 0 && Boolean(windowStart && windowEnd)],
     ["Distribution appointment", bridgeDistributionAccepted],
     ["Authorization", Boolean(authorityType && evidenceType && confirmed)],
     ["Buyer intent", buyers.length > 0],
@@ -127,7 +127,7 @@ function RightsReadySubmission() {
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm sm:col-span-2">Title<input required value={name} onChange={(e) => setName(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
             <label className="text-sm">Loop lane<select value={contentType} onChange={(e) => setContentType(e.target.value as BridgeLoopLane)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">{BRIDGE_LOOP_LANES.map((lane) => <option key={lane.id} value={lane.loopType}>{lane.label}</option>)}</select></label>
-            <label className="text-sm">Original language<select value={originalLanguage} onChange={(e) => setOriginalLanguage(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">{LANGUAGES.map((x) => <option key={x}>{x}</option>)}</select></label>
+            <label className="text-sm">Original language<select value={originalLanguage} onChange={(e) => { setOriginalLanguage(e.target.value); setRightsLanguages([e.target.value]); setDubLanguages((v) => v.filter((x) => x !== e.target.value)); setSubtitleLanguages((v) => v.filter((x) => x !== e.target.value)); }} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">{LANGUAGES.map((x) => <option key={x}>{x}</option>)}</select></label>
             <label className="text-sm">Country<select value={country} onChange={(e) => setCountry(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"><option>India</option><option>United Arab Emirates</option><option>United States</option><option>United Kingdom</option><option>Other</option></select></label>
             <label className="text-sm">Release year<input required type="number" min="1895" max="2100" value={year} onChange={(e) => setYear(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
             <label className="text-sm">Runtime (minutes)<input required type="number" min="1" max="600" value={runtime} onChange={(e) => setRuntime(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
