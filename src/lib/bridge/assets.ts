@@ -193,8 +193,13 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     // Use the immutable asset row ID, not a per-request UUID. If a browser timeout
     // leads to a duplicate confirmation while the first server call is still running,
     // both attempts target the same sealed object instead of creating orphan copies.
-    const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
-    const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
+    const alreadySealed = asset.s3_key.includes(".verified/");
+    const sealedKey = alreadySealed ? asset.s3_key : `${asset.s3_key}.verified/${asset.id}`;
+    // A retry against an already sealed key must not copy the object again.
+    // Re-verify it in place so an older asset cannot overwrite a newer pointer.
+    const sealed = alreadySealed
+      ? object
+      : await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
