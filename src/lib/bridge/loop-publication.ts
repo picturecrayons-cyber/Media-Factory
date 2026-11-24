@@ -177,8 +177,7 @@ export async function verifyDistributionPreflight(
     delivery_status: string | null;
   }>`
     select ott_preparation_status, packaging_status, curation_status, delivery_status
-    from bridge_title_gate_certifications
-    where title_id = ${titleId}
+    from bridge_title_gate_certifications    where title_id = ${titleId}
     limit 1
   `;
   const gates = gateRows[0];
@@ -227,21 +226,9 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
+    // This GET endpoint is strictly read-only. Expiry and suspension are
+    // enforced by a separately authenticated worker; dashboard reads must
+    // never mutate publication or catalogue records.
     const rows = await sql<{
       id: string;
       slug: string;
@@ -357,8 +344,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           ].includes(r.status)
         ) {
           blockers.push(`Rights status (${r.status}) is not cleared for distribution`);
-        }
-        if (!r.master_key) blockers.push("QC master video is missing");
+        }        if (!r.master_key) blockers.push("QC master video is missing");
         if (!r.poster_key) blockers.push("Artwork/poster is missing");
 
         return {
@@ -537,8 +523,7 @@ export const suspendLoopPublication = createServerFn({ method: "POST" })
     `;
 
       await writeAudit(
-        {
-          actorUserId: actor.userId,
+        {          actorUserId: actor.userId,
           action: "distribution.suspend_loop",
           entityType: "bridge_title",
           entityId: data.bridgeTitleId,
