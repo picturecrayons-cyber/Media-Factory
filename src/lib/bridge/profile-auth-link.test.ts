@@ -10,7 +10,7 @@ test("onboarding persists verified auth-to-Bridge identity binding", () => {
   assert.match(src, /'supabase_auth_onboarding'/);
   assert.doesNotMatch(src, /public\."user"/);
   assert.match(src, /from bridge_profiles bp[\s\S]*join auth\.users au/);
-  assert.match(src, /where lower\(email\) = lower\(\$\{identity\.auth_email\}\)/);
+  assert.match(src, /and lower\(trim\(bp\.email\)\) = lower\(trim\(au\.email\)\)/);
   assert.match(src, /verified matching Supabase email is required/);
   assert.match(src, /on conflict \(auth_user_id\) do nothing/);
   assert.match(src, /where lower\(trim\(email\)\) = \$\{normalizedEmail\}/);
