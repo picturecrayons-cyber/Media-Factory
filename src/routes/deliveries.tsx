@@ -28,24 +28,47 @@ const LABELS: Record<VendorJobType, string> = {
 function Deliveries() {
   return (
     <RequireBridge>
-      {(actor) => (
-        <BridgeShell actor={actor} title="Deliveries">
-          <VendorJobs actor={actor} />
-          <DeliveryList />
-        </BridgeShell>
-      )}
+      {(actor) => {
+        const canOpenVendorServices =
+          !actor.internalRole &&
+          actor.accountType === "studio" &&
+          Boolean(actor.organizationId) &&
+          hasPermission(actor, "service.request_create") &&
+          hasPermission(actor, "service.request_read");
+        const canOpenSuperAdminDesk = actor.internalRole === "super_admin";
+
+        if (!canOpenVendorServices && !canOpenSuperAdminDesk) {
+          return (
+            <BridgeShell actor={actor} title="Deliveries">
+              <section className="mx-auto max-w-3xl rounded-2xl border border-line bg-surface p-6 sm:p-8">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Crayons Bridge</p>
+                <h2 className="mt-2 font-display text-2xl font-semibold">Deliveries</h2>
+                <p className="mt-2 text-sm text-muted">Vendor Services are available only within an authorized Studio organization. This account does not have access to vendor-job operations.</p>
+                <Link to="/" className="mt-5 inline-flex rounded-full border border-line px-4 py-2 text-sm font-semibold hover:border-accent">Return to workspace home</Link>
+              </section>
+            </BridgeShell>
+          );
+        }
+
+        return (
+          <BridgeShell actor={actor} title="Deliveries">
+            <VendorJobs actor={actor} />
+            {canOpenSuperAdminDesk ? <DeliveryList /> : null}
+          </BridgeShell>
+        );
+      }}
     </RequireBridge>
   );
 }
 
 function VendorJobs({ actor }: { actor: Actor }) {
   const queryClient = useQueryClient();
-  const canRequest = !actor.internalRole && ["independent_creator", "studio"].includes(actor.accountType) && hasPermission(actor, "service.order_create");
+  const canRequest = !actor.internalRole && actor.accountType === "studio" && Boolean(actor.organizationId) && hasPermission(actor, "service.request_create") && hasPermission(actor, "service.request_read");
   const canAssign = hasPermission(actor, "delivery.assign_vendor");
   const canRecordReceipt = hasPermission(actor, "delivery.record_receipt");
   const canManage = canAssign || canRecordReceipt;
   const canApprove = hasPermission(actor, "delivery.sign_off");
-  const titlesQuery = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const titlesQuery = useQuery({ queryKey: ["bridge-titles", actor.userId, actor.organizationId ?? "no-org"], queryFn: () => listTitles(), enabled: canRequest });
   const availableTitles = titlesQuery.data?.titles ?? [];
   const [type, setType] = useState<VendorJobType>("human_qc");
   const [titleId, setTitleId] = useState("");
@@ -53,10 +76,10 @@ function VendorJobs({ actor }: { actor: Actor }) {
   const [error, setError] = useState("");
 
   const jobsQuery = useQuery({
-    queryKey: ["bridge-delivery-jobs"],
+    queryKey: ["bridge-delivery-jobs", actor.userId, actor.organizationId ?? "no-org", actor.internalRole ?? actor.accountType],
     queryFn: () => listBridgeDeliveryJobs(),
   });
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["bridge-delivery-jobs"] });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["bridge-delivery-jobs", actor.userId, actor.organizationId ?? "no-org", actor.internalRole ?? actor.accountType] });
   const request = useMutation({
     mutationFn: (data: { titleId: string; type: VendorJobType; note?: string }) =>
       requestBridgeDeliveryJob({ data }),
@@ -211,7 +234,7 @@ function DeliveryJobActions({
 }
 
 function DeliveryList() {
-  const q = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const q = useQuery({ queryKey: ["bridge-delivery-desk-titles"], queryFn: () => listTitles() });
   const titles = q.data?.titles ?? [];
   if (q.isError) return <p role="alert">Delivery data is unavailable. Refresh to retry.</p>;
   if (q.isPending) return <p className="text-sm text-muted">Loading deliveries…</p>;

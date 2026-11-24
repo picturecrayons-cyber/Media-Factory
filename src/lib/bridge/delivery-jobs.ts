@@ -34,9 +34,13 @@ export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
     const actor = await actorFor(context.userId);
     const sql = await getSql();
     const internal = actor.internalRole === "super_admin";
-    if (actor.internalRole && !internal) throw new Error("Vendor job administration is restricted to Super Admin");
-    if (!internal && !actor.organizationId && !["independent_creator", "studio"].includes(actor.accountType)) {
-      throw new Error("Delivery workspace access required");
+    const canReadStudioJobs = !actor.internalRole &&
+      actor.accountType === "studio" &&
+      Boolean(actor.organizationId) &&
+      hasPermission(actor, "service.request_read") &&
+      hasPermission(actor, "service.request_create");
+    if (!internal && !canReadStudioJobs) {
+      throw new Error("Vendor Services are restricted to authorized Studio organizations and Super Admin");
     }
     const rows = internal
       ? await sql<{
@@ -57,18 +61,14 @@ export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
             j.admin_sign_off, j.request_note, j.requested_by, j.created_at, j.updated_at
           from bridge_delivery_jobs j
           join bridge_titles t on t.id = j.title_id
-          where j.requested_by = ${actor.userId}
-            or t.owner_user_id = ${actor.userId}
-            or (
-              ${actor.accountType === "studio" && Boolean(actor.organizationId)}
-              and t.owner_account_type = 'studio'
-              and t.owner_organization_id = ${actor.organizationId ?? null}::uuid
-              and exists (
-                select 1 from bridge_organization_memberships m
-                where m.organization_id = t.owner_organization_id
-                  and m.user_id = ${actor.userId}
-                  and m.status = 'active'
-              )
+          where t.submission_type = 'finished_film'
+            and t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${actor.organizationId}::uuid
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = t.owner_organization_id
+                and m.user_id = ${actor.userId}
+                and m.status = 'active'
             )
           order by j.created_at desc limit 200
         `;
@@ -100,11 +100,17 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Title not found");
-    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType) || !hasPermission(actor, "service.order_create")) {
-      throw new Error("Only Creator or Studio accounts can request vendor services");
+    if (
+      actor.internalRole ||
+      actor.accountType !== "studio" ||
+      !actor.organizationId ||
+      !hasPermission(actor, "service.request_create") ||
+      !hasPermission(actor, "service.request_read")
+    ) {
+      throw new Error("Only authorized Studio organization members can request vendor services");
     }
     if (!canReadTitle(actor, title)) {
-      throw new Error("You can request services only for a title owned by your Creator account or Studio organization");
+      throw new Error("You can request services only for a title owned by your active Studio organization");
     }
     const sql = await getSql();
     const eligible = await sql<{ id: string }>`
