@@ -1,6 +1,15 @@
 name: Scope A PostgreSQL Onboarding Verification
 
 on:
+  push:
+    branches: ["fix/creator-distribution-mandate-preview-20261125"]
+    paths:
+      - ".github/workflows/scope-a-postgres.yml"
+      - "migrations/**"
+      - "src/lib/bridge/**"
+      - "src/lib/db.ts"
+      - "package.json"
+      - "package-lock.json"
   pull_request:
     branches: ["main", "fix/private-founder-operations-dashboard-20261124"]
     paths:
