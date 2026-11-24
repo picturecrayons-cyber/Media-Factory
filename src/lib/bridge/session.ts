@@ -3,7 +3,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import type { AccountType, InternalRole, Permission } from "./types";
 import type { Actor } from "./rbac";
-import { assertPermission, canAccessDashboard, workspaceHome } from "./rbac";
+import { assertPermission, assertSuperAdminMfa, canAccessDashboard, workspaceHome } from "./rbac";
 import { PRODUCT_NAME, LEGAL_OWNER, PRODUCTION_DOMAIN } from "./canonical";
 import { integrationStatus } from "./env";
 import { assertNotDevUser } from "./guards";
@@ -125,9 +125,10 @@ export async function requireActor(userId: string): Promise<BridgeActor> {
   return actor;
 }
 
-export async function requireVerifiedActor(userId: string): Promise<BridgeActor> {
+export async function requireVerifiedActor(userId: string, aal?: string | null): Promise<BridgeActor> {
   const actor = await requireActor(userId);
   if (!actor.emailVerified) throw new Error("Email verification required");
+  assertSuperAdminMfa(actor, aal);
   return actor;
 }
 
