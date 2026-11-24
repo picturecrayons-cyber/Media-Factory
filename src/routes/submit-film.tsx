@@ -36,6 +36,7 @@ function RightsReadySubmission() {
   const [screenerMode, setScreenerMode] = useState<"NONE" | "PRIVATE_BRIDGE" | "SECURE_EXTERNAL">("PRIVATE_BRIDGE");
   const [screenerUrl, setScreenerUrl] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+  const [mandateAccepted, setMandateAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,6 +69,7 @@ function RightsReadySubmission() {
           authorityType: authorityType as "RIGHTS_OWNER",
           authorizationEvidenceType: evidenceType as "RIGHTS_AGREEMENT",
           authorizationConfirmed: true,
+          creatorMandateAccepted: mandateAccepted,
           buyerChannels: buyers,
           screenerMode,
           screenerUrl: screenerUrl || undefined,
@@ -144,6 +146,17 @@ function RightsReadySubmission() {
             {screenerMode === "SECURE_EXTERNAL" ? <label className="text-sm">Secure screener URL<input required type="url" value={screenerUrl} onChange={(e) => setScreenerUrl(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label> : null}
           </div>
           <p className="text-xs text-muted">Screener access never grants master-download permission.</p>
+        </section>
+
+        <section className="space-y-3 rounded-2xl border border-line p-4">
+          <h2 className="font-display text-lg">Creator Distribution Mandate</h2>
+          <p className="text-xs leading-relaxed text-muted">
+            If this Creator / Studio account has not already accepted the account-level mandate, accept it here. It records distribution scope only; it does not approve title-specific rights, guarantee a license, authorize publication, or transfer ownership. Sublicensing remains disabled by default.
+          </p>
+          <label className="flex items-start gap-3 text-sm leading-relaxed">
+            <input type="checkbox" checked={mandateAccepted} onChange={(event) => setMandateAccepted(event.target.checked)} className="mt-1" />
+            <span>I accept Creator Distribution Mandate v1 for this Creator / Studio account.</span>
+          </label>
         </section>
 
         <section className="rounded-2xl border border-line bg-elevated p-4">
