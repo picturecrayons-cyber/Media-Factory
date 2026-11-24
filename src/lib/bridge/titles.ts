@@ -13,6 +13,7 @@ import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
+import { requireActiveDistributionMandate } from "./distribution-mandate";
 
 type TitleRow = {
   id: string;
@@ -218,6 +219,9 @@ export const createTitle = createServerFn({ method: "POST" })
     const slug = slugify(data.name, id);
     const sql = await getSql();
     const isPublicSubmission = data.publicSubmission === true;
+    await requireActiveDistributionMandate(sql, actor, isPublicSubmission && !actor.internalRole
+      ? { destinations: data.intendedDestinations ?? [], media: data.media ?? [], sublicensingRequested: data.sublicensingAllowed === true }
+      : undefined);
 
     if (isPublicSubmission) {
       if (
@@ -615,6 +619,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (expected !== data.to) throw new Error("Illegal title transition");
     const sql = await getSql();
     if (data.to === "QC_REVIEW") {
+      await requireActiveDistributionMandate(sql, actor);
       return submitTitleForQc(sql, title, actor.userId, data.note);
     }
     return sql.transaction(async (tx) => {

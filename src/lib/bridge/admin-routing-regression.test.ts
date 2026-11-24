@@ -15,7 +15,7 @@ test("authenticated profiles route through the server-resolved workspace home", 
   const session = read("./session.ts");
   const onboarding = read("../../routes/onboarding.tsx");
   assert.match(session, /profile: actor, home: workspaceHome\(actor\)/);
-  assert.match(onboarding, /const home = sessionQ\.data\?\.profile \? sessionQ\.data\.home : null/);
+  assert.match(onboarding, /const home = profile && mandateResolved[\s\S]*sessionQ\.data\?\.home : null/);
   assert.match(onboarding, /if \(home\) goHome\(home, navigate\)/);
 });
 
@@ -46,9 +46,8 @@ test("onboarding preserves the signup-selected role and fails closed for unsuppo
   assert.match(onboarding, /publicAccountTypeFrom\(signupAccountTypeHint\)/);
   assert.match(read("../../lib/auth/use-current-user.ts"), /signupAccountTypeHint/);
   assert.match(onboarding, /const roleFromSignup = publicAccountTypeFrom\(signupAccountTypeHint\)/);
-  assert.match(onboarding, /const unsupportedRole = Boolean\(signupAccountTypeHint && !roleFromSignup\)/);
   assert.match(onboarding, /if \(roleFromSignup\) setAccountType\(roleFromSignup\)/);
-  assert.match(onboarding, /if \(unsupportedRole\)/);
+  assert.match(onboarding, /if \(unsupportedSignupRole\)/);
 });
 
 test("the server rejects direct Investor onboarding without a reviewed access path", () => {

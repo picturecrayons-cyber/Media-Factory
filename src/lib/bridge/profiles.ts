@@ -12,6 +12,7 @@ import { bridgeEnv } from "./env";
 import { bridgeInvitationUrl, bridgeVerificationUrl } from "./origin";
 import { assertNotDevUser } from "./guards";
 import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
+import { acceptDistributionMandate } from "./distribution-mandate";
 
 function tokenPair() {
   const token = randomBytes(32).toString("hex");
@@ -179,6 +180,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       accountType: z.enum(ACCOUNT_TYPES),
       organizationName: z.string().max(120).optional(),
       inviteToken: z.string().optional(),
+      creatorMandateAccepted: z.boolean().optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -187,10 +189,13 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     const existing = await loadActor(context.userId);
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
     if (existing) {
+      const requiresMandate = !existing.internalRole && (existing.accountType === "independent_creator" || existing.accountType === "studio");
+      if (requiresMandate && data.creatorMandateAccepted !== true) throw new Error("Accept the Creator Distribution Mandate to continue to your workspace.");
       const email = context.userEmail || existing.email;
       await sql.transaction(async (tx) => {
         await persistSupabaseIdentityLink(tx, existing.userId, context.userId);
         await claimLegacyCreatorIntake(tx, email, existing.userId);
+        if (requiresMandate) await acceptDistributionMandate(tx, existing.userId);
       });
       return { home: workspaceHome(existing), profile: existing };
     }
@@ -199,6 +204,10 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     // this at the authenticated server endpoint, not only in the signup UI.
     if (data.accountType === "investor") {
       throw new Error("Investor access requires a reviewed access request.");
+    }
+
+    if ((data.accountType === "independent_creator" || data.accountType === "studio") && data.creatorMandateAccepted !== true) {
+      throw new Error("Accept the Creator Distribution Mandate to create this workspace.");
     }
 
     const email = context.userEmail;
@@ -334,6 +343,9 @@ export const completeOnboarding = createServerFn({ method: "POST" })
             `;
           }
         }
+        if (data.accountType === "independent_creator" || data.accountType === "studio") {
+          await acceptDistributionMandate(tx, bridgeUserId);
+        }
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
         await claimLegacyCreatorIntake(tx, email, bridgeUserId);
         const roleForTransaction: string | null = internalRole;
@@ -386,6 +398,29 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     }
 
     return { home: workspaceHome(actor), profile: actor };
+  });
+
+export const getDistributionMandateStatus = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole || (actor.accountType !== "independent_creator" && actor.accountType !== "studio")) {
+      return { required: false, schemaReady: true, accepted: true, status: "NOT_REQUIRED" as const };
+    }
+    const sql = await getSql();
+    try {
+      const rows = await sql<{ mandate_version: number; status: string }>`
+        select mandate_version, status from bridge_creator_distribution_mandates
+        where creator_user_id = ${actor.userId} order by mandate_version desc limit 1
+      `;
+      const latest = rows[0];
+      return { required: true, schemaReady: true, accepted: latest?.status === "ACTIVE", status: latest?.status ?? null, mandateVersion: latest?.mandate_version ?? null };
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : "";
+      if (code === "42P01") return { required: true, schemaReady: false, accepted: false, status: null, mandateVersion: null };
+      throw error;
+    }
   });
 
 export const requestEmailVerification = createServerFn({ method: "POST" })
