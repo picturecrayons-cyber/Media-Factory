@@ -48,7 +48,7 @@ test("all Creator/Studio title creation and distribution paths require an active
   }
 });
 test("mandate migration uses a versioned key, RLS and service-role-only grants", () => {
-  const migration = readFileSync(new URL("../../../migrations/0024_bridge_creator_distribution_mandates.sql", import.meta.url), "utf8");
+  const migration = readFileSync(new URL("../../../migrations/20261125000100_bridge_creator_distribution_mandates.sql", import.meta.url), "utf8");
   assert.ok(migration.includes("primary key (creator_user_id, mandate_version)"));
   assert.ok(migration.includes("enable row level security"));
   assert.ok(migration.includes("revoke all on table public.bridge_creator_distribution_mandates from anon, authenticated"));
