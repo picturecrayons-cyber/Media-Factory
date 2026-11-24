@@ -52,5 +52,5 @@ test("mandate migration uses a versioned key, RLS and service-role-only grants",
   assert.ok(migration.includes("primary key (creator_user_id, mandate_version)"));
   assert.ok(migration.includes("enable row level security"));
   assert.ok(migration.includes("revoke all on table public.bridge_creator_distribution_mandates from anon, authenticated"));
-  assert.ok(migration.includes("grant select, insert, update on table public.bridge_creator_distribution_mandates to service_role"));
+  assert.ok(migration.includes("grant select, insert on table public.bridge_creator_distribution_mandates to service_role"));
 });
