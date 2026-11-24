@@ -37,8 +37,8 @@ test("Creator/Studio onboarding requires explicit versioned mandate acceptance a
   assert.ok(onboarding.includes("creatorMandateAccepted:"));
   assert.ok(onboarding.includes("getDistributionMandateStatus"));
 });
-test("all Creator/Studio title creation endpoints require an active mandate", () => {
-  for (const path of ["./titles.ts", "./submissions.ts", "./story-concept-api.ts"]) {
+test("all Creator/Studio title creation and distribution paths require an active mandate", () => {
+  for (const path of ["./titles.ts", "./submissions.ts", "./story-concept-api.ts", "./workflow.ts"]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
     assert.ok(source.includes("requireActiveDistributionMandate"), path);
   }

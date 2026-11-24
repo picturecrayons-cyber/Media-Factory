@@ -619,6 +619,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (expected !== data.to) throw new Error("Illegal title transition");
     const sql = await getSql();
     if (data.to === "QC_REVIEW") {
+      await requireActiveDistributionMandate(sql, actor);
       return submitTitleForQc(sql, title, actor.userId, data.note);
     }
     return sql.transaction(async (tx) => {

@@ -8,6 +8,7 @@ import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
 import { hasVerifiedMasterAndArtwork } from "./asset-roles";
+import { requireActiveDistributionMandate } from "./distribution-mandate";
 
 async function audit(tx: Sql, user: string, title: string, action: string, metadata: object) {
   await tx`insert into bridge_audit_logs(actor_user_id,action,entity_type,entity_id,metadata)
@@ -37,6 +38,7 @@ export async function saveLoopLicense(
     )
   )
     throw new Error("Forbidden");
+  await requireActiveDistributionMandate(tx, actor);
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
     (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
