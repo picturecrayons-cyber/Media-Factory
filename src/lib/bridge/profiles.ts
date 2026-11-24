@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
-import { INTERNAL_ROLES } from "./types";
+import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
 import { loadActor, requireVerifiedActor } from "./session";
 import { verificationProfileId } from "./verification-profile-id";
@@ -176,7 +176,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
   .validator(
     z.object({
       displayName: z.string().min(1).max(80),
-      accountType: z.enum(["independent_creator", "studio", "buyer"]),
+      accountType: z.enum(ACCOUNT_TYPES),
       organizationName: z.string().max(120).optional(),
       inviteToken: z.string().optional(),
     }),
@@ -197,6 +197,12 @@ export const completeOnboarding = createServerFn({ method: "POST" })
 
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
+    if (data.accountType === "investor") {
+      throw new Error("Investor access requires a reviewed access request.");
+    }
+    if (data.accountType === "platform_admin") {
+      throw new Error("Platform Admin access is provisioned only by an authorized platform administrator.");
+    }
     const verified = true;
 
     // Email uniqueness is a safety boundary, not an ownership signal. If this
