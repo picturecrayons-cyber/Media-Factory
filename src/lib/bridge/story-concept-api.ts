@@ -133,7 +133,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
             ${data.synopsis},
             ${data.language},
             ${"OTHER"},
-            ${actor.accountType === "studio" && actor.organizationId ? actor.organizationId : null}${actor.accountType === "studio" && actor.organizationId ? "::uuid" : ""},
+            ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
             ${"story_concept"}
           )
         `;
