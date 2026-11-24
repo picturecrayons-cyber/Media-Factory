@@ -33,6 +33,8 @@ test("Creator/Studio onboarding requires explicit versioned mandate acceptance a
   assert.ok(profiles.includes("await acceptDistributionMandate(tx, bridgeUserId)"));
   assert.ok(profiles.includes("await acceptDistributionMandate(tx, existing.userId)"));
   assert.ok(mandate.includes('action: "creator.distribution_mandate.accepted"'));
+  assert.ok(mandate.includes("rightsReadyMandateScope"));
+  assert.ok(mandate.includes('"ott / streaming": ["SVOD", "TVOD", "AVOD", "FAST"]'));
   assert.ok(onboarding.includes('type="checkbox" checked={mandateAccepted}'));
   assert.ok(onboarding.includes("creatorMandateAccepted:"));
   assert.ok(onboarding.includes("getDistributionMandateStatus"));

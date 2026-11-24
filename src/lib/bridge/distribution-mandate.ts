@@ -6,7 +6,7 @@ export const DISTRIBUTION_MANDATE_CONSENT_TEXT_VERSION = "creator-distribution-m
 export const DISTRIBUTION_MANDATE_DEFAULTS = {
   enabled: true,
   destinations: ["Crayons Loop", "External OTT", "Broadcast / TV", "TVOD / EST", "FAST", "Festival / Educational", "Buyer delivery"],
-  media: ["SVOD", "TVOD", "AVOD", "FAST", "BROADCAST", "THEATRICAL", "AIRLINE", "EDUCATIONAL", "FESTIVAL"],
+  media: ["SVOD", "TVOD", "AVOD", "FAST", "BROADCAST", "THEATRICAL", "AIRLINE", "EDUCATIONAL", "FESTIVAL", "CRAYONS_LOOP"],
   sublicensingAllowed: false,
 } as const;
 export const distributionMandateSchema = z.object({
@@ -31,6 +31,40 @@ export function isMediaCovered(mandate: CreatorDistributionMandate, requestedMed
   const allowed = new Set(mandate.media.map(normalizedScopeValue));
   return requestedMedia.every((value) => allowed.has(normalizedScopeValue(value)));
 }
+const RIGHTS_READY_DESTINATION_ALIASES: Record<string, string> = {
+  "ott platform": "External OTT",
+  broadcaster: "Broadcast / TV",
+  distributor: "Buyer delivery",
+  aggregator: "External OTT",
+  "international buyer": "Buyer delivery",
+  "educational buyer": "Festival / Educational",
+  "festival / screening": "Festival / Educational",
+  "crayons loop": "Crayons Loop",
+  "open to qualified buyers": "Buyer delivery",
+};
+const RIGHTS_READY_MEDIA_ALIASES: Record<string, string[]> = {
+  "ott / streaming": ["SVOD", "TVOD", "AVOD", "FAST"],
+  svod: ["SVOD"],
+  tvod: ["TVOD"],
+  avod: ["AVOD"],
+  fast: ["FAST"],
+  "broadcast / tv": ["BROADCAST"],
+  theatrical: ["THEATRICAL"],
+  educational: ["EDUCATIONAL"],
+  "airline / ancillary": ["AIRLINE"],
+  "festival / screening": ["FESTIVAL"],
+  "crayons loop": ["CRAYONS_LOOP"],
+};
+export function rightsReadyMandateScope(
+  buyerChannels: readonly string[],
+  exploitation: readonly string[],
+) {
+  return {
+    destinations: buyerChannels.map((value) => RIGHTS_READY_DESTINATION_ALIASES[normalizedScopeValue(value)] ?? value),
+    media: exploitation.flatMap((value) => RIGHTS_READY_MEDIA_ALIASES[normalizedScopeValue(value)] ?? [value]),
+  };
+}
+
 export function canSublicenseWithinMandate(mandate: CreatorDistributionMandate, titleGrantAllowsSublicensing: boolean): boolean {
   return mandate.enabled && titleGrantAllowsSublicensing && mandate.sublicensingAllowed;
 }

@@ -38,7 +38,7 @@ export async function saveLoopLicense(
     )
   )
     throw new Error("Forbidden");
-  await requireActiveDistributionMandate(tx, actor);
+  await requireActiveDistributionMandate(tx, actor, { destinations: ["Crayons Loop"], media: ["CRAYONS_LOOP", "TVOD"] });
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
     (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
