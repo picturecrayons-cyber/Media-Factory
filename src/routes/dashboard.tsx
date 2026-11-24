@@ -37,6 +37,7 @@ const WORKSPACES = [
   { label: "Services", to: "/deliveries" },
   { label: "People & Access", to: "/internal" },
   { label: "Website CMS", to: "/admin-cms" },
+  { label: "Brand Settings", to: "/brand-settings" },
   { label: "Audit", to: "/admin/workstations", search: { tab: "Audit" } },
 ] as const;
 
