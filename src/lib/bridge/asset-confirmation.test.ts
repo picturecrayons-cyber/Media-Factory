@@ -192,6 +192,21 @@ test("a previously sized raw asset can be reconciled only with matching verified
       byte_size: 2492665200,
     });
     assert.equal(await persistVerifiedAsset(sql, { ...args, sourceKey: "unrelated/raw.mp4" }), false);
+
+    // A retry for an older sealed asset must not overwrite a newer title pointer.
+    await db.exec("update bridge_titles set master_key='newer/verified/master.mp4' where id='legacy-title'");
+    assert.equal(await persistVerifiedAsset(sql, {
+      ...args,
+      sourceKey: "legacy/raw/master.mp4.verified/legacy-asset",
+      sealedKey: "legacy/raw/master.mp4.verified/legacy-asset",
+    }), false);
+    const protectedRow = (await db.query<{ master_key: string; s3_key: string }>(`
+      select t.master_key, a.s3_key from bridge_titles t
+      join bridge_assets a on a.title_id=t.id where a.id='legacy-asset'`)).rows[0];
+    assert.deepEqual(protectedRow, {
+      master_key: "newer/verified/master.mp4",
+      s3_key: "legacy/raw/master.mp4.verified/legacy-asset",
+    });
     const audits = await db.query("select * from bridge_audit_logs where entity_id='legacy-asset' and action='asset.upload_verified'");
     assert.equal(audits.rows.length, 1);
   } finally {
