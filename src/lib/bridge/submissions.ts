@@ -127,6 +127,6 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
         },
       }, tx);
 
-      return { titleId: id, status: submittedStatus as const };
+      return { titleId: id, status: submittedStatus };
     });
   });
