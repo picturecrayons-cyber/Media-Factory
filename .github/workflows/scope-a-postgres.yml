@@ -2,7 +2,7 @@ name: Scope A PostgreSQL Onboarding Verification
 
 on:
   pull_request:
-    branches: ["main"]
+    branches: ["main", "fix/private-founder-operations-dashboard-20261124"]
     paths:
       - ".github/workflows/scope-a-postgres.yml"
       - "migrations/**"

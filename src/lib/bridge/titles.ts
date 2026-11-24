@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { distributionMandateSchema, isDestinationCovered, isMediaCovered, canSublicenseWithinMandate } from "./distribution-mandate";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -232,6 +233,15 @@ export const createTitle = createServerFn({ method: "POST" })
         !data.intendedDestinations?.length
       ) {
         throw new Error("Complete the rights package and authorization evidence details before submitting.");
+      }
+      if (!actor.internalRole) {
+        if (actor.accountType !== "independent_creator" && actor.accountType !== "studio") throw new Error("This account cannot submit rights-holder distribution requests.");
+        const mandates = await sql<{ status: string; scope: unknown }>`select status, scope from bridge_creator_distribution_mandates where creator_user_id = ${actor.userId} limit 1`;
+        const row = mandates[0];
+        if (!row || row.status !== "ACTIVE") throw new Error("An active Creator Distribution Mandate is required before submitting a title.");
+        const scope = distributionMandateSchema.parse(row.scope);
+        if (!isDestinationCovered(scope, data.intendedDestinations!) || !isMediaCovered(scope, data.media!)) throw new Error("The requested destination or media is outside your account mandate.");
+        if (data.sublicensingAllowed === true && !canSublicenseWithinMandate(scope, true)) throw new Error("Sublicensing is not authorized by the account mandate.");
       }
       const windowStart = new Date(data.windowStart);
       const windowEnd = new Date(data.windowEnd);

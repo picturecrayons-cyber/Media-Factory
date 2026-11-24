@@ -54,7 +54,7 @@ test("same-email foreign identity fails before profile mutation", () => {
 
 test("client blocks duplicate submit and never renders arbitrary server errors", () => {
   const src = readFileSync(new URL("../../routes/onboarding.tsx", import.meta.url), "utf8");
-  assert.match(src, /if \(submitInFlight\.current\) return/);
+  assert.match(src, /if \(busy\) return/);
   assert.match(src, /setError\(publicOnboardingError\(err\)\)/);
   assert.doesNotMatch(src, /err instanceof Error \? err\.message/);
 });

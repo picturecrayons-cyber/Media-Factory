@@ -42,6 +42,7 @@ function Onboarding() {
   const [accountType, setAccountType] = useState<PublicAccountType>(roleFromSignup ?? "independent_creator");
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [organizationName, setOrganizationName] = useState("");
+  const [mandateAccepted, setMandateAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const submitInFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +88,10 @@ function Onboarding() {
       setError("Enter your name.");
       return;
     }
+    if ((accountType === "independent_creator" || accountType === "studio") && !mandateAccepted) {
+      setError("Accept the Creator Distribution Mandate to continue.");
+      return;
+    }
     if (accountType === "studio" && !organizationName.trim()) {
       setError("Enter your studio or company name.");
       return;
@@ -102,6 +107,7 @@ function Onboarding() {
           accountType,
           organizationName: accountType === "studio" ? organizationName.trim() : undefined,
           inviteToken,
+          creatorMandateAccepted: accountType === "independent_creator" || accountType === "studio" ? mandateAccepted : undefined,
         },
       });
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
@@ -148,6 +154,16 @@ function Onboarding() {
 
         {accountType === "buyer" ? (
           <p className="rounded-md border border-line px-3 py-2 text-xs text-muted">Buyer workspace access and title visibility are controlled by Bridge approval and title-level permissions.</p>
+        ) : null}
+        {accountType === "independent_creator" || accountType === "studio" ? (
+          <section className="space-y-3 rounded-md border border-line p-4">
+            <h2 className="text-sm font-semibold">Multiplatform Distribution Mandate · Version 1</h2>
+            <p className="text-xs leading-relaxed text-muted">You authorize Bridge to administer distribution requests for Crayons Loop, external OTT, broadcast / TV, TVOD / EST, FAST, festival / educational and buyer delivery within the recorded scope. Each title still requires its own rights evidence and independent Legal approval. This mandate does not transfer ownership or approve any title. Sublicensing is OFF by default.</p>
+            <label className="flex items-start gap-2 text-sm">
+              <input required type="checkbox" checked={mandateAccepted} onChange={(event) => setMandateAccepted(event.target.checked)} />
+              <span>I have read and accept the Creator Distribution Mandate (version 1). I understand title-level rights approval remains separate.</span>
+            </label>
+          </section>
         ) : null}
         {accountType === "independent_creator" || accountType === "studio" ? (
           <p className="rounded-md border border-line px-3 py-2 text-xs text-muted">Creating an account does not approve a title, verify rights, or grant licensing or publication authority.</p>
