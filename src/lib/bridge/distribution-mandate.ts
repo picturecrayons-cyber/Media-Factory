@@ -21,7 +21,7 @@ export function createDefaultDistributionMandate(acceptedAt: string): CreatorDis
   return distributionMandateSchema.parse({ ...DISTRIBUTION_MANDATE_DEFAULTS, version: DISTRIBUTION_MANDATE_VERSION, acceptedAt, consentTextVersion: DISTRIBUTION_MANDATE_CONSENT_TEXT_VERSION });
 }
 function normalizedScopeValue(value: string): string {
-  return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en");
+  return value.normalize("NFKC").trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ").toLocaleLowerCase("en");
 }
 export function isDestinationCovered(mandate: CreatorDistributionMandate, requestedDestinations: readonly string[]): boolean {
   const allowed = new Set(mandate.destinations.map(normalizedScopeValue));
