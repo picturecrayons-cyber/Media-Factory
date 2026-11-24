@@ -6,7 +6,6 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
-import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 import { listTitles } from "@/lib/bridge/titles";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
@@ -41,7 +40,7 @@ function Creator() {
 function CreatorDashboard({
   actor,
 }: {
-  actor: { userId: string; organizationId?: string | null; internalRole?: string | null };
+  actor: { userId: string; organizationId?: string | null };
 }) {
   const titlesQ = useQuery({
     queryKey: ["bridge-titles", actor.userId, actor.organizationId],
@@ -220,12 +219,6 @@ function CreatorDashboard({
           Open a title's asset workspace →
         </a>
       </section>
-
-      {!actor.internalRole ? (
-        <section id="media-services" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
-          <StreamVistaOrders />
-        </section>
-      ) : null}
 
       <section id="review" className="scroll-mt-20 grid gap-4 md:grid-cols-2">
         <InfoPanel
