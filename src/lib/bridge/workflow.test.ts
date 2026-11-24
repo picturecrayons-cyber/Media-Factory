@@ -93,11 +93,11 @@ async function fixture() {
       ).replaceAll("public.", `${schema}.`),
     );
     await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
-      values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
+      values('title-123','owner','QC_REVIEW','sealed/master.verified/master-id','sealed/poster.verified/poster-id',now());
     insert into bridge_assets values
-      ('master','title-123','master','sealed/master',100),
+      ('master','title-123','master','sealed/master.verified/master-id',100),
       ('legacy-poster','title-123','poster','older/unreferenced-poster',100),
-      ('poster-vertical','title-123','poster_vertical','sealed/poster',100);`);
+      ('poster-vertical','title-123','poster_vertical','sealed/poster.verified/poster-id',100);`);
     function adapter(query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>) {
       const sql = (async (strings: TemplateStringsArray, ...params: unknown[]) => {
         let text = strings[0];
@@ -125,7 +125,7 @@ async function fixture() {
       "./rbac": rbac,
       "./asset-roles": assetRoles,
       "./titles": {},
-    "./env": {bridgeEnv:{}},
+      "./env": { bridgeEnv: {} },
       "./workflow-policy": policy,
     };
     const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
@@ -338,19 +338,19 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
   try {
     await f.sql.query(`
       insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
-      values ('qc-submit-title','owner','PREPARING','sealed/qc-master','sealed/qc-poster',now())
+      values ('qc-submit-title','owner','PREPARING','sealed/qc-master.verified/master-id','sealed/qc-poster.verified/poster-id',now())
     `);
     await f.sql.query(`
       insert into bridge_assets values
-        ('qc-master','qc-submit-title','master','sealed/qc-master',4096),
+        ('qc-master','qc-submit-title','master','sealed/qc-master.verified/master-id',4096),
         ('qc-old-poster','qc-submit-title','poster','older/unreferenced-poster',512),
-        ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster',1024)
+        ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster.verified/poster-id',1024)
     `);
     const title = {
       id: "qc-submit-title",
       status: "PREPARING" as const,
-      masterKey: "sealed/qc-master",
-      posterKey: "sealed/qc-poster",
+      masterKey: "sealed/qc-master.verified/master-id",
+      posterKey: "sealed/qc-poster.verified/poster-id",
     };
     const result = await submitTitleForQc(f.sql, title, "owner", "Submit verified title for QC");
     assert.equal(result.title.status, "QC_REVIEW");
@@ -381,4 +381,71 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
   } finally {
     await f.db.close();
   }
+});
+
+test("Submit for QC blocks raw asset pointers even when their byte sizes are present", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query(`
+      insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
+      values ('qc-submit-raw-title','owner','PREPARING','uploads/master.mov','uploads/poster.jpg',now())
+    `);
+    await f.sql.query(`
+      insert into bridge_assets values
+        ('raw-master','qc-submit-raw-title','master','uploads/master.mov',4096),
+        ('raw-poster','qc-submit-raw-title','poster','uploads/poster.jpg',1024)
+    `);
+    await assert.rejects(
+      submitTitleForQc(
+        f.sql,
+        {
+          id: "qc-submit-raw-title",
+          status: "PREPARING",
+          masterKey: "uploads/master.mov",
+          posterKey: "uploads/poster.jpg",
+        },
+        "owner",
+      ),
+      /Verified master and artwork required before QC/,
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>(
+        "select status from bridge_titles where id='qc-submit-raw-title'",
+      ))[0].status,
+      "PREPARING",
+    );
+    assert.equal(
+      (await f.sql.query(
+        "select * from bridge_title_events where title_id='qc-submit-raw-title'",
+      )).length,
+      0,
+    );
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("asset role helper requires sealed immutable verified object keys", () => {
+  assert.equal(
+    assetRoles.hasVerifiedMasterAndArtwork(
+      [
+        { kind: "master", s3_key: "vault/master.mov.verified/master-id" },
+        { kind: "poster_vertical", s3_key: "vault/poster.jpg.verified/poster-id" },
+      ],
+      "vault/master.mov.verified/master-id",
+      "vault/poster.jpg.verified/poster-id",
+    ),
+    true,
+  );
+  assert.equal(
+    assetRoles.hasVerifiedMasterAndArtwork(
+      [
+        { kind: "master", s3_key: "uploads/master.mov" },
+        { kind: "poster_vertical", s3_key: "uploads/poster.jpg" },
+      ],
+      "uploads/master.mov",
+      "uploads/poster.jpg",
+    ),
+    false,
+  );
 });
