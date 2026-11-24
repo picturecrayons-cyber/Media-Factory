@@ -267,41 +267,45 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
 
     const sql = await getSql();
     try {
-      const existing = await sql<ConceptRow>`
-        select * from bridge_story_concept_submissions where id = ${data.id} limit 1
-      `;
-      const current = existing[0];
-      if (!current) throw new Error("Not found");
+      const concept = await sql.transaction(async (tx) => {
+        const existing = await tx<ConceptRow>`
+          select * from bridge_story_concept_submissions where id = ${data.id} for update
+        `;
+        const current = existing[0];
+        if (!current) throw new Error("Not found");
 
-      const from = current.curation_status as CurationStatus;
-      const allowed = CURATION_TRANSITIONS[from] ?? [];
-      if (!allowed.includes(data.status)) {
-        throw new Error(`Invalid curation transition: ${from} → ${data.status}`);
-      }
+        const from = current.curation_status as CurationStatus;
+        const allowed = CURATION_TRANSITIONS[from] ?? [];
+        if (!allowed.includes(data.status)) {
+          throw new Error(`Invalid curation transition: ${from} → ${data.status}`);
+        }
 
-      const rows = await sql<ConceptRow>`
-        update bridge_story_concept_submissions
-        set
-          curation_status = ${data.status},
-          admin_notes = ${data.adminNotes ?? null},
-          updated_at = now(),
-          introduced_to_buyers_at = case
-            when ${data.status} = 'INTRODUCED_TO_BUYERS' then coalesce(introduced_to_buyers_at, now())
-            else introduced_to_buyers_at
-          end
-        where id = ${data.id}
-        returning *
-      `;
+        const rows = await tx<ConceptRow>`
+          update bridge_story_concept_submissions
+          set
+            curation_status = ${data.status},
+            admin_notes = ${data.adminNotes ?? null},
+            updated_at = now(),
+            introduced_to_buyers_at = case
+              when ${data.status} = 'INTRODUCED_TO_BUYERS' then coalesce(introduced_to_buyers_at, now())
+              else introduced_to_buyers_at
+            end
+          where id = ${data.id}
+          returning *
+        `;
 
-      const concept = rows[0];
-      if (!concept) throw new Error("Not found");
+        const updated = rows[0];
+        if (!updated) throw new Error("Not found");
 
-      await writeAudit({
-        actorUserId: actor.userId,
-        action: "story_concept.curation_update",
-        entityType: "bridge_story_concept_submission",
-        entityId: concept.id,
-        metadata: { from, status: data.status },
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: "story_concept.curation_update",
+          entityType: "bridge_story_concept_submission",
+          entityId: updated.id,
+          metadata: { from, status: data.status },
+        }, tx);
+
+        return updated;
       });
 
       return { concept: mapConcept(concept) };
