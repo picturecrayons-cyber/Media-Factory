@@ -25,7 +25,7 @@ function Account() {
                   </div>
                   <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
                     <span className="text-sm text-muted">Account</span>
-                    <span className="text-sm font-medium">{actor.accountType.replaceAll("_", " ")}</span>
+                    <span className="text-sm font-medium">{actor.internalRole === "super_admin" && actor.organizationName ? "Company account" : actor.accountType.replaceAll("_", " ")}</span>
                   </div>
                   <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
                     <span className="text-sm text-muted">Organization</span>
@@ -36,6 +36,9 @@ function Account() {
                     <span className="text-sm font-medium">{actor.emailVerified ? "Verified" : "Verification required"}</span>
                   </div>
                 </div>
+                {actor.internalRole === "super_admin" && actor.organizationName ? (
+                  <p className="mt-3 text-xs text-muted">Company identity and Super Admin operational permissions are managed separately.</p>
+                ) : null}
 
                 {!actor.emailVerified ? (
                   <div className="mt-5">
