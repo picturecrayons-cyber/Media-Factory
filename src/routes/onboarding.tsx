@@ -44,7 +44,7 @@ function Onboarding() {
   const mandateStatusBlocked = Boolean(existingRightsHolder && mandateQ.data?.required && mandateQ.data.schemaReady && mandateQ.data.status && !mandateQ.data.accepted);
   const signupAccountTypeHint = user?.signupAccountTypeHint;
   const roleFromSignup = publicAccountTypeFrom(signupAccountTypeHint);
-  const unsupportedRole = Boolean(signupAccountTypeHint && !roleFromSignup);
+  const unsupportedSignupRole = Boolean(signupAccountTypeHint && !roleFromSignup);
   const [accountType, setAccountType] = useState<PublicAccountType>(roleFromSignup ?? "independent_creator");
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [organizationName, setOrganizationName] = useState("");
@@ -85,7 +85,7 @@ function Onboarding() {
     return <main className="grid min-h-screen place-items-center bg-bg p-5"><section className="w-full max-w-lg space-y-4 rounded-xl border border-line bg-surface p-6"><BrandMark /><h1 className="font-display text-2xl font-semibold">Distribution Mandate verification</h1><p role="alert" className="text-sm text-muted">{message}</p><Button type="button" variant="outline" onClick={() => void mandateQ.refetch()} className="w-full">Retry verification</Button><Link to="/contact" className="text-sm text-accent underline">Contact Bridge</Link></section></main>;
   }
 
-  if (unsupportedRole) {
+  if (unsupportedSignupRole) {
     return (
       <main className="grid min-h-screen place-items-center bg-bg p-5">
         <section className="w-full max-w-md space-y-4 rounded-xl border border-line bg-surface p-6">
@@ -102,7 +102,7 @@ function Onboarding() {
   }
 
   async function createWorkspace() {
-    if (submitInFlight.current || busy) return;
+    if (submitInFlight.current) return;
     setError(null);
     if (!displayName.trim()) {
       setError("Enter your name.");
