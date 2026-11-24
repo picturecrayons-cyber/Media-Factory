@@ -10,7 +10,12 @@ import type { BridgeActor } from "@/lib/bridge/session";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
-export const Route = createFileRoute("/admin/workstations")({\n  validateSearch: (search: Record<string, unknown>) => ({\n    tab: typeof search.tab === "string" ? search.tab : undefined,\n  }),\n  component: AdminWorkstations,\n});
+export const Route = createFileRoute("/admin/workstations")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: typeof search.tab === "string" ? search.tab : undefined,
+  }),
+  component: AdminWorkstations,
+});
 
 const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
