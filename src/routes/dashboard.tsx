@@ -32,11 +32,13 @@ const ADMIN_MODULES = [
     title: "Rights & Legal",
     description: "Rights evidence, agreements, independent reviews and approval decisions.",
     to: "/admin/workstations",
+    search: { tab: "Rights" },
   },
   {
     title: "Buyer Management",
     description: "Buyer release gates, licensing pipeline and title-scoped access controls.",
     to: "/admin/workstations",
+    search: { tab: "Buyers" },
   },
   {
     title: "Services & Operations",
@@ -47,6 +49,7 @@ const ADMIN_MODULES = [
     title: "Revenue & Finance",
     description: "Commercial pipeline and persisted delivery records. Reconciled cash revenue remains unverified until a finance ledger is connected.",
     to: "/admin/workstations",
+    search: { tab: "Deliveries" },
   },
   {
     title: "People & Access",
@@ -62,6 +65,7 @@ const ADMIN_MODULES = [
     title: "Audit & Security",
     description: "Read-only persisted operator history and operational evidence.",
     to: "/admin/workstations",
+    search: { tab: "Audit" },
   },
 ] as const;
 
@@ -188,7 +192,7 @@ function DashboardBody() {
           <p className="mt-1 text-sm text-muted">
             Do not treat title licensing-fee metadata, orders or payment captures as recognized revenue or payable settlements. Revenue must be reported from reconciled payment, refund, chargeback and settlement records.
           </p>
-          <Link to="/buyer" className="mt-3 inline-flex text-sm font-semibold text-accent hover:underline">Open commercial pipeline →</Link>
+          <Link to="/admin/workstations" search={{ tab: "Deliveries" }} className="mt-3 inline-flex text-sm font-semibold text-accent hover:underline">Open commercial pipeline →</Link>
         </div>
       </section>
 
