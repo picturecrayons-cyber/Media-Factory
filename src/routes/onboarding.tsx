@@ -17,6 +17,10 @@ export const Route = createFileRoute("/onboarding")({
 
 type PublicAccountType = "independent_creator" | "studio" | "buyer";
 
+function goHome(home: string | null | undefined, navigate: ReturnType<typeof useNavigate>) {
+  if (home) void navigate({ to: home as any, replace: true });
+}
+
 const ROLE_LABELS: Record<PublicAccountType, string> = {
   independent_creator: "Creator",
   studio: "Studio",
@@ -32,9 +36,9 @@ function Onboarding() {
     enabled: !isPending && Boolean(user),
     retry: 1,
   });
-  const roleHint = user?.signupAccountTypeHint;
-  const roleFromSignup = publicAccountTypeFrom(roleHint);
-  const unsupportedRole = Boolean(roleHint && !roleFromSignup);
+  const signupAccountTypeHint = user?.signupAccountTypeHint;
+  const roleFromSignup = publicAccountTypeFrom(signupAccountTypeHint);
+  const unsupportedRole = Boolean(signupAccountTypeHint && !roleFromSignup);
   const [accountType, setAccountType] = useState<PublicAccountType>(roleFromSignup ?? "independent_creator");
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [organizationName, setOrganizationName] = useState("");
@@ -51,7 +55,7 @@ function Onboarding() {
 
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
   useEffect(() => {
-    if (home) void navigate({ to: home as any, replace: true });
+    if (home) goHome(home, navigate);
   }, [home, navigate]);
 
   if (isPending || (user && sessionQ.isPending) || home) {
