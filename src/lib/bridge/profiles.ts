@@ -11,6 +11,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { bridgeInvitationUrl, bridgeVerificationUrl } from "./origin";
 import { assertNotDevUser } from "./guards";
+import { createDefaultDistributionMandate } from "./distribution-mandate";
 import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
 
 function tokenPair() {
@@ -179,6 +180,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       accountType: z.enum(ACCOUNT_TYPES),
       organizationName: z.string().max(120).optional(),
       inviteToken: z.string().optional(),
+      creatorMandateAccepted: z.boolean().optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -187,10 +189,21 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     const existing = await loadActor(context.userId);
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
     if (existing) {
+      const isRightsHolder = existing.accountType === "independent_creator" || existing.accountType === "studio";
+      if (isRightsHolder && data.creatorMandateAccepted !== true) throw new Error("Accept the Creator Distribution Mandate before entering your Creator / Studio workspace.");
       const email = context.userEmail || existing.email;
       await sql.transaction(async (tx) => {
         await persistSupabaseIdentityLink(tx, existing.userId, context.userId);
         await claimLegacyCreatorIntake(tx, email, existing.userId);
+        if (isRightsHolder) {
+          const rows = await tx<{ status: string }>`select status from bridge_creator_distribution_mandates where creator_user_id = ${existing.userId} for update`;
+          if (rows[0]?.status !== "ACTIVE") {
+            if (rows.length) throw new Error("Distribution mandate is suspended or revoked; Super Admin review is required.");
+            const mandate = createDefaultDistributionMandate(new Date().toISOString());
+            await tx`insert into bridge_creator_distribution_mandates (creator_user_id, mandate_version, status, scope, accepted_at, consent_text_version) values (${existing.userId}, ${mandate.version}, 'ACTIVE', ${JSON.stringify(mandate)}::jsonb, ${mandate.acceptedAt}, ${mandate.consentTextVersion})`;
+            await writeAudit({ actorUserId: existing.userId, action: "creator.distribution_mandate.accepted", entityType: "bridge_creator_distribution_mandate", entityId: existing.userId, metadata: { mandateVersion: mandate.version, consentTextVersion: mandate.consentTextVersion } }, tx);
+          }
+        }
       });
       return { home: workspaceHome(existing), profile: existing };
     }
@@ -200,6 +213,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     if (data.accountType === "investor") {
       throw new Error("Investor access requires a reviewed access request.");
     }
+    if ((data.accountType === "independent_creator" || data.accountType === "studio") && data.creatorMandateAccepted !== true) throw new Error("Accept the Creator Distribution Mandate to create this workspace.");
 
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
@@ -333,6 +347,11 @@ export const completeOnboarding = createServerFn({ method: "POST" })
                 set membership_role = 'owner', status = 'active', updated_at = now()
             `;
           }
+        }
+        if (data.accountType === "independent_creator" || data.accountType === "studio") {
+          const mandate = createDefaultDistributionMandate(new Date().toISOString());
+          await tx`insert into bridge_creator_distribution_mandates (creator_user_id, mandate_version, status, scope, accepted_at, consent_text_version) values (${bridgeUserId}, ${mandate.version}, 'ACTIVE', ${JSON.stringify(mandate)}::jsonb, ${mandate.acceptedAt}, ${mandate.consentTextVersion}) on conflict (creator_user_id) do nothing`;
+          await writeAudit({ actorUserId: bridgeUserId, action: "creator.distribution_mandate.accepted", entityType: "bridge_creator_distribution_mandate", entityId: bridgeUserId, metadata: { mandateVersion: mandate.version, consentTextVersion: mandate.consentTextVersion } }, tx);
         }
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
         await claimLegacyCreatorIntake(tx, email, bridgeUserId);
