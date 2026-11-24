@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { Sql } from "@/lib/db";
+import { writeAudit } from "./audit";
 
 export const DISTRIBUTION_MANDATE_VERSION = 1 as const;
 
@@ -57,4 +59,58 @@ export function canSublicenseWithinMandate(
   titleGrantAllowsSublicensing: boolean,
 ): boolean {
   return mandate.enabled && titleGrantAllowsSublicensing && mandate.sublicensingAllowed;
+}
+
+
+export async function ensureCreatorDistributionMandate(
+  tx: Sql,
+  creatorUserId: string,
+  accepted: boolean,
+): Promise<void> {
+  const current = await tx<{ status: string }>`
+    select status
+    from bridge_creator_distribution_mandates
+    where creator_user_id = ${creatorUserId}
+    for update
+  `;
+
+  if (current[0]?.status === "ACTIVE") return;
+  if (current.length > 0) {
+    throw new Error("This account-level mandate is not active. A Super Admin review is required.");
+  }
+  if (!accepted) {
+    throw new Error("Accept the Creator Distribution Mandate before submitting a title.");
+  }
+
+  const mandate = createDefaultDistributionMandate(new Date().toISOString());
+  const inserted = await tx<{ creator_user_id: string }>`
+    insert into bridge_creator_distribution_mandates
+      (creator_user_id, mandate_version, status, scope, accepted_at, consent_text_version)
+    values (
+      ${creatorUserId}, ${mandate.version}, 'ACTIVE',
+      ${JSON.stringify(mandate)}::jsonb, ${mandate.acceptedAt}, ${mandate.consentTextVersion}
+    )
+    on conflict (creator_user_id) do nothing
+    returning creator_user_id
+  `;
+
+  if (inserted.length > 0) {
+    await writeAudit({
+      actorUserId: creatorUserId,
+      action: "creator.distribution_mandate.accepted",
+      entityType: "bridge_creator_distribution_mandate",
+      entityId: creatorUserId,
+      metadata: { mandateVersion: mandate.version, consentTextVersion: mandate.consentTextVersion },
+    }, tx);
+  }
+
+  const finalState = await tx<{ status: string }>`
+    select status
+    from bridge_creator_distribution_mandates
+    where creator_user_id = ${creatorUserId}
+    for update
+  `;
+  if (finalState[0]?.status !== "ACTIVE") {
+    throw new Error("Creator Distribution Mandate could not be activated.");
+  }
 }
