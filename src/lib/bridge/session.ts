@@ -169,7 +169,7 @@ export const getDashboardSession = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     if (!canAccessDashboard(actor)) throw new Error("Super admin access required");
     return { profile: actor };
   });
