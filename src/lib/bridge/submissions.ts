@@ -65,7 +65,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
           country_of_origin, release_date
         ) values (
           ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType},
-          ${actor.accountType === "studio" ? actor.organizationId : null}, 'finished_film',
+          ${actor.accountType === "studio" ? actor.organizationId : null}::uuid, 'finished_film',
           ${submittedStatus}, ${data.synopsis}, ${data.synopsis}, ${data.originalLanguage},
           ${data.releaseYear}, ${data.runtimeMinutes}, ${data.contentType},
           ${data.originalLanguage}, ${data.countryOfOrigin}, make_date(${data.releaseYear}, 1, 1)
