@@ -119,24 +119,36 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
 
     try {
       const concept = await sql.transaction(async (tx) => {
-        await tx`
-          insert into bridge_titles (
-            id, slug, name, owner_user_id, owner_account_type, status,
-            synopsis, language, content_type, owner_organization_id, submission_type
-          ) values (
-            ${titleId},
-            ${slug},
-            ${data.titleName},
-            ${actor.userId},
-            ${actor.accountType},
-            ${"DRAFT"},
-            ${data.synopsis},
-            ${data.language},
-            ${"OTHER"},
-            ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
-            ${"story_concept"}
-          )
+        const organizationColumn = await tx<{ data_type: string }>`
+          select data_type from information_schema.columns
+          where table_schema = 'public' and table_name = 'bridge_titles'
+            and column_name = 'owner_organization_id'
+          limit 1
         `;
+        const organizationId = actor.accountType === "studio" ? actor.organizationId ?? null : null;
+        if (organizationColumn[0]?.data_type === "uuid") {
+          await tx`
+            insert into bridge_titles (
+              id, slug, name, owner_user_id, owner_account_type, status,
+              synopsis, language, content_type, owner_organization_id, submission_type
+            ) values (
+              ${titleId}, ${slug}, ${data.titleName}, ${actor.userId}, ${actor.accountType},
+              ${"DRAFT"}, ${data.synopsis}, ${data.language}, ${"OTHER"},
+              ${organizationId}::uuid, ${"story_concept"}
+            )
+          `;
+        } else {
+          await tx`
+            insert into bridge_titles (
+              id, slug, name, owner_user_id, owner_account_type, status,
+              synopsis, language, content_type, owner_organization_id, submission_type
+            ) values (
+              ${titleId}, ${slug}, ${data.titleName}, ${actor.userId}, ${actor.accountType},
+              ${"DRAFT"}, ${data.synopsis}, ${data.language}, ${"OTHER"},
+              ${organizationId}::text, ${"story_concept"}
+            )
+          `;
+        }
 
         await tx`
           insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
