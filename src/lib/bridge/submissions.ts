@@ -55,7 +55,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
   .validator(submissionSchema)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
 
     if (!["independent_creator", "studio"].includes(actor.accountType)) {
       throw new Error("Only creator and studio accounts can submit titles");
