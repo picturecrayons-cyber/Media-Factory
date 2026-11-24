@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -50,6 +50,7 @@ function Onboarding() {
   const [organizationName, setOrganizationName] = useState("");
   const [mandateAccepted, setMandateAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
+  const submitInFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -101,7 +102,7 @@ function Onboarding() {
   }
 
   async function createWorkspace() {
-    if (busy) return;
+    if (submitInFlight.current || busy) return;
     setError(null);
     if (!displayName.trim()) {
       setError("Enter your name.");
@@ -115,6 +116,7 @@ function Onboarding() {
       setError("Accept the Creator Distribution Mandate to continue.");
       return;
     }
+    submitInFlight.current = true;
     setBusy(true);
     try {
       let inviteToken: string | undefined;
@@ -134,6 +136,7 @@ function Onboarding() {
     } catch (err) {
       setError(publicOnboardingError(err));
     } finally {
+      submitInFlight.current = false;
       setBusy(false);
     }
   }
