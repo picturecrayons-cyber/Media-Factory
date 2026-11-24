@@ -94,7 +94,13 @@ describe("PRD authorization matrix", () => {
     assert.equal(canMutateTitle(viewer(), foreign, "title.update_own", "title.qc_review"), false);
   });
 
-  it("platform_admin account type alone grants no privileged permission", () => {\n    const unprivileged = actor("platform-no-role", "platform_admin", null);\n    assert.equal(canAccessDashboard(unprivileged), false);\n    for (const permission of PERMISSIONS) assert.equal(hasPermission(unprivileged, permission), false);\n  });\n\n  it("Super Admin receives every registered permission while remaining email-verified", () => {
+  it("platform_admin account type alone grants no privileged permission", () => {
+    const unprivileged = actor("platform-no-role", "platform_admin", null);
+    assert.equal(canAccessDashboard(unprivileged), false);
+    for (const permission of PERMISSIONS) assert.equal(hasPermission(unprivileged, permission), false);
+  });
+
+  it("Super Admin receives every registered permission while remaining email-verified", () => {
     const privileged = superAdmin();
     for (const permission of PERMISSIONS) {
       assert.equal(hasPermission(privileged, permission), true, `missing ${permission}`);
