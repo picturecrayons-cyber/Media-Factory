@@ -43,7 +43,8 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   const sql = await getSql();
 
   // Profile resolution must not depend on optional Studio organization schema.
-  // In particular, the production super-admin profile is an independent_creator.
+  // Platform Admin identity is represented by account_type=platform_admin and
+  // internal_role=super_admin; privileged access is still role-authorized.
   const rows = await sql<BridgeProfileRow>`
     select bp.user_id, bp.email, bp.display_name, bp.account_type, bp.organization_name,
       null::text as organization_id, bp.internal_role, bp.email_verified
