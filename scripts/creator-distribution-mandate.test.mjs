@@ -18,6 +18,13 @@ test("onboarding captures explicit mandate acceptance before Creator or Studio w
   assert.match(ui, /const \[mandateAccepted, setMandateAccepted\] = useState\(false\)/);
   assert.match(ui, /checked=\{mandateAccepted\}/);
   assert.match(ui, /creatorMandateAccepted: accountType === "buyer" \? undefined : mandateAccepted/);
+  const submission = read("../src/lib/bridge/submissions.ts");
+  assert.match(submission, /ensureCreatorDistributionMandate\(tx, actor\.userId, data\.creatorMandateAccepted === true\)/);
+  assert.match(submission, /creatorMandateAccepted: z\.boolean\(\)\.optional\(\)/);
+  const submitFilm = read("../src/routes/submit-film.tsx");
+  assert.match(submitFilm, /const \[mandateAccepted, setMandateAccepted\] = useState\(false\)/);
+  assert.match(submitFilm, /creatorMandateAccepted: mandateAccepted/);
+  assert.match(submitFilm, /I accept Creator Distribution Mandate v1/);
   assert.match(ui, /Accept the Creator Distribution Mandate before creating this workspace/);
 });
 
