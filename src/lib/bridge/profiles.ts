@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
-import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
+import { INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
 import { loadActor, requireVerifiedActor } from "./session";
 import { verificationProfileId } from "./verification-profile-id";
@@ -176,7 +176,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
   .validator(
     z.object({
       displayName: z.string().min(1).max(80),
-      accountType: z.enum(ACCOUNT_TYPES),
+      accountType: z.enum(["independent_creator", "studio", "buyer"]),
       organizationName: z.string().max(120).optional(),
       inviteToken: z.string().optional(),
     }),
@@ -193,12 +193,6 @@ export const completeOnboarding = createServerFn({ method: "POST" })
         await claimLegacyCreatorIntake(tx, email, existing.userId);
       });
       return { home: workspaceHome(existing), profile: existing };
-    }
-
-    // Investor access is granted only after a reviewed access request. Enforce
-    // this at the authenticated server endpoint, not only in the signup UI.
-    if (data.accountType === "investor") {
-      throw new Error("Investor access requires a reviewed access request.");
     }
 
     const email = context.userEmail;
