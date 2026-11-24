@@ -56,7 +56,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
     const sql = await getSql();
     const submittedStatus = "PREPARING";
 
-    return sql.begin(async (tx) => {
+    return sql.transaction(async (tx) => {
       await tx`
         insert into bridge_titles (
           id, slug, name, original_title, owner_user_id, owner_account_type,
