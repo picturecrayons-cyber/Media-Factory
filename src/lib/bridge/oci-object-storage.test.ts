@@ -366,6 +366,52 @@ test("OCI Recovery copy uses a distinct destination bucket and verifies the Reco
   }
 });
 
+test("OCI verifyObject returns SHA-256 calculated from the source object body", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "primary-vault",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    const calls: string[] = [];
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const method = init?.method || "GET";
+      calls.push(method);
+      if (method === "HEAD") {
+        return new Response(null, { status: 200, headers: {
+          "content-length": "12", "content-type": "video/mp4", etag: '"source-etag"',
+        }});
+      }
+      if (method === "GET") {
+        assert.equal(url.pathname, "/n/test-namespace/b/primary-vault/o/source-key");
+        return new Response("hello world!", { status: 200, headers: { "content-length": "12" } });
+      }
+      throw new Error(`Unexpected OCI method: ${method}`);
+    };
+    const { createHash } = await import("node:crypto");
+    const expected = createHash("sha256").update("hello world!").digest("hex");
+    const result = await verifyObject("source-key", "video/mp4");
+    assert.equal(result.sha256, expected);
+    assert.equal(result.etag, "source-etag");
+    assert.deepEqual(calls, ["HEAD", "GET"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 test("OCI SHA-256 read-back streams object bytes from the specified bucket", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const values = {
