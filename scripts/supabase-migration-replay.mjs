@@ -18,6 +18,13 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
 const EXPECTED_MIGRATIONS = 70;
+// These are new, branch-local migrations layered on top of the reconciled
+// 70-row Production source snapshot. They are replayed in the disposable local
+// Supabase stack but are not misrepresented as part of the historical ledger.
+const ADDITIVE_MIGRATIONS = new Set([
+  "20261124222927_bridge_qc_verified_asset_gate_20261125.sql",
+  "20261125040000_bridge_loop_identity_link_fk_reconcile.sql",
+]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -54,9 +61,10 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
+const additiveNames = names.filter((name) => ADDITIVE_MIGRATIONS.has(name));
+if (names.length !== EXPECTED_MIGRATIONS + additiveNames.length) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
+    `Expected ${EXPECTED_MIGRATIONS} reconciled migrations plus only explicitly allowlisted additive migrations; found ${names.length}`,
   );
 }
 if (new Set(names).size !== names.length) {
@@ -92,10 +100,21 @@ if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   );
 }
 
+for (const name of manifestRows.keys()) {
+  if (!names.includes(name)) {
+    throw new Error(`Reconciled Production migration missing from source: ${name}`);
+  }
+}
+
 for (const name of names) {
   const contents = await readFile(join(MIGRATIONS_DIR, name));
   const expected = manifestRows.get(name);
-  if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
+  if (!expected) {
+    if (!ADDITIVE_MIGRATIONS.has(name)) {
+      throw new Error(`Migration missing from manifest and additive allowlist: ${name}`);
+    }
+    continue;
+  }
   const actualBytes = contents.byteLength;
   const actualSha256 = createHash("sha256").update(contents).digest("hex");
   if (actualBytes !== expected.bytes || actualSha256 !== expected.sha256) {
