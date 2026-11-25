@@ -90,7 +90,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     const assets = await tx<{
       kind: string;
       s3_key: string;
-    }>`select kind,s3_key from bridge_assets where title_id=${data.titleId} and byte_size>0`;
+    }>`select kind,s3_key from bridge_assets where title_id=${data.titleId} and byte_size>0 and length(checksum_sha256)=44 and storage_verified_at is not null`;
     if (
       data.decision === "APPROVE" &&
       (!assets.some((a) => a.kind === "master" && a.s3_key === title.master_key) ||

@@ -516,10 +516,11 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (["RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to))
       throw new Error("Use the recorded QC or legal review action");
     if (data.to === "QC_REVIEW") {
+      assertPermission(actor, "title.submit_qc");
       const verified = await (await getSql())<{
         kind: string;
         s3_key: string;
-      }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0`;
+      }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0 and length(checksum_sha256)=44 and storage_verified_at is not null`;
       if (
         !verified.some((a) => a.kind === "master" && a.s3_key === title.masterKey) ||
         !verified.some((a) => a.kind === "poster" && a.s3_key === title.posterKey)
@@ -539,7 +540,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
     }
     const expected = nextStatus(title.status);
     if (expected !== data.to) throw new Error("Illegal title transition");
-    return (await getSql()).transaction(async (tx) => {
+    const result = await (await getSql()).transaction(async (tx) => {
       const [locked] = await tx<{
         status: string;
       }>`select status from bridge_titles where id=${title.id} for update`;
@@ -567,6 +568,34 @@ export const advanceTitle = createServerFn({ method: "POST" })
       );
       return { title: { ...title, status: data.to } };
     });
+    if (data.to === "QC_REVIEW") {
+      let emailStatus: "SENT" | "FAILED" = "FAILED";
+      let emailFailure: string | null = null;
+      try {
+        const { sendBridgeMail } = await import("./mail.server");
+        const delivery = await sendBridgeMail({
+          to: "admin@crayonspictures.in",
+          subject: "QC submission received: " + title.name,
+          text: "A title was submitted to QC in Crayons Bridge: " + title.name + ". Review it in /admin/submissions.",
+        });
+        emailStatus = delivery.ok ? "SENT" : "FAILED";
+      } catch (error) {
+        emailFailure = error instanceof Error ? error.message.slice(0, 500) : "Email delivery failed";
+      }
+      try {
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: emailStatus === "SENT" ? "email.delivery.sent" : "email.delivery.failed",
+          entityType: "bridge_title",
+          entityId: title.id,
+          metadata: { category: "qc_submission", recipient: "admin@crayonspictures.in", status: emailStatus, failure: emailFailure },
+        });
+      } catch (error) {
+        console.error("[bridge-qc-submission] email status audit failed", error);
+      }
+      return { ...result, emailDelivery: { status: emailStatus, failure: emailFailure } };
+    }
+    return result;
   });
 
 export const listAuditLogs = createServerFn({ method: "GET" })
