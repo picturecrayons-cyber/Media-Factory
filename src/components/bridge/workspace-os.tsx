@@ -76,14 +76,17 @@ export function WorkspacePanel({
   children: ReactNode;
 }) {
   return (
-    <section id={id} className="scroll-mt-28 rounded-xl border border-line bg-surface p-4 sm:p-5">
-      <div className="mb-4">
-        {eyebrow ? <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent">{eyebrow}</p> : null}
-        <h3 className="mt-1 font-display text-lg font-semibold">{title}</h3>
-        {description ? <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted">{description}</p> : null}
-      </div>
-      {children}
-    </section>
+    <details id={id} open={id === "overview"} className="group scroll-mt-28 rounded-xl border border-line bg-surface p-4 sm:p-5">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+        <div className="min-w-0">
+          {eyebrow ? <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent">{eyebrow}</p> : null}
+          <h3 className="mt-1 font-display text-lg font-semibold">{title}</h3>
+          {description ? <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted">{description}</p> : null}
+        </div>
+        <span aria-hidden="true" className="mt-1 shrink-0 rounded-md border border-line px-2 py-1 text-xs font-semibold text-muted group-open:rotate-180">⌄</span>
+      </summary>
+      <div className="mt-4 border-t border-line pt-4">{children}</div>
+    </details>
   );
 }
 
