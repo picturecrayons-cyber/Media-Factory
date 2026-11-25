@@ -20,6 +20,10 @@ import type { BridgeActor } from "@/lib/bridge/session";
 import type { BridgeTitle } from "@/lib/bridge/types";
 
 const stages = ["Prepare", "Business", "Distribution", "Revenue"] as const;
+function toLocalDateTimeValue(date: Date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
 export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
   const [stage, setStage] = useState<(typeof stages)[number]>("Prepare");
   const [settlementRef, setSettlementRef] = useState("");
@@ -63,8 +67,12 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Action failed"),
   });
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  const [start, setStart] = useState(() => toLocalDateTimeValue(new Date()));
+  const [end, setEnd] = useState(() => {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() + 5);
+    return toLocalDateTimeValue(date);
+  });
   const [exclusive, setExclusive] = useState(false);
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
@@ -235,7 +243,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               {canDraftLicense ? (
               <details className="rounded-xl border border-line p-3">
                 <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
-                <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
+                <p className="mt-2 text-xs text-muted">Worldwide · {title.language} · TVOD · 5-year draft window · Non-exclusive · 50/50 default split. Edit before saving if required. Legal verification remains mandatory.</p>
                 {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
                   <form
                     className="mt-3 grid gap-3 sm:grid-cols-2"
@@ -331,7 +339,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           <span>· {selectedGrant.languages.join(", ")}</span>
                         </div>
                         <p className="text-xs text-muted">
-                          {selectedGrant.window_start} → {selectedGrant.window_end}
+                          {Number.isNaN(new Date(selectedGrant.window_start).getTime()) ? "Start date unavailable" : new Date(selectedGrant.window_start).toLocaleDateString()} → {Number.isNaN(new Date(selectedGrant.window_end).getTime()) ? "End date unavailable" : new Date(selectedGrant.window_end).toLocaleDateString()}
                         </p>
                         <p className="break-all text-xs text-muted">Grant record: {selectedGrant.id}</p>
                         <div className="space-y-2 rounded-lg border border-line bg-surface p-3">
