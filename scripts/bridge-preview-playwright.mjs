@@ -4,18 +4,15 @@ import { chromium } from "playwright";
 const baseURL = process.env.BRIDGE_BASE_URL;
 if (!baseURL) throw new Error("BRIDGE_BASE_URL is required.");
 const target = new URL(baseURL);
-const blockedHosts = new Set([
-  "bridge-kappa-six.vercel.app",
-  "bridge-stream-vista-opc-pvt-ltd-s-projects.vercel.app",
-  "bridge-git-fix-bridg-96c1a6-stream-vista-opc-pvt-ltd-s-projects.vercel.app",
-]);
-if (!target.hostname.endsWith(".vercel.app") || blockedHosts.has(target.hostname)) {
-  throw new Error("Safety stop: tests may run only against a dedicated Vercel Preview URL, never Production/custom domains.");
+const allowedPreviewHost = "bridge-lyfdfrxns-stream-vista-opc-pvt-ltd-s-projects.vercel.app";
+if (target.protocol !== "https:" || target.hostname !== allowedPreviewHost) {
+  throw new Error("Safety stop: tests are pinned to the approved Crayons Bridge Testing Preview deployment only.");
 }
 
 const headers = {};
 if (process.env.VERCEL_PROTECTION_BYPASS) {
   headers["x-vercel-protection-bypass"] = process.env.VERCEL_PROTECTION_BYPASS;
+  headers["x-vercel-set-bypass-cookie"] = "true";
 }
 const draftTitleId = process.env.BRIDGE_E2E_DRAFT_TITLE_ID ?? "test-fixture-free-video-20261124";
 const draftTitleName = process.env.BRIDGE_E2E_DRAFT_TITLE_NAME ?? "[TEST ONLY] Free Video Route Fixture";
