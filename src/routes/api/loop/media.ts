@@ -6,6 +6,7 @@ import { getSql } from "@/lib/db";
 
 const MAX_BODY_BYTES = 4096;
 const MAX_CLOCK_SKEW_SECONDS = 60;
+const MAX_POSTER_BYTES = 20 * 1024 * 1024;
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 const VIDEO_TYPES = new Set(["video/mp4", "video/quicktime", "application/octet-stream"]);
 
@@ -48,9 +49,9 @@ export const Route = createFileRoute("/api/loop/media")({
           const sql = await getSql();
           const catalog = await sql<{
             id: string; bridge_title_id: string; status: string; listed: boolean;
-            published: boolean; access_tier: string; poster_available: boolean;
+            published: boolean; access_tier: string; poster_available: boolean; trailer_available: boolean;
           }>`select id::text as id, bridge_title_id::text as bridge_title_id, status, listed, published,
-                    access_tier, poster_available
+                    access_tier, poster_available, trailer_available
              from public_loop_catalog()
              where id::text = ${loopTitleId} and bridge_title_id::text = ${bridgeTitleId}
              limit 1`;
@@ -79,13 +80,13 @@ export const Route = createFileRoute("/api/loop/media")({
 
           const assets = await sql<{
             object_key: string; content_type: string; byte_size: number | string;
-            sha256: string; storage_provider: string; storage_bucket: string;
+            sha256: string; storage_provider: string; storage_bucket: string;\n            storage_region: string; storage_endpoint: string;
           }>`select
                     to_jsonb(a)->>'verified_object_key' as object_key,
                     a.content_type, a.byte_size,
                     coalesce(to_jsonb(a)->>'checksum_sha256', to_jsonb(a)->>'sha256') as sha256,
                     to_jsonb(a)->>'storage_provider' as storage_provider,
-                    to_jsonb(a)->>'storage_bucket' as storage_bucket
+                    to_jsonb(a)->>'storage_bucket' as storage_bucket,\n                    to_jsonb(a)->>'storage_region' as storage_region,\n                    to_jsonb(a)->>'storage_endpoint' as storage_endpoint
              from bridge_titles t
              join bridge_assets a on a.title_id = t.id
              join bridge_asset_versions av
@@ -121,7 +122,7 @@ export const Route = createFileRoute("/api/loop/media")({
              limit 1`;
           const asset = assets[0];
           const allowedTypes = role === "POSTER" ? IMAGE_TYPES : VIDEO_TYPES;
-          if (!asset || !asset.object_key || !asset.sha256 || !asset.storage_bucket || !allowedTypes.has(String(asset.content_type).toLowerCase())) {
+          if (!asset || !asset.object_key || !asset.sha256 || !asset.storage_bucket ||\n              asset.storage_region !== bridgeEnv.ociRegion() ||\n              asset.storage_endpoint !== `https://objectstorage.\${bridgeEnv.ociRegion()}.oraclecloud.com` ||\n              !allowedTypes.has(String(asset.content_type).toLowerCase())) {
             return Response.json({ error: "Current verified Bridge asset unavailable" }, { status: 503 });
           }
 
@@ -141,7 +142,7 @@ export const Route = createFileRoute("/api/loop/media")({
             "Content-Type": upstreamType,
             "Cache-Control": role === "MASTER" ? "private, no-store" : "public, max-age=60",
             "Accept-Ranges": "bytes",
-            "X-Content-Type-Options": "nosniff",
+            "X-Content-Type-Options": "nosniff",\n            "Cross-Origin-Resource-Policy": "same-origin",
           });
           if (upstreamLength) headers.set("Content-Length", upstreamLength);
           const contentRange = upstream.headers.get("content-range");
