@@ -1,9 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AssetPosterSlot } from "@/components/bridge/asset-preview-gallery";
+import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { listTitleAssets } from "@/lib/bridge/assets";
 import { getTitleWorkflow } from "@/lib/bridge/workflow";
+import { requestSuperAdminReview } from "@/lib/bridge/submissions";
 import type { BridgeTitle } from "@/lib/bridge/types";
 
 function GateLine({ label, value }: { label: string; value: string }) {
@@ -23,6 +25,31 @@ export function StudioFilmCatalogue({ titles }: { titles: BridgeTitle[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {titles.map((title) => <StudioFilmCard key={title.id} title={title} />)}
+    </div>
+  );
+}
+
+function RequestSuperAdminReview({ title }: { title: BridgeTitle }) {
+  const mutation = useMutation({
+    mutationFn: () => requestSuperAdminReview({ data: { titleId: title.id } }),
+  });
+  if (title.name.startsWith("[TEST ONLY]")) {
+    return <span className="text-[11px] text-muted">Test fixture — cannot be submitted</span>;
+  }
+  const result = mutation.data;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={mutation.isPending || Boolean(result)}
+        onClick={() => mutation.mutate()}
+      >
+        {mutation.isPending ? "Submitting…" : result?.alreadySubmitted ? "Already submitted" : result?.submitted ? "Sent to Super Admin" : "Submit to Super Admin"}
+      </Button>
+      {mutation.error ? <p role="alert" className="w-full text-xs text-red-600">{mutation.error.message}</p> : null}
+      {result?.submitted ? <p className="w-full text-xs text-muted">Review requested. QC, rights and Legal remain pending until independently approved.</p> : null}
+      {result?.alreadySubmitted ? <p className="w-full text-xs text-muted">This title is already in the Super Admin intake queue.</p> : null}
     </div>
   );
 }
@@ -110,7 +137,10 @@ function StudioFilmCard({ title }: { title: BridgeTitle }) {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-elevated/40 px-4 py-3">
         <p className="text-[11px] text-muted">Private Studio record · Not a public listing</p>
-        <Link to="/title/$id" params={{ id: title.id }} className="text-xs font-semibold text-accent hover:underline">Manage title →</Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <RequestSuperAdminReview title={title} />
+          <Link to="/title/$id" params={{ id: title.id }} className="text-xs font-semibold text-accent hover:underline">Manage title →</Link>
+        </div>
       </div>
     </article>
   );
