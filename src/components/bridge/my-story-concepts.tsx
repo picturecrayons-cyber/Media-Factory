@@ -11,45 +11,49 @@ const STATUS_LABEL: Record<string, string> = {
   INTRODUCED_TO_BUYERS: "Introduced",
 };
 
+function formatConceptDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "date unavailable" : date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
 function listLogline(value: string | null | undefined) {
   const text = value?.trim() ?? "";
   if (!text.includes(" ") || !/[a-zA-Z]{3,}/.test(text)) return "";
   return text.length > 80 ? `${text.slice(0, 80)}…` : text;
 }
 
-export function MyStoryConcepts() {
+export function MyStoryConcepts({ actor }: { actor: { userId: string; organizationId?: string | null } }) {
   const query = useQuery({
-    queryKey: ["my-story-concepts"],
+    queryKey: ["my-story-concepts", actor.userId, actor.organizationId ?? null],
     queryFn: () => listMyStoryConcepts(),
     enabled: STORY_CONCEPT_ENABLED,
+    refetchInterval: 60_000,
   });
 
   if (!STORY_CONCEPT_ENABLED) return null;
   if (query.isLoading) return <p className="text-sm text-muted">Loading concepts…</p>;
-  if (query.isError) return null;
+  if (query.isError) return <p role="alert" className="text-sm text-muted">Story / Concept records are unavailable. Retry after the workspace service is restored.</p>;
 
   const concepts = query.data?.concepts ?? [];
-  if (!concepts.length) return null;
+  if (!concepts.length) return <p className="text-sm text-muted">No Story / Concept records are available for this account.</p>;
 
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold">Story concepts</h2>
-      <ul className="divide-y divide-line rounded-sm border border-line">
+      <h4 className="font-semibold">Story / Concepts</h4>
+      <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
         {concepts.map((c) => {
           const logline = listLogline(c.logline);
           return (
             <li key={c.id}>
-              <Link
-                to="/title/$id"
-                params={{ id: c.title_id }}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
-              >
+              <Link to="/title/$id" params={{ id: c.title_id }} className="flex flex-wrap items-center justify-between gap-3 px-3 py-3 hover:bg-elevated">
                 <div>
                   <p className="font-medium">{(c as { titleName?: string }).titleName ?? "Concept"}</p>
-                  <p className="text-sm text-muted">
+                  <p className="text-xs text-muted">
                     {STATUS_LABEL[c.curation_status] ?? c.curation_status}
                     {logline ? ` · ${logline}` : ""}
+                    {c.updated_at ? ` · Updated ${formatConceptDate(c.updated_at)}` : ""}
                   </p>
+                  {c.admin_notes ? <p className="mt-2 text-xs leading-relaxed text-muted">Review update: {c.admin_notes}</p> : null}
                 </div>
               </Link>
             </li>
