@@ -26,6 +26,7 @@ test("only a verified upload sets the master reference, once, with an audit even
       byteSize: 120,
       contentType: "video/mp4",
       checksum: "etag-1",
+      sha256: "a".repeat(64),
       sourceKey: "bridge/creator/title1234/master/video.mp4",
       sealedKey: "bridge/creator/title1234/master/video.mp4.verified/uuid-1",
     };
@@ -47,6 +48,11 @@ test("only a verified upload sets the master reference, once, with an audit even
     assert.equal(audit.rows[0]?.action, "asset.upload_verified");
     const metadata = JSON.parse(audit.rows[0]?.metadata ?? "{}");
     assert.equal(metadata.checksum, "etag-1");
+    assert.equal(metadata.sha256, "a".repeat(64));
+    const digest = await db.query<{ sha256: string; checksum_sha256: string }>(
+      "select sha256, checksum_sha256 from bridge_assets where id='asset1234'",
+    );
+    assert.deepEqual(digest.rows[0], { sha256: "a".repeat(64), checksum_sha256: "a".repeat(64) });
     assert.equal(metadata.titleId, "title1234");
     assert.equal(metadata.kind, "master");
   } finally {
@@ -97,6 +103,7 @@ test("same-organization verified Studio member can confirm upload, other organiz
       byteSize: 120,
       contentType: "video/mp4",
       checksum: "etag-staging-test",
+      sha256: "b".repeat(64),
     };
     assert.equal(await persistVerifiedAsset(sql, {
       ...common,
@@ -146,6 +153,7 @@ test("title owner can confirm an upload when organization tables are absent", as
       byteSize: 170,
       contentType: "video/mp4",
       checksum: "etag-no-org",
+      sha256: "c".repeat(64),
       sourceKey: "bridge/creator/title1234/screener/video.mp4",
       sealedKey: "bridge/creator/title1234/screener/video.mp4.verified/asset1234",
     }), true);
@@ -179,6 +187,7 @@ test("a previously sized raw asset can be reconciled only with matching verified
       byteSize: 2492665200,
       contentType: "video/mp4",
       checksum: "etag-legacy-verified",
+      sha256: "d".repeat(64),
       sourceKey: "legacy/raw/master.mp4",
       sealedKey: "legacy/raw/master.mp4.verified/legacy-asset",
     };
@@ -239,6 +248,7 @@ test("a newer verified master upload can replace an older asset without allowing
       byteSize: 250,
       contentType: "video/mp4",
       checksum: "etag-new-master",
+      sha256: "e".repeat(64),
       sourceKey: "new/raw/master.mp4",
       sealedKey: "new/raw/master.mp4.verified/new-asset",
     };
@@ -258,6 +268,7 @@ test("a newer verified master upload can replace an older asset without allowing
       assetId: "old-asset",
       byteSize: 100,
       checksum: "etag-old-master",
+      sha256: "f".repeat(64),
       sourceKey: "old/master.mp4.verified/old-asset",
       sealedKey: "old/master.mp4.verified/old-asset",
     }), false);
