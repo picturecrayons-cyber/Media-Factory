@@ -103,6 +103,12 @@ export const Route = createFileRoute("/api/loop/media")({
                      and av.asset_group = 'PROMO' and upper(av.asset_type) like '%TRAILER%')
                )
                and av.processing_state = 'PASSED'
+               and exists (
+                 select 1 from bridge_qc_cases q
+                 where q.title_id = t.id and q.status = 'PASSED'
+                   and q.reviewer_findings->0->>'masterKey' = t.master_key
+                   and q.reviewer_findings->0->>'posterKey' = t.poster_key
+               )
                and a.byte_size > 0
                and nullif(to_jsonb(a)->>'verified_object_key', '') is not null
                and nullif(to_jsonb(a)->>'storage_verified_at', '') is not null
