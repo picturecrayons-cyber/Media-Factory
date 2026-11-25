@@ -78,32 +78,48 @@ export const Route = createFileRoute("/api/loop/media")({
           }
 
           const assets = await sql<{
-            s3_key: string; content_type: string; byte_size: number | string; sha256: string;
-          }>`select a.s3_key, a.content_type, a.byte_size,
-                    coalesce(to_jsonb(a)->>'sha256', to_jsonb(a)->>'checksum_sha256') as sha256
+            object_key: string; content_type: string; byte_size: number | string;
+            sha256: string; storage_provider: string; storage_bucket: string;
+          }>`select
+                    to_jsonb(a)->>'verified_object_key' as object_key,
+                    a.content_type, a.byte_size,
+                    coalesce(to_jsonb(a)->>'checksum_sha256', to_jsonb(a)->>'sha256') as sha256,
+                    to_jsonb(a)->>'storage_provider' as storage_provider,
+                    to_jsonb(a)->>'storage_bucket' as storage_bucket
              from bridge_titles t
              join bridge_assets a on a.title_id = t.id
+             join bridge_asset_versions av
+               on av.id::text = to_jsonb(a)->>'asset_version_id'
+              and av.title_id = t.id
              where t.id::text = ${bridgeTitleId}
-               and a.s3_key = case when ${role} = 'MASTER' then t.master_key else t.poster_key end
-               and a.kind = case when ${role} = 'MASTER' then 'master' else 'poster' end
+               and a.s3_key = case when ${role} = 'MASTER' then t.master_key
+                                   when ${role} = 'POSTER' then t.poster_key
+                                   else a.s3_key end
+               and (
+                 (${role} = 'MASTER' and a.kind = 'master' and av.asset_group = 'VIDEO')
+                 or (${role} = 'POSTER' and a.kind in ('poster', 'poster_horizontal', 'poster_vertical')
+                     and av.asset_group = 'ARTWORK')
+                 or (${role} = 'TRAILER' and a.kind in ('technical', 'thumbnail')
+                     and av.asset_group = 'PROMO' and upper(av.asset_type) like '%TRAILER%')
+               )
+               and av.processing_state = 'PASSED'
                and a.byte_size > 0
+               and nullif(to_jsonb(a)->>'verified_object_key', '') is not null
+               and nullif(to_jsonb(a)->>'storage_verified_at', '') is not null
+               and lower(coalesce(to_jsonb(a)->>'storage_provider', '')) like '%oci%'
+               and nullif(to_jsonb(a)->>'storage_bucket', '') is not null
+               and coalesce(to_jsonb(a)->>'checksum_sha256', to_jsonb(a)->>'sha256') ~ '^[a-f0-9]{64}$'
                and (not (to_jsonb(a) ? 'storage_business_state') or to_jsonb(a)->>'storage_business_state' = 'ACTIVE')
                and (not (to_jsonb(a) ? 'restore_state') or to_jsonb(a)->>'restore_state' = 'READY')
-               and coalesce(to_jsonb(a)->>'sha256', to_jsonb(a)->>'checksum_sha256') ~ '^[a-f0-9]{64}$'
-               and exists (
-                 select 1 from bridge_qc_cases q
-                 where q.title_id = t.id and q.status = 'PASSED'
-                   and q.reviewer_findings->0->>'masterKey' = t.master_key
-                   and q.reviewer_findings->0->>'posterKey' = t.poster_key
-               )
+             order by a.created_at desc
              limit 1`;
           const asset = assets[0];
           const allowedTypes = role === "POSTER" ? IMAGE_TYPES : VIDEO_TYPES;
-          if (!asset || !allowedTypes.has(String(asset.content_type).toLowerCase())) {
+          if (!asset || !asset.object_key || !asset.sha256 || !asset.storage_bucket || !allowedTypes.has(String(asset.content_type).toLowerCase())) {
             return Response.json({ error: "Current verified Bridge asset unavailable" }, { status: 503 });
           }
 
-          const upstream = await fetchObjectResponse(asset.s3_key, undefined, request.headers.get("range"));
+          const upstream = await fetchObjectResponse(asset.object_key, asset.storage_bucket, request.headers.get("range"));
           if (!upstream.ok || !upstream.body) {
             await upstream.body?.cancel();
             return new Response(null, { status: upstream.status === 404 ? 404 : 502 });
