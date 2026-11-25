@@ -7,7 +7,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   finance: ["finance.read", "finance.payouts_read", "razorpay.orders_read"],
   admin: [
     "title.admin_queue_read", "title.read_catalog", "title.negotiate",
-    "delivery.read", "asset.read_storage_proof", "finance.read",
+    "asset.read_storage_proof",
     "users.invite_internal", "audit.read",
     "business.read", "business.write", "revenue.read", "revenue.write",
     "distribution.read", "distribution.write",
