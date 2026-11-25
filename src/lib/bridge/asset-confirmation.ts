@@ -40,7 +40,7 @@ async function persistVerifiedAssetScoped(
     byteSize: number;
     contentType: string | null;
     checksum: string | null;
-  sha256: string;
+    sha256: string;
     sourceKey: string;
     sealedKey: string;
   },
