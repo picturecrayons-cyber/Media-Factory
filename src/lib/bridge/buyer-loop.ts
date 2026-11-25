@@ -79,24 +79,32 @@ export const createInvestmentInterest = createServerFn({ method: "POST" })
       [data.conceptSubmissionId],
     ) as Array<{ id: string; title_name: string }>;
     if (!eligible[0]) throw new Error("Investment interest is available only for an introduced, published Story Concept");
-    const existing = await sql.unsafe(
-      "select id::text from bridge_buyer_interest where concept_submission_id=$1 and buyer_user_id=$2 limit 1",
-      [data.conceptSubmissionId, actor.userId],
-    ) as Array<{ id: string }>;
-    let interestId = existing[0]?.id;
-    if (!interestId) {
-      const inserted = await sql.unsafe(
+    const saved = await sql.transaction(async (tx) => {
+      await tx.unsafe("select pg_advisory_xact_lock(hashtext($1),hashtext($2))", [actor.userId, data.conceptSubmissionId]);
+      const existing = await tx.unsafe(
+        "select id::text from bridge_buyer_interest where concept_submission_id=$1 and buyer_user_id=$2 limit 1",
+        [data.conceptSubmissionId, actor.userId],
+      ) as Array<{ id: string }>;
+      if (existing[0]) return { interestId: existing[0].id, created: false };
+      const inserted = await tx.unsafe(
         "insert into bridge_buyer_interest (concept_submission_id,buyer_user_id,interest_level,notes) values ($1,$2,'INTERESTED',$3) returning id::text",
         [data.conceptSubmissionId, actor.userId, data.notes ?? null],
       ) as Array<{ id: string }>;
-      interestId = inserted[0]?.id;
-      if (!interestId) throw new Error("Investment interest could not be recorded");
-      await writeAudit({
-        actorUserId: actor.userId, action: "buyer.investment_interest.create",
-        entityType: "bridge_buyer_interest", entityId: interestId,
-        metadata: { conceptSubmissionId: data.conceptSubmissionId, titleName: eligible[0].title_name },
-      });
+      if (!inserted[0]) throw new Error("Investment interest could not be recorded");
+      return { interestId: inserted[0].id, created: true };
+    });
+    if (!saved.created) {
+      const prior = await sql.unsafe(
+        "select case when action='email.delivery.sent' then 'SENT' else 'FAILED' end as status from bridge_audit_logs where entity_type='bridge_buyer_interest' and entity_id=$1 and action in ('email.delivery.sent','email.delivery.failed') order by created_at desc limit 1",
+        [saved.interestId],
+      ) as Array<{ status: "SENT" | "FAILED" }>;
+      return { interestId: saved.interestId, alreadySubmitted: true, emailDelivery: { status: prior[0]?.status ?? "NOT_SENT", failure: null } };
     }
+    await writeAudit({
+      actorUserId: actor.userId, action: "buyer.investment_interest.create",
+      entityType: "bridge_buyer_interest", entityId: saved.interestId,
+      metadata: { conceptSubmissionId: data.conceptSubmissionId, titleName: eligible[0].title_name },
+    });
     let emailStatus: "SENT" | "FAILED" = "FAILED";
     let emailFailure: string | null = null;
     try {
@@ -113,13 +121,13 @@ export const createInvestmentInterest = createServerFn({ method: "POST" })
       await writeAudit({
         actorUserId: actor.userId,
         action: emailStatus === "SENT" ? "email.delivery.sent" : "email.delivery.failed",
-        entityType: "bridge_buyer_interest", entityId: interestId,
+        entityType: "bridge_buyer_interest", entityId: saved.interestId,
         metadata: { category: "investment_interest", recipient: "admin@crayonspictures.in", status: emailStatus, failure: emailFailure },
       });
     } catch (error) {
       console.error("[bridge-investment-interest] email status audit failed", error);
     }
-    return { interestId, emailDelivery: { status: emailStatus, failure: emailFailure } };
+    return { interestId: saved.interestId, alreadySubmitted: false, emailDelivery: { status: emailStatus, failure: emailFailure } };
   });
 
 export const listStoryConceptApprovalQueue = createServerFn({ method: "GET" })
@@ -165,7 +173,7 @@ export const listBuyerOrganizations = createServerFn({ method: "GET" })
     assertPermission(actor, "legacy.map");
     const sql = await getSql();
     const rows = await sql.unsafe(
-      "select id::text,legal_name from bridge_organizations where status='ACTIVE' order by legal_name",
+      "select id::text,legal_name from bridge_organizations where status='active' order by legal_name",
     );
     return { organizations: rows };
   });
@@ -184,6 +192,12 @@ export const approveStoryConceptDownload = createServerFn({ method: "POST" })
     if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
     assertPermission(actor, "story_concept.download_approved");
     const sql = await getSql();
+    const org = await sql.unsafe(
+      "select id from bridge_organizations where id=$1 and status='active' limit 1",
+      [data.organizationId],
+    );
+    if (!org[0]) throw new Error("Active Buyer/Investor organization not found");
+    if (data.expiresAt && new Date(data.expiresAt).getTime() <= Date.now()) throw new Error("Download approval expiry must be in the future");
     const eligible = await sql.unsafe(
       "select id from bridge_story_concept_submissions where id=$1 and fee_certified_at is not null and introduced_to_buyers_at is not null and treatment_object_key is not null limit 1",
       [data.conceptSubmissionId],
