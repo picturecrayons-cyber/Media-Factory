@@ -73,6 +73,7 @@ test("Finance sees financial data only and cannot review or publish", () => {
   assert.equal(hasPermission(finance, "finance.read"), true);
   assert.equal(hasPermission(finance, "finance.payouts_read"), true);
   assert.equal(hasPermission(finance, "razorpay.orders_read"), true);
+  assert.equal(hasPermission(finance, "finance.record_settlement"), false);
   assert.equal(hasPermission(finance, "title.qc_review"), false);
   assert.equal(hasPermission(finance, "title.update_own"), false);
   assert.equal(hasPermission(finance, "loop.publish"), false);
@@ -83,6 +84,8 @@ test("Admin can write workspace business/revenue/distribution but cannot publish
   for (const p of ["business.write","revenue.write","distribution.write","title.admin_queue_read"] as const)
     assert.equal(hasPermission(admin, p), true);
   assert.equal(hasPermission(admin, "loop.publish"), false);
+  assert.equal(hasPermission(admin, "title.qc_review"), false);
+  assert.equal(hasPermission(admin, "title.rights_review"), false);
   assert.equal(hasPermission(admin, "loop.revoke"), false);
   assert.equal(hasPermission(admin, "buyer.read"), false);
   assert.equal(hasPermission(admin, "title.final_approve"), false);
@@ -91,6 +94,7 @@ test("Admin can write workspace business/revenue/distribution but cannot publish
 test("Super Admin can final-approve/publish/map but is read-only for workspace and buyer writes", () => {
   assert.equal(hasPermission(superAdmin, "title.final_approve"), true);
   assert.equal(hasPermission(superAdmin, "loop.publish"), true);
+  assert.equal(hasPermission(superAdmin, "loop.revoke"), false);
   assert.equal(hasPermission(superAdmin, "legacy.map"), true);
   assert.equal(hasPermission(superAdmin, "buyer.read"), true);
   for (const p of ["title.create","title.update_own","asset.sign_upload","payment.create_order","title.submit_qc","business.write","revenue.write","distribution.write"] as const)

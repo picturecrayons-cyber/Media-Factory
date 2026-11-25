@@ -4,21 +4,21 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   viewer: ["title.read_published", "asset.read_trailer"],
   qc_reviewer: ["title.qc_queue_read", "title.qc_review", "asset.read_storage_proof"],
   legal_reviewer: ["title.legal_queue_read", "title.rights_review", "legal.contracts_read"],
-  finance: ["finance.read", "finance.payouts_read", "razorpay.orders_read", "finance.record_settlement"],
+  finance: ["finance.read", "finance.payouts_read", "razorpay.orders_read"],
   admin: [
     "title.admin_queue_read", "title.read_catalog",
     "service.quote_create", "service.order_create", "service.fulfill",
-    "title.qc_review", "title.rights_review", "title.license", "title.merge_duplicate",
+    "title.license", "title.merge_duplicate",
     "title.negotiate", "title.deliver", "delivery.read", "delivery.read_finance",
     "asset.sign_download", "asset.read_storage_proof", "finance.read",
-    "finance.record_settlement", "users.invite_internal", "audit.read",
+    "users.invite_internal", "audit.read",
     "business.read", "business.write", "revenue.read", "revenue.write",
     "distribution.read", "distribution.write",
   ],
   super_admin: [
     "title.admin_queue_read", "title.read_catalog", "title.final_approve",
     "buyer.read", "buyer_loop.read", "legacy.map", "story_concept.download_approved",
-    "loop.publish", "loop.revoke", "distribution.read", "audit.read",
+    "loop.publish", "distribution.read", "audit.read",
   ],
 };
 
