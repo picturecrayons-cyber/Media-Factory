@@ -1,5 +1,19 @@
 -- Backend owns service execution by default; approval decisions are routed separately.
 -- assigned_provider remains the external/vendor provider field.
+--
+-- This service-request schema currently exists in Testing but not in the
+-- Production baseline. Apply routing only where the complete table exists;
+-- do not manufacture a partial Production table to satisfy migration replay.
+DO $migration$
+BEGIN
+  IF to_regclass('public.bridge_service_requests') IS NULL THEN
+    RAISE NOTICE 'Skipping service-request routing: public.bridge_service_requests is not installed in this environment';
+    RETURN;
+  END IF;
+
+  EXECUTE $ddl$
+-- Backend owns service execution by default; approval decisions are routed separately.
+-- assigned_provider remains the external/vendor provider field.
 alter table public.bridge_service_requests
   add column if not exists assigned_team text not null default 'backend',
   add column if not exists decision_required boolean not null default false;
@@ -48,3 +62,7 @@ comment on column public.bridge_service_requests.assigned_team is
   'Internal execution ownership: backend for automated processing; decision_queue for authorized human decisions.';
 comment on column public.bridge_service_requests.decision_required is
   'True only at explicit human decision checkpoints; not a request for Super Admin to perform backend execution.';
+
+  $ddl$;
+END
+$migration$;
