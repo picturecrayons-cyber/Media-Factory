@@ -1,6 +1,5 @@
-import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { CreateTitleForm } from "@/components/bridge/title-desk";
+import { RightsReadySubmissionForm } from "@/components/bridge/rights-ready-submission-form";
 import { StoryConceptForm } from "@/components/bridge/story-concept-form";
 import { Button } from "@/components/ui/button";
 import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
@@ -72,16 +71,7 @@ export function NewSubmissionPanel() {
 
       {path === "finished_film" && (
         <div className="mt-6 border-t border-line pt-6">
-          <h2 className="text-sm font-semibold">Add finished title</h2>
-          <div className="mt-3">
-            <CreateTitleForm concise />
-          </div>
-          <p className="mt-3 text-xs text-muted">
-            Prefer the full rights-ready form?{" "}
-            <Link to="/submit-film" className="underline underline-offset-2">
-              Open detailed submission
-            </Link>
-          </p>
+          <RightsReadySubmissionForm embedded />
         </div>
       )}
 
