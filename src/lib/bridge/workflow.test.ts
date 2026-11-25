@@ -124,6 +124,7 @@ async function fixture() {
       "./session": {},
       "./rbac": rbac,
       "./asset-roles": assetRoles,
+      "./buyer-visibility": { getBuyerGateStatus: async () => ({ qc: false, legal: false, ott: false, packaging: false, curation: false, delivery: false, publishable: false }) },
       "./titles": {},
     "./env": {bridgeEnv:{}},
       "./workflow-policy": policy,
