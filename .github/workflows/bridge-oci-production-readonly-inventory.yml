@@ -1,0 +1,65 @@
+name: Bridge OCI Production Read-only Inventory
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production_bucket:
+        description: "Type the exact Production bucket name to authorize read-only inventory"
+        required: true
+        type: string
+      max_objects:
+        description: "Safety cap; run fails rather than reporting incomplete totals"
+        required: true
+        default: "100000"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bridge-oci-production-readonly-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    if: ${{ inputs.confirm_production_bucket == 'bucket-20260526-1544' }}
+    environment: bridge-production-storage-readonly
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Validate target and inventory cap
+        env:
+          CONFIRM_BUCKET: ${{ inputs.confirm_production_bucket }}
+          MAX_OBJECTS: ${{ inputs.max_objects }}
+        run: |
+          test "$CONFIRM_BUCKET" = "bucket-20260526-1544"
+          case "$MAX_OBJECTS" in
+            ''|*[!0-9]*) echo "max_objects must be numeric"; exit 1 ;;
+          esac
+          test "$MAX_OBJECTS" -ge 1
+          test "$MAX_OBJECTS" -le 500000
+      - name: Validate inventory script syntax
+        run: node --check scripts/oci-production-readonly-inventory.mjs
+      - name: Read-only OCI inventory (no DB access)
+        env:
+          OCI_TENANCY_OCID: ${{ secrets.PRODUCTION_OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.PRODUCTION_OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.PRODUCTION_OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.PRODUCTION_OCI_PRIVATE_KEY }}
+          OCI_REGION: ap-mumbai-1
+          OCI_NAMESPACE: ${{ secrets.PRODUCTION_OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: bucket-20260526-1544
+          OCI_INVENTORY_MAX_OBJECTS: ${{ inputs.max_objects }}
+        run: node scripts/oci-production-readonly-inventory.mjs
+      - name: Upload sanitized inventory report
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-oci-production-readonly-inventory
+          path: inventory-report.json
+          if-no-files-found: warn
