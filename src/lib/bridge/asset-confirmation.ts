@@ -11,6 +11,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   contentType: string | null;
   checksumSha256: string;
   checksumAlgorithm: string;
+  storageBucket?: string;
   format: string;
   sourceKey: string;
   sealedKey: string;
@@ -20,7 +21,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
     with verified as (
       update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6,
         sha256 = $9, checksum_sha256 = $9, storage_verified_at = now(), source_object_key = $7,
-        verified_object_key = $6
+        verified_object_key = $6, storage_provider = 'oci', storage_bucket = coalesce(a.storage_bucket, $12)
       where a.id = $3 and a.created_by = $4 and (a.byte_size is null or a.checksum_sha256 is null or a.storage_verified_at is null) and a.s3_key = $7
         and a.title_id = $8
         and exists (
@@ -83,6 +84,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
     opts.checksumSha256,
     opts.checksumAlgorithm,
     opts.format,
+    opts.storageBucket ?? null,
   ]);
   return Boolean(rows[0]);
 }

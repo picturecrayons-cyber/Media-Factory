@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { isSuperAdminReadOnlySurface } from "./super-admin-readonly";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
+import { Buffer } from "node:buffer";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
@@ -65,8 +66,8 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
     await sql`
-      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
-      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
+      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by, storage_provider, storage_bucket)
+      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId}, 'oci', ${signed.bucket})
     `;
     await writeAudit({
       actorUserId: actor.userId,
@@ -104,8 +105,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       byte_size: number | null;
       checksum_sha256: string | null;
       storage_verified_at: string | Date | null;
+      storage_bucket: string | null;
     }>`
-      select id, title_id, kind, s3_key, created_by, content_type, byte_size, checksum_sha256, storage_verified_at
+      select id, title_id, kind, s3_key, created_by, content_type, byte_size, checksum_sha256, storage_verified_at, storage_bucket
       from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
@@ -114,7 +116,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
     }
-    if (asset.byte_size != null && asset.checksum_sha256 && asset.storage_verified_at)
+    if (asset.byte_size != null && asset.checksum_sha256 && asset.checksum_sha256.length === 64 && asset.storage_verified_at)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true, checksumSha256: asset.checksum_sha256 };
 
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
@@ -141,11 +143,12 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       kind: asset.kind,
       byteSize: sealed.byteSize,
       contentType: sealed.contentType,
-      checksumSha256: sealed.checksumSha256,
+      checksumSha256: Buffer.from(sealed.checksumSha256, "base64").toString("hex"),
       checksumAlgorithm: sealed.checksumAlgorithm,
       format: sealed.format,
       sourceKey: asset.s3_key,
       sealedKey,
+      storageBucket: asset.storage_bucket ?? undefined,
     });
     if (confirmed) {
       // UPLOADED is only recorded after persistVerifiedAsset succeeds.

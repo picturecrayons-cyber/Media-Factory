@@ -55,7 +55,7 @@ export const requestLoopTrailer = createServerFn({ method: "POST" })
     }
     const sql = await getSql();
     const rows = await sql.unsafe(
-      "select lt.trailer_url,a.s3_key from loop_titles lt join bridge_titles bt on bt.id=lt.bridge_title_id join bridge_loop_publications pub on pub.loop_title_id=lt.id and pub.authorization_status='authorized' and pub.revoked_at is null left join lateral (select s3_key from bridge_assets where title_id=bt.id and kind in ('trailer','screener') and byte_size>0 and length(checksum_sha256)=44 and storage_verified_at is not null order by case when kind='trailer' then 0 else 1 end,created_at desc limit 1) a on true where lt.id=$1 and lt.is_published=true and lt.is_listed=true and bt.status='LIVE_FOR_BUYERS' and public.bridge_title_buyer_visibility(bt.id)=true limit 1",
+      "select lt.trailer_url,a.s3_key from loop_titles lt join bridge_titles bt on bt.id=lt.bridge_title_id join bridge_loop_publications pub on pub.loop_title_id=lt.id and pub.authorization_status='authorized' and pub.revoked_at is null left join lateral (select s3_key from bridge_assets where title_id=bt.id and kind in ('trailer','screener') and byte_size>0 and length(checksum_sha256)=64 and storage_verified_at is not null order by case when kind='trailer' then 0 else 1 end,created_at desc limit 1) a on true where lt.id=$1 and lt.is_published=true and lt.is_listed=true and bt.status='LIVE_FOR_BUYERS' and public.bridge_title_buyer_visibility(bt.id)=true limit 1",
       [data.loopTitleId],
     ) as Array<{ trailer_url: string | null; s3_key: string | null }>;
     const row = rows[0];

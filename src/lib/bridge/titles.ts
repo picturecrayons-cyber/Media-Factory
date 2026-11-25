@@ -522,7 +522,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
       const verified = await (await getSql())<{
         kind: string;
         s3_key: string;
-      }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0 and length(checksum_sha256)=44 and storage_verified_at is not null`;
+      }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0 and length(checksum_sha256)=64 and storage_verified_at is not null`;
       if (
         !verified.some((a) => a.kind === "master" && a.s3_key === title.masterKey) ||
         !verified.some((a) => a.kind === "poster" && a.s3_key === title.posterKey)

@@ -151,7 +151,7 @@ const submissionProofSql = `
     'checksumSha256', to_jsonb(a)->>'checksum_sha256',
     'verifiedAt', to_jsonb(a)->>'storage_verified_at',
     'verified', a.byte_size > 0
-      and length(to_jsonb(a)->>'checksum_sha256') = 44
+      and length(to_jsonb(a)->>'checksum_sha256') = 64
       and to_jsonb(a)->>'storage_verified_at' is not null
   ) order by a.created_at desc), '[]'::json)
   from bridge_assets a where a.title_id = t.id
