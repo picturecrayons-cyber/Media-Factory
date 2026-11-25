@@ -258,6 +258,7 @@ export const listTitles = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType === "buyer" || actor.accountType === "investor" || actor.internalRole === "viewer") throw new Error("Use the published Buyer Loop catalogue");
     const sql = await getSql();
     let rows: TitleRow[] = [];
     if (actor.internalRole && hasPermission(actor, "title.read_catalog")) {
@@ -300,6 +301,7 @@ export const getTitle = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType === "buyer" || actor.accountType === "investor" || actor.internalRole === "viewer") throw new Error("Use the published Buyer Loop catalogue");
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
     const sql = await getSql();

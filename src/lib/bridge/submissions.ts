@@ -133,38 +133,9 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       },
     });
 
-    const emailDelivery = await recordSubmissionEmailStatus(actor.userId, id, data.name);
-    return { titleId: id, status: "DRAFT" as const, emailDelivery };
+    return { titleId: id, status: "DRAFT" as const };
   });
 
-async function recordSubmissionEmailStatus(actorUserId: string, titleId: string, titleName: string) {
-  let status: "SENT" | "FAILED" = "FAILED";
-  let messageId: string | null = null;
-  let failure: string | null = null;
-  try {
-    const result = await sendBridgeMail({
-      to: "admin@crayonspictures.in",
-      subject: `New QC submission: ${titleName}`,
-      text: `A title was submitted to Crayons Bridge: ${titleName}. Review it in /admin/submissions.`,
-    });
-    status = result.ok ? "SENT" : "FAILED";
-    messageId = result.messageId ?? null;
-  } catch (error) {
-    failure = error instanceof Error ? error.message.slice(0, 500) : "Email delivery failed";
-  }
-  try {
-    await writeAudit({
-      actorUserId,
-      action: status === "SENT" ? "email.delivery.sent" : "email.delivery.failed",
-      entityType: "bridge_title",
-      entityId: titleId,
-      metadata: { category: "submission", recipient: "admin@crayonspictures.in", status, messageId, failure },
-    });
-  } catch (error) {
-    console.error("[bridge-submission] email status audit failed", error);
-  }
-  return { status, messageId, failure };
-}
 
 const adminQueueInput = z.object({
   search: z.string().trim().max(160).optional(),
