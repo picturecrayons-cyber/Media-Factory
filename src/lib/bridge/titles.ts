@@ -597,7 +597,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
       }
       return { ...result, emailDelivery: { status: emailStatus, failure: emailFailure } };
     }
-    return data.to === "QC_REVIEW" ? { ...result, emailDelivery: { status: emailStatus, failure: emailFailure } } : result;
+    return result;
   });
 
 export const listAuditLogs = createServerFn({ method: "GET" })
