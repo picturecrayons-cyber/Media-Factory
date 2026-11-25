@@ -3,7 +3,7 @@
 - Source: Supabase Production `supabase_migrations.schema_migrations`.
 - Project ref: `mlmgugivsyoxzdgwkbpu`.
 - Snapshot date: 2026-11-18.
-- Recorded remote migrations restored to active `supabase/migrations/`: **70**.
+- Recorded remote migrations restored to active `supabase/migrations/`: **70 recovered Production-ledger migrations plus one pending PR migration**.
 - SQL bytes: **144632**.
 - Every active SQL file now preserves the exact stored statement text joined with LF, including all trailing spaces and newline characters. No trailing-whitespace normalization is performed. SHA-256 values are calculated from the same exact stored statement text.
 - The additive `bridge_master_language` migration (version `20261118123335`) was applied to canonical Production project `mlmgugivsyoxzdgwkbpu`. Read-back confirmed the column exists; all 42 existing title rows retain `master_language = NULL`. No `language` values, title rows, asset rows, or OCI objects were changed.
