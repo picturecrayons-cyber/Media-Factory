@@ -47,9 +47,10 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     enabled: stage === "Revenue" && canFinance,
   });
   const action = useMutation({
-    mutationFn: async (run: () => Promise<unknown>) => run(),
-    onSuccess: async () => {
+    mutationFn: async (input: { run: () => Promise<unknown>; nextStage?: (typeof stages)[number] }) => input.run(),
+    onSuccess: async (_result, input) => {
       setError("");
+      if (input.nextStage) setStage(input.nextStage);
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["title-workflow", title.id] }),
         qc.invalidateQueries({ queryKey: ["bridge-title", title.id] }),
@@ -103,12 +104,17 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   }, {});
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
-  const button = (label: string, run: () => Promise<unknown>, disabled = false) => (
+  const button = (
+    label: string,
+    run: () => Promise<unknown>,
+    disabled = false,
+    nextStage?: (typeof stages)[number],
+  ) => (
     <button
       type="button"
       className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50"
       disabled={action.isPending || disabled}
-      onClick={() => action.mutate(run)}
+      onClick={() => action.mutate({ run, nextStage })}
     >
       {label}
     </button>
@@ -181,8 +187,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 ? "PREPARING"
                                 : "QC_REVIEW",
                         },
-                      }),
-                  )
+                      }), false, "Revenue")
                 : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
                 <>
@@ -194,8 +199,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   {button("Approve QC", () =>
                     reviewTitleWorkflow({
                       data: { titleId: title.id, stage: "QC", decision: "APPROVE", note },
-                    }),
-                  )}
+                    }), false, "Business")}
                   {button("Return for correction", () =>
                     reviewTitleWorkflow({
                       data: { titleId: title.id, stage: "QC", decision: "REJECT", note },
@@ -221,7 +225,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     className="mt-3 grid gap-3 sm:grid-cols-2"
                     onSubmit={(e) => {
                       e.preventDefault();
-                      action.mutate(() =>
+                      action.mutate({ run: () =>
                         submitLoopLicense({
                           data: {
                             titleId: title.id,
@@ -235,8 +239,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             rightsOwnerSharePct: Number(ownerShare),
                             distributorSharePct: 100 - Number(ownerShare),
                           },
-                        }),
-                      );
+                        }) });
                     }}
                   >
                     {input("License starts", start, setStart, "datetime-local")}
@@ -388,6 +391,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                   },
                                 }),
                               note.trim().length < 8,
+                              "Distribution",
                             ) : null}
                             {button(
                               "Reject",
@@ -532,7 +536,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       className="grid gap-3 sm:grid-cols-2"
                       onSubmit={(e) => {
                         e.preventDefault();
-                        action.mutate(() =>
+                        action.mutate({ run: () =>
                           recordSettlementEvidence({
                             data: {
                               titleId: title.id,
@@ -541,8 +545,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                               statementReference: statementRef,
                               amountPaise: Math.round(Number(settlementAmount) * 100),
                             },
-                          }),
-                        );
+                          }) });
                       }}
                     >
                       <p className="sm:col-span-2">
