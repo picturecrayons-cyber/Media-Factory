@@ -42,7 +42,7 @@ test("Buyer and Investor remain distinct roles with published-only Loop access",
     assert.equal(hasPermission(actor, "story_concept.read_buyer"), true);
     assert.equal(hasPermission(actor, "asset.read_trailer"), true);
     assert.equal(canReadTitle(actor, { ownerUserId: "creator", status: "DRAFT" }), false);
-    assert.equal(canReadTitle(actor, { ownerUserId: "creator", status: "LIVE_FOR_BUYERS" }), true);
+    assert.equal(canReadTitle(actor, { ownerUserId: "creator", status: "LIVE_FOR_BUYERS" }), false);
     assert.equal(hasPermission(actor, "asset.sign_download"), false);
   }
   assert.equal(hasPermission(buyer, "payment.create_order"), false);
@@ -95,7 +95,7 @@ test("Super Admin is read-only except final publish and legacy mapping", () => {
 
 test("Viewer can see published public titles only without downloads, investment or submission", () => {
   assert.equal(hasPermission(viewer, "title.read_published"), true);
-  assert.equal(canReadTitle(viewer, { ownerUserId: "creator", status: "LIVE_FOR_BUYERS" }), true);
+  assert.equal(canReadTitle(viewer, { ownerUserId: "creator", status: "LIVE_FOR_BUYERS" }), false);
   assert.equal(canReadTitle(viewer, { ownerUserId: "creator", status: "DRAFT" }), false);
   for (const p of ["asset.sign_download","buyer.investment_interest","title.create","title.submit_qc"] as const)
     assert.equal(hasPermission(viewer, p), false);

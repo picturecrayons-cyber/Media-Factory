@@ -6,7 +6,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   legal_reviewer: ["title.legal_queue_read", "title.rights_review", "legal.contracts_read"],
   finance: ["finance.read", "finance.payouts_read", "razorpay.orders_read"],
   admin: [
-    "title.admin_queue_read", "title.read_catalog", "title.negotiate",
+    "title.admin_queue_read", "title.read_catalog",
     "asset.read_storage_proof",
     "users.invite_internal", "audit.read",
     "business.read", "business.write", "revenue.read", "revenue.write",
@@ -164,13 +164,7 @@ export function canReadTitle(
     if (actor.internalRole === "legal_reviewer") {
       return title.status === "RIGHTS_REVIEW" && hasPermission(actor, "title.legal_queue_read");
     }
-    if (actor.internalRole === "viewer") {
-      return title.status === "LIVE_FOR_BUYERS" && hasPermission(actor, "title.read_published");
-    }
     return false;
-  }
-  if (actor.accountType === "buyer" || actor.accountType === "investor") {
-    return title.status === "LIVE_FOR_BUYERS" && hasPermission(actor, "title.read_published");
   }
   return false;
 }
