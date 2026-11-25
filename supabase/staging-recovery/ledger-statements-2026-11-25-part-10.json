@@ -1,0 +1,81 @@
+{
+  "source_project": "jbymleftneggcgutlcqu",
+  "source_table": "supabase_migrations.schema_migrations",
+  "retrieved_at": "2026-11-25",
+  "offset": 90,
+  "limit": 8,
+  "records": [
+    {
+      "version": "20261124204101",
+      "name": "platform_super_admin_account_type",
+      "statement_count": 1,
+      "statements": [
+        "-- Introduce a distinct platform-level account classification for the existing Super Admin.\n-- The privileged capability remains governed by internal_role and verified identity;\n-- account_type alone never grants administrative permissions.\nbegin;\n\nalter table public.bridge_profiles\n  drop constraint if exists bridge_profiles_account_type_chk;\n\nalter table public.bridge_profiles\n  add constraint bridge_profiles_account_type_chk\n  check (account_type = any (array[\n    'independent_creator'::text,\n    'studio'::text,\n    'buyer'::text,\n    'investor'::text,\n    'platform_admin'::text\n  ]));\n\ndo $migration$\ndeclare\n  matching_accounts integer;\nbegin\n  select count(*) into matching_accounts\n  from public.bridge_profiles\n  where lower(trim(email)) = 'picturecrayons@gmail.com'\n    and internal_role = 'super_admin'\n    and email_verified = true;\n\n  if matching_accounts <> 1 then\n    raise exception 'Expected exactly one verified Super Admin profile for platform account classification; found %', matching_accounts;\n  end if;\n\n  update public.bridge_profiles\n  set account_type = 'platform_admin',\n      updated_at = now()\n  where lower(trim(email)) = 'picturecrayons@gmail.com'\n    and internal_role = 'super_admin'\n    and email_verified = true;\nend;\n$migration$;\n\ncommit;"
+      ],
+      "sha256": "4ab5c30c9ef26c060bdf2eceeb76a88de80589489363cf470061586954ff547d"
+    },
+    {
+      "version": "20261124205116",
+      "name": "loop_admin_featured_audit",
+      "statement_count": 1,
+      "statements": [
+        "create or replace function public.bridge_loop_admin_set_featured(\n  p_actor_user_id text,\n  p_title_id uuid,\n  p_featured boolean\n)\nreturns void\nlanguage plpgsql\nsecurity definer\nset search_path = ''\nas $function$\nbegin\n  if auth.role() is distinct from 'service_role' then\n    raise exception 'service role required';\n  end if;\n\n  if p_actor_user_id is null or p_title_id is null or p_featured is null then\n    raise exception 'required arguments are missing';\n  end if;\n\n  if not exists (\n    select 1\n    from public.bridge_profiles p\n    where p.user_id = p_actor_user_id\n      and p.email_verified = true\n      and p.internal_role in ('admin', 'super_admin')\n  ) then\n    raise exception 'verified Bridge admin identity required';\n  end if;\n\n  update public.loop_titles\n  set featured = p_featured\n  where id = p_title_id;\n\n  if not found then\n    raise exception 'LOOP title not found';\n  end if;\n\n  insert into public.bridge_audit_logs (\n    actor_user_id, action, entity_type, entity_id, metadata\n  ) values (\n    p_actor_user_id,\n    'loop.title.featured_updated',\n    'loop_title',\n    p_title_id::text,\n    jsonb_build_object('featured', p_featured)::text\n  );\nend;\n$function$;\n\nrevoke all on function public.bridge_loop_admin_set_featured(text, uuid, boolean) from public;\nrevoke all on function public.bridge_loop_admin_set_featured(text, uuid, boolean) from anon;\nrevoke all on function public.bridge_loop_admin_set_featured(text, uuid, boolean) from authenticated;\ngrant execute on function public.bridge_loop_admin_set_featured(text, uuid, boolean) to service_role;"
+      ],
+      "sha256": "bd7b8113dc6055745ad1662b583fb921009caf711ac4bc93b2decc4eb7f2c39e"
+    },
+    {
+      "version": "20261124210726",
+      "name": "public_loop_catalog_publishable_rpc",
+      "statement_count": 1,
+      "statements": [
+        "alter function public.public_loop_catalog() security definer;\nalter function public.public_loop_catalog() set search_path = '';\nrevoke all on function public.public_loop_catalog() from public;\nrevoke all on function public.public_loop_catalog() from anon;\nrevoke all on function public.public_loop_catalog() from authenticated;\ngrant execute on function public.public_loop_catalog() to anon;\ngrant execute on function public.public_loop_catalog() to authenticated;\ngrant execute on function public.public_loop_catalog() to service_role;\ncomment on function public.public_loop_catalog() is\n'Read-only public LOOP catalogue projection. SECURITY DEFINER with empty search_path; returns only titles with approved, active, non-revoked worldwide rights and approved/published/listed LOOP state.';"
+      ],
+      "sha256": "831a3259a71351576046ab79ff444ce584713ba0e0f753691ce4a0cf0c56c99b"
+    },
+    {
+      "version": "20261124212758",
+      "name": "bridge_service_request_backend_routing",
+      "statement_count": 1,
+      "statements": [
+        "alter table public.bridge_service_requests\n  add column if not exists assigned_team text not null default 'backend',\n  add column if not exists decision_required boolean not null default false;\n\ndo $$\nbegin\n  if not exists (\n    select 1 from pg_constraint\n    where conname = 'bridge_service_requests_assigned_team_check'\n      and conrelid = 'public.bridge_service_requests'::regclass\n  ) then\n    alter table public.bridge_service_requests\n      add constraint bridge_service_requests_assigned_team_check\n      check (assigned_team in ('backend', 'decision_queue'));\n  end if;\nend $$;\n\ncreate or replace function public.bridge_route_service_request_team()\nreturns trigger\nlanguage plpgsql\nset search_path to 'pg_catalog', 'public'\nas $$\nbegin\n  if new.status in ('UNDER_REVIEW', 'QUOTE_READY', 'REVIEW') then\n    new.assigned_team := 'decision_queue';\n    new.decision_required := true;\n  else\n    new.assigned_team := 'backend';\n    new.decision_required := false;\n  end if;\n  return new;\nend;\n$$;\n\ndrop trigger if exists bridge_service_request_team_routing on public.bridge_service_requests;\ncreate trigger bridge_service_request_team_routing\nbefore insert or update of status on public.bridge_service_requests\nfor each row execute function public.bridge_route_service_request_team();\n\ncreate index if not exists bridge_service_requests_team_queue_idx\n  on public.bridge_service_requests (assigned_team, decision_required, status, created_at desc);\n\ncomment on column public.bridge_service_requests.assigned_team is\n  'Internal execution ownership: backend for automated processing; decision_queue for authorized human decisions.';\ncomment on column public.bridge_service_requests.decision_required is\n  'True only at explicit human decision checkpoints; not a request for Super Admin to perform backend execution.';\n"
+      ],
+      "sha256": "be2e8569074c00927633f850fe509371459b6ff617f67f50014ee9814a11391a"
+    },
+    {
+      "version": "20261124221400",
+      "name": "bridge_creator_distribution_mandates_20261125",
+      "statement_count": 1,
+      "statements": [
+        "-- Account-level Creator/Studio distribution mandate. Acceptance is versioned and audited.\ncreate table public.bridge_creator_distribution_mandates (\n  creator_user_id text not null references public.bridge_profiles(user_id) on delete restrict,\n  mandate_version integer not null check (mandate_version > 0),\n  status text not null check (status in ('ACTIVE', 'SUSPENDED', 'REVOKED')),\n  scope jsonb not null check (jsonb_typeof(scope) = 'object'),\n  accepted_at timestamptz not null,\n  consent_text_version text not null,\n  created_at timestamptz not null default now(),\n  updated_at timestamptz not null default now(),\n  primary key (creator_user_id, mandate_version),\n  constraint bridge_creator_distribution_mandates_scope_shape check (\n    scope ? 'enabled' and scope ? 'version' and scope ? 'destinations'\n    and scope ? 'media' and scope ? 'sublicensingAllowed' and scope ? 'acceptedAt'\n    and scope ? 'consentTextVersion'\n  )\n);\nalter table public.bridge_creator_distribution_mandates enable row level security;\nrevoke all on table public.bridge_creator_distribution_mandates from anon, authenticated;\ngrant select, insert on table public.bridge_creator_distribution_mandates to service_role;\ncreate unique index bridge_creator_distribution_mandates_one_active_idx on public.bridge_creator_distribution_mandates (creator_user_id) where status = 'ACTIVE';\ncreate index bridge_creator_distribution_mandates_status_idx on public.bridge_creator_distribution_mandates (status);\n"
+      ],
+      "sha256": "4a11323f5eaaf4c49268eb75e3ecb1a9e16df7893ac9a179a33b7986bfaed694"
+    },
+    {
+      "version": "20261124221432",
+      "name": "bridge_creator_distribution_mandates_service_role_privilege_hardening_20261125",
+      "statement_count": 1,
+      "statements": [
+        "-- Remove Supabase default service_role table grants and keep mandate rows append-only.\nrevoke all on table public.bridge_creator_distribution_mandates from service_role;\ngrant select, insert on table public.bridge_creator_distribution_mandates to service_role;\n"
+      ],
+      "sha256": "ab9492ea1341e410eaf7f6b71f09df6d23ebb15522fe61e12a9b35f08448da59"
+    },
+    {
+      "version": "20261124225934",
+      "name": "reconcile_duplicate_title_merge_gate_20261008",
+      "statement_count": 1,
+      "statements": [
+        "begin;\n\ncreate table if not exists public.bridge_title_merge_audits (\n  merge_id uuid primary key default gen_random_uuid(),\n  canonical_title_id text not null references public.bridge_titles(id) on delete restrict,\n  retiring_title_id text not null,\n  decision text not null check (decision in ('PREVIEW_SAFE','HOLD','BLOCK','MERGED','ROLLED_BACK')),\n  decision_version text not null default 'v1',\n  actor_user_id text,\n  reason text,\n  collision_scan jsonb not null default '{}'::jsonb,\n  pre_merge_state jsonb not null default '{}'::jsonb,\n  post_merge_state jsonb not null default '{}'::jsonb,\n  rollback_state jsonb not null default '{}'::jsonb,\n  created_at timestamptz not null default now(),\n  completed_at timestamptz\n);\n\ncreate index if not exists bridge_title_merge_audits_titles_idx\n  on public.bridge_title_merge_audits(canonical_title_id, retiring_title_id, created_at desc);\n\ncreate table if not exists public.bridge_title_merge_aliases (\n  retiring_title_id text primary key,\n  canonical_title_id text not null references public.bridge_titles(id) on delete restrict,\n  merge_id uuid not null references public.bridge_title_merge_audits(merge_id) on delete restrict,\n  merged_at timestamptz not null default now()\n);\n\nalter table public.bridge_titles\n  add column if not exists merged_into_title_id text references public.bridge_titles(id) on delete restrict;\nalter table public.bridge_titles\n  add column if not exists merged_at timestamptz;\n\ncreate index if not exists bridge_titles_merged_into_idx\n  on public.bridge_titles(merged_into_title_id);\n\ncreate index if not exists bridge_title_merge_aliases_canonical_idx\n  on public.bridge_title_merge_aliases(canonical_title_id);\n\nalter table public.bridge_title_merge_audits enable row level security;\nalter table public.bridge_title_merge_aliases enable row level security;\n\ndrop policy if exists bridge_title_merge_audits_no_client_access\n  on public.bridge_title_merge_audits;\ncreate policy bridge_title_merge_audits_no_client_access\n  on public.bridge_title_merge_audits\n  for all\n  to anon, authenticated\n  using (false)\n  with check (false);\n\ndrop policy if exists bridge_title_merge_aliases_no_client_access\n  on public.bridge_title_merge_aliases;\ncreate policy bridge_title_merge_aliases_no_client_access\n  on public.bridge_title_merge_aliases\n  for all\n  to anon, authenticated\n  using (false)\n  with check (false);\n\ncommit;"
+      ],
+      "sha256": "9f5272bd1df31d5e7abf7913a4df8f2db18f6660b5628b7393a5d82790316555"
+    },
+    {
+      "version": "20261125005506",
+      "name": "bridge_asset_sha256_0022_testing",
+      "statement_count": 1,
+      "statements": [
+        "-- Add content digests without conflating them with OCI ETags.\nalter table if exists public.bridge_assets\n  add column if not exists sha256 text,\n  add column if not exists checksum_sha256 text;\nalter table if exists public.bridge_assets\n  drop constraint if exists bridge_assets_sha256_format_chk;\nalter table if exists public.bridge_assets\n  add constraint bridge_assets_sha256_format_chk\n  check (\n    (sha256 is null or sha256 ~ '^[a-f0-9]{64}$')\n    and (checksum_sha256 is null or checksum_sha256 ~ '^[a-f0-9]{64}$')\n  );\ncomment on column public.bridge_assets.sha256 is\n  'SHA-256 of verified object bytes; not an OCI ETag.';\ncomment on column public.bridge_assets.checksum_sha256 is\n  'Canonical SHA-256 of verified object bytes; not an OCI ETag.';"
+      ],
+      "sha256": "376a99d402ef872339a5377a05ebe7479e96b8325dbeecb4de5d9f5d624fc944"
+    }
+  ]
+}

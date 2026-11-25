@@ -1,0 +1,99 @@
+{
+  "source_project": "jbymleftneggcgutlcqu",
+  "source_table": "supabase_migrations.schema_migrations",
+  "retrieved_at": "2026-11-25",
+  "offset": 50,
+  "limit": 10,
+  "records": [
+    {
+      "version": "20261116082236",
+      "name": "20261116083000_harden_bridge_title_owner_helper",
+      "statement_count": 1,
+      "statements": [
+        "-- Harden the ownership helper used by Production-asset RLS policies.\n-- All referenced objects are schema-qualified, so the definer search path\n-- can be restricted to pg_catalog only.\n--\n-- Keep EXECUTE available to authenticated: the RLS policy must call this\n-- helper during row authorization. The function returns only an ownership\n-- boolean, binds to auth.uid(), and is not executable by anon or PUBLIC.\n\ncreate or replace function public.bridge_is_title_owner(p_title_id text)\nreturns boolean\nlanguage sql\nstable\nsecurity definer\nset search_path = pg_catalog\nset row_security = off\nas $bridge_owner$\n  select exists (\n    select 1\n    from public.bridge_titles t\n    join public.bridge_loop_identity_links l\n      on l.bridge_user_id = t.owner_user_id\n    where t.id = p_title_id\n      and l.auth_user_id = (select auth.uid())\n  );\n$bridge_owner$;\n\nrevoke all on function public.bridge_is_title_owner(text) from public, anon;\ngrant execute on function public.bridge_is_title_owner(text) to authenticated;\n"
+      ],
+      "sha256": "a9cb95d944e7b98825be2094e0d2bdee00abe163aad2999ab5ba70e2633a0498"
+    },
+    {
+      "version": "20261116111314",
+      "name": "secure_public_loop_catalog_testing",
+      "statement_count": 1,
+      "statements": [
+        "DROP FUNCTION public.public_loop_catalog();\nCREATE FUNCTION public.public_loop_catalog()\nRETURNS TABLE (\n  id text,\n  bridge_title_id text,\n  slug text,\n  title text,\n  synopsis text,\n  description text,\n  content_type text,\n  language text,\n  year integer,\n  duration_minutes integer,\n  maturity_rating text,\n  director text,\n  is_original boolean,\n  original_badge text,\n  status text,\n  listed boolean,\n  published boolean,\n  featured boolean,\n  access_tier text,\n  tvod_rental_price numeric,\n  poster_available boolean,\n  backdrop_available boolean,\n  trailer_available boolean\n)\nLANGUAGE sql\nSTABLE\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\n  SELECT\n    l.id,\n    l.bridge_title_id,\n    l.slug,\n    l.title,\n    l.synopsis,\n    NULL::text AS description,\n    'Film'::text AS content_type,\n    l.language,\n    l.release_year AS year,\n    l.runtime_minutes AS duration_minutes,\n    l.age_rating AS maturity_rating,\n    NULL::text AS director,\n    FALSE AS is_original,\n    NULL::text AS original_badge,\n    l.status,\n    l.is_listed AS listed,\n    l.is_published AS published,\n    FALSE AS featured,\n    l.access_tier,\n    NULL::numeric AS tvod_rental_price,\n    FALSE AS poster_available,\n    FALSE AS backdrop_available,\n    FALSE AS trailer_available\n  FROM public.loop_titles AS l\n  INNER JOIN public.bridge_loop_publications AS p\n    ON p.loop_title_id::text = l.id::text\n   AND p.bridge_title_id = l.bridge_title_id\n  WHERE p.destination = 'CRAYONS_LOOP'\n    AND p.authorization_status = 'AUTHORIZED'\n    AND p.approved_at IS NOT NULL\n    AND p.revoked_at IS NULL\n    AND p.window_start IS NOT NULL\n    AND p.window_end IS NOT NULL\n    AND p.window_start <= now()\n    AND p.window_end > now()\n    AND p.territories @> ARRAY['WORLDWIDE']::text[]\n    AND p.languages @> ARRAY[l.language]::text[]\n    AND p.exploitation_models @> ARRAY[l.access_tier]::text[]\n    AND l.access_tier = 'TVOD'\n    AND l.status IN ('APPROVED', 'PUBLISHED')\n    AND l.is_listed IS TRUE\n    AND l.is_published IS TRUE\n  ORDER BY l.created_at DESC;\n$function$;\nREVOKE ALL ON FUNCTION public.public_loop_catalog() FROM PUBLIC;\nREVOKE ALL ON FUNCTION public.public_loop_catalog() FROM anon, authenticated;\nGRANT EXECUTE ON FUNCTION public.public_loop_catalog() TO anon, authenticated;\n"
+      ],
+      "sha256": "87df8348d4791d070200d9c8e3f5b39453267b2be9d68b43fb30d331acbbc044"
+    },
+    {
+      "version": "20261116111344",
+      "name": "grant_public_loop_catalog_invoker_reads_testing",
+      "statement_count": 1,
+      "statements": [
+        "GRANT USAGE ON SCHEMA public TO anon, authenticated;\nGRANT SELECT ON TABLE public.loop_titles TO anon, authenticated;\nGRANT SELECT ON TABLE public.bridge_loop_publications TO anon, authenticated;\n"
+      ],
+      "sha256": "f74ae90e08c58565bf3ba3083e7e6cf2e67475393d02acbaf1f2405ae9821b45"
+    },
+    {
+      "version": "20261116111454",
+      "name": "normalize_public_loop_catalog_schema_testing",
+      "statement_count": 1,
+      "statements": [
+        "DROP FUNCTION public.public_loop_catalog();\nCREATE FUNCTION public.public_loop_catalog()\nRETURNS TABLE (\n  id text,\n  bridge_title_id text,\n  slug text,\n  title text,\n  synopsis text,\n  description text,\n  content_type text,\n  language text,\n  year integer,\n  duration_minutes integer,\n  maturity_rating text,\n  director text,\n  is_original boolean,\n  original_badge text,\n  status text,\n  listed boolean,\n  published boolean,\n  featured boolean,\n  access_tier text,\n  tvod_rental_price numeric,\n  poster_available boolean,\n  backdrop_available boolean,\n  trailer_available boolean\n)\nLANGUAGE sql\nSTABLE\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\n  SELECT\n    j->>'id',\n    j->>'bridge_title_id',\n    j->>'slug',\n    j->>'title',\n    j->>'synopsis',\n    j->>'description',\n    COALESCE(j->>'content_type', 'Film'),\n    j->>'language',\n    COALESCE(NULLIF(j->>'year','')::integer, NULLIF(j->>'release_year','')::integer),\n    COALESCE(NULLIF(j->>'duration_minutes','')::integer, NULLIF(j->>'runtime_minutes','')::integer),\n    COALESCE(j->>'maturity_rating', j->>'age_rating'),\n    j->>'director',\n    COALESCE(NULLIF(j->>'is_original','')::boolean, false),\n    j->>'original_badge',\n    lower(COALESCE(j->>'status','')),\n    COALESCE(NULLIF(j->>'listed','')::boolean, NULLIF(j->>'is_listed','')::boolean, false),\n    COALESCE(NULLIF(j->>'published','')::boolean, NULLIF(j->>'is_published','')::boolean, false),\n    COALESCE(NULLIF(j->>'featured','')::boolean, false),\n    j->>'access_tier',\n    COALESCE(NULLIF(j->>'tvod_rental_price','')::numeric, NULLIF(j->>'price_paise','')::numeric / 100),\n    NULLIF(COALESCE(j->>'poster_path', j->>'poster_url'),'') IS NOT NULL,\n    NULLIF(COALESCE(j->>'backdrop_path', j->>'backdrop_url'),'') IS NOT NULL,\n    NULLIF(COALESCE(j->>'trailer_path', j->>'trailer_url'),'') IS NOT NULL\n  FROM (\n    SELECT to_jsonb(l) AS j\n    FROM public.loop_titles AS l\n    INNER JOIN public.bridge_loop_publications AS p\n      ON p.loop_title_id::text = l.id::text\n     AND p.bridge_title_id = l.bridge_title_id\n    WHERE lower(p.authorization_status) = 'authorized'\n      AND p.approved_at IS NOT NULL\n      AND p.revoked_at IS NULL\n      AND p.window_start IS NOT NULL\n      AND p.window_end IS NOT NULL\n      AND p.window_start <= now()\n      AND p.window_end > now()\n      AND p.territories @> ARRAY['WORLDWIDE']::text[]\n      AND p.languages @> ARRAY[l.language]::text[]\n      AND p.exploitation_models @> ARRAY[l.access_tier]::text[]\n  ) AS authorized_rows\n  WHERE upper(COALESCE(j->>'status','')) IN ('APPROVED','PUBLISHED')\n    AND COALESCE(NULLIF(j->>'listed','')::boolean, NULLIF(j->>'is_listed','')::boolean, false) IS TRUE\n    AND COALESCE(NULLIF(j->>'published','')::boolean, NULLIF(j->>'is_published','')::boolean, false) IS TRUE\n  ORDER BY j->>'created_at' DESC;\n$function$;\nREVOKE ALL ON FUNCTION public.public_loop_catalog() FROM PUBLIC;\nREVOKE ALL ON FUNCTION public.public_loop_catalog() FROM anon, authenticated;\nGRANT USAGE ON SCHEMA public TO anon, authenticated;\nGRANT SELECT ON TABLE public.loop_titles TO anon, authenticated;\nGRANT SELECT ON TABLE public.bridge_loop_publications TO anon, authenticated;\nGRANT EXECUTE ON FUNCTION public.public_loop_catalog() TO anon, authenticated;\n"
+      ],
+      "sha256": "0743fbf6a6b87f7121d1550a51f74c5e1728663169e2769195c79a25408002fc"
+    },
+    {
+      "version": "20261116111631",
+      "name": "restrict_public_loop_catalog_rpc_to_edge_service_testing",
+      "statement_count": 1,
+      "statements": [
+        "REVOKE ALL ON FUNCTION public.public_loop_catalog() FROM PUBLIC;\nREVOKE ALL ON FUNCTION public.public_loop_catalog() FROM anon, authenticated;\nGRANT EXECUTE ON FUNCTION public.public_loop_catalog() TO service_role;\nREVOKE SELECT ON TABLE public.loop_titles FROM anon, authenticated;\nREVOKE SELECT ON TABLE public.bridge_loop_publications FROM anon, authenticated;\n"
+      ],
+      "sha256": "87caf56dc37f236e3374b9d41e9b4ef2e37a35fcca7eec01a4babd54bf9e8e65"
+    },
+    {
+      "version": "20261116210822",
+      "name": "bridge_title_hold_block_controls",
+      "statement_count": 1,
+      "statements": [
+        "-- Persist title-level operational HOLD / BLOCK independently of lifecycle status.\n-- Application writes are server-authoritative; browser roles receive no direct write grants.\ncreate table if not exists public.bridge_title_controls (\n  title_id text primary key references public.bridge_titles(id) on delete restrict,\n  control_state text not null default 'CLEAR'\n    check (control_state in ('CLEAR','HOLD','BLOCK')),\n  reason text,\n  set_by text,\n  set_at timestamptz,\n  released_by text,\n  released_at timestamptz,\n  release_reason text,\n  updated_at timestamptz not null default now(),\n  constraint bridge_title_controls_consistency check (\n    (control_state = 'CLEAR' and reason is null and set_by is null and set_at is null)\n    or\n    (control_state in ('HOLD','BLOCK') and length(trim(coalesce(reason,''))) >= 8\n      and set_by is not null and set_at is not null)\n  )\n);\n\ncreate table if not exists public.bridge_title_control_events (\n  id bigserial primary key,\n  title_id text not null references public.bridge_titles(id) on delete restrict,\n  control_state text not null check (control_state in ('HOLD','BLOCK','CLEAR')),\n  action text not null check (action in ('SET_HOLD','SET_BLOCK','RELEASE_HOLD','UNBLOCK')),\n  reason text not null check (length(trim(reason)) >= 8),\n  actor_user_id text not null,\n  created_at timestamptz not null default now()\n);\n\ncreate index if not exists bridge_title_control_events_title_created_idx\n  on public.bridge_title_control_events(title_id, created_at desc);\n\nalter table public.bridge_title_controls enable row level security;\ncreate or replace function public.bridge_title_buyer_visibility(p_title_id text)\nreturns boolean language sql stable set search_path = public, pg_temp as $function$\n  select exists (\n    select 1 from public.bridge_titles t\n    join public.bridge_title_gate_certifications g on g.title_id=t.id\n    where t.id=p_title_id\n      and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')\n      and not exists (\n        select 1 from public.bridge_title_controls c\n        where c.title_id=t.id and c.control_state in ('HOLD','BLOCK')\n      )\n      and exists (select 1 from public.bridge_qc_cases q where q.title_id=t.id and q.status='PASSED')\n      and exists (select 1 from public.bridge_legal_cases l where l.title_id=t.id and l.status='APPROVED')\n      and g.ott_preparation_status='READY'\n      and g.packaging_status='COMPLETE'\n      and g.curation_status='APPROVED'\n      and g.delivery_status='READY'\n      and exists (select 1 from public.bridge_destination_packages p where p.title_id=t.id and p.readiness_state in ('READY','AUTHORIZED','DELIVERED'))\n  );\n$function$;\nalter table public.bridge_title_control_events enable row level security;\nrevoke all on public.bridge_title_controls from anon, authenticated;\nrevoke all on public.bridge_title_control_events from anon, authenticated;\n\ncreate or replace function public.bridge_reject_title_control_event_mutation()\nreturns trigger\nlanguage plpgsql\nset search_path = pg_catalog\nas $function$\nbegin\n  raise exception 'bridge_title_control_events is append-only';\nend;\n$function$;\n\ndrop trigger if exists bridge_title_control_events_no_mutation\n  on public.bridge_title_control_events;\ncreate trigger bridge_title_control_events_no_mutation\n  before update or delete on public.bridge_title_control_events\n  for each row execute function public.bridge_reject_title_control_event_mutation();\n\nrevoke all on function public.bridge_reject_title_control_event_mutation() from public, anon, authenticated;"
+      ],
+      "sha256": "90cf5c9a8899e43143e0d1bc414bda550f3c558b00439dabfb2b8aa1361a8e3a"
+    },
+    {
+      "version": "20261116224138",
+      "name": "loop_viewer_profiles_20261117",
+      "statement_count": 1,
+      "statements": [
+        "create table if not exists public.loop_viewer_profiles (\n  id uuid primary key default gen_random_uuid(),\n  user_id uuid not null references auth.users(id) on delete cascade,\n  display_name text not null check (length(btrim(display_name)) between 1 and 24),\n  is_kids boolean not null default false,\n  created_at timestamptz not null default now(),\n  updated_at timestamptz not null default now()\n);\ncreate index if not exists loop_viewer_profiles_user_created_idx\n  on public.loop_viewer_profiles (user_id, created_at);\nalter table public.loop_viewer_profiles enable row level security;\ndrop policy if exists loop_viewer_profiles_select_own on public.loop_viewer_profiles;\ncreate policy loop_viewer_profiles_select_own on public.loop_viewer_profiles\n  for select to authenticated using (user_id = (select auth.uid()));\ndrop policy if exists loop_viewer_profiles_insert_own on public.loop_viewer_profiles;\ncreate policy loop_viewer_profiles_insert_own on public.loop_viewer_profiles\n  for insert to authenticated with check (user_id = (select auth.uid()));\ndrop policy if exists loop_viewer_profiles_update_own on public.loop_viewer_profiles;\ncreate policy loop_viewer_profiles_update_own on public.loop_viewer_profiles\n  for update to authenticated using (user_id = (select auth.uid()))\n  with check (user_id = (select auth.uid()));\ndrop policy if exists loop_viewer_profiles_delete_own on public.loop_viewer_profiles;\ncreate policy loop_viewer_profiles_delete_own on public.loop_viewer_profiles\n  for delete to authenticated using (user_id = (select auth.uid()));\nrevoke all on public.loop_viewer_profiles from anon;\ngrant select, insert, update, delete on public.loop_viewer_profiles to authenticated;"
+      ],
+      "sha256": "de3610086b16e6401557764c5e251b8b579ed1eebd50b05ad7551cf132f81846"
+    },
+    {
+      "version": "20261116224140",
+      "name": "loop_watchlists_20261117",
+      "statement_count": 1,
+      "statements": [
+        "create table if not exists public.loop_watchlists (\n  id uuid primary key default gen_random_uuid(),\n  user_id uuid not null references auth.users(id) on delete cascade,\n  title_id text not null references public.loop_titles(id) on delete cascade,\n  created_at timestamptz not null default now(),\n  constraint loop_watchlists_user_title_key unique (user_id, title_id)\n);\ncreate index if not exists loop_watchlists_user_created_idx\n  on public.loop_watchlists (user_id, created_at desc);\nalter table public.loop_watchlists enable row level security;\ndrop policy if exists loop_watchlists_select_own on public.loop_watchlists;\ncreate policy loop_watchlists_select_own on public.loop_watchlists\n  for select to authenticated using (user_id = (select auth.uid()));\ndrop policy if exists loop_watchlists_insert_own on public.loop_watchlists;\ncreate policy loop_watchlists_insert_own on public.loop_watchlists\n  for insert to authenticated with check (user_id = (select auth.uid()));\ndrop policy if exists loop_watchlists_delete_own on public.loop_watchlists;\ncreate policy loop_watchlists_delete_own on public.loop_watchlists\n  for delete to authenticated using (user_id = (select auth.uid()));\nrevoke all on public.loop_watchlists from anon;\ngrant select, insert, delete on public.loop_watchlists to authenticated;"
+      ],
+      "sha256": "677b2b2cf9453b12dbe89876ac4f9aa814eba4d8fd1580da5b8d7d81a2576fc4"
+    },
+    {
+      "version": "20261116233444",
+      "name": "streamvista_legacy_links_unresolved_resolution_state",
+      "statement_count": 1,
+      "statements": [
+        "create table public.streamvista_legacy_links (\n  source_table text not null,\n  legacy_id text not null,\n  order_id uuid null,\n  bridge_title_id text null,\n  review_status text not null default 'pending',\n  reviewed_by text null,\n  reviewed_at timestamptz null,\n  resolution_status text not null default 'resolved',\n  constraint streamvista_legacy_links_pkey primary key (source_table, legacy_id),\n  constraint streamvista_legacy_links_source_table_check\n    check (source_table = any (array['accounts_user','films_film','films_filmdraft','films_filmbuyermapping','films_payment','films_status','films_viewhistory']::text[])),\n  constraint streamvista_legacy_links_review_status_check\n    check (review_status = any (array['pending','verified','rejected']::text[])),\n  constraint streamvista_link_review\n    check (review_status <> 'verified' or (reviewed_by is not null and reviewed_at is not null)),\n  constraint streamvista_legacy_links_resolution_status_check\n    check (resolution_status = any (array['resolved','unresolved','rejected']::text[])),\n  constraint streamvista_link_target\n    check (\n      (resolution_status = 'resolved' and (order_id is not null or bridge_title_id is not null))\n      or\n      (resolution_status = 'unresolved' and review_status = 'pending' and order_id is null and bridge_title_id is null)\n      or\n      (resolution_status = 'rejected' and review_status = 'rejected')\n    ),\n  constraint streamvista_legacy_links_bridge_title_id_fkey\n    foreign key (bridge_title_id) references public.bridge_titles(id) on delete restrict\n);\nalter table public.streamvista_legacy_links enable row level security;"
+      ],
+      "sha256": "ae8ef1ccf6dff166c34dc66f2350e974a57e14624b590a497d323bfe5bb2be57"
+    },
+    {
+      "version": "20261116234234",
+      "name": "harden_legacy_links_service_role_privileges_20261117",
+      "statement_count": 1,
+      "statements": [
+        "-- Restrict the legacy-link server role to row operations only.\n-- Browser roles and PUBLIC retain no table privileges.\nrevoke all on table public.streamvista_legacy_links from public, anon, authenticated, service_role;\ngrant select, insert, update, delete on table public.streamvista_legacy_links to service_role;\n"
+      ],
+      "sha256": "64197182edca4bece2c4d5b2de4ed6e52f514a3c45fd442a189a4b9d05e84fb1"
+    }
+  ]
+}
