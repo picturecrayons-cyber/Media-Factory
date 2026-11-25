@@ -542,6 +542,24 @@ try {
       }
 
       await client.query(sql);
+      if (name === "20261125101500_public_loop_catalog_publishable_rpc.sql") {
+        const catalogSecurity = await client.query(`
+          select
+            p.prosecdef as security_definer,
+            coalesce(p.proconfig, array[]::text[]) @> array['search_path=""']::text[] as empty_search_path
+          from pg_proc p
+          where p.oid = 'public.public_loop_catalog()'::regprocedure
+        `);
+        if (
+          catalogSecurity.rows.length !== 1 ||
+          catalogSecurity.rows[0].security_definer !== true ||
+          catalogSecurity.rows[0].empty_search_path !== true
+        ) {
+          throw new Error(
+            "Public LOOP catalogue RPC must be SECURITY DEFINER with an empty search_path",
+          );
+        }
+      }
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
