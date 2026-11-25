@@ -6,6 +6,7 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
+import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -58,6 +59,7 @@ function Studio() {
               </div>
               <TitleList empty="No finished films are currently returned for this studio account." />
               <MyStoryConcepts />
+              <CreatorDocumentVault />
             </section>
 
 
