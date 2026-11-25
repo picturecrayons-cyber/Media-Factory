@@ -19,13 +19,14 @@ function harness(
     delivery_status: "READY",
   },
   publicationStatuses = ["HOLD", "AUTHORIZED", "REVOKED", "EXPIRED"],
+  titleStatus = "LICENSED",
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
     slug: "film",
     name: "Film",
-    status: "LICENSED",
+    status: titleStatus,
     language: "Malayalam",
     master_key: "sealed/master",
     poster_key: "sealed/poster",
@@ -134,6 +135,15 @@ test("new and existing publications use the exact status accepted by each databa
       assert.ok(publication.values.includes(data.windowEnd));
     }
   }
+});
+
+test("IN_NEGOTIATION is never eligible for consumer distribution", async () => {
+  const h = harness([grant], true, false, undefined, undefined, "IN_NEGOTIATION");
+  await assert.rejects(
+    h.authorize({ context, data }),
+    /Distribution Authorization Blocked:.*not distribution-ready/,
+  );
+  assert.equal(h.writes.length, 0);
 });
 
 test("status alignment never bypasses operator, rights or commercial coverage", async () => {
