@@ -4,8 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate, updateBusinessReview, updateCommercialTerms } from "@/lib/bridge/admin-workstations";
-import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
+import { listAdminWorkstations, setBuyerPublicationGate, updateBusinessReview, updateCommercialTerms } from "@/lib/bridge/admin-workstations";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
@@ -31,10 +30,6 @@ function AdminWorkstations() {
 function WorkstationBody({ actor }: { actor: any }) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
-  const review = useMutation({
-    mutationFn: reviewAdminTitle,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
-  });
   const business = useMutation({ mutationFn: updateBusinessReview, onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }) });
   const revenue = useMutation({ mutationFn: updateCommercialTerms, onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }) });
   const gate = useMutation({
@@ -51,8 +46,6 @@ function WorkstationBody({ actor }: { actor: any }) {
   if (query.isError || !data) return <div className="rounded-2xl border border-line bg-surface p-8 text-sm">Unable to load the Bridge operational backend.</div>;
 
   const titleName = new Map(data.titles.map((t: any) => [t.id, t.name]));
-  const qcQueue = data.titles.filter((t: any) => t.status === "QC_REVIEW");
-  const rightsQueue = data.titles.filter((t: any) => t.status === "RIGHTS_REVIEW");
   const ready = data.titles.filter((t: any) => ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(t.status));
 
   return (
@@ -78,13 +71,7 @@ function WorkstationBody({ actor }: { actor: any }) {
       </nav>
 
       {activeTab === "Titles" ? (
-        <TitleQueue titles={data.titles} review={review} />
-      ) : activeTab === "QC" ? (
-        <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
-          actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
-      ) : activeTab === "Rights" ? (
-        <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
-          actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
+        <TitleQueue titles={data.titles} />
       ) : activeTab === "Business" ? (
         <BusinessReview rows={data.rights} mandates={data.creatorMandates} titles={titleName} mutation={business} />
       ) : activeTab === "Revenue" ? (
@@ -108,12 +95,12 @@ function WorkstationBody({ actor }: { actor: any }) {
           rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
       )}
 
-      {review.isError || gate.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error)}</p> : null}
+      {business.isError || revenue.isError || gate.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(business.error ?? revenue.error ?? gate.error)}</p> : null}
     </div>
   );
 }
 
-function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
+function TitleQueue({ titles }: { titles: any[] }) {
   return (
     <section className="space-y-3">
       <SectionHeader title="Titles" description="One canonical Title ID from intake through delivery." />
@@ -135,22 +122,6 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
   );
 }
 
-function DuplicateReviewSection() {
-  const qc = useQueryClient();
-  const query = useQuery({ queryKey: ["duplicate-reviews"], queryFn: () => listDuplicateReviews() });
-  const openMutation = useMutation({ mutationFn: openDuplicateReview, onSuccess: () => qc.invalidateQueries({ queryKey: ["duplicate-reviews"] }) });
-  const decideMutation = useMutation({ mutationFn: decideDuplicateReview, onSuccess: () => qc.invalidateQueries({ queryKey: ["duplicate-reviews"] }) });
-  const reviews = [...(query.data?.reviews ?? []), ...(query.data?.knownCandidates ?? [])];
-  return <section id="duplicate-reviews" className="space-y-4">
-    <div><h3 className="font-display text-2xl font-semibold">11 · Duplicate Title Review</h3><p className="text-sm text-muted">Review identity and dependency conflicts before any reconciliation. Approval only creates a reconciliation-ready record; title references are never changed here.</p></div>
-    {query.isLoading ? <Empty text="Loading duplicate reviews…"/> : query.isError ? <Empty text="Unable to load duplicate reviews."/> : !reviews.length ? <Empty text="No duplicate candidates require review."/> : <div className="space-y-3">{reviews.map((r:any)=><div key={r.id} className="rounded-2xl border border-line bg-elevated p-4 space-y-3">
-      <div><p className="font-medium">{r.candidateName} → {r.canonicalName}</p><p className="text-xs text-muted">{r.status} · identity {r.identityConfidence} · Loop {r.loopIdentityStatus ?? "BLOCKED"}</p></div>
-      <div className="grid gap-2 text-xs sm:grid-cols-3"><span>Rights: {r.rightsConflictStatus ?? "UNRESOLVED"}</span><span>Territory: {r.territoryConflictStatus ?? "UNRESOLVED"}</span><span>Window: {r.windowConflictStatus ?? "UNRESOLVED"}</span><span>Assets: {r.assetReferenceStatus ?? "UNRESOLVED"}</span><span>Delivery: {r.deliveryReferenceStatus ?? "UNRESOLVED"}</span><span>Buyer mappings: {r.buyerMappingStatus ?? "UNRESOLVED"}</span></div>
-      {!r.persisted ? <Button size="sm" disabled={openMutation.isPending} onClick={() => openMutation.mutate({ data: { candidateTitleId: r.candidateTitleId, canonicalTitleId: r.canonicalTitleId } })}>Open review</Button> : <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={decideMutation.isPending} onClick={() => decideMutation.mutate({ data: { reviewId: r.id, decision: "HOLD", identityConfidence: r.identityConfidence, rightsConflictStatus: r.rightsConflictStatus ?? "UNKNOWN", territoryConflictStatus: r.territoryConflictStatus ?? "UNKNOWN", windowConflictStatus: r.windowConflictStatus ?? "UNKNOWN", assetReferenceStatus: r.assetReferenceStatus ?? "UNKNOWN", deliveryReferenceStatus: r.deliveryReferenceStatus ?? "UNKNOWN", buyerMappingStatus: r.buyerMappingStatus ?? "UNKNOWN" } })}>Hold</Button><Button size="sm" variant="outline" disabled={decideMutation.isPending} onClick={() => decideMutation.mutate({ data: { reviewId: r.id, decision: "NO_MERGE", identityConfidence: r.identityConfidence, rightsConflictStatus: r.rightsConflictStatus ?? "UNKNOWN", territoryConflictStatus: r.territoryConflictStatus ?? "UNKNOWN", windowConflictStatus: r.windowConflictStatus ?? "UNKNOWN", assetReferenceStatus: r.assetReferenceStatus ?? "UNKNOWN", deliveryReferenceStatus: r.deliveryReferenceStatus ?? "UNKNOWN", buyerMappingStatus: r.buyerMappingStatus ?? "UNKNOWN" } })}>No merge</Button><Button size="sm" disabled={decideMutation.isPending || r.identityConfidence !== "CONFIRMED"} onClick={() => decideMutation.mutate({ data: { reviewId: r.id, decision: "APPROVE", identityConfidence: "CONFIRMED", rightsConflictStatus: r.rightsConflictStatus ?? "CLEAR", territoryConflictStatus: r.territoryConflictStatus ?? "CLEAR", windowConflictStatus: r.windowConflictStatus ?? "CLEAR", assetReferenceStatus: r.assetReferenceStatus ?? "CLEAR", deliveryReferenceStatus: r.deliveryReferenceStatus ?? "CLEAR", buyerMappingStatus: r.buyerMappingStatus ?? "CLEAR" } })}>Approve reconciliation</Button></div>}
-    </div>)}</div>}
-  </section>;
-}
-
 function Empty({ text }: { text: string }) { return <div className="rounded-2xl border border-dashed border-line p-6 text-sm text-muted">{text}</div>; }
 
 function RecordTable({ rows, fields, titleName }: { rows: any[]; fields: string[]; titleName: Map<any, any> }) {
@@ -160,12 +131,6 @@ function RecordTable({ rows, fields, titleName }: { rows: any[]; fields: string[
 
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return <div><h3 className="font-display text-2xl font-semibold">{title}</h3><p className="text-sm text-muted">{description}</p></div>;
-}
-function ActionButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
-  return <Button size="sm" disabled={disabled} onClick={onClick}>{label}</Button>;
-}
-function ReviewQueue({ title, description, titles, actions, mutation }: { title: string; description: string; titles: any[]; actions: [string, string][]; mutation: any }) {
-  return <section className="space-y-3"><SectionHeader title={title} description={description} />{titles.length ? titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span><div className="flex gap-2">{actions.map(([decision, label]) => <ActionButton key={decision} label={label} disabled={mutation.isPending} onClick={() => mutation.mutate({ data: { titleId: t.id, decision } })} />)}</div></div>) : <Empty text="Queue is clear." />}</section>;
 }
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
