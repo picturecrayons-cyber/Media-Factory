@@ -466,7 +466,11 @@ test("OCI SHA-256 read-back rejects a byte-for-byte mismatch", async () => {
   const originalFetch = globalThis.fetch;
   Object.assign(process.env, values);
   try {
-    globalThis.fetch = async () => new Response("different", { status: 200, headers: { "content-length": "9" } });
+    globalThis.fetch = async (input, init) => {
+      assert.equal(init?.method, "GET");
+      assert.equal(new URL(String(input)).pathname, "/n/test-namespace/b/primary-vault/o/object-key");
+      return new Response("different", { status: 200, headers: { "content-length": "9" } });
+    };
     const { createHash } = await import("node:crypto");
     const sha256 = createHash("sha256").update("expected").digest("hex");
     const { verifyObjectSha256 } = await import("./oci-object-storage.server.ts");
