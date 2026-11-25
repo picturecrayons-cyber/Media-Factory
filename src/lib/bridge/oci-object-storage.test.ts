@@ -105,7 +105,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
         };
         if (outcome === "SUCCEEDED" || outcome === "COMPLETED") {
           assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag")).byteSize, 12);
-          assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
+          assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD", "GET"]);
         } else {
           const message = outcome === "HTTP_ERROR" ? /lookup failed \(403\)/ : new RegExp(`copy ${outcome.toLowerCase()}`);
           await assert.rejects(sealVerifiedObject("source-key", "sealed-key", "source-etag"), message);
@@ -137,7 +137,7 @@ test("OCI object verification rejects an unexpected content type", async () => {
   globalThis.fetch = async (_input, init) => (init?.method || "GET") === "HEAD"
     ? new Response(null, { status: 200,
         headers: { "content-length": "12", "content-type": "image/png", etag: '"test-etag"' } })
-    : new Response("image-bytes", { status: 200, headers: { "content-length": "12" } });
+    : new Response("image-bytes!", { status: 200, headers: { "content-length": "12" } });
   try {
     await assert.rejects(verifyObject("asset-key", "video/mp4"), /content type mismatch/);
     assert.equal((await verifyObject("asset-key", "image/png")).contentType, "image/png");
