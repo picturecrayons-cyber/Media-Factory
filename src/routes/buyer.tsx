@@ -218,7 +218,6 @@ function BuyerBody({ userId, readOnly }: { userId: string; readOnly: boolean }) 
       toast("Payment captured — entitlement recorded");
       void qc.invalidateQueries({ queryKey: titlesKey });
       void qc.invalidateQueries({ queryKey: entitlementsKey });
-      void qc.invalidateQueries({ queryKey: entitlementsKey });
     },
     onError: (err) => toast(err instanceof Error ? err.message : "Payment did not complete"),
   });
