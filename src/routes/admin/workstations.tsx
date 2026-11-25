@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
@@ -10,7 +10,12 @@ import type { BridgeActor } from "@/lib/bridge/session";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
-export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
+export const Route = createFileRoute("/admin/workstations")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: typeof search.tab === "string" ? search.tab : undefined,
+  }),
+  component: AdminWorkstations,
+});
 
 const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
@@ -40,7 +45,13 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
     mutationFn: setBuyerPublicationGate,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
-  const [activeTab, setActiveTab] = useState<Tab>("Titles");
+  const search = Route.useSearch();
+  const [activeTab, setActiveTab] = useState<Tab>(() =>
+    TABS.includes(search.tab as Tab) ? (search.tab as Tab) : "Titles",
+  );
+  useEffect(() => {
+    if (TABS.includes(search.tab as Tab)) setActiveTab(search.tab as Tab);
+  }, [search.tab]);
 
   const data = query.data;
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading Admin…</div>;
