@@ -4,6 +4,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
+import { StudioFilmCatalogue } from "@/components/bridge/studio-film-catalogue";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
@@ -96,7 +97,7 @@ function StudioDashboard({ actor }: { actor: { userId: string; displayName: stri
       <WorkspacePanel id="my-titles" eyebrow="Organization-scoped catalogue" title="Studio Titles" description="Finished films, Story / Concept submissions and records with an unknown discriminator remain separate. Only server-authorized records are displayed.">
         <section>
           <h4 className="font-semibold">Finished films · {films.length}</h4>
-          <TitleRows titles={films} empty="No finished-film titles are currently returned for this Studio account." />
+          <StudioFilmCatalogue titles={films} />
         </section>
         <div className="mt-4 border-t border-line pt-4"><MyStoryConcepts actor={actor} /></div>
         {unclassified.length ? (
