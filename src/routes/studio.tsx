@@ -21,6 +21,7 @@ function Studio() {
               steps={["Add title", "Prepare assets", "Rights clearance", "License", "Deliver"]}
             />
             <PaidFeaturesPanel mode="studio" />
+            <Link to="/studio/dit" className="mt-3 inline-flex rounded-full border border-line px-4 py-2 text-xs font-semibold">Open DIT Agent status</Link>
             <section id="add-title">
               <h2 className="text-lg font-semibold">Add title</h2>
               <div className="mt-3"><CreateTitleForm concise /></div>
