@@ -21,8 +21,10 @@ const EXPECTED_MIGRATIONS = 70;
 // Explicit unmerged migrations added by this Platform Super Admin PR. The
 // recovered Production-ledger set remains independently pinned by its manifest.
 const PENDING_MIGRATIONS = new Set([
+  "20261124212758_bridge_service_request_backend_routing.sql",
   "20261125093000_platform_super_admin_account_type.sql",
   "20261125094500_loop_admin_featured_audit.sql",
+  "20261125101500_public_loop_catalog_publishable_rpc.sql",
 ]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
