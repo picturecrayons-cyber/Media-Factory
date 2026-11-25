@@ -15,7 +15,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "distribution.read", "distribution.write",
   ],
   super_admin: [
-    "title.admin_queue_read", "title.read_catalog", "title.final_approve",
+    "title.admin_queue_read", "title.read_catalog", "title.final_approve", "story_concept.final_approve",
     "buyer.read", "buyer_loop.read", "legacy.map", "story_concept.download_approved",
     "loop.publish", "distribution.read", "audit.read",
   ],

@@ -108,6 +108,7 @@ export const PERMISSIONS = [
   "story_concept.read_own",
   "story_concept.read_buyer",
   "story_concept.download_approved",
+  "story_concept.final_approve",
   "asset.read_trailer",
   "asset.read_storage_proof",
   "title.read_published",
