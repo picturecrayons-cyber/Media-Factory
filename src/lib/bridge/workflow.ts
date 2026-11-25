@@ -104,8 +104,8 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       created_by: string;
     }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
-    if (grant.created_by === actor.userId)
-      throw new Error("Another legal reviewer must approve this license");
+    if (grant.created_by === actor.userId && actor.internalRole !== "super_admin")
+      throw new Error("Only the verified Super Admin may approve their own license draft");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
