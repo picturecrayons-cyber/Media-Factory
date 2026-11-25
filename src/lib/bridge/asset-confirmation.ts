@@ -11,6 +11,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   byteSize: number;
   contentType: string | null;
   checksum: string | null;
+  sha256: string;
   sourceKey: string;
   sealedKey: string;
 }): Promise<boolean> {
@@ -39,6 +40,7 @@ async function persistVerifiedAssetScoped(
     byteSize: number;
     contentType: string | null;
     checksum: string | null;
+  sha256: string;
     sourceKey: string;
     sealedKey: string;
   },
@@ -64,7 +66,7 @@ async function persistVerifiedAssetScoped(
               )` : "";
   const rows = await sql.query<{ entity_id: string }>(`
     with verified as (
-      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6
+      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6, sha256 = $10, checksum_sha256 = $10
       where a.id = $3 and a.created_by = $4 and a.s3_key = $7
         and a.title_id = $8
         and exists (
@@ -122,7 +124,8 @@ async function persistVerifiedAssetScoped(
         'titleId', v.title_id,
         'kind', v.kind,
         'byteSize', $1,
-        'checksum', $9::text
+        'checksum', $9::text,
+        'sha256', $10::text
       )
     from verified v join title_set t on t.id = v.title_id
     returning entity_id
@@ -136,6 +139,7 @@ async function persistVerifiedAssetScoped(
     opts.sourceKey,
     opts.titleId,
     opts.checksum,
+    opts.sha256,
   ]);
   return Boolean(rows[0]);
 }
