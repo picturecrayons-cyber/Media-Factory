@@ -12,11 +12,13 @@ test("accepts exact non-null master and current vertical poster pointers", () =>
   assert.equal(hasVerifiedMasterAndArtwork(exactVerticalArtwork, "verified/master", "verified/current-vertical-poster"), true);
 });
 
-test("accepts a sealed master pointer only when source key and asset ID both match", () => {
+test("accepts sealed master and artwork pointers only when source key and asset ID match", () => {
   assert.equal(
     hasVerifiedMasterAndArtwork(
-      [{ id: "asset-123", kind: "master", s3_key: "bridge/title/master/source.mov" },
-       { kind: "poster", s3_key: "bridge/title/poster/current.jpg.verified/poster-123" }],
+      [
+        { id: "asset-123", kind: "master", s3_key: "bridge/title/master/source.mov" },
+        { id: "poster-123", kind: "poster_vertical", s3_key: "bridge/title/poster/current.jpg" },
+      ],
       "bridge/title/master/source.mov.verified/asset-123",
       "bridge/title/poster/current.jpg.verified/poster-123",
     ),
@@ -24,12 +26,15 @@ test("accepts a sealed master pointer only when source key and asset ID both mat
   );
 });
 
-test("rejects a sealed pointer with a different asset ID", () => {
+test("rejects sealed pointers with a different asset ID", () => {
   assert.equal(
     hasVerifiedMasterAndArtwork(
-      [{ id: "asset-123", kind: "master", s3_key: "bridge/title/master/source.mov" }, { kind: "poster", s3_key: "verified/poster" }],
-      "bridge/title/master/source.mov.verified/other-asset",
-      "verified/poster",
+      [
+        { id: "asset-123", kind: "master", s3_key: "bridge/title/master/source.mov" },
+        { id: "poster-123", kind: "poster", s3_key: "bridge/title/poster/current.jpg" },
+      ],
+      "bridge/title/master/source.mov.verified/asset-123",
+      "bridge/title/poster/current.jpg.verified/other-poster",
     ),
     false,
   );
