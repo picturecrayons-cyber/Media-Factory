@@ -156,6 +156,7 @@ const owner = {
 };
 const qc = { ...owner, userId: "qc", internalRole: "qc_reviewer" as const };
 const legal = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
+const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
 const license = {
   titleId: "title-123",
   territories: ["WORLDWIDE"],
@@ -184,7 +185,7 @@ test("real SQL services persist QC, independently approved license, lifecycle an
       }),
     );
     await f.sql.transaction((tx) =>
-      f.review(tx, legal, {
+      f.review(tx, superAdmin, {
         titleId: "title-123",
         stage: "LEGAL",
         decision: "APPROVE",
@@ -303,6 +304,29 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
     await f.db.close();
   }
 });
+
+test("legal reviewer cannot finalize a rights license; verified Super Admin is required", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123",
+        stage: "LEGAL",
+        decision: "APPROVE",
+        note: "Evidence reviewed and ready",
+        grantId: saved.grantId,
+      })),
+      /Only a verified Super Admin/,
+    );
+    assert.equal((await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status, "DRAFT");
+    assert.equal((await f.sql.query<{ status: string }>("select status from bridge_titles"))[0].status, "RIGHTS_REVIEW");
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("license author cannot approve their own agreement", async () => {
   const f = await fixture();
   try {
