@@ -207,7 +207,7 @@ function BuyerLoopDesk({ mode }: { mode: "buyer" | "investor" | "viewer" | "supe
           <section className="rounded-2xl border border-line bg-surface p-5">
             <h3 className="font-display text-xl font-semibold">Investment-interest notifications</h3>
             <div className="mt-3 space-y-2">
-              {interestActivity.map((item: any) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-3 text-xs"><div><p className="font-semibold">{item.title_name}</p><p className="mt-1 text-muted">{item.buyer_name} · {item.buyer_email} · {item.account_type}</p><p className="mt-1 text-muted">{item.created_at}</p></div><span className="rounded-full border border-line px-2 py-1">Email: {item.email_status ?? "NOT SENT"}</span></div>)}
+              {interestActivity.map((item: any) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-3 text-xs"><div><p className="font-semibold">{item.title_name}</p><p className="mt-1 text-muted">{item.buyer_name} · {item.buyer_email} · {item.account_type}</p><p className="mt-1 text-muted">{item.created_at}</p></div><span className="rounded-full border border-line px-2 py-1">Email: {item.email_status ?? "NOT SENT"}{item.email_failure ? " · " + item.email_failure : ""}</span></div>)}
               {!interestQ.isPending && interestActivity.length === 0 ? <p className="text-sm text-muted">No investment-interest records yet.</p> : null}
             </div>
           </section>
