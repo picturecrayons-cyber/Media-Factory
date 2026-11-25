@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
@@ -6,6 +7,7 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
+import { listMyOwnerSubmissionStatuses } from "@/lib/bridge/owner-submission-intake";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -42,6 +44,8 @@ function Studio() {
               <Link to="/account" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Account</strong><p className="mt-1 text-sm text-muted">Studio account profile</p></Link>
               <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
             </section>
+
+            <StudioOwnerSubmissionStatus />
 
             <section className="space-y-4">
               <div>
@@ -96,5 +100,34 @@ function Studio() {
         </BridgeShell>
       )}
     </RequireBridge>
+  );
+}
+
+
+function StudioOwnerSubmissionStatus() {
+  const statusQ = useQuery({
+    queryKey: ["my-owner-submission-status"],
+    queryFn: () => listMyOwnerSubmissionStatuses(),
+    retry: false,
+  });
+  const rows = statusQ.data?.submissions ?? [];
+  return (
+    <section aria-labelledby="studio-owner-submission-status-title" className="rounded-sm border border-line bg-surface p-5">
+      <h2 id="studio-owner-submission-status-title" className="font-display text-xl font-semibold">Bridge Admin Submission Status</h2>
+      <p className="mt-1 text-sm text-muted">Only submissions belonging to your verified Studio organization are shown. Admin decisions and internal notes are not exposed.</p>
+      {statusQ.isPending ? <p className="mt-3 text-sm text-muted">Loading your submission status…</p> : null}
+      {statusQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Your submission status is not available right now.</p> : null}
+      {statusQ.isSuccess && rows.length === 0 ? <p className="mt-3 text-sm text-muted">No owner submissions yet.</p> : null}
+      {statusQ.isSuccess && rows.length > 0 ? (
+        <ul className="mt-3 divide-y divide-line">
+          {rows.map((row) => (
+            <li key={row.title_id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <span className="font-medium">{row.title_name}</span>
+              <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{row.submission_status.replaceAll("_", " ")}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }

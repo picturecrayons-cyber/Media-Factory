@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
-import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
-import { getDashboardSession } from "@/lib/bridge/session";
+import { listBridgeAdminOwnerSubmissionQueue } from "@/lib/bridge/owner-submission-intake";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -15,7 +15,7 @@ function Dashboard() {
   return (
     <RequireBridge allow="super_admin">
       {(actor) => (
-        <BridgeShell actor={actor} title="Founder control centre">
+        <BridgeShell actor={actor} title="Founder Centre">
           <DashboardBody />
         </BridgeShell>
       )}
@@ -23,282 +23,143 @@ function Dashboard() {
   );
 }
 
-const ADMIN_MODULES = [
-  {
-    title: "Titles & media",
-    description: "Title records, metadata, artwork, uploads, QC and rights.",
-    to: "/workspace",
-  },
-  {
-    title: "Operations & approvals",
-    description: "Operational review workstations and approval queues.",
-    to: "/admin/workstations",
-  },
-  {
-    title: "Buyer desk & licensing",
-    description: "Buyer activity, offers and licensing workflow.",
-    to: "/buyer",
-  },
-  {
-    title: "Deliveries & services",
-    description: "Delivery work and service requests.",
-    to: "/deliveries",
-  },
-  {
-    title: "People & access",
-    description: "Internal users, invitations and access profiles.",
-    to: "/internal",
-  },
-  {
-    title: "CMS & site content",
-    description: "Bridge-managed website content.",
-    to: "/cms",
-  },
-] as const;
-
-const ACTION_GUIDANCE: Record<string, string> = {
-  QC_REVIEW: "QC review is pending",
-  RIGHTS_REVIEW: "Rights review is pending",
-  LICENSING_READY: "Licensing decision is pending",
-};
+function getIndiaGreeting() {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date()),
+  );
+  if (hour >= 5 && hour < 12) return "Good morning";
+  if (hour >= 12 && hour < 17) return "Good afternoon";
+  if (hour >= 17 && hour < 21) return "Good evening";
+  return "Good night";
+}
 
 function DashboardBody() {
-  const dashboardQ = useQuery({
-    queryKey: ["bridge-dashboard-session"],
-    queryFn: () => getDashboardSession(),
-    retry: false,
-  });
+  const [greeting, setGreeting] = useState("Good morning");
+  useEffect(() => {
+    const refresh = () => setGreeting(getIndiaGreeting());
+    refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
     queryFn: () => listTitles(),
-    enabled: dashboardQ.isSuccess,
     retry: 1,
   });
-
-  if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
-  if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
+  const submissionsQ = useQuery({
+    queryKey: ["bridge-admin-owner-submission-queue"],
+    queryFn: () => listBridgeAdminOwnerSubmissionQueue(),
+    retry: false,
+  });
 
   const titles = titlesQ.data?.titles ?? [];
-  const actionItems = titles.filter((title) => title.status in ACTION_GUIDANCE);
-  const liveOrCommercial = titles.filter((title) =>
-    ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status),
-  );
-  const readyToList = titles.filter((title) => title.status === "LICENSING_READY").length;
-  const activeDeals = titles.filter((title) =>
-    title.status === "LICENSED" || title.status === "IN_NEGOTIATION",
+  const awaitingReview = titles.filter((title) =>
+    ["QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(title.status),
   ).length;
-  const licensedValuePaise = titles.reduce(
-    (sum, title) =>
-      title.status === "LICENSED" || title.status === "DELIVERED"
-        ? sum + title.licensingFeePaise
-        : sum,
-    0,
-  );
-  const reportingUnavailable = titlesQ.isError;
-  const metricValue = (value: number) =>
-    titlesQ.isPending || reportingUnavailable ? "—" : String(value);
-  const moneyValue =
-    titlesQ.isPending || reportingUnavailable
-      ? "—"
-      : `₹${(licensedValuePaise / 100).toLocaleString("en-IN")}`;
+  const titleCount = titlesQ.isSuccess ? String(titles.length) : "Not available";
+  const reviewCount = titlesQ.isSuccess ? String(awaitingReview) : "Not available";
+  const peopleCount = "Not available";
+  const organizationCount = "Not available";
+  const submissions = submissionsQ.data?.submissions ?? [];
+
+  const quickActions = [
+    { title: "Title Library", description: "Open title records and submissions.", to: "/workspace" },
+    { title: "QC & Rights", description: "Review operational decisions.", to: "/admin/workstations" },
+    { title: "Buyers & Organizations", description: "Manage buyer access and organizations.", to: "/admin/buyers" },
+    { title: "Audit & Security", description: "Inspect persisted operator activity.", to: "/admin/audit" },
+  ];
 
   return (
-    <div className="space-y-7">
-      <section className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-            Crayons Bridge · Super Admin
-          </p>
-          <h2 className="font-display text-3xl font-semibold">Founder control centre</h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted">
-            One place to see what needs attention, understand the business and open the right workspace.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            to="/workspace"
-            className="rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-[#041018]"
-          >
-            Open titles
-          </Link>
-          <Link
-            to="/admin/workstations"
-            className="rounded-sm border border-line px-4 py-2 text-sm font-semibold"
-          >
-            Open operations
-          </Link>
-        </div>
-      </section>
-
-      <section aria-labelledby="today-title" className="rounded-sm border border-line">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-4">
-          <div>
-            <h3 id="today-title" className="font-display text-xl font-semibold">Needs your attention</h3>
-            <p className="mt-1 text-sm text-muted">
-              Only titles in review or licensing-decision states are listed here.
-            </p>
-          </div>
-          <p className="text-sm font-semibold">
-            {titlesQ.isPending || reportingUnavailable ? "—" : actionItems.length} pending
-          </p>
-        </div>
-        {titlesQ.isPending ? (
-          <p className="px-4 py-6 text-sm text-muted">Loading the action queue…</p>
-        ) : reportingUnavailable ? (
-          <p role="alert" className="px-4 py-6 text-sm text-accent">
-            The action queue could not be loaded. Refresh to retry; no zero values are assumed.
-          </p>
-        ) : actionItems.length ? (
-          <ul className="divide-y divide-line">
-            {actionItems.slice(0, 6).map((title) => (
-              <li
-                key={title.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium">{title.name}</p>
-                  <p className="mt-1 text-xs text-muted">
-                    {ACTION_GUIDANCE[title.status]} · {title.status.replaceAll("_", " ").toLowerCase()}
-                  </p>
-                </div>
-                <Link
-                  to="/workspace"
-                  className="shrink-0 text-sm font-semibold text-accent hover:underline"
-                >
-                  Review in workspace →
-                </Link>
-              </li>
-            ))}
-            {actionItems.length > 6 && (
-              <li className="px-4 py-3 text-sm text-muted">
-                Showing 6 of {actionItems.length}.{" "}
-                <Link to="/workspace" className="font-semibold text-accent hover:underline">
-                  View all titles
-                </Link>
-              </li>
-            )}
-          </ul>
-        ) : (
-          <div className="px-4 py-6">
-            <p className="font-medium">No title decision is waiting in these states.</p>
-            <p className="mt-1 text-sm text-muted">
-              This does not mean every title is published or commercially ready. Check the title workspace for drafts and other workflow states.
-            </p>
-          </div>
-        )}
-      </section>
-
-      <section aria-labelledby="business-title" className="space-y-3">
-        <div>
-          <h3 id="business-title" className="font-display text-xl font-semibold">Business snapshot</h3>
-          <p className="mt-1 text-sm text-muted">
-            Values are derived from the current title list; they are not payment-settlement or accounting reports.
-          </p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Stat label="Licensed value*" value={moneyValue} />
-          <Stat label="Live / commercial titles" value={metricValue(liveOrCommercial.length)} />
-          <Stat label="Ready for licensing review" value={metricValue(readyToList)} />
-          <Stat label="Licensed or negotiating deals" value={metricValue(activeDeals)} />
-        </div>
-        <p className="text-xs text-muted">
-          *Sum of recorded licensing fees for licensed or delivered titles; not cash received.
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-7">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
+          Crayons Bridge · Super Admin
+        </p>
+        <h2 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+          {greeting}, Super Admin
+        </h2>
+        <p className="mt-2 text-sm text-muted">
+          Here are the items that need your attention today.
         </p>
       </section>
 
-      <section aria-labelledby="portfolio-title" className="space-y-3">
-        <div>
-          <h3 id="portfolio-title" className="font-display text-xl font-semibold">Title portfolio</h3>
-          <p className="mt-1 text-sm text-muted">
-            A simple count by content lane. Buyer visibility still depends on server-side publication and rights gates.
-          </p>
+      <section aria-labelledby="owner-submissions-title" className="rounded-2xl border border-accent/40 bg-surface p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-widest text-accent">Action required · Review queue</p>
+            <h3 id="owner-submissions-title" className="mt-2 font-display text-2xl font-semibold">
+              Owner Submissions
+            </h3>
+            <p className="mt-2 max-w-2xl text-sm text-muted">
+              Review finished-film submissions sent by Creators and Studios. Accepting intake does not approve QC, Rights, Legal, Licensing or Loop publication.
+            </p>
+          </div>
+          <div className="min-w-[8rem] rounded-xl border border-line px-4 py-3 text-right">
+            <p className="text-xs text-muted">Pending</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">
+              {submissionsQ.isSuccess ? submissions.length : "Not available"}
+            </p>
+          </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {BRIDGE_LOOP_LANES.map((lane) => (
-            <article key={lane.id} className="rounded-sm border border-line px-4 py-3">
-              <p className="text-xs uppercase tracking-widest text-muted">{lane.label}</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {titlesQ.isPending || reportingUnavailable
-                  ? "—"
-                  : titles.filter((title) => loopStageType(title.contentType) === lane.loopType).length}
-              </p>
-              <p className="mt-1 text-xs text-muted">Titles in this content lane</p>
-            </article>
-          ))}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted">
+            {submissionsQ.isPending
+              ? "Loading owner submissions…"
+              : submissionsQ.isError
+                ? "Queue unavailable. The count is not assumed to be zero."
+                : submissions.length
+                  ? "Submissions are waiting for an Admin decision."
+                  : "No pending submissions."}
+          </p>
+          <Link to="/internal" className="inline-flex items-center rounded-full bg-accent px-4 py-2.5 text-sm font-semibold text-bg hover:opacity-90">
+            Open submission queue →
+          </Link>
         </div>
       </section>
 
-      <section aria-labelledby="workspaces-title" className="space-y-3">
+      <section aria-label="Operational status" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Title Library" value={titleCount} note="Total titles returned by the title query" />
+        <Stat label="QC & Rights" value={reviewCount} note="Titles awaiting review in these stages" />
+        <Stat label="People" value={peopleCount} note="Verified profiles · source not connected" />
+        <Stat label="Organizations" value={organizationCount} note="Active organizations · source not connected" />
+      </section>
+
+      <section aria-labelledby="quick-actions-title" className="space-y-3">
         <div>
-          <h3 id="workspaces-title" className="font-display text-xl font-semibold">Workspaces</h3>
-          <p className="mt-1 text-sm text-muted">
-            Choose the workspace by the job you need to do. Access remains role-gated.
-          </p>
+          <h3 id="quick-actions-title" className="font-display text-xl font-semibold">Quick Actions</h3>
+          <p className="mt-1 text-sm text-muted">Open the right workspace in one step.</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {ADMIN_MODULES.map((module) => (
-            <Link
-              key={module.title}
-              to={module.to}
-              className="group rounded-sm border border-line p-4 transition-colors hover:border-accent"
-            >
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {quickActions.map((item) => (
+            <Link key={item.title} to={item.to} className="group rounded-xl border border-line bg-surface p-4 transition-colors hover:border-accent">
               <div className="flex items-center justify-between gap-3">
-                <h4 className="font-semibold">{module.title}</h4>
+                <h4 className="font-semibold">{item.title}</h4>
                 <span aria-hidden="true" className="text-accent">→</span>
               </div>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{module.description}</p>
-              <p className="mt-4 text-xs font-semibold text-accent">Open workspace</p>
+              <p className="mt-2 text-sm text-muted">{item.description}</p>
+              <p className="mt-4 text-xs font-semibold text-accent">Open →</p>
             </Link>
           ))}
         </div>
       </section>
-
-      <section aria-labelledby="recent-title-records" className="rounded-sm border border-line">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
-          <div>
-            <h3 id="recent-title-records" className="font-semibold">Recently updated titles</h3>
-            <p className="text-xs text-muted">Latest records returned by the title workspace query.</p>
-          </div>
-          <Link to="/workspace" className="text-sm font-semibold text-accent hover:underline">
-            View all titles →
-          </Link>
-        </div>
-        {titlesQ.isPending ? (
-          <p className="px-4 py-6 text-sm text-muted">Loading title records…</p>
-        ) : reportingUnavailable ? (
-          <p role="alert" className="px-4 py-6 text-sm text-accent">
-            Title records could not be loaded. Refresh to retry.
-          </p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {titles.slice(0, 6).map((title) => (
-              <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
-                <div className="min-w-0">
-                  <p className="font-medium">{title.name}</p>
-                  <p className="break-all font-mono text-[10px] text-muted">ID: {title.id}</p>
-                </div>
-                <span className="shrink-0 rounded-sm border border-line px-2 py-1 text-xs text-muted">
-                  {title.status.replaceAll("_", " ").toLowerCase()}
-                </span>
-              </li>
-            ))}
-            {!titles.length && (
-              <li className="px-4 py-6 text-sm text-muted">
-                No title records were returned by the canonical query.
-              </li>
-            )}
-          </ul>
-        )}
-      </section>
+      <p className="text-xs text-muted">
+        Counts are shown only when their source query succeeds. “Not available” means the data source is not connected or did not respond; it is not a zero count.
+      </p>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div className="rounded-sm border border-line px-4 py-3">
-      <p className="text-xs uppercase tracking-widest text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
+    <div className="rounded-xl border border-line bg-surface px-4 py-4">
+      <p className="text-xs font-semibold uppercase tracking-widest text-muted">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
+      <p className="mt-1 text-xs text-muted">{note}</p>
     </div>
   );
 }
