@@ -184,7 +184,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     // Never infer verification from the database byte_size field. Re-check
     // the source object with OCI on every confirmation request, including
     // legacy rows that already carry a size but still point at an unsealed key.
-    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    const { verifyObject, sealVerifiedObject, verifyObjectSha256 } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
@@ -203,6 +203,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
+    // OCI ETag is not a content checksum. Stream the sealed object back and
+    // compare the actual bytes before recording a successful confirmation.
+    const checksum = await verifyObjectSha256(sealedKey, object.sha256 ?? "", sealed.byteSize);
     // Persist asset/title/audit state first. Do not advance the migration queue
     // if persistence fails: its prior state remains the truthful state.
     const confirmed = await persistVerifiedAsset(sql, {
@@ -214,6 +217,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       byteSize: sealed.byteSize,
       contentType: sealed.contentType,
       checksum: sealed.etag,
+      sha256: checksum.sha256,
       sourceKey: asset.s3_key,
       sealedKey,
     });
