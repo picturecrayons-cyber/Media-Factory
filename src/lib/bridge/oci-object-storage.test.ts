@@ -85,6 +85,9 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
             assert.equal(JSON.parse(String(init?.body)).sourceObjectIfMatch, "source-etag");
             return new Response(null, { status: 202, headers: { "opc-work-request-id": "copy/id" } });
           }
+          if (method === "GET" && url.pathname.startsWith("/n/")) {
+            return new Response("hello world!", { status: 200, headers: { "content-length": "12" } });
+          }
           if (method === "GET") {
             assert.equal(url.pathname, "/workRequests/copy%2Fid");
             const headers = new Headers(init?.headers);
@@ -169,6 +172,9 @@ test("OCI copy work-request handles transient 404 propagation delay and recovers
       if (method === "POST") {
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-transient-1" } });
       }
+      if (method === "GET" && url.pathname.startsWith("/n/")) {
+        return new Response("x".repeat(42), { status: 200, headers: { "content-length": "42" } });
+      }
       if (method === "GET") {
         getAttempts += 1;
         // First attempt returns 404 (temporary not-yet-visible during propagation window)
@@ -217,6 +223,9 @@ test("OCI copy work-request fails closed on persistent 404 after propagation gra
       const method = init?.method || "GET";
       if (method === "POST") {
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-persistent-404" } });
+      }
+      if (method === "GET" && url.pathname.startsWith("/n/")) {
+        return new Response("x".repeat(42), { status: 200, headers: { "content-length": "42" } });
       }
       if (method === "GET") {
         return new Response(null, { status: 404 });
@@ -350,6 +359,9 @@ test("OCI Recovery copy uses a distinct destination bucket and verifies the Reco
         assert.equal(body.destinationBucket, "recovery-vault");
         assert.equal(body.sourceObjectIfMatch, "source-etag");
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "recovery-copy/1" } });
+      }
+      if (method === "GET" && url.pathname.startsWith("/n/")) {
+        return new Response("hello world!", { status: 200, headers: { "content-length": "12" } });
       }
       if (method === "GET") {
         assert.equal(url.pathname, "/workRequests/recovery-copy%2F1");
