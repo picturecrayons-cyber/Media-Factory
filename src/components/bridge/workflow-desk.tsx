@@ -506,6 +506,12 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     Captured rental receipts: {revenueReceipts.length}. Settlement requires
                     reconciliation of refunds, fees, tax and agreed terms; no payout is implied.
                   </p>
+                  {revenue.data?.mappingWarnings?.length ? (
+                    <p role="alert" className="rounded-xl border border-amber-500/40 p-3 text-sm">
+                      Revenue held: Loop title mapping {revenue.data.mappingWarnings.map((row) => row.loopTitle).join(", ")}
+                      {" "}does not match this Bridge title ({title.name}). No receipt is attributed until the canonical title link is verified and corrected.
+                    </p>
+                  ) : null}
                   {revenueReceipts.length ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-xl border border-line p-4">
