@@ -275,15 +275,23 @@ export const listLegalQueue = createServerFn({ method: "GET" })
     if (actor.internalRole !== "legal_reviewer") throw new Error("Legal access required");
     assertPermission(actor, "title.legal_queue_read");
     const sql = await getSql();
-    const rows = await sql<{
-      id: string; name: string; status: string; created_at: string | Date; legal_cases: unknown;
-    }>`
-      select t.id,t.name,t.status,t.created_at,
-        (select coalesce(json_agg(json_build_object('status',l.status,'classification',l.classification,
-          'evidence',l.evidence,'restrictions',l.restrictions,'reviewedAt',l.reviewed_at)
-          order by l.created_at desc),'[]'::json) from bridge_legal_cases l where l.title_id=t.id) as legal_cases
-      from bridge_titles t where t.status='RIGHTS_REVIEW' and t.archived_at is null
-      order by t.updated_at asc limit 100
-    `;
+    const rows = await sql.unsafe(
+      "select t.id,t.name,t.status,t.created_at,(select coalesce(json_agg(json_build_object('status',l.status,'evidence',l.evidence,'reviewedAt',l.reviewed_at) order by l.created_at desc),'[]'::json) from bridge_legal_cases l where l.title_id=t.id) as legal_cases,(select g.id::text from bridge_rights_grants g where g.title_id=t.id and g.status='DRAFT' order by g.created_at desc limit 1) as grant_id,(select to_jsonb(g) from bridge_rights_grants g where g.title_id=t.id and g.status='DRAFT' order by g.created_at desc limit 1) as grant_details from bridge_titles t where t.status='RIGHTS_REVIEW' and t.archived_at is null order by t.updated_at asc limit 100",
+    );
     return { queue: JSON.parse(JSON.stringify(rows)) };
+  });
+
+
+export const listStoryConceptSubmissions = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") throw new Error("Admin submissions access required");
+    assertPermission(actor, "title.admin_queue_read");
+    const sql = await getSql();
+    const rows = await sql.unsafe(
+      "select sc.id::text,sc.title_id,bt.name as title_name,bt.owner_user_id,bt.owner_account_type,p.display_name as owner_name,sc.owner_submission_status,sc.fee_certified_at,sc.legal_status,sc.editorial_status,sc.curation_status,sc.introduced_to_buyers_at,sc.created_at from bridge_story_concept_submissions sc join bridge_titles bt on bt.id=sc.title_id left join bridge_profiles p on p.user_id=bt.owner_user_id order by sc.created_at desc limit 200",
+    );
+    return { storyConcepts: JSON.parse(JSON.stringify(rows)) };
   });
