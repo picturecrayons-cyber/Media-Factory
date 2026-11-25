@@ -332,6 +332,46 @@ export const createTitle = createServerFn({ method: "POST" })
     return { title, submission: isPublicSubmission };
   });
 
+export const listBuyerCataloguePreview = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
+    if (actor.accountType !== "buyer" && !actor.internalRole) {
+      throw new Error("Forbidden");
+    }
+    assertPermission(actor, "title.read_catalog");
+    const sql = await getSql();
+    const rows = await sql<TitleRow>`
+      select t.* from bridge_titles t
+      where t.status in ('LIVE_FOR_BUYERS', 'IN_NEGOTIATION', 'LICENSED', 'DELIVERED')
+        and public.bridge_title_buyer_visibility(t.id)
+        and (
+          not exists (
+            select 1 from information_schema.columns
+            where table_schema = 'public'
+              and table_name = 'bridge_titles'
+              and column_name = 'merged_into_title_id'
+          )
+          or to_jsonb(t)->>'merged_into_title_id' is null
+        )
+      order by t.updated_at desc
+      limit 200
+    `;
+    return {
+      titles: rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        synopsis: row.synopsis ?? "",
+        language: row.language,
+        year: row.year,
+        runtimeMinutes: row.runtime_minutes,
+        licensingFeePaise: Number(row.licensing_fee_paise ?? 0),
+        status: row.status,
+      })),
+    };
+  });
+
 export const listTitles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
