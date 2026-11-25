@@ -50,9 +50,27 @@ if (
   );
 }
 
-const names = (await readdir(MIGRATIONS_DIR))
+const allMigrationNames = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
+
+// The owner-submission migration is a new PR candidate, not part of the
+// recovered Production migration ledger. Replay the 70 ledger files first,
+// then apply this candidate only to the disposable local replay database.
+const candidateMigrations = new Set([
+  "20261123120000_bridge_homepage_carousel.sql",
+  "20261123170000_bridge_legal_acceptances.sql",
+  "20261123190000_bridge_service_request_workflow.sql",
+  "20261123200000_bridge_title_finance_and_reconciliation.sql",
+  "20261123220000_bridge_owner_submission_intake_only.sql",
+]);
+const candidateNames = allMigrationNames.filter((name) => candidateMigrations.has(name));
+const names = allMigrationNames.filter((name) => !candidateMigrations.has(name));
+if (candidateNames.length !== candidateMigrations.size) {
+  throw new Error(
+    `Expected ${candidateMigrations.size} candidate migrations; found ${candidateNames.length}`,
+  );
+}
 
 if (names.length !== EXPECTED_MIGRATIONS) {
   throw new Error(
@@ -447,6 +465,88 @@ try {
     console.log(`[migration-replay] applied ${name}`);
   }
 
+  // Creator Document Vault and title-document links are verified pre-ledger
+  // Production baselines. Recreate only empty schemas in this disposable replay DB.
+  await client.query(`
+    create table if not exists public.bridge_creator_documents (
+      id text primary key,
+      owner_user_id text not null references public.bridge_profiles(user_id) on delete restrict,
+      owner_account_type text not null check (owner_account_type in ('independent_creator','studio')),
+      owner_organization_id text,
+      document_type text not null check (document_type in (
+        'FINISHED_FILM_AGREEMENT','STORY_CONCEPT_AGREEMENT','DISTRIBUTION_AGREEMENT',
+        'OWNERSHIP_CHAIN_OF_TITLE','AUTHOR_ASSIGNMENT','MUSIC_RIGHTS','OTHER'
+      )),
+      file_name text not null,
+      content_type text not null,
+      byte_size bigint,
+      storage_key text not null unique,
+      status text not null default 'PENDING_UPLOAD' check (status in ('PENDING_UPLOAD','VERIFIED','REVOKED')),
+      created_by text not null references public.bridge_profiles(user_id) on delete restrict,
+      verified_at timestamptz,
+      revoked_at timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      constraint bridge_creator_documents_check check (
+        (owner_account_type='independent_creator' and owner_organization_id is null)
+        or owner_account_type='studio'
+      )
+    );
+    create index if not exists bridge_creator_documents_owner_idx
+      on public.bridge_creator_documents(owner_user_id,created_at desc);
+    create index if not exists bridge_creator_documents_org_idx
+      on public.bridge_creator_documents(owner_organization_id,created_at desc)
+      where owner_organization_id is not null;
+
+    create table if not exists public.bridge_title_document_links (
+      id text primary key,
+      title_id text not null references public.bridge_titles(id) on delete cascade,
+      document_id text not null references public.bridge_creator_documents(id) on delete restrict,
+      evidence_type text not null check (evidence_type in (
+        'FINISHED_FILM_AGREEMENT','STORY_CONCEPT_AGREEMENT','DISTRIBUTION_AGREEMENT',
+        'OWNERSHIP_CHAIN_OF_TITLE','AUTHOR_ASSIGNMENT','MUSIC_RIGHTS','OTHER'
+      )),
+      linked_by text not null references public.bridge_profiles(user_id) on delete restrict,
+      created_at timestamptz not null default now(),
+      unique(title_id,document_id,evidence_type)
+    );
+    create index if not exists bridge_title_document_links_title_idx
+      on public.bridge_title_document_links(title_id,created_at desc);
+
+    alter table public.bridge_creator_documents enable row level security;
+    alter table public.bridge_title_document_links enable row level security;
+    revoke all on table public.bridge_creator_documents,public.bridge_title_document_links from public,anon,authenticated;
+    grant all on table public.bridge_creator_documents,public.bridge_title_document_links to postgres,service_role;
+  `);
+  await client.query(`
+    do $document_deny$
+    begin
+      if not exists (select 1 from pg_policy where polrelid='public.bridge_creator_documents'::regclass and polname='deny_browser_access') then
+        create policy deny_browser_access on public.bridge_creator_documents for all to anon,authenticated using(false) with check(false);
+      end if;
+      if not exists (select 1 from pg_policy where polrelid='public.bridge_title_document_links'::regclass and polname='deny_browser_access') then
+        create policy deny_browser_access on public.bridge_title_document_links for all to anon,authenticated using(false) with check(false);
+      end if;
+    end
+    $document_deny$;
+  `);
+  console.log("[migration-replay] restored empty pre-ledger Creator Document Vault schema locally; no Production document rows copied");
+
+  // Apply candidate-only migrations after the recovered Production ledger.
+  // This is an isolated local replay database, never a hosted STAGING/PRODUCTION DB.
+  for (const name of candidateNames) {
+    const sql = await readFile(join(MIGRATIONS_DIR, name), "utf8");
+    await client.query("BEGIN");
+    try {
+      await client.query(sql);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw new Error(`Candidate migration failed: ${name}: ${error?.message || error}`);
+    }
+    console.log(`[migration-replay] applied candidate-only migration ${name}`);
+  }
+
   // Production's current Bridge Data API security baseline is not fully
   // represented by the 69-row migration ledger. Recreate it locally after
   // replay from read-only Production catalog evidence only.
@@ -637,6 +737,20 @@ try {
     "private.bridge_inbound_mail_events",
     "public.bridge_production_assets",
     "public.bridge_delivery_jobs",
+    "public.bridge_creator_documents",
+    "public.bridge_title_document_links",
+    "public.bridge_legal_acceptances",
+    "public.bridge_service_requests",
+    "public.bridge_service_request_events",
+    "public.bridge_service_request_notifications",
+    "public.bridge_story_concept_review_events",
+    "public.bridge_story_concept_notifications",
+    "public.bridge_title_owner_interests",
+    "public.bridge_investment_agreements",
+    "public.bridge_licensing_receipts",
+    "public.bridge_licensing_allocations",
+    "public.bridge_finance_reconciliations",
+    "public.bridge_finance_reconciliation_items",
   ];
   const tableCheck = await client.query(
     "select name, to_regclass(name) is not null as exists from unnest($1::text[]) as t(name)",
@@ -649,6 +763,33 @@ try {
         missingTables.map((row) => row.name).join(", "),
     );
   }
+
+  const financeRls = await client.query(`
+    select c.relname,c.relrowsecurity as rls_enabled,
+      exists(select 1 from pg_policy p where p.polrelid=c.oid
+        and p.polname=c.relname || '_deny_client' and p.polcmd='*'
+        and coalesce(pg_get_expr(p.polqual,p.polrelid),'')='false'
+        and coalesce(pg_get_expr(p.polwithcheck,p.polrelid),'')='false') as deny_policy_valid,
+      has_table_privilege('anon',c.oid,'SELECT') as anon_select,
+      has_table_privilege('authenticated',c.oid,'SELECT') as authenticated_select,
+      has_table_privilege('service_role',c.oid,'SELECT') as service_select,
+      has_table_privilege('service_role',c.oid,'INSERT') as service_insert,
+      has_table_privilege('service_role',c.oid,'UPDATE') as service_update
+    from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and c.relname=any($1::text[])
+    order by c.relname
+  `, [[
+    "bridge_title_owner_interests","bridge_investment_agreements",
+    "bridge_licensing_receipts","bridge_licensing_allocations",
+    "bridge_finance_reconciliations","bridge_finance_reconciliation_items"
+  ]]);
+  if (financeRls.rows.length !== 6 || financeRls.rows.some((row) =>
+    !row.rls_enabled || !row.deny_policy_valid || row.anon_select ||
+    row.authenticated_select || !row.service_select || !row.service_insert || !row.service_update
+  )) {
+    throw new Error("Title finance server-only RLS/grants verification failed: " + JSON.stringify(financeRls.rows));
+  }
+  console.log("[migration-replay] PASS: all six title-finance tables enforce deny-client RLS and server-role grants");
 
   const baselineRls = await client.query(`
     select
@@ -690,6 +831,20 @@ try {
               'private.bridge_is_internal' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')
             ) > 0
         )
+        when c.relname in (
+          'bridge_creator_documents','bridge_title_document_links','bridge_legal_acceptances',
+          'bridge_service_requests','bridge_service_request_events','bridge_service_request_notifications',
+          'bridge_story_concept_review_events','bridge_story_concept_notifications'
+        ) then exists (
+          select 1 from pg_policy p
+          where p.polrelid = c.oid
+            and p.polname = 'deny_browser_access'
+            and p.polcmd = '*'
+            and p.polroles @> ARRAY[(select oid from pg_roles where rolname='anon'),(select oid from pg_roles where rolname='authenticated')]
+            and cardinality(p.polroles) = 2
+            and coalesce(pg_get_expr(p.polqual,p.polrelid),'') = 'false'
+            and coalesce(pg_get_expr(p.polwithcheck,p.polrelid),'') = 'false'
+        )
         else false
       end as policy_state_valid
     from pg_class c
@@ -704,15 +859,59 @@ try {
     "loop_media_migration_queue",
     "loop_parental_controls",
     "bridge_delivery_jobs",
+    "bridge_creator_documents",
+    "bridge_title_document_links",
+    "bridge_legal_acceptances",
+    "bridge_service_requests",
+    "bridge_service_request_events",
+    "bridge_service_request_notifications",
+    "bridge_story_concept_review_events",
+    "bridge_story_concept_notifications",
   ]]);
   if (
-    baselineRls.rows.length !== 6 ||
+    baselineRls.rows.length !== 14 ||
     baselineRls.rows.some((row) => !row.rls_enabled || !row.policy_state_valid)
   ) {
     throw new Error(
       "Pre-ledger baseline RLS/policy verification failed: " +
         JSON.stringify(baselineRls.rows),
     );
+  }
+
+  const serviceFunctions = await client.query(`
+    select proname,prosecdef,coalesce(array_to_string(proconfig,','),'') as config
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname = any($1::text[])
+  `, [[
+    "bridge_sync_service_request_order_state",
+    "bridge_reject_service_request_event_mutation",
+    "bridge_validate_service_request_status",
+  ]]);
+  if (serviceFunctions.rows.length !== 3 || serviceFunctions.rows.some((row) =>
+    row.prosecdef || !row.config.includes("search_path=pg_catalog, public")
+  )) {
+    throw new Error("Service-request trigger functions must be invoker-only with hardened search_path: " + JSON.stringify(serviceFunctions.rows));
+  }
+  const serviceTriggers = await client.query(`
+    select count(distinct trigger_name)::int as count
+    from information_schema.triggers
+    where trigger_schema='public'
+      and trigger_name in (
+        'bridge_service_request_order_state_sync',
+        'bridge_service_request_events_immutable',
+        'bridge_service_request_status_guard'
+      )
+  `);
+  if (serviceTriggers.rows[0]?.count !== 3) {
+    throw new Error("Service-request lifecycle/immutability triggers are incomplete");
+  }
+  const carouselReady = await client.query(`
+    select
+      exists(select 1 from information_schema.columns where table_schema='public' and table_name='bridge_site_content' and column_name='carousel_slides') as column_ready,
+      exists(select 1 from pg_constraint where conrelid='public.bridge_site_content'::regclass and conname='bridge_site_content_carousel_slides_array_check') as constraint_ready
+  `);
+  if (!carouselReady.rows[0]?.column_ready || !carouselReady.rows[0]?.constraint_ready) {
+    throw new Error("Homepage carousel column/array constraint is incomplete");
   }
 
   const fixtureCheck = await client.query(

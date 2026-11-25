@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { isAdminAcceptedOwnerIntake } from "./title-submission.ts";
 import {
   TITLE_STATUS_ORDER,
   assertTransition,
@@ -24,6 +25,15 @@ describe("title lifecycle", () => {
     assert.equal(canTransition("QC_REVIEW", "DRAFT"), false);
     assert.equal(canTransition("DRAFT", "LIVE_FOR_BUYERS"), false);
     assert.throws(() => assertTransition("LICENSED", "IN_NEGOTIATION"));
+  });
+
+  it("requires explicit Admin acceptance before a title can enter QC", () => {
+    assert.equal(isAdminAcceptedOwnerIntake("ACCEPTED_INTAKE"), true);
+    assert.equal(isAdminAcceptedOwnerIntake("SUBMITTED"), false);
+    assert.equal(isAdminAcceptedOwnerIntake("NEEDS_CORRECTION"), false);
+    assert.equal(isAdminAcceptedOwnerIntake("DRAFT"), false);
+    assert.equal(isAdminAcceptedOwnerIntake(null), false);
+    assert.equal(isAdminAcceptedOwnerIntake(undefined), false);
   });
 
   it("exposes titles to buyers only from LIVE_FOR_BUYERS onward", () => {

@@ -124,9 +124,10 @@ describe("PRD authorization matrix", () => {
 
   it("ordinary admins cannot grant super admin while super admin has an explicit grant matrix", () => {
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
-    assert.equal(canGrantInternalRole(admin(), "admin"), true);
+    assert.equal(canGrantInternalRole(admin(), "admin"), false);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
-    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(superAdmin(), "admin"), true);
+    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), false);
     assert.equal(canGrantInternalRole(qc, "viewer"), false);
     assert.equal(canGrantInternalRole(actor("unverified", "independent_creator", "admin", false), "viewer"), false);
   });
@@ -176,7 +177,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(canAccessDashboard(viewer()), false);
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
-    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), false);
     assert.equal(
       canAccessDashboard(actor("super-u", "independent_creator", "super_admin", false)),
       false,
@@ -235,6 +236,36 @@ describe("PRD authorization matrix", () => {
     assert.equal(workspaceHome(superAdmin()), "/dashboard");
     assert.equal(workspaceHome(admin()), "/internal");
     assert.equal(workspaceHome(qc), "/internal?desk=qc");
+  });
+});
+
+
+describe("Creator / Studio service request authorization", () => {
+  it("allows Creator and Studio owners to request/read and accept quotes, but not manage the queue", () => {
+    for (const owner of [creator(), studio()]) {
+      assert.equal(hasPermission(owner, "service.request_create"), true);
+      assert.equal(hasPermission(owner, "service.request_read"), true);
+      assert.equal(hasPermission(owner, "service.quote_accept"), true);
+      assert.equal(hasPermission(owner, "service.request_manage"), false);
+    }
+  });
+
+  it("keeps service request queue management Super Admin-only", () => {
+    for (const denied of [buyer(), investor(), admin(), viewer(), qc, legal, finance]) {
+      assert.equal(hasPermission(denied, "service.request_create"), false);
+      assert.equal(hasPermission(denied, "service.request_read"), false);
+      assert.equal(hasPermission(denied, "service.request_manage"), false);
+    }
+    assert.equal(hasPermission(superAdmin(), "service.request_manage"), true);
+  });
+
+  it("scopes Studio service requests to its active organization", () => {
+    const member: Actor = { ...studio(), organizationId: "11111111-1111-4111-8111-111111111111" };
+    const own = { ownerUserId: "studio-owner", ownerAccountType: "studio" as const, ownerOrganizationId: member.organizationId };
+    const foreign = { ...own, ownerOrganizationId: "22222222-2222-4222-8222-222222222222" };
+    assert.equal(canOperateOnTitle(member, own, "service.request_create"), true);
+    assert.equal(canOperateOnTitle(member, foreign, "service.request_create"), false);
+    assert.equal(canOperateOnTitle({ ...member, organizationId: null }, own, "service.request_create"), false);
   });
 });
 

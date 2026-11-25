@@ -7,6 +7,7 @@ import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
+import { TitleFinanceWorkspace } from "@/components/bridge/title-finance-workspace";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -54,6 +55,7 @@ function AdminBody({ actor }: { actor: any }) {
   return (
     <BridgeShell actor={actor} title="Admin dashboard">
       <div className="space-y-5">
+        {actor.internalRole === "super_admin" ? <TitleFinanceWorkspace actor={actor} /> : null}
         <section className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-accent">Crayons Pictures · Operations</p>
@@ -62,6 +64,7 @@ function AdminBody({ actor }: { actor: any }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <a href="/admin/workstations" aria-label="Open workspace"><Button>Open workspace</Button></a>
+            {actor.internalRole === "super_admin" ? <Link to="/admin/services"><Button variant="outline">Service requests</Button></Link> : null}
             <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
             <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Loop ↗</Button></a>
           </div>
