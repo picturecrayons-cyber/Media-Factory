@@ -220,7 +220,9 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
         coalesce(e.payload->>'order_id',e.payload->>'razorpay_order_id',e.payload#>>'{payload,payment,entity,order_id}') as order_id
       from loop_payment_events e left join loop_user_tvod_entitlements t on t.payment_transaction_id=e.razorpay_payment_id
       join loop_titles l on l.id::text=coalesce(e.payload->>'title_id',t.title_id::text)
-      where l.bridge_title_id=${data.titleId} and e.status in ('captured','processed') and e.razorpay_payment_id is not null
+      where l.bridge_title_id=${data.titleId}
+        and lower(btrim(l.title))=lower(btrim(${title.name}))
+        and e.status in ('captured','processed') and e.razorpay_payment_id is not null
       order by e.razorpay_payment_id,e.received_at desc limit 200`;
     const receipts = rows.map((r) => ({
       paymentId: r.payment_id,
@@ -234,6 +236,16 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
           : null,
       currency: r.currency,
     }));
+    const mappingWarnings = await sql<{
+      loop_title_id: string;
+      loop_title: string;
+    }>`
+      select id as loop_title_id,title as loop_title
+      from loop_titles
+      where bridge_title_id=${data.titleId}
+        and lower(btrim(title))<>lower(btrim(${title.name}))
+      order by created_at desc
+    `;
     const settlementEvidence = await sql<{
       id: number;
       metadata: string;
@@ -324,6 +336,11 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
               : null,
         };
       }),
+      mappingWarnings: mappingWarnings.map((row) => ({
+        loopTitleId: row.loop_title_id,
+        loopTitle: row.loop_title,
+        bridgeTitle: title.name,
+      })),
       settlementEvidence: settlementEvidence.map((r) => ({
         id: Number(r.id),
         details: z
