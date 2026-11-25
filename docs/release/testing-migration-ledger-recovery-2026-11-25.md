@@ -81,3 +81,22 @@ A local-only replay runner is now committed at `scripts/supabase-testing-ledger-
 The runner is wired into the existing GitHub Actions CI workflow as `testing-ledger-replay`. It starts a disposable local Supabase stack after quarantining the canonical Production migration directory, then restores that directory and stops the local stack. Static archive-integrity and remote-connection rejection tests are included in `npm test`.
 
 **The replay has not yet been reported as passing.** The branch is still a draft PR and the current head has not returned a completed GitHub Actions run. Until the new CI job completes successfully, this is an implemented test harness, not a replay certification.
+
+## Current Production-ledger delta (read-only snapshot, 2026-11-25)
+
+The live Production ledger currently contains **78** records through `20261124222927`. The committed Production reconciliation document is a dated **70-record** snapshot (2026-11-18), not a current 78-record manifest. Eight live Production entries are later than or absent from that snapshot:
+
+| Live Production version | Live Production name |
+|---|---|
+| 20261116114408 | secure_public_loop_catalog_production |
+| 20261119203855 | bridge_story_concept_author_rights_declaration_20261120 |
+| 20261121042907 | secure_production_asset_owner_helper |
+| 20261122082934 | bridge_creator_document_vault_20261122 |
+| 20261122083819 | bridge_title_owner_submissions_20261122 |
+| 20261122164115 | grant_authenticated_watch_progress_read |
+| 20261123015009 | bridge_owner_submission_production_rollout |
+| 20261124222927 | bridge_qc_verified_asset_gate_20261125 |
+
+There are no version entries in the 70-record snapshot that are absent from the live 78-record ledger. The eight additional live entries must be incorporated into an updated Production evidence manifest with their original source paths, exact file hashes, and commit provenance. Until then, the 70-record manifest is a historical snapshot, not a complete current Production source inventory.
+
+The seven exact Testing-to-Production SQL-body matches above were computed against that 70-record snapshot. They remain valid exact matches to those seven source statements, but the comparison is not exhaustive against all 78 live Production records.
