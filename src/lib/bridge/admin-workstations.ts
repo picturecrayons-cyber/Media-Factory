@@ -16,20 +16,29 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await actorFor(context.userId);
-    if (!actor.internalRole) throw new Error("Forbidden");
+    if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") throw new Error("Forbidden");
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
+    const profilesQuery = actor.internalRole === "super_admin"
+      ? sql`select user_id,email,display_name,account_type,organization_name,internal_role,email_verified,created_at,updated_at from bridge_profiles order by updated_at desc limit 200`
+      : sql`select user_id,email,display_name,account_type,organization_name,internal_role,email_verified,created_at,updated_at from bridge_profiles where account_type not in ('buyer','investor') order by updated_at desc limit 200`;
+    const auditQuery = actor.internalRole === "super_admin"
+      ? sql`select id,actor_user_id,action,entity_type,entity_id,metadata,created_at from bridge_audit_logs order by created_at desc limit 200`
+      : sql`select id,actor_user_id,action,entity_type,entity_id,metadata,created_at from bridge_audit_logs where action not like 'buyer.%' and action not like 'payment.%' and entity_type not in ('bridge_payment','bridge_buyer_interest','buyer') order by created_at desc limit 200`;
     const [titles, assets, assetVersions, qc, legal, rights, packages, publications, profiles, audit] = await Promise.all([
-      sql`select id, name, owner_user_id, owner_account_type, status, language, updated_at from bridge_titles order by updated_at desc limit 200`,
-      sql`select id, title_id, kind, s3_key, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
-      sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`,
-      sql`select id, title_id, asset_version_id, status, automated_findings, reviewer_findings, reviewed_by, reviewed_at, created_at from bridge_qc_cases order by created_at desc limit 200`,
-      sql`select id, title_id, status, classification, evidence, restrictions, reviewed_by, reviewed_at, created_at from bridge_legal_cases order by created_at desc limit 200`,
-      sql`select id, title_id, grant_type, territories, languages, media, window_start, window_end, exclusivity, status, created_by, created_at from bridge_rights_grants order by created_at desc limit 200`,
-      sql`select id, title_id, destination, package_version, rights_grant_id, qc_case_id, legal_case_id, readiness_state, authorized_by, authorized_at, created_at, commercial_model, distributor_exclusivity, revenue_share_percent from bridge_destination_packages order by created_at desc limit 200`,
-      sql`select id, bridge_title_id, loop_title_id, authorization_status, territories, languages, exploitation_models, window_start, window_end, approved_by, approved_at, revoked_at, updated_at from bridge_loop_publications order by updated_at desc limit 200`,
-      sql`select user_id, email, display_name, account_type, organization_name, internal_role, email_verified, created_at, updated_at from bridge_profiles order by updated_at desc limit 200`,
-      sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs order by created_at desc limit 200`,
+      sql`select id,name,owner_user_id,owner_account_type,status,language,updated_at from bridge_titles order by updated_at desc limit 200`,
+      sql`select a.id,a.title_id,a.kind,a.content_type,a.byte_size,
+        coalesce(to_jsonb(a)->>'checksum_sha256',to_jsonb(a)->>'sha256') as checksum_sha256,
+        to_jsonb(a)->>'storage_verified_at' as storage_verified_at
+        from bridge_assets a order by a.created_at desc limit 300`,
+      sql`select id,title_id,asset_group,asset_type,version,language,codec,processing_state,created_at from bridge_asset_versions order by created_at desc limit 300`,
+      sql`select id,title_id,asset_version_id,status,automated_findings,reviewer_findings,reviewed_by,reviewed_at,created_at from bridge_qc_cases order by created_at desc limit 200`,
+      sql`select id,title_id,status,classification,evidence,restrictions,reviewed_by,reviewed_at,created_at from bridge_legal_cases order by created_at desc limit 200`,
+      sql`select id,title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,status,created_by,created_at from bridge_rights_grants order by created_at desc limit 200`,
+      sql`select id,title_id,destination,package_version,rights_grant_id,qc_case_id,legal_case_id,readiness_state,authorized_by,authorized_at,created_at,commercial_model,distributor_exclusivity,revenue_share_percent from bridge_destination_packages order by created_at desc limit 200`,
+      sql`select id,bridge_title_id,loop_title_id,authorization_status,territories,languages,exploitation_models,window_start,window_end,approved_by,approved_at,revoked_at,updated_at from bridge_loop_publications order by updated_at desc limit 200`,
+      profilesQuery,
+      auditQuery,
     ]);
     return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, profiles, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
   });

@@ -365,31 +365,30 @@ export const listAdminProfiles = createServerFn({ method: "GET" })
       throw new Error("Admin access required");
     }
     const sql = await getSql();
-    const rows = await sql<{
-      user_id: string;
-      email: string;
-      display_name: string;
-      account_type: string;
-      organization_name: string | null;
-      internal_role: string | null;
-      email_verified: boolean;
-      created_at: string | Date;
-    }>`
-      select user_id, email, display_name, account_type, organization_name,
-             internal_role, email_verified, created_at
-      from bridge_profiles
-      order by created_at desc
-      limit 200
-    `;
+    const rows = actor.internalRole === "super_admin"
+      ? await sql<{
+          user_id: string; email: string; display_name: string; account_type: string;
+          organization_name: string | null; internal_role: string | null;
+          email_verified: boolean; created_at: string | Date;
+        }>`
+          select user_id,email,display_name,account_type,organization_name,internal_role,email_verified,created_at
+          from bridge_profiles order by created_at desc limit 200
+        `
+      : await sql<{
+          user_id: string; email: string; display_name: string; account_type: string;
+          organization_name: string | null; internal_role: string | null;
+          email_verified: boolean; created_at: string | Date;
+        }>`
+          select user_id,email,display_name,account_type,organization_name,internal_role,email_verified,created_at
+          from bridge_profiles
+          where account_type not in ('buyer','investor')
+          order by created_at desc limit 200
+        `;
     return {
       profiles: rows.map((row) => ({
-        userId: row.user_id,
-        email: row.email,
-        displayName: row.display_name,
-        accountType: row.account_type,
-        organizationName: row.organization_name,
-        internalRole: row.internal_role,
-        emailVerified: Boolean(row.email_verified),
+        userId: row.user_id, email: row.email, displayName: row.display_name,
+        accountType: row.account_type, organizationName: row.organization_name,
+        internalRole: row.internal_role, emailVerified: Boolean(row.email_verified),
         createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
       })),
     };

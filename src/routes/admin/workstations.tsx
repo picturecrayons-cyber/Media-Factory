@@ -21,12 +21,12 @@ const STATUS_LABELS: Record<string, string> = {
 function AdminWorkstations() {
   return (
     <RequireBridge allow="internal">
-      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody /></BridgeShell>}
+      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody actor={actor} /></BridgeShell>}
     </RequireBridge>
   );
 }
 
-function WorkstationBody() {
+function WorkstationBody({ actor }: { actor: any }) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
   const review = useMutation({
@@ -38,6 +38,9 @@ function WorkstationBody() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
   const [activeTab, setActiveTab] = useState<Tab>("Titles");
+  const visibleTabs = actor.internalRole === "super_admin"
+    ? TABS.filter((tab) => !["QC", "Rights"].includes(tab))
+    : TABS.filter((tab) => !["QC", "Rights", "Buyers"].includes(tab));
 
   const data = query.data;
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading Admin…</div>;
@@ -62,7 +65,7 @@ function WorkstationBody() {
       </section>
 
       <nav className="flex gap-2 overflow-x-auto border-b border-line pb-2">
-        {TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button key={tab} type="button" onClick={() => setActiveTab(tab)}
             className={"whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition " + (activeTab === tab ? "bg-fg text-bg" : "border border-line bg-surface text-muted hover:text-fg")}>
             {tab}
@@ -80,7 +83,7 @@ function WorkstationBody() {
           actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
-          rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
+          rows={data.assets} fields={["kind", "content_type", "byte_size", "checksum_sha256", "storage_verified_at"]} />
       ) : activeTab === "Buyers" ? (
         <BuyerRelease titles={data.titles} qc={data.qc} legal={data.legal} gate={gate}
           onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
@@ -115,7 +118,7 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
               <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
+              
               <Link to="/title/$id" params={{ id: title.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open</Link>
             </div>
           </div>
