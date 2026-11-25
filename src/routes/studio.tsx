@@ -117,7 +117,7 @@ function StudioDashboard({ actor }: { actor: { userId: string; displayName: stri
       </WorkspacePanel>
 
       <WorkspacePanel id="members" eyebrow="Organization access" title="Members & Roles" description="Verified roster only. Invitations, role changes, suspensions and removals are not enabled here.">
-        <StudioMemberDesk />
+        <StudioMemberDesk actor={actor} />
       </WorkspacePanel>
 
       <WorkspacePanel id="qc-rights" eyebrow="Independent review controls" title="QC & Rights" description="Follow title-level review status and provide requested evidence. Studio users cannot approve their own QC, Legal or rights decisions.">
