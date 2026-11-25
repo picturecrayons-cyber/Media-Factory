@@ -166,4 +166,5 @@ const report = {
     note: "No object names, media bytes, or object metadata rows are emitted in this report. Title-name matches are advisory only and do not establish Bridge asset ownership or active playback state.",
   },
 };
-await writeFile("inventory-report.json", JSON.stringify(report, null, 2) + "\\n", { mode: 0o600 });\nconsole.log(JSON.stringify(report, null, 2));
+await writeFile("inventory-report.json", JSON.stringify(report, null, 2) + String.fromCharCode(10), { mode: 0o600 });
+console.log(JSON.stringify(report, null, 2));
