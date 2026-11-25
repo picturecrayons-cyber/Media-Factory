@@ -36,11 +36,15 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
         OCI_NAMESPACE: "test-namespace",
         OCI_BUCKET_NAME: "test-bucket",
       });
-      globalThis.fetch = async () =>
-        new Response(null, {
-          status: 200,
-          headers: { "content-length": "1", etag: '"test-etag"' },
-        });
+      globalThis.fetch = async (_input, init) => {
+        if ((init?.method || "GET") === "HEAD") {
+          return new Response(null, {
+            status: 200,
+            headers: { "content-length": "1", "content-type": "application/octet-stream", etag: '"test-etag"' },
+          });
+        }
+        return new Response("x", { status: 200, headers: { "content-length": "1" } });
+      };
 
       await assert.doesNotReject(verifyObject("asset-key"));
     }
@@ -127,8 +131,10 @@ test("OCI object verification rejects an unexpected content type", async () => {
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   const originalFetch = globalThis.fetch;
   Object.assign(process.env, values);
-  globalThis.fetch = async () => new Response(null, { status: 200,
-    headers: { "content-length": "12", "content-type": "image/png", etag: '"test-etag"' } });
+  globalThis.fetch = async (_input, init) => (init?.method || "GET") === "HEAD"
+    ? new Response(null, { status: 200,
+        headers: { "content-length": "12", "content-type": "image/png", etag: '"test-etag"' } })
+    : new Response("image-bytes", { status: 200, headers: { "content-length": "12" } });
   try {
     await assert.rejects(verifyObject("asset-key", "video/mp4"), /content type mismatch/);
     assert.equal((await verifyObject("asset-key", "image/png")).contentType, "image/png");
