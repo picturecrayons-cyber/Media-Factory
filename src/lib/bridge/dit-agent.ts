@@ -76,8 +76,8 @@ type SessionRow = {
   signed_off_at: string | Date | null;
 };
 
-async function requireDitOperator(userId: string) {
-  const actor = await requireVerifiedActor(userId);
+async function requireDitOperator(userId: string, aal?: string | null) {
+  const actor = await requireVerifiedActor(userId, aal);
   if (actor.accountType !== "studio" || actor.internalRole || !actor.organizationId) {
     throw new Error("Verified Studio organization access is required for DIT operations");
   }
