@@ -66,7 +66,7 @@ function Studio() {
                 <h3 className="font-display text-xl font-semibold">Members & Roles</h3>
                 <p className="mt-1 text-sm text-muted">Read-only roster for verified Studio owners and administrators. Role changes and invitations remain disabled until separately approved.</p>
               </div>
-              <StudioMemberDesk />
+              <StudioMemberDesk actor={actor} />
             </section>
 
             <section id="studio-dit" className="space-y-3">
