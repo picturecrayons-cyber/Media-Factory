@@ -29,7 +29,6 @@ test("only a verified upload sets the master reference, once, with an audit even
       checksumSha256: "a".repeat(64),
       checksumAlgorithm: "SHA256",
       format: "ISO-BMFF",
-      storageBucket: "test-bucket",
       sourceKey: "bridge/creator/title1234/master/video.mp4",
       sealedKey: "bridge/creator/title1234/master/video.mp4.verified/uuid-1",
       storageBucket: "test-bucket",
