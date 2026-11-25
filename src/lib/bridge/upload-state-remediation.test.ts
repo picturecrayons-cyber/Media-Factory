@@ -145,7 +145,6 @@ test("atomic state transition: migration queue and title master/poster only adva
       contentType: "video/mp4",
       checksum: "sealed-etag-abc",
       sha256: "1".repeat(64),
-      sha256: "1".repeat(64),
       sourceKey: "bridge/owner-1/title-pass-test/screener/raw.mp4",
       sealedKey,
     });
