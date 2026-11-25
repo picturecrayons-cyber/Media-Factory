@@ -1,0 +1,66 @@
+name: Bridge OCI Testing Prefix Read-only Inventory
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_testing_prefix:
+        description: "Type testing/ to authorize read-only inventory of this prefix only"
+        required: true
+        type: string
+      max_objects:
+        description: "Safety cap; run fails rather than reporting incomplete totals"
+        required: true
+        default: "100000"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bridge-oci-testing-prefix-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    if: ${{ inputs.confirm_testing_prefix == 'testing/' }}
+    environment: bridge-preview-storage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Validate target and inventory cap
+        env:
+          CONFIRM_PREFIX: ${{ inputs.confirm_testing_prefix }}
+          MAX_OBJECTS: ${{ inputs.max_objects }}
+        run: |
+          test "$CONFIRM_PREFIX" = "testing/"
+          case "$MAX_OBJECTS" in
+            ''|*[!0-9]*) echo "max_objects must be numeric"; exit 1 ;;
+          esac
+          test "$MAX_OBJECTS" -ge 1
+          test "$MAX_OBJECTS" -le 500000
+      - name: Validate inventory script syntax
+        run: node --check scripts/oci-testing-prefix-readonly-inventory.mjs
+      - name: Read-only OCI Testing-prefix inventory
+        env:
+          OCI_TENANCY_OCID: ${{ secrets.BRIDGE_E2E_OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.BRIDGE_E2E_OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.BRIDGE_E2E_OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.BRIDGE_E2E_OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.BRIDGE_E2E_OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.BRIDGE_E2E_OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.BRIDGE_E2E_OCI_BUCKET_NAME }}
+          OCI_OBJECT_PREFIX: testing/
+          OCI_INVENTORY_MAX_OBJECTS: ${{ inputs.max_objects }}
+        run: node scripts/oci-testing-prefix-readonly-inventory.mjs
+      - name: Upload sanitized Testing inventory report
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-oci-testing-prefix-readonly-inventory
+          path: inventory-report.json
+          if-no-files-found: error
