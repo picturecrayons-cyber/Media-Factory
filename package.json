@@ -28,7 +28,7 @@
     "test:cra101": "node --test scripts/cra-101-auth-flow.test.mjs",
     "test:workflow": "node --experimental-strip-types --test src/lib/bridge/workflow.test.ts",
     "test:staging-rbac": "node --experimental-strip-types scripts/staging-rbac-smoke.mjs",
-    "test:e2e:bridge-preview": "playwright test --config=playwright.config.ts"
+    "test:e2e:bridge-preview": "node scripts/bridge-preview-playwright.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",
