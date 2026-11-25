@@ -4,13 +4,13 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { createTitle, listTitleOwnerTitles, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", ownerOnly = false, scopeKey = "workspace" }: { empty: string; query?: string; ownerOnly?: boolean; scopeKey?: string }) {
   const titlesQ = useQuery({
-    queryKey: ["bridge-titles"],
-    queryFn: () => listTitles(),
+    queryKey: ownerOnly ? ["bridge-owner-titles", scopeKey] : ["bridge-titles", scopeKey],
+    queryFn: () => ownerOnly ? listTitleOwnerTitles() : listTitles(),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
