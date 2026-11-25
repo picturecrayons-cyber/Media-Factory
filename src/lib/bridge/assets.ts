@@ -336,7 +336,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           key: buyer ? null : r.s3_key,
           contentType: r.content_type,
           byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0,
+          verified: Number(r.byte_size) > 0 && ["poster", "poster_vertical"].includes(r.kind) && Boolean(title.posterKey) && r.s3_key === title.posterKey,
           createdAt:
             r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
