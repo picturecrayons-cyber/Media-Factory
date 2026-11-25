@@ -22,14 +22,17 @@ test("Creator and Studio have separate paid-feature and title-owner permissions"
     assert.equal(hasPermission(actor, "title.submit_qc"), true);
     assert.equal(hasPermission(actor, "asset.sign_upload"), true);
     assert.equal(hasPermission(actor, "story_concept.create"), true);
+    assert.equal(hasPermission(actor, "payment.create_story_concept_order"), true);
     assert.equal(canReadTitle(actor, { ownerUserId: actor.userId, status: "DRAFT" }), true);
     assert.equal(canReadTitle(actor, { ownerUserId: "other", status: "DRAFT" }), false);
     assert.equal(hasPermission(actor, "title.qc_review"), false);
     assert.equal(hasPermission(actor, "loop.publish"), false);
   }
   assert.equal(hasPermission(creator, "dit.upload"), false);
+  assert.equal(hasPermission(creator, "payment.create_dit_agent_order"), false);
   assert.equal(hasPermission(studio, "dit.upload"), true);
   assert.equal(hasPermission(studio, "storage.manage"), true);
+  assert.equal(hasPermission(studio, "payment.create_dit_agent_order"), true);
 });
 
 test("Buyer and Investor remain distinct roles with published-only Loop access", () => {
@@ -42,7 +45,7 @@ test("Buyer and Investor remain distinct roles with published-only Loop access",
     assert.equal(canReadTitle(actor, { ownerUserId: "creator", status: "LIVE_FOR_BUYERS" }), true);
     assert.equal(hasPermission(actor, "asset.sign_download"), false);
   }
-  assert.equal(hasPermission(buyer, "payment.create_order"), true);
+  assert.equal(hasPermission(buyer, "payment.create_order"), false);
   assert.equal(hasPermission(investor, "payment.create_order"), false);
 });
 
@@ -82,7 +85,7 @@ test("Admin can write business/revenue/distribution but cannot publish or see bu
 });
 
 test("Super Admin is read-only except final publish and legacy mapping", () => {
-  for (const p of ["title.admin_queue_read","title.read_catalog","title.final_approve","loop.publish","legacy.map","buyer.read","buyer_loop.read","story_concept.download_approved"] as const)
+  for (const p of ["title.admin_queue_read","title.read_catalog","title.final_approve","loop.publish","legacy.map","buyer.read","buyer_loop.read","story_concept.download_approved","story_concept.final_approve","asset.read_storage_proof","asset.read_trailer"] as const)
     assert.equal(hasPermission(superAdmin, p), true);
   for (const p of ["title.create","title.update_own","asset.sign_upload","payment.create_order","title.submit_qc","business.write","revenue.write","distribution.write","loop.revoke"] as const)
     assert.equal(hasPermission(superAdmin, p), false);
@@ -105,6 +108,7 @@ test("Role destinations keep Buyer and Investor distinct but share published Loo
   assert.equal(workspaceHome(buyer), "/buyer-loop");
   assert.equal(workspaceHome(investor), "/buyer-loop");
   assert.equal(workspaceHome(superAdmin), "/dashboard");
+  assert.equal(workspaceHome(viewer), "/buyer-loop");
   assert.equal(workspaceHome(qc), "/internal?desk=qc");
   assert.equal(workspaceHome(legal), "/internal?desk=legal");
   assert.equal(workspaceHome(finance), "/internal?desk=finance");
