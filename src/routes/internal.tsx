@@ -150,7 +150,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
   // Authorization Form State
   const [selectedTitleId, setSelectedTitleId] = useState<string>("");
-  const [territories, setTerritories] = useState("IN");
+  const [territories, setTerritories] = useState("WORLDWIDE");
   const [languages, setLanguages] = useState("Malayalam");
   const [model] = useState<ExploitationModel>("TVOD");
   const [windowStart, setWindowStart] = useState("");
@@ -236,6 +236,12 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
   });
 
   const allTitles = q.data?.titles ?? [];
+  const selectedTitle = allTitles.find((title) => title.id === selectedTitleId);
+  const selectedPublicationStatus = selectedTitle?.publication?.authorizationStatus?.toUpperCase();
+  const selectedPublicationBlocked = selectedPublicationStatus === "HOLD" || selectedPublicationStatus === "REVOKED";
+  const requestedTerritories = territories.split(",").map((value) => value.trim().toUpperCase()).filter(Boolean);
+  const validLoopWindow = Boolean(windowStart && windowEnd && Number.isFinite(new Date(windowStart).getTime()) && Number.isFinite(new Date(windowEnd).getTime()) && new Date(windowEnd) > new Date(windowStart));
+  const validLoopRequest = requestedTerritories.length === 1 && requestedTerritories[0] === "WORLDWIDE" && languages.split(",").some((value) => value.trim().length >= 2) && validLoopWindow;
   if (q.isPending) return <p>Loading distribution readiness…</p>;
   if (q.isError)
     return <p role="alert">Distribution readiness is unavailable. Refresh to retry.</p>;
@@ -373,7 +379,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
         <div className="rounded-2xl border border-accent/30 bg-surface p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-display text-lg font-semibold text-fg">
-              Authorize Distribution: {allTitles.find((t) => t.id === selectedTitleId)?.name}
+              Review Distribution: {selectedTitle?.name ?? "Selected title"}
             </h3>
             <button
               type="button"
@@ -383,6 +389,26 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               Cancel
             </button>
           </div>
+
+          {selectedTitle ? (
+            <div className="rounded-xl border border-line bg-elevated/40 p-4 space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <strong className="text-fg">Current Bridge status: {selectedTitle.bridgeStatus}</strong>
+                <span className="text-muted">· Master {selectedTitle.hasMaster ? "present" : "missing"} · Artwork {selectedTitle.hasPoster ? "present" : "missing"}</span>
+                {selectedPublicationStatus ? <span className="rounded-full border border-line px-2 py-1 font-semibold">{selectedPublicationStatus}</span> : <span className="rounded-full border border-line px-2 py-1">Not yet authorized</span>}
+              </div>
+              {selectedTitle.blockers.length ? (
+                <div>
+                  <p className="text-xs font-semibold text-amber-400">Requirements still pending</p>
+                  <ul className="mt-2 list-disc pl-5 space-y-1 text-xs text-muted">
+                    {selectedTitle.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+                  </ul>
+                </div>
+              ) : <p className="text-xs text-emerald-400">Existing publication checks are satisfied. The final server-side preflight still runs before authorization.</p>}
+              {selectedPublicationBlocked ? <p className="text-xs font-semibold text-red-400">This publication is {selectedPublicationStatus}. Distribution remains blocked; a separate authorized hold/revocation review is required.</p> : null}
+              <p className="text-xs text-muted">Opening this panel does not publish the title. Final authorization is separately checked against the active rights grant, current QC and legal approvals, OTT preparation, packaging, curation and delivery certifications.</p>
+            </div>
+          ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-xs">
             <label className="block space-y-1">
@@ -453,13 +479,17 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           <div className="flex items-center gap-3 pt-2">
             <Button
               type="button"
-              disabled={publishMut.isPending}
+              disabled={publishMut.isPending || !validLoopRequest || selectedPublicationBlocked}
               onClick={() => publishMut.mutate(selectedTitleId)}
               className="rounded-full px-5 text-xs font-semibold"
             >
               {publishMut.isPending
                 ? "Validating & Authorizing…"
-                : "Authorize & Publish to Crayons Loop"}
+                : selectedPublicationBlocked
+                  ? "Blocked — resolve HOLD / REVOKED review"
+                  : !validLoopRequest
+                    ? "Enter WORLDWIDE TVOD dates to continue"
+                    : "Authorize & Publish to Crayons Loop"}
             </Button>
             <Button
               type="button"
@@ -592,17 +622,13 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-2.5 pt-1">
                 {canPublish &&
-                (!pub ||
-                  pub.authorizationStatus === "SUSPENDED" ||
-                  pub.authorizationStatus === "EXPIRED" ||
-                  pub.authorizationStatus === "DRAFT") ? (
+                (!pub || !["LIVE", "AUTHORIZED"].includes(pub.authorizationStatus.toUpperCase())) ? (
                   <Button
                     type="button"
-                    disabled={!t.ready}
                     onClick={() => setSelectedTitleId(t.id)}
                     className="rounded-full text-xs font-semibold px-4 h-9"
                   >
-                    {pub ? "Re-authorize & Distribute" : "Distribute to Crayons Loop"}
+                    {pub ? "Review Distribution Status" : "Review Distribution Readiness"}
                   </Button>
                 ) : null}
 
