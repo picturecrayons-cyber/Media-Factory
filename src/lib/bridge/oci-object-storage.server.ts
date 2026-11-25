@@ -441,6 +441,6 @@ export async function fetchObjectResponse(key: string, bucket?: string, range?: 
   // The response body is streamed after fetch() resolves. Allow enough time
   // for a large poster to finish instead of aborting the body at the default
   // 15-second control-plane deadline.
-  if (range && !/^bytes=\\d*-\\d*$/.test(range)) throw new Error("Invalid byte range");
+  if (range && !/^bytes=\d*-\d*$/.test(range)) throw new Error("Invalid byte range");
   return signedFetch({ cfg, method: "GET", path, timeoutMs: 120_000, headers: range ? { range } : undefined });
 }
