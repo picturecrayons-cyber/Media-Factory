@@ -338,7 +338,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                               ["NON-EXCLUSIVE terms recorded", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
                               ["Revenue-share split recorded and totals 100%", validSplit],
                               ["Territory, language and validity window recorded", selectedGrant.territories.length > 0 && selectedGrant.languages.length > 0 && validWindow],
-                              ["Independent Legal Reviewer approval completed", selectedGrant.status === "VALID"],
+                              ["Super Admin legal approval recorded", selectedGrant.status === "VALID"],
                             ] as const;
                             return (
                               <>
@@ -361,7 +361,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 <p className="text-xs font-medium" role="status">
                                   {checks.every(([, passed]) => passed)
                                     ? "All required fields are recorded. Documentary verification and Legal approval remain separate gates."
-                                    : "PENDING — do not mark READY until every required item is verified and the independent Legal Reviewer approves."}
+                                    : "PENDING — do not mark READY until every required item is verified and the verified Super Admin approves."}
                                 </p>
                               </>
                             );
