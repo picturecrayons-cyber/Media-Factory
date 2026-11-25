@@ -155,7 +155,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     if (
       !title ||
       !canReadTitle(actor, title) ||
-      (!actor.internalRole && actor.accountType === "buyer")
+      actor.accountType === "buyer" || actor.accountType === "investor" || actor.internalRole === "viewer"
     )
       throw new Error("Not found");
     const sql = await getSql();

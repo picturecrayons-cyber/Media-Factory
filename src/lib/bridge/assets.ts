@@ -269,7 +269,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
         id: r.id, kind: r.kind, contentType: r.content_type, byteSize: r.byte_size,
         checksumSha256: r.checksum_sha256,
         storageVerifiedAt: r.storage_verified_at instanceof Date ? r.storage_verified_at.toISOString() : r.storage_verified_at,
-        verified: Number(r.byte_size ?? 0) > 0 && Boolean(r.checksum_sha256) && Boolean(r.storage_verified_at),
+        verified: Number(r.byte_size ?? 0) > 0 && Boolean(r.checksum_sha256) && r.checksum_sha256.length === 44 && Boolean(r.storage_verified_at),
         createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
       })),
     };
