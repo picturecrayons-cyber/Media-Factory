@@ -206,7 +206,7 @@ function Home() {
                 </div>
                 <div className="mt-8 pt-5 border-t border-line">
                   <Link
-                    to="/contact"
+                    to="/investors"
                     className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
                   >
                     Request Investor Access →
@@ -228,8 +228,7 @@ function Home() {
                 </div>
                 <div className="mt-8 pt-5 border-t border-line">
                   <Link
-                    to="/signup"
-                    search={{ role: "buyer" }}
+                    to="/buyers"
                     className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
                   >
                     Explore Buyer Access →
@@ -301,6 +300,9 @@ function Home() {
             </Link>
             <Link to="/terms" className="hover:text-fg transition-colors">
               Terms
+            </Link>
+            <Link to="/dmca" className="hover:text-fg transition-colors">
+              DMCA
             </Link>
             <Link to="/contact" className="hover:text-fg transition-colors">
               Contact
