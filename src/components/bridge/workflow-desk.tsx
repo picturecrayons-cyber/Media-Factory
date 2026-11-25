@@ -387,7 +387,6 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                   },
                                 }),
                               note.trim().length < 8,
-                            )}
                             ) : null}
                             {button(
                               "Reject",
