@@ -579,3 +579,17 @@ export const verifyDitAgentPayment = createServerFn({ method: "POST" })
     assertPermission(actor, "payment.create_dit_agent_order");
     return verifyPaidServiceOrder({ actorUserId: actor.userId, purpose: "DIT_AGENT", ...data });
   });
+
+
+export const listOwnStoryConceptPayments = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType !== "independent_creator" && actor.accountType !== "studio") throw new Error("Creator or Studio account required");
+    const sql = await getSql();
+    const rows = await sql.unsafe(
+      "select p.id::text,p.amount_paise,p.currency,p.verified_at,p.created_at from bridge_payments p where p.user_id=$1 and p.purpose='STORY_CONCEPT_NETWORK_SUBMISSION' and p.status='captured' and p.verified_at is not null and not exists(select 1 from bridge_story_concept_submissions sc where sc.payment_id=p.id) order by p.verified_at desc limit 20",
+      [actor.userId],
+    );
+    return { payments: JSON.parse(JSON.stringify(rows)) };
+  });
