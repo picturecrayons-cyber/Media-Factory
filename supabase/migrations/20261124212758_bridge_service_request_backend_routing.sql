@@ -11,58 +11,55 @@ BEGIN
     RETURN;
   END IF;
 
-  EXECUTE $ddl$
--- Backend owns service execution by default; approval decisions are routed separately.
--- assigned_provider remains the external/vendor provider field.
-alter table public.bridge_service_requests
-  add column if not exists assigned_team text not null default 'backend',
-  add column if not exists decision_required boolean not null default false;
+  EXECUTE 'ALTER TABLE public.bridge_service_requests
+    ADD COLUMN IF NOT EXISTS assigned_team text NOT NULL DEFAULT ''backend'',
+    ADD COLUMN IF NOT EXISTS decision_required boolean NOT NULL DEFAULT false';
 
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conname = 'bridge_service_requests_assigned_team_check'
-      and conrelid = 'public.bridge_service_requests'::regclass
-  ) then
-    alter table public.bridge_service_requests
-      add constraint bridge_service_requests_assigned_team_check
-      check (assigned_team in ('backend', 'decision_queue'));
-  end if;
-end $$;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'bridge_service_requests_assigned_team_check'
+      AND conrelid = to_regclass('public.bridge_service_requests')
+  ) THEN
+    EXECUTE 'ALTER TABLE public.bridge_service_requests
+      ADD CONSTRAINT bridge_service_requests_assigned_team_check
+      CHECK (assigned_team IN (''backend'', ''decision_queue''))';
+  END IF;
 
-create or replace function public.bridge_route_service_request_team()
-returns trigger
-language plpgsql
-set search_path to 'pg_catalog', 'public'
-as $$
-begin
-  -- Human decision checkpoints stay in a restricted decision queue.
-  -- All other request lifecycle work is owned by backend services.
-  if new.status in ('UNDER_REVIEW', 'QUOTE_READY', 'REVIEW') then
-    new.assigned_team := 'decision_queue';
-    new.decision_required := true;
-  else
-    new.assigned_team := 'backend';
-    new.decision_required := false;
-  end if;
-  return new;
-end;
-$$;
+  EXECUTE $function$
+    CREATE OR REPLACE FUNCTION public.bridge_route_service_request_team()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'public'
+    AS $body$
+    BEGIN
+      -- Human decision checkpoints stay in a restricted decision queue.
+      -- All other request lifecycle work is owned by backend services.
+      IF NEW.status IN ('UNDER_REVIEW', 'QUOTE_READY', 'REVIEW') THEN
+        NEW.assigned_team := 'decision_queue';
+        NEW.decision_required := true;
+      ELSE
+        NEW.assigned_team := 'backend';
+        NEW.decision_required := false;
+      END IF;
+      RETURN NEW;
+    END;
+    $body$;
+  $function$;
 
-drop trigger if exists bridge_service_request_team_routing on public.bridge_service_requests;
-create trigger bridge_service_request_team_routing
-before insert or update of status on public.bridge_service_requests
-for each row execute function public.bridge_route_service_request_team();
-
-create index if not exists bridge_service_requests_team_queue_idx
-  on public.bridge_service_requests (assigned_team, decision_required, status, created_at desc);
-
-comment on column public.bridge_service_requests.assigned_team is
-  'Internal execution ownership: backend for automated processing; decision_queue for authorized human decisions.';
-comment on column public.bridge_service_requests.decision_required is
-  'True only at explicit human decision checkpoints; not a request for Super Admin to perform backend execution.';
-
-  $ddl$;
+  EXECUTE 'DROP TRIGGER IF EXISTS bridge_service_request_team_routing ON public.bridge_service_requests';
+  EXECUTE 'CREATE TRIGGER bridge_service_request_team_routing
+    BEFORE INSERT OR UPDATE OF status ON public.bridge_service_requests
+    FOR EACH ROW EXECUTE FUNCTION public.bridge_route_service_request_team()';
+  EXECUTE 'CREATE INDEX IF NOT EXISTS bridge_service_requests_team_queue_idx
+    ON public.bridge_service_requests (assigned_team, decision_required, status, created_at DESC)';
+  EXECUTE $comment$
+    COMMENT ON COLUMN public.bridge_service_requests.assigned_team IS
+      'Internal execution ownership: backend for automated processing; decision_queue for authorized human decisions.'
+  $comment$;
+  EXECUTE $comment$
+    COMMENT ON COLUMN public.bridge_service_requests.decision_required IS
+      'True only at explicit human decision checkpoints; not a request for Super Admin to perform backend execution.'
+  $comment$;
 END
 $migration$;
