@@ -6,18 +6,16 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   legal_reviewer: ["title.legal_queue_read", "title.rights_review", "legal.contracts_read"],
   finance: ["finance.read", "finance.payouts_read", "razorpay.orders_read"],
   admin: [
-    "title.admin_queue_read", "title.read_catalog",
-    "service.quote_create", "service.order_create", "service.fulfill",
-    "title.license", "title.merge_duplicate", "title.negotiate", "title.deliver",
-    "delivery.read", "delivery.read_finance", "asset.read_storage_proof",
-    "finance.read", "users.invite_internal", "audit.read",
+    "title.admin_queue_read", "title.read_catalog", "title.negotiate",
+    "delivery.read", "asset.read_storage_proof", "finance.read",
+    "users.invite_internal", "audit.read",
     "business.read", "business.write", "revenue.read", "revenue.write",
     "distribution.read", "distribution.write",
   ],
   super_admin: [
     "title.admin_queue_read", "title.read_catalog", "title.final_approve", "story_concept.final_approve",
     "buyer.read", "buyer_loop.read", "legacy.map", "story_concept.download_approved",
-    "loop.publish", "distribution.read", "audit.read",
+    "asset.read_storage_proof", "asset.read_trailer", "loop.publish", "distribution.read", "audit.read",
   ],
 };
 
@@ -25,19 +23,19 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
   independent_creator: [
     "title.create", "title.read_own", "title.update_own", "title.advance_upload", "title.submit_qc",
     "asset.sign_upload", "asset.sign_download", "asset.read_storage_proof",
-    "story_concept.create", "story_concept.read_own", "payment.create_story_concept_order",
+    "story_concept.create", "story_concept.read_own", "payment.create_story_concept_order", "payment.create_story_concept_order",
     "service.quote_create", "service.order_create", "entitlement.read_own", "delivery.read",
   ],
   studio: [
     "title.create", "title.read_own", "title.update_own", "title.advance_upload", "title.submit_qc",
     "asset.sign_upload", "asset.sign_download", "asset.read_storage_proof",
     "story_concept.create", "story_concept.read_own",
-    "dit.agent", "dit.upload", "storage.manage", "payment.create_dit_agent_order",
+    "dit.agent", "dit.upload", "storage.manage", "payment.create_dit_agent_order", "payment.create_dit_agent_order",
     "service.quote_create", "service.order_create", "entitlement.read_own", "delivery.read",
   ],
   buyer: [
     "title.read_published", "story_concept.read_buyer", "asset.read_trailer",
-    "buyer.investment_interest", "buyer_loop.read", "payment.create_order", "entitlement.read_own",
+    "buyer.investment_interest", "buyer_loop.read",
   ],
   investor: [
     "title.read_published", "story_concept.read_buyer", "asset.read_trailer",
@@ -213,6 +211,7 @@ export function workspaceHome(actor: Actor): string {
   if (actor.internalRole === "legal_reviewer") return "/internal?desk=legal";
   if (actor.internalRole === "finance") return "/internal?desk=finance";
   if (actor.internalRole === "admin") return "/internal?desk=admin";
+  if (actor.internalRole === "viewer") return "/buyer-loop";
   if (actor.internalRole) return "/internal";
   if (actor.accountType === "independent_creator") return "/creator";
   if (actor.accountType === "studio") return "/studio";
