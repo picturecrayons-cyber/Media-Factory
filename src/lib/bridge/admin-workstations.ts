@@ -42,70 +42,13 @@ const reviewInput = z.object({
   evidenceAssetIds: z.array(z.string().min(1)).max(20).optional(),
 });
 
-async function requireVerifiedCurrentAsset(
-  sql: Awaited<ReturnType<typeof getSql>>,
-  titleId: string,
-  assetVersionId: string,
-  expectedPointer: string | null,
-  label: string,
-) {
+async function requireVerifiedCurrentAsset(sql: Awaited<ReturnType<typeof getSql>>, titleId: string, assetVersionId: string, expectedPointer: string | null, label: string) {
   if (!expectedPointer) throw new Error(`Current ${label} pointer is missing; approval is blocked.`);
-  const columns = await sql<{ column_name: string }>`
-    select column_name from information_schema.columns
-    where table_schema='public' and table_name='bridge_assets'
-      and column_name in ('asset_version_id','verified_object_key','checksum_sha256','storage_verified_at')
-  `;
+  const columns = await sql<{ column_name: string }>`select column_name from information_schema.columns where table_schema='public' and table_name='bridge_assets' and column_name in ('asset_version_id','verified_object_key','checksum_sha256','storage_verified_at')`;
   const available = new Set(columns.map((row) => row.column_name));
-  if (['asset_version_id','verified_object_key','checksum_sha256','storage_verified_at'].some((name) => !available.has(name))) {
-    throw new Error(`Verified asset provenance columns are unavailable; ${label} approval fails closed.`);
-  }
-  const rows = await sql<{ id: string; asset_version_id: string; verified_object_key: string; checksum_sha256: string; storage_verified_at: string }>`
-    select a.id, a.asset_version_id, a.verified_object_key, a.checksum_sha256, a.storage_verified_at
-    from bridge_assets a
-    join bridge_asset_versions v on v.id=a.asset_version_id and v.title_id=a.title_id
-    where a.title_id=${titleId}
-      and a.asset_version_id=${assetVersionId}::uuid
-      and a.verified_object_key=${expectedPointer}
-      and a.storage_verified_at is not null
-      and a.checksum_sha256 ~ '^[0-9a-fA-F]{64}$'
-      and v.processing_state='READY'
-    limit 1
-  `;
-  if (!rows[0]) throw new Error(`The selected ${label} version is not the current verified Bridge asset; approval is blocked.`);
-  return rows[0];
-}
+  if (['asset_version_id','verified_object_key','checksum_sha256','storage_verified_at'].some((name) => !available.has(name))) throw new Error(`Verified asset provenance columns are unavailable; ${label} approval fails closed.`);
+  const rows = await sql<{ id: string }>`select a.id from bridge_assets a join bridge_asset_versions v on v.id=a.asset_version_id and v.title_id=a.title_id where a.title_id=${titleId} and a.asset_version_id=${assetVersionId}::uuid and a.verified_object_key=${expectedPointer} and a.storage_verified_at is not null and a.checksum_sha256 ~ '^[0-9a-fA-F]{64}
 
-async function requireVerifiedLegalEvidence(
-  sql: Awaited<ReturnType<typeof getSql>>,
-  titleId: string,
-  evidenceAssetIds: string[] | undefined,
-) {
-  if (!evidenceAssetIds?.length) throw new Error("At least one verified, title-linked legal evidence asset is required.");
-  const columns = await sql<{ column_name: string }>`
-    select column_name from information_schema.columns
-    where table_schema='public' and table_name='bridge_assets'
-      and column_name in ('verified_object_key','checksum_sha256','storage_verified_at')
-  `;
-  const available = new Set(columns.map((row) => row.column_name));
-  if (['verified_object_key','checksum_sha256','storage_verified_at'].some((name) => !available.has(name))) {
-    throw new Error("Verified legal evidence provenance is unavailable; legal approval fails closed.");
-  }
-  const verified: Array<{ id: string; kind: string; verified_object_key: string; checksum_sha256: string }> = [];
-  for (const evidenceAssetId of evidenceAssetIds) {
-    const rows = await sql<{ id: string; kind: string; verified_object_key: string; checksum_sha256: string }>`
-      select id, kind, verified_object_key, checksum_sha256
-      from bridge_assets
-      where id=${evidenceAssetId} and title_id=${titleId}
-        and verified_object_key is not null and storage_verified_at is not null
-        and checksum_sha256 ~ '^[0-9a-fA-F]{64}$'
-        and lower(kind) ~ '(legal|rights|contract|agreement|certificate|chain|loa)'
-      limit 1
-    `;
-    if (!rows[0]) throw new Error("Every legal evidence reference must be a verified legal/rights document belonging to this title.");
-    verified.push(rows[0]);
-  }
-  return verified;
-}
 export const reviewAdminTitle = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(reviewInput)
@@ -125,12 +68,8 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     } else if (data.decision === "PASS") {
       assertPermission(actor, "title.qc_review");
       if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
-      if (!data.masterAssetVersionId || !data.artworkAssetVersionId) {
-        throw new Error("QC PASS requires the exact current master and artwork asset-version IDs.");
-      }
-      const current = await sql<{ master_key: string | null; poster_key: string | null }>`
-        select master_key, poster_key from bridge_titles where id=${title.id} limit 1
-      `;
+      if (!data.masterAssetVersionId || !data.artworkAssetVersionId) throw new Error("QC PASS requires exact current master and artwork asset-version IDs.");
+      const current = await sql<{ master_key: string | null; poster_key: string | null }>`select master_key, poster_key from bridge_titles where id=${title.id} limit 1`;
       await requireVerifiedCurrentAsset(sql, title.id, data.masterAssetVersionId, current[0]?.master_key ?? null, "master");
       await requireVerifiedCurrentAsset(sql, title.id, data.artworkAssetVersionId, current[0]?.poster_key ?? null, "artwork");
       next = "RIGHTS_REVIEW"; action = "qc.pass";
@@ -144,15 +83,10 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
       if (!data.rightsGrantId) throw new Error("Legal approval requires the exact Bridge Rights Grant ID.");
-      const grants = await sql<{ id: string }>`
-        select id from bridge_rights_grants
-        where id=${data.rightsGrantId}::uuid and title_id=${title.id} and status='VALID'
-        limit 1
-      `;
+      const grants = await sql<{ id: string }>`select id from bridge_rights_grants where id=${data.rightsGrantId}::uuid and title_id=${title.id} and status='VALID' limit 1`;
       if (!grants[0]) throw new Error("The selected Rights Grant is not valid for this title.");
-      const evidence = await requireVerifiedLegalEvidence(sql, title.id, data.evidenceAssetIds);
+      await requireVerifiedLegalEvidence(sql, title.id, data.evidenceAssetIds);
       next = "LICENSING_READY"; action = "rights.approve";
-      if (evidence.length !== data.evidenceAssetIds?.length) throw new Error("Legal evidence verification was incomplete.");
     } else {
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
@@ -163,17 +97,15 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     await sql`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
     await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
     if (data.decision === "PASS") {
+      const current = await sql<{ master_key: string | null; poster_key: string | null }>`select master_key, poster_key from bridge_titles where id=${title.id} limit 1`;
       await sql`insert into bridge_qc_cases (title_id, asset_version_id, status, reviewer_findings, reviewed_by, reviewed_at)
         values (${title.id}, ${data.masterAssetVersionId}::uuid, 'PASSED',
-          ${JSON.stringify([{ masterAssetVersionId: data.masterAssetVersionId, artworkAssetVersionId: data.artworkAssetVersionId, masterKey: (await sql<{master_key:string}>`select master_key from bridge_titles where id=${title.id}`)[0]?.master_key, posterKey: (await sql<{poster_key:string}>`select poster_key from bridge_titles where id=${title.id}`)[0]?.poster_key, note: data.notes ?? null }])}::jsonb,
+          ${JSON.stringify([{ masterAssetVersionId: data.masterAssetVersionId, artworkAssetVersionId: data.artworkAssetVersionId, masterKey: current[0]?.master_key, posterKey: current[0]?.poster_key, note: data.notes ?? null }])}::jsonb,
           ${actor.userId}, now())`;
     }
     if (data.decision === "APPROVE") {
-      const evidenceAssetIds = data.evidenceAssetIds ?? [];
       await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at)
-        values (${title.id}, 'APPROVED',
-          ${JSON.stringify([{ grantId: data.rightsGrantId, evidenceAssetIds, note: data.notes ?? null }])}::jsonb,
-          ${actor.userId}, now())`;
+        values (${title.id}, 'APPROVED', ${JSON.stringify([{ grantId: data.rightsGrantId, evidenceAssetIds: data.evidenceAssetIds, note: data.notes ?? null }])}::jsonb, ${actor.userId}, now())`;
     }
     await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } });
     return { ok: true, status: next };
@@ -240,37 +172,17 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
     return {ok:true,gate:data.gate,decision:data.decision,publishable:result[0]?.ok===true};
   });
-
-      and v.processing_state='READY'
-    limit 1
-  `;
+ and v.processing_state='READY' limit 1`;
   if (!rows[0]) throw new Error(`The selected ${label} version is not the current verified Bridge asset; approval is blocked.`);
-  return rows[0];
 }
 
-async function requireVerifiedLegalEvidence(
-  sql: Awaited<ReturnType<typeof getSql>>,
-  titleId: string,
-  evidenceAssetIds: string[] | undefined,
-) {
+async function requireVerifiedLegalEvidence(sql: Awaited<ReturnType<typeof getSql>>, titleId: string, evidenceAssetIds: string[] | undefined) {
   if (!evidenceAssetIds?.length) throw new Error("At least one verified, title-linked legal evidence asset is required.");
-  const columns = await sql<{ column_name: string }>`
-    select column_name from information_schema.columns
-    where table_schema='public' and table_name='bridge_assets'
-      and column_name in ('verified_object_key','checksum_sha256','storage_verified_at')
-  `;
+  const columns = await sql<{ column_name: string }>`select column_name from information_schema.columns where table_schema='public' and table_name='bridge_assets' and column_name in ('verified_object_key','checksum_sha256','storage_verified_at')`;
   const available = new Set(columns.map((row) => row.column_name));
-  if (['verified_object_key','checksum_sha256','storage_verified_at'].some((name) => !available.has(name))) {
-    throw new Error("Verified legal evidence provenance is unavailable; legal approval fails closed.");
-  }
-  const verified: Array<{ id: string; kind: string; verified_object_key: string; checksum_sha256: string }> = [];
+  if (['verified_object_key','checksum_sha256','storage_verified_at'].some((name) => !available.has(name))) throw new Error("Verified legal evidence provenance is unavailable; legal approval fails closed.");
   for (const evidenceAssetId of evidenceAssetIds) {
-    const rows = await sql<{ id: string; kind: string; verified_object_key: string; checksum_sha256: string }>`
-      select id, kind, verified_object_key, checksum_sha256
-      from bridge_assets
-      where id=${evidenceAssetId} and title_id=${titleId}
-        and verified_object_key is not null and storage_verified_at is not null
-        and checksum_sha256 ~ '^[0-9a-fA-F]{64}
+    const rows = await sql<{ id: string }>`select id from bridge_assets where id=${evidenceAssetId} and title_id=${titleId} and verified_object_key is not null and storage_verified_at is not null and checksum_sha256 ~ '^[0-9a-fA-F]{64}
 
 export const reviewAdminTitle = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -378,15 +290,11 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
     return {ok:true,gate:data.gate,decision:data.decision,publishable:result[0]?.ok===true};
   });
-
-        and lower(kind) ~ '(legal|rights|contract|agreement|certificate|chain|loa)'
-      limit 1
-    `;
+ and lower(kind) ~ '(legal|rights|contract|agreement|certificate|chain|loa)' limit 1`;
     if (!rows[0]) throw new Error("Every legal evidence reference must be a verified legal/rights document belonging to this title.");
-    verified.push(rows[0]);
   }
-  return verified;
 }
+
 
 export const reviewAdminTitle = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
