@@ -49,13 +49,13 @@ Leaked Password Protection is an Auth configuration control, not an RLS policy. 
 
 ## Gate 2 — OCI Object Storage
 
-Current inspected code at the base commit uses `@aws-sdk/client-s3` in `src/lib/bridge/aws-object-storage.server.ts`; OCI variables in `src/lib/bridge/env.ts` do not prove that the adapter sends native OCI requests.
+Historical baseline note (superseded): the AWS S3 adapter has been retired from the active Bridge runtime. Current asset upload, verification, sealing and media delivery use the Bridge-owned Oracle OCI Object Storage adapter. This document remains as an audit record; its old AWS examples are not deployment instructions.
 
 - Inspect existing storage interfaces, callers, tests, and dependencies before choosing an OCI SDK/API implementation.
 - Implement OCI support behind a server-only provider boundary; fail closed when provider configuration is incomplete.
 - Use a dedicated non-production bucket and non-production credentials only.
 - Verify actual OCI upload, read-back bytes, content length, ETag semantics, conditional source check, sealing/copy, destination HEAD, and signed download behavior.
-- Do not treat mocked S3 tests as OCI E2E evidence. Record live E2E as NOT VERIFIED until real OCI responses are captured without secrets.
+- Do not treat mocked OCI tests as live OCI E2E evidence. Record live E2E as NOT VERIFIED until real OCI responses are captured without secrets.
 
 ## Gate 3 — Hostinger Mail and Razorpay
 
