@@ -41,7 +41,10 @@ export function formatBrandedEmailHtml(title: string, bodyHtml: string, cta?: { 
 </html>`;
 }
 
-export async function sendTransactionalEmail(opts: TransactionalEmailOptions): Promise<{ ok: boolean; messageId?: string }> {
+export async function sendTransactionalEmail(opts: TransactionalEmailOptions): Promise<{ ok: boolean; messageId?: string; suppressed?: boolean; reason?: string }> {
+  if (process.env.VERCEL_ENV === "preview" || process.env.NODE_ENV !== "production" || process.env.BRIDGE_MAIL_MODE === "dry-run") {
+    return { ok: false, suppressed: true, reason: "NON_PRODUCTION_MAIL_SUPPRESSED" };
+  }
   const host = bridgeEnv.smtpHost();
   const user = bridgeEnv.smtpUser();
   const pass = bridgeEnv.smtpPass();

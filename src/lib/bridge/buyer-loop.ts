@@ -95,7 +95,7 @@ export const createInvestmentInterest = createServerFn({ method: "POST" })
     });
     if (!saved.created) {
       const prior = await sql.unsafe(
-        "select case when action='email.delivery.sent' then 'SENT' else 'FAILED' end as status from bridge_audit_logs where entity_type='bridge_buyer_interest' and entity_id=$1 and action in ('email.delivery.sent','email.delivery.failed') order by created_at desc limit 1",
+        "select case when action='email.delivery.sent' then 'SENT' when action='email.delivery.suppressed_preview' then 'SUPPRESSED_PREVIEW' else 'FAILED' end as status from bridge_audit_logs where entity_type='bridge_buyer_interest' and entity_id=$1 and action in ('email.delivery.sent','email.delivery.failed','email.delivery.suppressed_preview') order by created_at desc limit 1",
         [saved.interestId],
       ) as Array<{ status: "SENT" | "FAILED" }>;
       return { interestId: saved.interestId, alreadySubmitted: true, emailDelivery: { status: prior[0]?.status ?? "NOT_SENT", failure: null } };
@@ -105,7 +105,7 @@ export const createInvestmentInterest = createServerFn({ method: "POST" })
       entityType: "bridge_buyer_interest", entityId: saved.interestId,
       metadata: { conceptSubmissionId: data.conceptSubmissionId, titleName: eligible[0].title_name },
     });
-    let emailStatus: "SENT" | "FAILED" = "FAILED";
+    let emailStatus: "SENT" | "FAILED" | "SUPPRESSED_PREVIEW" = "FAILED";
     let emailFailure: string | null = null;
     try {
       const result = await sendBridgeMail({
@@ -113,14 +113,14 @@ export const createInvestmentInterest = createServerFn({ method: "POST" })
         subject: "New investment interest: " + eligible[0].title_name,
         text: "A Buyer/Investor submitted investment interest for " + eligible[0].title_name + ". Review the interest in Crayons Bridge.",
       });
-      emailStatus = result.ok ? "SENT" : "FAILED";
+      emailStatus = result.suppressed ? "SUPPRESSED_PREVIEW" : result.ok ? "SENT" : "FAILED";
     } catch (error) {
       emailFailure = error instanceof Error ? error.message.slice(0, 500) : "Email delivery failed";
     }
     try {
       await writeAudit({
         actorUserId: actor.userId,
-        action: emailStatus === "SENT" ? "email.delivery.sent" : "email.delivery.failed",
+        action: emailStatus === "SENT" ? "email.delivery.sent" : emailStatus === "SUPPRESSED_PREVIEW" ? "email.delivery.suppressed_preview" : "email.delivery.failed",
         entityType: "bridge_buyer_interest", entityId: saved.interestId,
         metadata: { category: "investment_interest", recipient: "admin@crayonspictures.in", status: emailStatus, failure: emailFailure },
       });
@@ -295,7 +295,7 @@ export const listInvestmentInterestActivity = createServerFn({ method: "GET" })
     assertPermission(actor, "buyer.read");
     const sql = await getSql();
     const rows = await sql.unsafe(
-      "select bi.id::text,bt.name as title_name,bi.interest_level,bi.created_at,p.display_name as buyer_name,p.email as buyer_email,p.account_type,(select case when a.action='email.delivery.sent' then 'SENT' else 'FAILED' end from bridge_audit_logs a where a.entity_type='bridge_buyer_interest' and a.entity_id=bi.id::text and a.action in ('email.delivery.sent','email.delivery.failed') order by a.created_at desc limit 1) as email_status from bridge_buyer_interest bi join bridge_story_concept_submissions sc on sc.id=bi.concept_submission_id join bridge_titles bt on bt.id=sc.title_id left join bridge_profiles p on p.user_id=bi.buyer_user_id order by bi.created_at desc limit 100",
+      "select bi.id::text,bt.name as title_name,bi.interest_level,bi.created_at,p.display_name as buyer_name,p.email as buyer_email,p.account_type,(select case when a.action='email.delivery.sent' then 'SENT' when a.action='email.delivery.suppressed_preview' then 'SUPPRESSED_PREVIEW' else 'FAILED' end from bridge_audit_logs a where a.entity_type='bridge_buyer_interest' and a.entity_id=bi.id::text and a.action in ('email.delivery.sent','email.delivery.failed','email.delivery.suppressed_preview') order by a.created_at desc limit 1) as email_status from bridge_buyer_interest bi join bridge_story_concept_submissions sc on sc.id=bi.concept_submission_id join bridge_titles bt on bt.id=sc.title_id left join bridge_profiles p on p.user_id=bi.buyer_user_id order by bi.created_at desc limit 100",
     );
     return { activity: JSON.parse(JSON.stringify(rows)) };
   });

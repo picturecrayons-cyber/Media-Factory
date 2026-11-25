@@ -174,12 +174,12 @@ export const listAdminSubmissions = createServerFn({ method: "GET" })
         ) order by q.created_at desc), '[]'::json)
          from bridge_qc_cases q where q.title_id = t.id) as qc_notes,
         (select coalesce(json_agg(json_build_object(
-          'status', case when a.action = 'email.delivery.sent' then 'SENT' else 'FAILED' end,
+          'status', case when a.action = 'email.delivery.sent' then 'SENT' when a.action='email.delivery.suppressed_preview' then 'SUPPRESSED_PREVIEW' else 'FAILED' end,
           'metadata', a.metadata, 'createdAt', a.created_at
         ) order by a.created_at desc), '[]'::json)
          from bridge_audit_logs a
          where a.entity_type = 'bridge_title' and a.entity_id = t.id
-           and a.action in ('email.delivery.sent','email.delivery.failed')) as email_delivery
+           and a.action in ('email.delivery.sent','email.delivery.failed','email.delivery.suppressed_preview')) as email_delivery
       from bridge_titles t
       left join bridge_profiles p on p.user_id = t.owner_user_id
       where t.archived_at is null
@@ -218,7 +218,7 @@ export const getAdminSubmission = createServerFn({ method: "GET" })
         ) order by q.created_at desc),'[]'::json) from bridge_qc_cases q where q.title_id=t.id) as qc_notes,
         (select to_jsonb(i) from bridge_title_submission_intake i where i.title_id=t.id limit 1) as intake,
         (select coalesce(json_agg(json_build_object(
-          'status',case when a.action='email.delivery.sent' then 'SENT' else 'FAILED' end,
+          'status',case when a.action='email.delivery.sent' then 'SENT' when a.action='email.delivery.suppressed_preview' then 'SUPPRESSED_PREVIEW' else 'FAILED' end,
           'metadata',a.metadata,'createdAt',a.created_at
         ) order by a.created_at desc),'[]'::json) from bridge_audit_logs a
           where a.entity_type='bridge_title' and a.entity_id=t.id

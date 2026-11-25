@@ -571,7 +571,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
       return { title: { ...title, status: data.to } };
     });
     if (data.to === "QC_REVIEW") {
-      let emailStatus: "SENT" | "FAILED" = "FAILED";
+      let emailStatus: "SENT" | "FAILED" | "SUPPRESSED_PREVIEW" = "FAILED";
       let emailFailure: string | null = null;
       try {
         const { sendBridgeMail } = await import("./mail.server");
@@ -580,14 +580,14 @@ export const advanceTitle = createServerFn({ method: "POST" })
           subject: "QC submission received: " + title.name,
           text: "A title was submitted to QC in Crayons Bridge: " + title.name + ". Review it in /admin/submissions.",
         });
-        emailStatus = delivery.ok ? "SENT" : "FAILED";
+        emailStatus = delivery.suppressed ? "SUPPRESSED_PREVIEW" : delivery.ok ? "SENT" : "FAILED";
       } catch (error) {
         emailFailure = error instanceof Error ? error.message.slice(0, 500) : "Email delivery failed";
       }
       try {
         await writeAudit({
           actorUserId: actor.userId,
-          action: emailStatus === "SENT" ? "email.delivery.sent" : "email.delivery.failed",
+          action: emailStatus === "SENT" ? "email.delivery.sent" : emailStatus === "SUPPRESSED_PREVIEW" ? "email.delivery.suppressed_preview" : "email.delivery.failed",
           entityType: "bridge_title",
           entityId: title.id,
           metadata: { category: "qc_submission", recipient: "admin@crayonspictures.in", status: emailStatus, failure: emailFailure },
@@ -597,7 +597,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
       }
       return { ...result, emailDelivery: { status: emailStatus, failure: emailFailure } };
     }
-    return result;
+    return data.to === "QC_REVIEW" ? { ...result, emailDelivery: { status: emailStatus, failure: emailFailure } } : result;
   });
 
 export const listAuditLogs = createServerFn({ method: "GET" })
