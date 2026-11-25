@@ -66,3 +66,18 @@ A read-only SHA-256 comparison of the 98 recovered Testing statement sequences a
 | 20261124225934 | reconcile_duplicate_title_merge_gate_20261008 | 20261008113911 | reconcile_duplicate_title_merge_gate_20261008 |
 
 These are exact statement-sequence matches against the Production manifest, not matching migration versions. They confirm reuse of those seven SQL bodies; they do not establish that the entire Testing schema is equivalent to Production or that the remaining Testing entries should be discarded. The prior PR #683 source-provenance audit's 10 exact + 1 normalized source matches remain a separate historical finding and are not arithmetically combined with this comparison.
+
+## Disposable replay implementation
+
+A local-only replay runner is now committed at `scripts/supabase-testing-ledger-replay.mjs`. It:
+
+- Reads only the 10 archived JSON files and requires exactly 98 ordered, unique records.
+- Recomputes every SHA-256 fingerprint before connecting.
+- Rejects every database URL except local Supabase Postgres at `127.0.0.1:55432/postgres`.
+- Requires PostgreSQL 17, local Supabase Auth/Storage schemas, the migration ledger, and expected local roles.
+- Requires the local migration ledger to be empty, then applies each recovered migration in order in its own transaction.
+- Records replay progress in a temporary table and reports a compact catalog summary.
+
+The runner is wired into the existing GitHub Actions CI workflow as `testing-ledger-replay`. It starts a disposable local Supabase stack after quarantining the canonical Production migration directory, then restores that directory and stops the local stack. Static archive-integrity and remote-connection rejection tests are included in `npm test`.
+
+**The replay has not yet been reported as passing.** The branch is still a draft PR and the current head has not returned a completed GitHub Actions run. Until the new CI job completes successfully, this is an implemented test harness, not a replay certification.
