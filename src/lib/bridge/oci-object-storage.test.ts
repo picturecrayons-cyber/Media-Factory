@@ -36,11 +36,9 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
         OCI_NAMESPACE: "test-namespace",
         OCI_BUCKET_NAME: "test-bucket",
       });
-      globalThis.fetch = async () =>
-        new Response(null, {
-          status: 200,
-          headers: { "content-length": "1", etag: '"test-etag"' },
-        });
+      globalThis.fetch = async (_input, init) => init?.method === "HEAD"
+        ? new Response(null, { status: 200, headers: { "content-length": "12", "content-type": "video/mp4", "opc-content-sha256": "A".repeat(43) + "=", etag: '"test-etag"' } })
+        : new Response(new Uint8Array([0, 0, 0, 12, 102, 116, 121, 112, 105, 115, 111, 109, 0]), { status: 206 });
 
       await assert.doesNotReject(verifyObject("asset-key"));
     }
@@ -81,8 +79,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
             assert.equal(JSON.parse(String(init?.body)).sourceObjectIfMatch, "source-etag");
             return new Response(null, { status: 202, headers: { "opc-work-request-id": "copy/id" } });
           }
-          if (method === "GET") {
-            assert.equal(url.pathname, "/workRequests/copy%2Fid");
+          if (method === "GET" && url.pathname === "/workRequests/copy%2Fid") {
             const headers = new Headers(init?.headers);
             const signature = headers.get("authorization")?.match(/signature="([^"]+)"/)?.[1];
             assert.ok(signature);
@@ -92,13 +89,15 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
               ? new Response(null, { status: 403 })
               : Response.json({ status: outcome });
           }
-          assert.equal(method, "HEAD");
-          assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/o/sealed-key");
-          return new Response(null, { headers: { "content-length": "12", etag: '"sealed-etag"' } });
+          if (method === "HEAD") {
+            assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/o/sealed-key");
+            return new Response(null, { status: 200, headers: { "content-length": "12", "content-type": "video/mp4", "opc-content-sha256": "A".repeat(43) + "=", etag: '"sealed-etag"' } });
+          }
+          return new Response(new Uint8Array([0, 0, 0, 12, 102, 116, 121, 112, 105, 115, 111, 109, 0]), { status: 206 });
         };
         if (outcome === "SUCCEEDED") {
           assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag")).byteSize, 12);
-          assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
+          assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD", "GET"]);
         } else {
           const message = outcome === "HTTP_ERROR" ? /lookup failed \(403\)/ : new RegExp(`copy ${outcome.toLowerCase()}`);
           await assert.rejects(sealVerifiedObject("source-key", "sealed-key", "source-etag"), message);
@@ -127,11 +126,12 @@ test("OCI object verification rejects an unexpected content type", async () => {
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   const originalFetch = globalThis.fetch;
   Object.assign(process.env, values);
-  globalThis.fetch = async () => new Response(null, { status: 200,
-    headers: { "content-length": "12", "content-type": "image/png", etag: '"test-etag"' } });
+  globalThis.fetch = async (_input, init) => init?.method === "HEAD"
+    ? new Response(null, { status: 200, headers: { "content-length": "12", "content-type": "image/png", "opc-content-sha256": "A".repeat(43) + "=", etag: '"test-etag"' } })
+    : new Response(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]), { status: 206 });
   try {
     await assert.rejects(verifyObject("asset-key", "video/mp4"), /content type mismatch/);
-    assert.equal((await verifyObject("asset-key", "image/png")).contentType, "image/png");
+    assert.equal((await verifyObject("asset-key", "image/png")).format, "PNG");
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
@@ -163,17 +163,13 @@ test("OCI copy work-request handles transient 404 propagation delay and recovers
       if (method === "POST") {
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-transient-1" } });
       }
-      if (method === "GET") {
+      if (method === "GET" && url.pathname.startsWith("/workRequests/")) {
         getAttempts += 1;
-        // First attempt returns 404 (temporary not-yet-visible during propagation window)
-        if (getAttempts === 1) {
-          return new Response(null, { status: 404 });
-        }
-        // Second attempt returns SUCCEEDED
+        if (getAttempts === 1) return new Response(null, { status: 404 });
         return Response.json({ status: "SUCCEEDED" });
       }
-      // HEAD on destination object
-      return new Response(null, { headers: { "content-length": "42", etag: '"sealed-etag"' } });
+      if (method === "HEAD") return new Response(null, { status: 200, headers: { "content-length": "42", "content-type": "video/mp4", "opc-content-sha256": "A".repeat(43) + "=", etag: '"sealed-etag"' } });
+      return new Response(new Uint8Array([0, 0, 0, 12, 102, 116, 121, 112, 105, 115, 111, 109, 0]), { status: 206 });
     };
 
     const sealed = await sealVerifiedObject("src", "dst", "etag", {
@@ -212,10 +208,9 @@ test("OCI copy work-request fails closed on persistent 404 after propagation gra
       if (method === "POST") {
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-persistent-404" } });
       }
-      if (method === "GET") {
-        return new Response(null, { status: 404 });
-      }
-      return new Response(null, { headers: { "content-length": "42", etag: '"sealed-etag"' } });
+      if (method === "GET" && url.pathname.startsWith("/workRequests/")) return new Response(null, { status: 404 });
+      if (method === "HEAD") return new Response(null, { status: 200, headers: { "content-length": "42", "content-type": "video/mp4", "opc-content-sha256": "A".repeat(43) + "=", etag: '"sealed-etag"' } });
+      return new Response(new Uint8Array([0, 0, 0, 12, 102, 116, 121, 112, 105, 115, 111, 109, 0]), { status: 206 });
     };
 
     await assert.rejects(
