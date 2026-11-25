@@ -78,7 +78,7 @@ function CmsBody({ actor }: { actor: any }) {
       </nav>
 
       <div className="mt-6">
-        {tab === "ingest" ? <IngestDesk actor={actor} /> : null}
+        {tab === "ingest" ? <IngestDesk actor={actor} titles={titles} /> : null}
         {tab === "licensing" ? <LicensingDesk titles={titles} /> : null}
         {tab === "publishing" ? <PublishingDesk publications={publications} /> : null}
       </div>
@@ -86,7 +86,12 @@ function CmsBody({ actor }: { actor: any }) {
   );
 }
 
-function IngestDesk({ actor }: { actor: any }) {
+function IngestDesk({ actor, titles }: { actor: any; titles: Array<any> }) {
+  const ownerSubmissions = titles.filter((title) =>
+    title.status === "DRAFT" &&
+    title.submissionType === "finished_film" &&
+    ["independent_creator", "studio"].includes(title.ownerAccountType),
+  );
   const canCreate =
     hasPermission(actor, "title.create") || hasPermission(actor, "title.ingest_internal");
   return (
@@ -106,6 +111,42 @@ function IngestDesk({ actor }: { actor: any }) {
           ) : (
             <p className="text-sm text-muted">Your current role cannot create titles.</p>
           )}
+        </div>
+      </div>
+      <div className="rounded-3xl border border-line bg-surface p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
+              Owner submissions
+            </p>
+            <h3 className="mt-1 font-display text-2xl font-semibold">Creator / Studio intake</h3>
+            <p className="mt-2 text-sm text-muted">
+              Draft finished-film submissions awaiting Super Admin intake review. Intake does not approve rights or publish to Loop.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full border border-line px-3 py-1 text-xs">{ownerSubmissions.length}</span>
+        </div>
+        <div className="mt-4 divide-y divide-line">
+          {ownerSubmissions.map((title) => (
+            <div key={title.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{title.name}</p>
+                <p className="mt-1 text-xs text-muted">
+                  {title.ownerAccountType.replaceAll("_", " ")} · {title.language} · {title.year ?? "Year not set"}
+                </p>
+              </div>
+              <Link
+                to="/title/$id"
+                params={{ id: title.id }}
+                className="shrink-0 text-sm font-semibold text-accent hover:underline"
+              >
+                Review submission →
+              </Link>
+            </div>
+          ))}
+          {!ownerSubmissions.length ? (
+            <p className="py-5 text-sm text-muted">No finished-film owner submissions are waiting.</p>
+          ) : null}
         </div>
       </div>
       <div className="rounded-3xl border border-line bg-surface p-6">
