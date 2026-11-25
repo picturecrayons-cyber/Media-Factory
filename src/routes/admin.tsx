@@ -44,7 +44,13 @@ function AdminBody({ actor }: { actor: any }) {
   const distribution = distQ.data?.titles ?? [];
   const profiles = profilesQ.data?.profiles ?? [];
   const organizations = new Set(profiles.map((profile) => profile.organizationName).filter(Boolean));
-  const qcQueue = titles.filter((title) => title.status === "PREPARING" || title.status === "QC_REVIEW").length;
+  const ownerSubmissions = titles.filter((title) =>
+    title.status === "DRAFT" &&
+    ["independent_creator", "studio"].includes(title.ownerAccountType),
+  );
+  const qcQueue = titles.filter((title) =>
+    title.status === "PREPARING" || title.status === "QC_REVIEW",
+  ).length;
   const rightsQueue = titles.filter((title) => title.status === "RIGHTS_REVIEW").length;
   const buyerReady = titles.filter((title) => ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED"].includes(title.status)).length;
   const live = distribution.filter((title) => title.publication?.published).length;
@@ -73,6 +79,30 @@ function AdminBody({ actor }: { actor: any }) {
           <Metric label="Rights review" value={loading ? "—" : String(rightsQueue)} detail="Clearance queue" />
           <Metric label="Buyer-ready" value={loading ? "—" : String(buyerReady)} detail="Licensing stages" />
         </section>
+
+        {actor.internalRole === "super_admin" ? (
+          <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-display text-xl font-semibold">Owner submissions</h3>
+                <p className="mt-1 text-sm text-muted">Creator and Studio drafts awaiting Super Admin intake review. Nothing is published automatically.</p>
+              </div>
+              <span className="text-xs text-muted">{ownerSubmissions.length} awaiting review</span>
+            </div>
+            <div className="mt-3 divide-y divide-line">
+              {ownerSubmissions.slice(0, 20).map((title) => (
+                <div key={title.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">{title.name}</p>
+                    <p className="mt-1 text-xs text-muted">{title.ownerAccountType.replaceAll("_", " ")} · {title.language} · {title.year ?? "Year not set"}</p>
+                  </div>
+                  <Link to="/title/$id" params={{ id: title.id }} className="shrink-0 text-sm font-semibold text-accent hover:underline">Review submission →</Link>
+                </div>
+              ))}
+              {!ownerSubmissions.length ? <p className="py-5 text-sm text-muted">No owner submissions are waiting.</p> : null}
+            </div>
+          </section>
+        ) : null}
 
         <section className="rounded-2xl border border-line bg-surface p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
