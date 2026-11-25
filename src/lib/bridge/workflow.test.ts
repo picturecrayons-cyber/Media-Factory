@@ -362,7 +362,7 @@ test("license author cannot approve their own agreement", async () => {
           grantId: saved.grantId,
         }),
       ),
-      /Another legal reviewer/,
+      /Only the verified Super Admin may approve their own license draft/,
     );
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
