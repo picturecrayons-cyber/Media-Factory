@@ -1,6 +1,8 @@
 name: Crayons Bridge Preview Playwright
 
 on:
+  push:
+    branches: ["test/bridge-preview-playwright-20261125"]
   workflow_dispatch:
     inputs:
       base_url:
@@ -30,7 +32,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run read-only Preview checks
         env:
-          BRIDGE_BASE_URL: ${{ inputs.base_url }}
+          BRIDGE_BASE_URL: ${{ inputs.base_url || vars.BRIDGE_PREVIEW_URL || 'https://bridge-lyfdfrxns-stream-vista-opc-pvt-ltd-s-projects.vercel.app' }}
           VERCEL_PROTECTION_BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
           BRIDGE_E2E_ACCOUNTS_JSON: ${{ secrets.BRIDGE_E2E_ACCOUNTS_JSON }}
           BRIDGE_E2E_DRAFT_TITLE_ID: test-fixture-free-video-20261124
