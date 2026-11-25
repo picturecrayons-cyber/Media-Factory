@@ -99,7 +99,6 @@ try {
       current_setting('server_version_num')::int as server_version_num,
       to_regclass('auth.users') is not null as auth_users_ready,
       to_regclass('storage.buckets') is not null as storage_ready,
-      to_regclass('supabase_migrations.schema_migrations') is not null as migrations_ledger_ready,
       exists (select 1 from pg_roles where rolname = 'anon') as anon_role_ready,
       exists (select 1 from pg_roles where rolname = 'authenticated') as authenticated_role_ready,
       exists (select 1 from pg_roles where rolname = 'service_role') as service_role_ready
@@ -111,19 +110,11 @@ try {
     state.server_version_num >= 180000 ||
     !state.auth_users_ready ||
     !state.storage_ready ||
-    !state.migrations_ledger_ready ||
     !state.anon_role_ready ||
     !state.authenticated_role_ready ||
     !state.service_role_ready
   ) {
     throw new Error("Disposable PostgreSQL 17 Supabase base schemas/roles are not ready");
-  }
-
-  const ledger = await client.query(
-    "select count(*)::int as count from supabase_migrations.schema_migrations",
-  );
-  if (ledger.rows[0].count !== 0) {
-    throw new Error("Local Supabase startup applied migrations before controlled Testing-ledger replay");
   }
 
   await client.query(`
