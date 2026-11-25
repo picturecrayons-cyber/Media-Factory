@@ -25,7 +25,7 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
     const auditQuery = actor.internalRole === "super_admin"
       ? sql`select id,actor_user_id,action,entity_type,entity_id,metadata,created_at from bridge_audit_logs order by created_at desc limit 200`
       : sql`select id,actor_user_id,action,entity_type,entity_id,metadata,created_at from bridge_audit_logs where action not like 'buyer.%' and action not like 'payment.%' and entity_type not in ('bridge_payment','bridge_buyer_interest','buyer') order by created_at desc limit 200`;
-    const [titles, assets, assetVersions, qc, legal, rights, packages, publications, profiles, audit] = await Promise.all([
+    const [titles, assets, assetVersions, qc, legal, rights, packages, publications, gates, creatorMandates, profiles, audit] = await Promise.all([
       sql`select id,name,owner_user_id,owner_account_type,status,language,updated_at from bridge_titles order by updated_at desc limit 200`,
       sql`select a.id,a.title_id,a.kind,a.content_type,a.byte_size,
         coalesce(to_jsonb(a)->>'checksum_sha256',to_jsonb(a)->>'sha256') as checksum_sha256,
@@ -34,13 +34,15 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
       sql`select id,title_id,asset_group,asset_type,version,language,codec,processing_state,created_at from bridge_asset_versions order by created_at desc limit 300`,
       sql`select id,title_id,asset_version_id,status,automated_findings,reviewer_findings,reviewed_by,reviewed_at,created_at from bridge_qc_cases order by created_at desc limit 200`,
       sql`select id,title_id,status,classification,evidence,restrictions,reviewed_by,reviewed_at,created_at from bridge_legal_cases order by created_at desc limit 200`,
-      sql`select id,title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,status,created_by,created_at from bridge_rights_grants order by created_at desc limit 200`,
-      sql`select id,title_id,destination,package_version,rights_grant_id,qc_case_id,legal_case_id,readiness_state,authorized_by,authorized_at,created_at,commercial_model,distributor_exclusivity,revenue_share_percent from bridge_destination_packages order by created_at desc limit 200`,
+      sql`select id,title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,status,evidence,created_by,created_at from bridge_rights_grants order by created_at desc limit 200`,
+      sql`select id,title_id,destination,package_version,rights_grant_id,qc_case_id,legal_case_id,asset_version_ids,consumer_metadata,monetization,readiness_state,authorized_by,authorized_at,created_at from bridge_destination_packages order by created_at desc limit 200`,
       sql`select id,bridge_title_id,loop_title_id,authorization_status,territories,languages,exploitation_models,window_start,window_end,approved_by,approved_at,revoked_at,updated_at from bridge_loop_publications order by updated_at desc limit 200`,
+      sql`select title_id,ott_preparation_status,packaging_status,curation_status,delivery_status,evidence,updated_by,updated_at from bridge_title_gate_certifications order by updated_at desc limit 200`,
+      sql`select m.creator_user_id,p.display_name,p.email,p.account_type,m.mandate_version,m.status,m.scope,m.accepted_at,m.consent_text_version,m.updated_at from bridge_creator_distribution_mandates m join bridge_profiles p on p.user_id=m.creator_user_id order by m.updated_at desc limit 200`,
       profilesQuery,
       auditQuery,
     ]);
-    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, profiles, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
+    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, gates, creatorMandates, profiles, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
   });
 
 const reviewInput = z.object({
@@ -54,7 +56,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
   .validator(reviewInput)
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    if (!actor.internalRole) throw new Error("Forbidden");
+    if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") throw new Error("Forbidden");
     const sql = await getSql();
     const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
     const title = rows[0];
@@ -106,8 +108,8 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
   .validator(gateInput)
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    if (!actor.internalRole) throw new Error("Forbidden");
-    assertPermission(actor, "title.license");
+    if (actor.internalRole !== "admin") throw new Error("Admin distribution review required");
+    assertPermission(actor, "distribution.write");
     const sql = await getSql();
     const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
     if (!rows[0]) throw new Error("Title not found");
@@ -154,4 +156,71 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     await writeAudit({actorUserId:actor.userId,action:`buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,entityType:"bridge_title",entityId:data.titleId,metadata:{gate:data.gate,decision:data.decision,notes:data.notes??null}});
     const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
     return {ok:true,gate:data.gate,decision:data.decision,publishable:result[0]?.ok===true};
+  });
+
+
+const businessReviewInput = z.object({
+  titleId: z.string().min(8),
+  grantId: z.string().uuid(),
+  status: z.enum(["REVIEWED","HOLD"]),
+  notes: z.string().trim().min(3).max(2000),
+});
+
+export const updateBusinessReview = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(businessReviewInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "admin") throw new Error("Admin Business review required");
+    assertPermission(actor, "business.write");
+    const sql = await getSql();
+    const review = { status: data.status, notes: data.notes, reviewedBy: actor.userId, reviewedAt: new Date().toISOString() };
+    await sql.transaction(async (tx) => {
+      const rows = await tx.unsafe("select evidence from bridge_rights_grants where id=$1 and title_id=$2 and status='DRAFT' for update", [data.grantId, data.titleId]) as Array<{ evidence: unknown }>;
+      if (!rows[0]) throw new Error("Business review is writable only while the rights grant is still DRAFT");
+      const current = Array.isArray(rows[0].evidence) ? rows[0].evidence as Array<Record<string, unknown>> : [];
+      const first = current[0] ?? {};
+      const next = [{ ...first, businessReview: review }, ...current.slice(1)];
+      await tx.unsafe("update bridge_rights_grants set evidence=$1::jsonb where id=$2 and title_id=$3 and status='DRAFT'", [JSON.stringify(next), data.grantId, data.titleId]);
+    });
+    await writeAudit({ actorUserId: actor.userId, action: "business.review_updated", entityType: "bridge_rights_grant", entityId: data.grantId, metadata: { titleId: data.titleId, status: data.status, notes: data.notes } });
+    return { ok: true, review };
+  });
+
+const revenueReviewInput = z.object({
+  titleId: z.string().min(8),
+  grantId: z.string().uuid(),
+  rightsOwnerSharePct: z.number().int().min(0).max(100),
+  distributorSharePct: z.number().int().min(0).max(100),
+  feePaise: z.number().int().nonnegative().optional(),
+  notes: z.string().trim().max(2000).optional(),
+});
+
+export const updateCommercialTerms = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(revenueReviewInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "admin") throw new Error("Admin Revenue review required");
+    assertPermission(actor, "revenue.write");
+    if (data.rightsOwnerSharePct + data.distributorSharePct !== 100) throw new Error("Rights owner and distributor shares must total exactly 100%");
+    const sql = await getSql();
+    const commercialTerms = {
+      rightsOwnerSharePct: data.rightsOwnerSharePct,
+      distributorSharePct: data.distributorSharePct,
+      ...(data.feePaise == null ? {} : { feePaise: data.feePaise }),
+      ...(data.notes ? { notes: data.notes } : {}),
+    };
+    await sql.transaction(async (tx) => {
+      const rows = await tx.unsafe("select evidence from bridge_rights_grants where id=$1 and title_id=$2 and status='DRAFT' for update", [data.grantId, data.titleId]) as Array<{ evidence: unknown }>;
+      if (!rows[0]) throw new Error("Revenue terms are writable only while the rights grant is still DRAFT");
+      const current = Array.isArray(rows[0].evidence) ? rows[0].evidence as Array<Record<string, unknown>> : [];
+      const first = current[0] ?? {};
+      const next = [{ ...first, commercialTerms }, ...current.slice(1)];
+      await tx.unsafe("update bridge_rights_grants set evidence=$1::jsonb where id=$2 and title_id=$3 and status='DRAFT'", [JSON.stringify(next), data.grantId, data.titleId]);
+    });
+    await writeAudit({ actorUserId: actor.userId, action: "revenue.commercial_terms_updated", entityType: "bridge_rights_grant", entityId: data.grantId, metadata: { titleId: data.titleId, ...commercialTerms } });
+    return { ok: true };
   });

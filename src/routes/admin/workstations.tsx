@@ -4,12 +4,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
+import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate, updateBusinessReview, updateCommercialTerms } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "Business", "Revenue", "Distribution", "Assets", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -21,7 +21,9 @@ const STATUS_LABELS: Record<string, string> = {
 function AdminWorkstations() {
   return (
     <RequireBridge allow="internal">
-      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody actor={actor} /></BridgeShell>}
+      {(actor) => actor.internalRole === "admin" || actor.internalRole === "super_admin"
+        ? <BridgeShell actor={actor} title="Admin"><WorkstationBody actor={actor} /></BridgeShell>
+        : <BridgeShell actor={actor} title="Admin"><div className="rounded-xl border border-line p-5 text-sm">Admin access required.</div></BridgeShell>}
     </RequireBridge>
   );
 }
@@ -33,14 +35,16 @@ function WorkstationBody({ actor }: { actor: any }) {
     mutationFn: reviewAdminTitle,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
+  const business = useMutation({ mutationFn: updateBusinessReview, onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }) });
+  const revenue = useMutation({ mutationFn: updateCommercialTerms, onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }) });
   const gate = useMutation({
     mutationFn: setBuyerPublicationGate,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
   const [activeTab, setActiveTab] = useState<Tab>("Titles");
   const visibleTabs = actor.internalRole === "super_admin"
-    ? TABS.filter((tab) => !["QC", "Rights"].includes(tab))
-    : TABS.filter((tab) => !["QC", "Rights", "Buyers"].includes(tab));
+    ? TABS.filter((tab) => !["Business", "Revenue", "Distribution"].includes(tab))
+    : TABS;
 
   const data = query.data;
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading Admin…</div>;
@@ -81,6 +85,12 @@ function WorkstationBody({ actor }: { actor: any }) {
       ) : activeTab === "Rights" ? (
         <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
           actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
+      ) : activeTab === "Business" ? (
+        <BusinessReview rows={data.rights} mandates={data.creatorMandates} titles={titleName} mutation={business} />
+      ) : activeTab === "Revenue" ? (
+        <RevenueReview rows={data.rights} titles={titleName} mutation={revenue} />
+      ) : activeTab === "Distribution" ? (
+        <DistributionReview titles={data.titles} gates={data.gates} mutation={gate} />
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "content_type", "byte_size", "checksum_sha256", "storage_verified_at"]} />
@@ -163,6 +173,58 @@ function ReviewQueue({ title, description, titles, actions, mutation }: { title:
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
 }
-function BuyerRelease({ titles, onGate }: { titles: any[]; qc?: any; legal?: any; gate?: any; onGate: (titleId: string, gateName: string) => void }) {
-  return <section className="space-y-3"><SectionHeader title="Buyer release" description="Pass a gate only after the required check." />{titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span><ActionButton label="Pass gate" onClick={() => onGate(t.id, "buyer")} /></div>)}</section>;
+
+function BusinessReview({ rows, mandates, titles, mutation }: { rows: any[]; mandates: any[]; titles: Map<any,any>; mutation: any }) {
+  const drafts = rows.filter((r) => r.status === "DRAFT");
+  const [notes, setNotes] = useState<Record<string,string>>({});
+  return <section className="space-y-4">
+    <SectionHeader title="Business review" description="Review creator distribution mandates and record the Admin business review on draft rights grants. Creator consent itself is not overwritten." />
+    <SimpleTable title="Creator distribution mandates" description={mandates.length + " persisted creator/studio mandates"} rows={mandates} fields={["display_name","account_type","mandate_version","status","scope","accepted_at","consent_text_version"]} />
+    <div className="space-y-3">{drafts.map((g:any)=><article key={g.id} className="rounded-2xl border border-line bg-surface p-4 space-y-3">
+      <div><p className="font-semibold">{titles.get(g.title_id) ?? g.title_id}</p><p className="text-xs text-muted">Draft rights grant · {g.grant_type} · {g.exclusivity}</p></div>
+      <pre className="whitespace-pre-wrap break-words rounded-xl bg-elevated p-3 text-xs text-muted">{JSON.stringify(Array.isArray(g.evidence) ? g.evidence[0]?.businessReview ?? {} : {},null,2)}</pre>
+      <textarea value={notes[g.id] ?? ""} onChange={(e)=>setNotes(old=>({...old,[g.id]:e.target.value}))} placeholder="Business review notes" className="min-h-20 w-full rounded-xl border border-line bg-bg p-3 text-sm" />
+      <div className="flex gap-2"><Button size="sm" disabled={(notes[g.id] ?? "").trim().length<3 || mutation.isPending} onClick={()=>mutation.mutate({data:{titleId:g.title_id,grantId:g.id,status:"REVIEWED",notes:notes[g.id]}})}>Mark reviewed</Button><Button size="sm" variant="outline" disabled={(notes[g.id] ?? "").trim().length<3 || mutation.isPending} onClick={()=>mutation.mutate({data:{titleId:g.title_id,grantId:g.id,status:"HOLD",notes:notes[g.id]}})}>Hold</Button></div>
+    </article>)}</div>
+    {!drafts.length ? <Empty text="No draft rights grants are waiting for Business review."/> : null}
+  </section>;
+}
+
+function RevenueReview({ rows, titles, mutation }: { rows: any[]; titles: Map<any,any>; mutation: any }) {
+  const drafts = rows.filter((r) => r.status === "DRAFT");
+  const [values, setValues] = useState<Record<string,{owner:string;distributor:string;fee:string;notes:string}>>({});
+  return <section className="space-y-4">
+    <SectionHeader title="Revenue review" description="Set the commercial revenue split on DRAFT rights grants. Shares must total 100%; Legal approval locks this review stage." />
+    {drafts.map((g:any)=>{
+      const terms = Array.isArray(g.evidence) ? g.evidence[0]?.commercialTerms ?? {} : {};
+      const v = values[g.id] ?? {owner:String(terms.rightsOwnerSharePct ?? 0),distributor:String(terms.distributorSharePct ?? 0),fee:String(terms.feePaise ?? ""),notes:String(terms.notes ?? "")};
+      return <article key={g.id} className="space-y-3 rounded-2xl border border-line bg-surface p-4">
+        <div><p className="font-semibold">{titles.get(g.title_id) ?? g.title_id}</p><p className="text-xs text-muted">Draft rights grant · {g.grant_type}</p></div>
+        <div className="grid gap-2 sm:grid-cols-2"><label className="text-xs text-muted">Rights owner share %<input type="number" min="0" max="100" value={v.owner} onChange={(e)=>setValues(old=>({...old,[g.id]:{...v,owner:e.target.value}}))} className="mt-1 h-10 w-full rounded-lg border border-line bg-bg px-3 text-sm text-fg"/></label><label className="text-xs text-muted">Distributor share %<input type="number" min="0" max="100" value={v.distributor} onChange={(e)=>setValues(old=>({...old,[g.id]:{...v,distributor:e.target.value}}))} className="mt-1 h-10 w-full rounded-lg border border-line bg-bg px-3 text-sm text-fg"/></label><label className="text-xs text-muted">License fee (paise)<input type="number" min="0" value={v.fee} onChange={(e)=>setValues(old=>({...old,[g.id]:{...v,fee:e.target.value}}))} className="mt-1 h-10 w-full rounded-lg border border-line bg-bg px-3 text-sm text-fg"/></label><label className="text-xs text-muted">Commercial notes<input value={v.notes} onChange={(e)=>setValues(old=>({...old,[g.id]:{...v,notes:e.target.value}}))} className="mt-1 h-10 w-full rounded-lg border border-line bg-bg px-3 text-sm text-fg"/></label></div>
+        <p className="text-xs text-muted">Current split total: {Number(v.owner||0)+Number(v.distributor||0)}%</p>
+        <Button size="sm" disabled={Number(v.owner)+Number(v.distributor)!==100 || mutation.isPending} onClick={()=>mutation.mutate({data:{titleId:g.title_id,grantId:g.id,rightsOwnerSharePct:Number(v.owner),distributorSharePct:Number(v.distributor),feePaise:v.fee===""?undefined:Number(v.fee),notes:v.notes||undefined}})}>Save revenue terms</Button>
+      </article>;
+    })}
+    {!drafts.length ? <Empty text="No draft rights grants are waiting for Revenue review."/> : null}
+  </section>;
+}
+
+function DistributionReview({ titles, gates, mutation }: { titles: any[]; gates: any[]; mutation: any }) {
+  const gateByTitle = new Map(gates.map((g:any)=>[g.title_id,g]));
+  const gateNames = ["OTT","PACKAGING","CURATION","DELIVERY"] as const;
+  return <section className="space-y-3">
+    <SectionHeader title="Distribution review" description="Admin can pass or hold readiness gates. This is not a publish control; Buyer Loop publication remains Super Admin only." />
+    {titles.map((t:any)=>{
+      const g:any=gateByTitle.get(t.id) ?? {};
+      return <article key={t.id} className="space-y-3 rounded-2xl border border-line bg-surface p-4">
+        <div><p className="font-semibold">{t.name}</p><p className="text-xs text-muted">{t.status}</p></div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {gateNames.map((name)=>{
+            const field = name==="OTT" ? "ott_preparation_status" : name==="PACKAGING" ? "packaging_status" : name==="CURATION" ? "curation_status" : "delivery_status";
+            return <div key={name} className="rounded-xl border border-line p-3"><div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold">{name}</p><span className="text-xs text-muted">{g[field] ?? "HOLD"}</span></div><div className="mt-2 flex flex-wrap gap-1"><button type="button" className="rounded-full border border-line px-2 py-1 text-xs" onClick={()=>mutation.mutate({data:{titleId:t.id,gate:name,decision:"PASS"}})}>Pass</button><button type="button" className="rounded-full border border-line px-2 py-1 text-xs" onClick={()=>mutation.mutate({data:{titleId:t.id,gate:name,decision:"HOLD"}})}>Hold</button><button type="button" className="rounded-full border border-line px-2 py-1 text-xs" onClick={()=>mutation.mutate({data:{titleId:t.id,gate:name,decision:"FAIL"}})}>Fail</button></div></div>;
+          })}
+        </div>
+      </article>;
+    })}
+  </section>;
 }
