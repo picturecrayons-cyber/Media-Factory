@@ -9,15 +9,19 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   kind: string;
   byteSize: number;
   contentType: string | null;
-  checksum: string | null;
+  checksumSha256: string;
+  checksumAlgorithm: string;
+  format: string;
   sourceKey: string;
   sealedKey: string;
 }): Promise<boolean> {
   if (!Number.isSafeInteger(opts.byteSize) || opts.byteSize <= 0) throw new Error("Uploaded object is empty");
   const rows = await sql.query<{ entity_id: string }>(`
     with verified as (
-      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6
-      where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $7
+      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6,
+        sha256 = $9, checksum_sha256 = $9, storage_verified_at = now(), source_object_key = $7,
+        verified_object_key = $6
+      where a.id = $3 and a.created_by = $4 and (a.byte_size is null or a.checksum_sha256 is null or a.storage_verified_at is null) and a.s3_key = $7
         and a.title_id = $8
         and exists (
           select 1
@@ -60,7 +64,10 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
         'titleId', v.title_id,
         'kind', v.kind,
         'byteSize', $1,
-        'checksum', $9::text
+        'checksumSha256', $9::text,
+        'checksumAlgorithm', $10::text,
+        'format', $11::text,
+        'formatVerified', true
       )
     from verified v join title_set t on t.id = v.title_id
     returning entity_id
@@ -73,7 +80,9 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
     opts.sealedKey,
     opts.sourceKey,
     opts.titleId,
-    opts.checksum,
+    opts.checksumSha256,
+    opts.checksumAlgorithm,
+    opts.format,
   ]);
   return Boolean(rows[0]);
 }
