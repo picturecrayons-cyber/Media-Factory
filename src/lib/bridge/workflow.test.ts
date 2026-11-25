@@ -302,6 +302,47 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
     await f.db.close();
   }
 });
+
+test("verified Super Admin can approve their own license draft as the single Bridge approval authority", async () => {
+  const f = await fixture();
+  try {
+    const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
+      grantId: string;
+    };
+    await f.sql.transaction((tx) =>
+      f.review(tx, superAdmin, {
+        titleId: "title-123",
+        stage: "QC",
+        decision: "APPROVE",
+        note: "Super Admin verified current master and artwork",
+      }),
+    );
+    await f.sql.transaction((tx) =>
+      f.review(tx, superAdmin, {
+        titleId: "title-123",
+        stage: "LEGAL",
+        decision: "APPROVE",
+        note: "Super Admin reviewed the recorded rights agreement evidence",
+        grantId: saved.grantId,
+      }),
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_titles"))[0].status,
+      "LICENSING_READY",
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
+      "VALID",
+    );
+    assert.equal((await f.sql.query("select * from bridge_qc_cases where status='PASSED'")).length, 1);
+    assert.equal((await f.sql.query("select * from bridge_legal_cases where status='APPROVED'")).length, 1);
+    assert.equal((await f.sql.query("select * from bridge_audit_logs")).length, 3);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("license author cannot approve their own agreement", async () => {
   const f = await fixture();
   try {
