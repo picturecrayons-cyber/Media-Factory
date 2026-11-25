@@ -134,7 +134,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
       {label}
     </button>
   );
-  const input = (label: string, value: string, set: (v: string) => void, type = "text") => (
+  const input = (label: string, value: string, set: (v: string) => void, type = "text", required = true) => (
     <label className="grid gap-1 text-sm">
       {label}
       <input
@@ -142,7 +142,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         value={value}
         onChange={(e) => set(e.target.value)}
         className="rounded-lg border border-line bg-elevated p-2"
-        required
+        required={required}
       />
     </label>
   );
@@ -264,8 +264,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       <input type="checkbox" checked={selfOwnedDeclaration} onChange={(e) => setSelfOwnedDeclaration(e.target.checked)} className="mt-1" />
                       <span><strong>Studio-owned digital rights declaration</strong><span className="mt-1 block text-xs text-muted">I confirm this Studio controls the digital distribution rights for this title. This records a declaration only; documentary verification and Super Admin approval are still required before Loop publication.</span></span>
                     </label>
-                    {input("Agreement reference (if applicable)", agreement, setAgreement)}
-                    {input("Ownership evidence reference (if available)", ownership, setOwnership)}
+                    {input("Agreement reference (if applicable)", agreement, setAgreement, "text", false)}
+                    {input("Ownership evidence reference (if available)", ownership, setOwnership, "text", false)}
                     <label className="grid gap-1 text-sm">Rights owner share (%)<input type="number" min="0" max="100" step="1" value={ownerShare} onChange={(e) => setOwnerShare(e.target.value)} className="rounded-lg border border-line bg-elevated p-2" required /></label>
                     <label className="flex items-center gap-2 text-sm">
                       <input
