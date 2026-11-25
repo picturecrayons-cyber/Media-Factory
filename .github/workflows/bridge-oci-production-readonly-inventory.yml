@@ -43,6 +43,8 @@ jobs:
           esac
           test "$MAX_OBJECTS" -ge 1
           test "$MAX_OBJECTS" -le 500000
+      - name: Validate inventory script syntax
+        run: node --check scripts/oci-production-readonly-inventory.mjs
       - name: Read-only OCI inventory (no DB access)
         env:
           OCI_TENANCY_OCID: ${{ secrets.PRODUCTION_OCI_TENANCY_OCID }}
