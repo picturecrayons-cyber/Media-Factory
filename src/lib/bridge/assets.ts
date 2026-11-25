@@ -324,8 +324,18 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       byte_size: number | null;
       created_at: string | Date;
     }>`
-      select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      select distinct on (a.kind)
+        a.id, a.kind, a.s3_key, a.content_type, a.byte_size, a.created_at
+      from bridge_assets a
+      where a.title_id = ${title.id}
+        and a.byte_size > 0
+        and a.s3_key like '%.verified/%'
+        and (
+          a.kind not in ('master', 'poster', 'poster_vertical')
+          or (a.kind = 'master' and a.s3_key = ${title.masterKey})
+          or (a.kind in ('poster', 'poster_vertical') and a.s3_key = ${title.posterKey})
+        )
+      order by a.kind, a.created_at desc
     `;
     return {
       assets: rows
@@ -336,7 +346,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           key: buyer ? null : r.s3_key,
           contentType: r.content_type,
           byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0 && ["poster", "poster_vertical"].includes(r.kind) && Boolean(title.posterKey) && r.s3_key === title.posterKey,
+          verified: Number(r.byte_size) > 0 && r.s3_key.includes(".verified/"),
           createdAt:
             r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
