@@ -1,50 +1,109 @@
 import type { AccountType, InternalRole, Permission, TitleStatus } from "./types.ts";
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
-  viewer: ["title.read_published", "asset.read_trailer"],
-  qc_reviewer: ["title.qc_queue_read", "title.qc_review", "asset.read_storage_proof"],
-  legal_reviewer: ["title.legal_queue_read", "title.rights_review", "legal.contracts_read"],
-  finance: ["finance.read", "finance.payouts_read", "razorpay.orders_read"],
+  viewer: ["title.read_catalog", "audit.read"],
+  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read"],
+  legal_reviewer: [
+    "title.read_catalog",
+    "title.rights_review",
+    "asset.sign_download",
+    "audit.read",
+  ],
+  finance: [
+    "title.read_catalog",
+    "finance.read",
+    "finance.record_settlement",
+    "entitlement.read_own",
+    "audit.read",
+  ],
   admin: [
-    "title.admin_queue_read", "title.read_catalog",
-    "service.quote_create", "service.order_create", "service.fulfill",
-    "title.license", "title.merge_duplicate",
-    "title.negotiate", "title.deliver", "delivery.read", "delivery.read_finance",
-    "asset.sign_download", "asset.read_storage_proof", "finance.read",
-    "users.invite_internal", "audit.read",
-    "business.read", "business.write", "revenue.read", "revenue.write",
-    "distribution.read", "distribution.write",
+    "title.read_catalog",
+    "service.quote_create",
+    "service.order_create",
+    "service.fulfill",
+    "title.qc_review",
+    "title.rights_review",
+    "title.license",
+    "title.merge_duplicate",
+    "title.negotiate",
+    "title.deliver",
+    "service.quote_create",
+    "service.order_create",
+    "service.fulfill",
+    "delivery.read",
+    "delivery.read_finance",
+    "asset.sign_download",
+    "finance.read",
+    "finance.record_settlement",
+    "users.invite_internal",
+    "audit.read",
+    "loop.publish",
+    "loop.revoke",
+    "loop.certify_playback",
   ],
   super_admin: [
-    "title.admin_queue_read", "title.read_catalog", "title.final_approve",
-    "buyer.read", "buyer_loop.read", "legacy.map", "story_concept.download_approved",
-    "loop.publish", "distribution.read", "audit.read",
+    "title.ingest_internal",
+    "title.create",
+    "title.read_catalog",
+    "title.advance_upload",
+    "title.qc_review",
+    "title.rights_review",
+    "title.license",
+    "title.negotiate",
+    "title.deliver",
+    "delivery.read",
+    "delivery.read_finance",
+    "asset.sign_download",
+    "entitlement.read_own",
+    "finance.read",
+    "finance.record_settlement",
+    "users.invite_internal",
+    "audit.read",
+    "loop.publish",
+    "loop.revoke",
+    "loop.certify_playback",
+    "asset.sign_upload",
   ],
 };
 
 const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
   independent_creator: [
-    "title.create", "title.read_own", "title.update_own", "title.advance_upload", "title.submit_qc",
-    "asset.sign_upload", "asset.sign_download", "asset.read_storage_proof",
-    "story_concept.create", "story_concept.read_own",
-    "service.quote_create", "service.order_create", "entitlement.read_own", "delivery.read",
+    "title.create",
+    "title.read_own",
+    "title.update_own",
+    "title.advance_upload",
+    "service.quote_create",
+    "service.order_create",
+    "asset.sign_upload",
+    "asset.sign_download",
+    "entitlement.read_own",
+    "delivery.read",
+    "delivery.read_finance",
   ],
   studio: [
-    "title.create", "title.read_own", "title.update_own", "title.advance_upload", "title.submit_qc",
-    "asset.sign_upload", "asset.sign_download", "asset.read_storage_proof",
-    "story_concept.create", "story_concept.read_own",
-    "dit.agent", "dit.upload", "storage.manage",
-    "service.quote_create", "service.order_create", "entitlement.read_own", "delivery.read",
+    "title.create",
+    "title.read_own",
+    "title.update_own",
+    "title.advance_upload",
+    "service.quote_create",
+    "service.order_create",
+    "asset.sign_upload",
+    "asset.sign_download",
+    "entitlement.read_own",
+    "delivery.read",
+    "delivery.read_finance",
   ],
   buyer: [
-    "title.read_published", "story_concept.read_buyer", "asset.read_trailer",
-    "buyer.investment_interest", "buyer_loop.read", "payment.create_order", "entitlement.read_own",
+    "title.read_catalog",
+    "payment.create_order",
+    "entitlement.read_own",
+    "asset.sign_download",
   ],
   investor: [
-    "title.read_published", "story_concept.read_buyer", "asset.read_trailer",
-    "buyer.investment_interest", "buyer_loop.read",
+    "entitlement.read_own",
   ],
 };
+
 export type Actor = {
   userId: string;
   emailVerified: boolean;
@@ -84,11 +143,7 @@ export function canAccessDashboard(actor: Actor): boolean {
 /** Title workspace is for Creator/Studio accounts and internal staff with catalog-read access. */
 export function canAccessTitleWorkspace(actor: Actor): boolean {
   if (!actor.emailVerified) return false;
-  if (actor.internalRole) {
-    return hasPermission(actor, "title.read_catalog") ||
-      hasPermission(actor, "title.qc_queue_read") ||
-      hasPermission(actor, "title.legal_queue_read");
-  }
+  if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
   return (
     (actor.accountType === "independent_creator" || actor.accountType === "studio") &&
     hasPermission(actor, "title.read_own")
@@ -157,24 +212,8 @@ export function canReadTitle(
     (title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) &&
     !actor.internalRole
   ) return hasPermission(actor, "title.read_own");
-  if (actor.internalRole) {
-    if (actor.internalRole === "admin" || actor.internalRole === "super_admin") {
-      return hasPermission(actor, "title.read_catalog");
-    }
-    if (actor.internalRole === "qc_reviewer") {
-      return title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_queue_read");
-    }
-    if (actor.internalRole === "legal_reviewer") {
-      return title.status === "RIGHTS_REVIEW" && hasPermission(actor, "title.legal_queue_read");
-    }
-    if (actor.internalRole === "viewer") {
-      return title.status === "LIVE_FOR_BUYERS" && hasPermission(actor, "title.read_published");
-    }
-    return false;
-  }
-  if (actor.accountType === "buyer" || actor.accountType === "investor") {
-    return title.status === "LIVE_FOR_BUYERS" && hasPermission(actor, "title.read_published");
-  }
+  if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
+  if (actor.accountType === "buyer") return ["LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status) && hasPermission(actor, "title.read_catalog");
   return false;
 }
 
@@ -211,12 +250,10 @@ export function workspaceHome(actor: Actor): string {
   // Signup query parameters are intent only and never grant privileges.
   if (canAccessDashboard(actor)) return "/dashboard";
   if (actor.internalRole === "qc_reviewer") return "/internal?desk=qc";
-  if (actor.internalRole === "legal_reviewer") return "/internal?desk=legal";
-  if (actor.internalRole === "finance") return "/internal?desk=finance";
-  if (actor.internalRole === "admin") return "/internal?desk=admin";
   if (actor.internalRole) return "/internal";
   if (actor.accountType === "independent_creator") return "/creator";
   if (actor.accountType === "studio") return "/studio";
-  if (actor.accountType === "buyer" || actor.accountType === "investor") return "/buyer-loop";
+  if (actor.accountType === "buyer") return "/buyer";
+  if (actor.accountType === "investor") return "/investor";
   return "/";
 }
