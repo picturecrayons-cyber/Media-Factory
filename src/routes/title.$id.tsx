@@ -158,11 +158,11 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <WorkflowDesk title={title} actor={actor} />
+      <WorkflowDesk title={title} actor={actor} assets={assets} assetsLoading={assetsQ.isPending} assetsError={assetsQ.isError} />
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
-          <AssetPosterSlot assets={assets} />
+          <AssetPosterSlot assets={assets} posterKey={title.posterKey} />
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -970,7 +970,7 @@ function FilesPanel({
           Still processing: {assets.filter((asset) => !asset.verified).map((asset) => displayKind(asset.kind)).join(", ")}. For a large film, choose the same file to continue. Do not upload it again from the start.
         </p>
       ) : null}
-      <AssetPreviewGallery assets={assets} />
+      <AssetPreviewGallery assets={assets} masterKey={title.masterKey} posterKey={title.posterKey} />
     </section>
   );
 }
