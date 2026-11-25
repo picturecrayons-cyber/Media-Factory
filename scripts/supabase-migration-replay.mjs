@@ -18,10 +18,6 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
 const EXPECTED_MIGRATIONS = 71;
-const RECOVERED_LEDGER_MIGRATIONS = 70;
-const UNRECONCILED_PENDING_MIGRATIONS = new Set([
-  "20261125150000_bridge_qc_sealed_pointer_trigger_fix.sql",
-]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -90,14 +86,13 @@ for (const line of manifest.split(String.fromCharCode(10))) {
   }
   manifestRows.set(`${version}_${migrationName}.sql`, { bytes, sha256 });
 }
-if (manifestRows.size !== RECOVERED_LEDGER_MIGRATIONS) {
+if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   throw new Error(
-    `Expected ${RECOVERED_LEDGER_MIGRATIONS} recovered-ledger manifest rows; found ${manifestRows.size}`,
+    `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
   );
 }
 
 for (const name of names) {
-  if (UNRECONCILED_PENDING_MIGRATIONS.has(name)) continue;
   const contents = await readFile(join(MIGRATIONS_DIR, name));
   const expected = manifestRows.get(name);
   if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
@@ -737,7 +732,7 @@ try {
   }
 
   console.log(
-    `[migration-replay] PASS: all ${names.length} active migrations replayed; ${RECOVERED_LEDGER_MIGRATIONS} recovered Production-ledger files passed source integrity checks.`,
+    `[migration-replay] PASS: all ${names.length} active migrations replayed and passed source integrity checks in a fresh local Supabase stack.`,
   );
 } finally {
   client.release();
