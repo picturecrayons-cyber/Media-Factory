@@ -31,6 +31,13 @@ export function WorkspaceOs({
               <a
                 key={item.href}
                 href={item.href}
+                onClick={() => {
+                  const target = document.getElementById(item.href.slice(1));
+                  if (!(target instanceof HTMLDetailsElement)) return;
+                  document.querySelectorAll<HTMLDetailsElement>("[data-workspace-panel]").forEach((panel) => {
+                    panel.open = panel === target;
+                  });
+                }}
                 className="group flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted transition hover:bg-accent-soft hover:text-accent-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 <span className="w-5 shrink-0 text-[10px] font-semibold tabular-nums text-faint">{String(index + 1).padStart(2, "0")}</span>
@@ -76,7 +83,7 @@ export function WorkspacePanel({
   children: ReactNode;
 }) {
   return (
-    <details id={id} open={id === "overview"} className="group scroll-mt-28 rounded-xl border border-line bg-surface p-4 sm:p-5">
+    <details id={id} data-workspace-panel open={id === "overview"} className="group scroll-mt-28 rounded-xl border border-line bg-surface p-4 sm:p-5">
       <summary className="flex cursor-pointer list-none items-start justify-between gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
         <div className="min-w-0">
           {eyebrow ? <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent">{eyebrow}</p> : null}
