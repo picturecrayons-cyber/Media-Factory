@@ -40,6 +40,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
+  const canDraftLicense = canOperateOnTitle(actor, title, "title.update_own", "title.license");
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
     queryFn: () => getTitleRevenue({ data: { titleId: title.id } }),
@@ -211,6 +212,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           ) : null}
           {stage === "Business" ? (
             <div className="space-y-4">
+              {canDraftLicense ? (
               <details className="rounded-xl border border-line p-3">
                 <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
                 <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
@@ -258,7 +260,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     </button>
                   </form>
                 ) : null}
-              </details>
+          
+              ) : null}    </details>
               {input("Legal review note", note, setNote)}
               <p className="text-xs text-muted" aria-live="polite">
                 {note.trim().length < 8
