@@ -187,7 +187,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 ? "PREPARING"
                                 : "QC_REVIEW",
                         },
-                      }), false, "Revenue")
+                      }),
+                  )
                 : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
                 <>
@@ -450,8 +451,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         windowEnd: valid.window_end,
                         commercialTerms: valid.evidence[0]?.commercialTerms,
                       },
-                    }),
-                  )
+                    }), false, "Revenue")
                 : null}
               {!valid ? <p>Blocked: approved, unexpired Loop license required.</p> : null}
               {pub && hasPermission(actor, "loop.revoke") ? (
