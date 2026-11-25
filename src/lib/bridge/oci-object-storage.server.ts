@@ -302,10 +302,12 @@ export async function verifyObject(key: string, expectedContentType?: string | n
     throw new Error(`OCI object content type mismatch: expected ${expectedContentType}, received ${contentType || "missing"}`);
   }
   if (!Number.isSafeInteger(contentLength) || contentLength < 0) throw new Error("Uploaded object has an invalid size");
+  const sha256 = await readObjectSha256(key, contentLength, targetBucket);
   return {
     byteSize: contentLength,
     contentType,
     etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
+    sha256,
   };
 }
 
