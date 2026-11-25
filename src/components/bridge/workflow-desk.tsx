@@ -261,7 +261,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   </form>
                 ) : null}
           
-              ) : null}    </details>
+              </details>
+              ) : null}
               {input("Legal review note", note, setNote)}
               <p className="text-xs text-muted" aria-live="polite">
                 {note.trim().length < 8
