@@ -21,6 +21,8 @@ export const bridgeEnv = {
   ociBucket: () => read("OCI_BUCKET_NAME"),
   // DIT Recovery Vault is a separately controlled OCI bucket; never reuse Primary.
   ociRecoveryBucket: () => read("OCI_RECOVERY_BUCKET_NAME"),
+  // Shared HMAC secret for Bridge-owned Loop media requests; never an OCI credential.
+  loopMediaSharedSecret: () => read("LOOP_BRIDGE_MEDIA_SECRET"),
   // Legacy AWS/S3 compatibility adapter only; never used by production readiness.
   awsRegion: () => read("AWS_REGION"),
   awsBucket: () => read("AWS_S3_MEDIA_BUCKET") || read("S3_MEDIA_BUCKET") || read("AWS_S3_BUCKET"),
