@@ -18,9 +18,10 @@ import { hasPermission, canOperateOnTitle } from "@/lib/bridge/rbac";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { BridgeTitle } from "@/lib/bridge/types";
+import { hasVerifiedMasterAndArtwork } from "@/lib/bridge/asset-roles";
 
 const stages = ["Prepare", "Business", "Distribution", "Revenue"] as const;
-export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
+export function WorkflowDesk({ title, actor, assets, assetsLoading, assetsError }: { title: BridgeTitle; actor: BridgeActor; assets: Array<{ kind: string; key: string | null; verified: boolean }>; assetsLoading: boolean; assetsError: boolean }) {
   const [stage, setStage] = useState<(typeof stages)[number]>("Prepare");
   const [settlementRef, setSettlementRef] = useState("");
   const [invoiceRef, setInvoiceRef] = useState("");
@@ -101,6 +102,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     return groups;
   }, {});
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
+  const qcAssetsReady = hasVerifiedMasterAndArtwork(
+    assets.filter((asset) => asset.verified && asset.key).map((asset) => ({ kind: asset.kind, s3_key: asset.key as string })),
+    title.masterKey,
+    title.posterKey,
+  );
   const pub = publication.data?.publication;
   const button = (label: string, run: () => Promise<unknown>, disabled = false) => (
     <button
@@ -161,6 +167,17 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit for QC. QC is not reviewed yet."
                   : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
+              {title.status === "PREPARING" ? (
+                <p role="status" className="text-sm text-muted">
+                  {assetsLoading
+                    ? "Checking the current master and poster storage verification…"
+                    : assetsError
+                      ? "QC submission is blocked because asset verification could not be loaded. Retry the workspace assets check."
+                      : qcAssetsReady
+                        ? "Current master and poster artwork are storage-verified. This title can be submitted for a separate QC review."
+                        : "QC submission is blocked. The current master and poster artwork must both be storage-verified before submission."}
+                </p>
+              ) : null}
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
               ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
                 ? button(
@@ -181,6 +198,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 : "QC_REVIEW",
                         },
                       }),
+                    title.status === "PREPARING" && (assetsLoading || assetsError || !qcAssetsReady),
                   )
                 : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
