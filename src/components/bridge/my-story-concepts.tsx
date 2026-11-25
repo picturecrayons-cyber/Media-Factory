@@ -39,7 +39,8 @@ export function MyStoryConcepts({ actor }: { actor: { userId: string; organizati
 
   return (
     <section>
-      <h4 className="font-semibold">Story / Concepts</h4>
+      <h4 className="font-semibold">Story Network · Story / Concepts</h4>
+      <p className="mt-1 text-xs text-muted">Separate network submissions for admin curation and approved buyer / investor introductions. These are not finished-film catalogue listings.</p>
       <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
         {concepts.map((c) => {
           const logline = listLogline(c.logline);
