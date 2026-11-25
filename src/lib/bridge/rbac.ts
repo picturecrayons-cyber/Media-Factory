@@ -29,7 +29,7 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
   studio: [
     "title.create", "title.read_own", "title.update_own", "title.advance_upload", "title.submit_qc",
     "asset.sign_upload", "asset.sign_download", "asset.read_storage_proof",
-    "story_concept.create", "story_concept.read_own",
+    "story_concept.create", "story_concept.read_own", "payment.create_story_concept_order",
     "dit.agent", "dit.upload", "storage.manage", "payment.create_dit_agent_order",
     "service.quote_create", "service.order_create", "entitlement.read_own", "delivery.read",
   ],

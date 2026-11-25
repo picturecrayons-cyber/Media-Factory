@@ -526,7 +526,7 @@ export const getPaidFeaturePricing = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await requireVerifiedActor(context.userId);
-    if (!actor.internalRole && actor.accountType !== "independent_creator" && actor.accountType !== "studio") {
+    if (actor.internalRole || (actor.accountType !== "independent_creator" && actor.accountType !== "studio")) {
       throw new Error("Creator or Studio account required");
     }
     const storyConcept = await getPaidServiceRate("STORY_CONCEPT_NETWORK_SUBMISSION");

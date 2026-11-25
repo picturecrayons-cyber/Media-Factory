@@ -9,14 +9,14 @@ import { assertNotDevUser } from "./guards";
 
 async function requireOwnedTitle(sql: Awaited<ReturnType<typeof getSql>>, actor: Awaited<ReturnType<typeof requireVerifiedActor>>, titleId: string) {
   const rows = await sql.unsafe(
-    "select t.id,t.owner_user_id,t.owner_account_type,t.owner_organization_id,p.organization_id as actor_organization_id from bridge_titles t left join bridge_profiles p on p.user_id=$2 where t.id=$1 and t.archived_at is null limit 1",
-    [titleId, actor.userId],
-  ) as Array<{ id: string; owner_user_id: string; owner_account_type: string; owner_organization_id: string | null; actor_organization_id: string | null }>;
+    "select t.id,t.owner_user_id,t.owner_account_type,t.owner_organization_id from bridge_titles t where t.id=$1 and t.archived_at is null limit 1",
+    [titleId],
+  ) as Array<{ id: string; owner_user_id: string; owner_account_type: string; owner_organization_id: string | null }>;
   const title = rows[0];
   if (!title) throw new Error("Title not found");
   const ownsDirectly = title.owner_user_id === actor.userId && title.owner_account_type === actor.accountType;
   const ownsStudio = actor.accountType === "studio" && title.owner_account_type === "studio" &&
-    Boolean(title.owner_organization_id) && title.owner_organization_id === title.actor_organization_id;
+    Boolean(title.owner_organization_id) && title.owner_organization_id === actor.organizationId;
   if (!ownsDirectly && !ownsStudio) throw new Error("You can manage only your own Creator/Studio titles");
   return title;
 }
@@ -29,8 +29,8 @@ export const listOwnStoryConceptSubmissions = createServerFn({ method: "GET" })
     assertPermission(actor, "story_concept.read_own");
     const sql = await getSql();
     const rows = await sql.unsafe(
-      "select sc.id::text,sc.title_id,bt.name as title_name,sc.owner_submission_status,sc.logline,sc.synopsis,sc.genre,sc.format,sc.estimated_budget_range,sc.fee_certified_at,sc.legal_status,sc.editorial_status,sc.curation_status,sc.introduced_to_buyers_at,sc.created_at from bridge_story_concept_submissions sc join bridge_titles bt on bt.id=sc.title_id left join bridge_profiles p on p.user_id=$1 where bt.owner_user_id=$1 or (bt.owner_account_type='studio' and bt.owner_organization_id=p.organization_id) order by sc.created_at desc",
-      [actor.userId],
+      "select sc.id::text,sc.title_id,bt.name as title_name,sc.owner_submission_status,sc.logline,sc.synopsis,sc.genre,sc.format,sc.estimated_budget_range,sc.fee_certified_at,sc.legal_status,sc.editorial_status,sc.curation_status,sc.introduced_to_buyers_at,sc.created_at from bridge_story_concept_submissions sc join bridge_titles bt on bt.id=sc.title_id where (bt.owner_user_id=$1 and bt.owner_account_type=$2) or (bt.owner_account_type='studio' and bt.owner_organization_id=$3) order by sc.created_at desc",
+      [actor.userId, actor.accountType, actor.organizationId ?? null],
     );
     return { storyConcepts: JSON.parse(JSON.stringify(rows)) };
   });
@@ -95,8 +95,8 @@ export const submitStoryConceptForReview = createServerFn({ method: "POST" })
     assertPermission(actor, "story_concept.create");
     const sql = await getSql();
     const rows = await sql.unsafe(
-      "update bridge_story_concept_submissions sc set owner_submission_status='SUBMITTED',updated_at=now() from bridge_titles t left join bridge_profiles p on p.user_id=$2 where sc.id=$1 and sc.title_id=t.id and sc.fee_certified_at is not null and sc.owner_submission_status in ('DRAFT','NEEDS_CORRECTION') and (t.owner_user_id=$2 or (t.owner_account_type='studio' and t.owner_organization_id=p.organization_id)) returning sc.id::text,sc.title_id",
-      [data.storyConceptId, actor.userId],
+      "update bridge_story_concept_submissions sc set owner_submission_status='SUBMITTED',updated_at=now() from bridge_titles t where sc.id=$1 and sc.title_id=t.id and sc.fee_certified_at is not null and sc.owner_submission_status in ('DRAFT','NEEDS_CORRECTION') and ((t.owner_user_id=$2 and t.owner_account_type=$3) or (t.owner_account_type='studio' and t.owner_organization_id=$4)) returning sc.id::text,sc.title_id",
+      [data.storyConceptId, actor.userId, actor.accountType, actor.organizationId ?? null],
     ) as Array<{ id: string; title_id: string }>;
     if (!rows[0]) throw new Error("Story Concept cannot be submitted: payment or title ownership check failed");
     await writeAudit({
