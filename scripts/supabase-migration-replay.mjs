@@ -92,7 +92,7 @@ for (const line of manifest.split(String.fromCharCode(10))) {
 }
 if (manifestRows.size !== RECOVERED_LEDGER_MIGRATIONS) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
+    `Expected ${RECOVERED_LEDGER_MIGRATIONS} recovered-ledger manifest rows; found ${manifestRows.size}`,
   );
 }
 
