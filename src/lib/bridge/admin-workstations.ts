@@ -116,8 +116,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       if (!grants[0]) throw new Error("The selected Rights Grant is not valid for this title.");
       const evidence = await requireVerifiedLegalEvidence(sql, title.id, data.evidenceAssetIds);
       next = "LICENSING_READY"; action = "rights.approve";
-      data.notes = data.notes ?? "";
-      (data as typeof data & { _verifiedLegalEvidence?: typeof evidence })._verifiedLegalEvidence = evidence;
+      if (evidence.length !== data.evidenceAssetIds?.length) throw new Error("Legal evidence verification was incomplete.");
     } else {
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
