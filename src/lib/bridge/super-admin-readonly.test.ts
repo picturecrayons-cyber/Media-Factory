@@ -53,3 +53,15 @@ test("all mapped mutation handlers guard before side-effect calls", () => {
     }
   }
 });
+
+test("Super Admin final publish is the sole explicit workspace-write exception", () => {
+  const source = readFileSync(new URL("./loop-publication.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export const authorizeLoopPublication = createServerFn");
+  const end = source.indexOf("\nexport const ", start + 1);
+  const handler = source.slice(start, end < 0 ? source.length : end);
+  const finalApproval = handler.indexOf('assertPermission(actor, "title.final_approve")');
+  const publish = handler.indexOf('assertPermission(actor, "loop.publish")');
+  const transaction = handler.indexOf("getSql()).transaction");
+  assert.ok(finalApproval >= 0 && finalApproval < transaction);
+  assert.ok(publish >= 0 && publish < transaction);
+});
