@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { listTitles } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
+import { listSuperAdminReviewRequests } from "@/lib/bridge/submissions";
 import { hasPermission } from "@/lib/bridge/rbac";
 
 export const Route = createFileRoute("/cms")({ component: OperationalCms });
@@ -25,9 +26,15 @@ function CmsBody({ actor }: { actor: any }) {
     queryKey: ["loop-publication-readiness"],
     queryFn: () => listLoopPublicationReadiness(),
   });
+  const intakeQ = useQuery({
+    queryKey: ["bridge-super-admin-intake"],
+    queryFn: () => listSuperAdminReviewRequests(),
+    retry: 1,
+  });
   const titles = titlesQ.data?.titles ?? [];
   const publications = pubQ.data?.titles ?? [];
-  if (titlesQ.isPending || pubQ.isPending)
+  const intakeRequests = intakeQ.data?.requests ?? [];
+  if (titlesQ.isPending || pubQ.isPending || intakeQ.isPending)
     return (
       <BridgeShell actor={actor} title="Bridge CMS">
         <p>Loading CMS…</p>
@@ -78,7 +85,7 @@ function CmsBody({ actor }: { actor: any }) {
       </nav>
 
       <div className="mt-6">
-        {tab === "ingest" ? <IngestDesk actor={actor} titles={titles} /> : null}
+        {tab === "ingest" ? <IngestDesk actor={actor} titles={titles} requests={intakeRequests} intakeError={intakeQ.isError} /> : null}
         {tab === "licensing" ? <LicensingDesk titles={titles} /> : null}
         {tab === "publishing" ? <PublishingDesk publications={publications} /> : null}
       </div>
@@ -86,11 +93,13 @@ function CmsBody({ actor }: { actor: any }) {
   );
 }
 
-function IngestDesk({ actor, titles }: { actor: any; titles: Array<any> }) {
+function IngestDesk({ actor, titles, requests, intakeError }: { actor: any; titles: Array<any>; requests: Array<any>; intakeError: boolean }) {
+  const requestedIds = new Set(requests.map((request) => request.title_id));
   const ownerSubmissions = titles.filter((title) =>
     title.status === "DRAFT" &&
     title.submissionType === "finished_film" &&
-    ["independent_creator", "studio"].includes(title.ownerAccountType),
+    ["independent_creator", "studio"].includes(title.ownerAccountType) &&
+    !requestedIds.has(title.id),
   );
   const canCreate =
     hasPermission(actor, "title.create") || hasPermission(actor, "title.ingest_internal");
@@ -111,6 +120,33 @@ function IngestDesk({ actor, titles }: { actor: any; titles: Array<any> }) {
           ) : (
             <p className="text-sm text-muted">Your current role cannot create titles.</p>
           )}
+        </div>
+      </div>
+      <div className="rounded-3xl border border-line bg-surface p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
+              Submitted for review
+            </p>
+            <h3 className="mt-1 font-display text-2xl font-semibold">Studio / Creator requests</h3>
+            <p className="mt-2 text-sm text-muted">Requests appear here without changing QC, Legal or publication status.</p>
+          </div>
+          <span className="shrink-0 rounded-full border border-line px-3 py-1 text-xs">{requests.length}</span>
+        </div>
+        <div className="mt-4 divide-y divide-line">
+          {intakeError ? <p className="py-4 text-sm text-muted">Review queue unavailable. No empty queue is inferred.</p> : null}
+          {requests.map((request) => (
+            <div key={request.title_id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{request.name}</p>
+                <p className="mt-1 text-xs text-muted">
+                  {request.status.replaceAll("_", " ")} · {request.language} · {request.reviewStatus === "EVIDENCE_PENDING" ? "Rights evidence pending" : "Owner declaration recorded; evidence review pending"}
+                </p>
+              </div>
+              <Link to="/title/$id" params={{ id: request.title_id }} className="shrink-0 text-sm font-semibold text-accent hover:underline">Review title →</Link>
+            </div>
+          ))}
+          {!intakeError && !requests.length ? <p className="py-5 text-sm text-muted">No Studio / Creator review requests yet.</p> : null}
         </div>
       </div>
       <div className="rounded-3xl border border-line bg-surface p-6">
