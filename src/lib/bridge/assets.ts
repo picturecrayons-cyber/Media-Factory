@@ -205,7 +205,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }
     // OCI ETag is not a content checksum. Stream the sealed object back and
     // compare the actual bytes before recording a successful confirmation.
-    const checksum = await verifyObjectSha256(sealedKey, object.sha256 ?? "", sealed.byteSize);
+    const checksum = await verifyObjectSha256(sealedKey, object.sha256, sealed.byteSize);
     // Persist asset/title/audit state first. Do not advance the migration queue
     // if persistence fails: its prior state remains the truthful state.
     const confirmed = await persistVerifiedAsset(sql, {
