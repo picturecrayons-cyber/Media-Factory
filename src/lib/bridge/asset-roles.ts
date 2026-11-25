@@ -9,13 +9,15 @@ export function hasVerifiedMasterAndArtwork(
 ): boolean {
   if (!masterKey || !posterKey) return false;
 
+  const isSealed = (key: string) => key.includes(".verified/");
   const masterReady = assets.some(
-    (asset) => asset.kind === "master" && asset.s3_key === masterKey,
+    (asset) => asset.kind === "master" && asset.s3_key === masterKey && isSealed(asset.s3_key),
   );
   const artworkReady = assets.some(
     (asset) =>
       (asset.kind === "poster" || asset.kind === "poster_vertical") &&
-      asset.s3_key === posterKey,
+      asset.s3_key === posterKey &&
+      isSealed(asset.s3_key),
   );
   return masterReady && artworkReady;
 }
