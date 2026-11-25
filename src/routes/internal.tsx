@@ -47,7 +47,6 @@ function Internal() {
             <InternalBody
               canInvite={hasPermission(actor, "users.invite_internal")}
               canPublish={hasPermission(actor, "loop.publish")}
-              canRevoke={hasPermission(actor, "loop.revoke")}
             />
           </BridgeShell>
         );
@@ -59,11 +58,9 @@ function Internal() {
 function InternalBody({
   canInvite,
   canPublish,
-  canRevoke,
 }: {
   canInvite: boolean;
   canPublish: boolean;
-  canRevoke: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -74,7 +71,7 @@ function InternalBody({
   return (
     <div className="grid gap-12">
       {/* 1. Master Distribution Desk */}
-      <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
+      <DistributionDesk canPublish={canPublish} />
 
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
@@ -155,7 +152,7 @@ const DISTRIBUTION_TABS = [
 
 type DistTab = (typeof DISTRIBUTION_TABS)[number];
 
-function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canRevoke: boolean }) {
+function DistributionDesk({ canPublish }: { canPublish: boolean }) {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<DistTab>("Ready for Distribution");
 
@@ -171,10 +168,6 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
   const [model] = useState<ExploitationModel>("TVOD");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
-  const [rightsOwnerShare, setRightsOwnerShare] = useState<string>("80");
-  const [distributorShare, setDistributorShare] = useState<string>("20");
-  const [extendTitleId, setExtendTitleId] = useState<string | null>(null);
-  const [newExtendEnd, setNewExtendEnd] = useState<string>("");
 
   const publishMut = useMutation({
     mutationFn: (bridgeTitleId: string) =>
@@ -194,10 +187,6 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           accessTier: "TVOD",
           windowStart: windowStart ? new Date(windowStart).toISOString() : null,
           windowEnd: windowEnd ? new Date(windowEnd).toISOString() : null,
-          commercialTerms: {
-            rightsOwnerSharePct: Number(rightsOwnerShare) || 0,
-            distributorSharePct: Number(distributorShare) || 0,
-          },
         },
       }),
     onSuccess: () => {
@@ -229,26 +218,6 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
       void qc.invalidateQueries({ queryKey: ["bridge-audit"] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Revocation failed"),
-  });
-
-  const extendMut = useMutation({
-    mutationFn: ({
-      bridgeTitleId,
-      newWindowEnd,
-    }: {
-      bridgeTitleId: string;
-      newWindowEnd: string;
-    }) =>
-      extendDistributionWindow({
-        data: { bridgeTitleId, newWindowEnd: new Date(newWindowEnd).toISOString() },
-      }),
-    onSuccess: () => {
-      toast.success("Distribution window extended");
-      setExtendTitleId(null);
-      void qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] });
-      void qc.invalidateQueries({ queryKey: ["bridge-audit"] });
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Window extension failed"),
   });
 
   const allTitles = q.data?.titles ?? [];
@@ -441,29 +410,6 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               />
             </label>
 
-            <label className="block space-y-1">
-              <span className="font-semibold text-muted">Rights-Owner Share (%)</span>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={rightsOwnerShare}
-                onChange={(e) => setRightsOwnerShare(e.target.value)}
-                className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-              />
-            </label>
-
-            <label className="block space-y-1">
-              <span className="font-semibold text-muted">Distributor Share (%)</span>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={distributorShare}
-                onChange={(e) => setDistributorShare(e.target.value)}
-                className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-              />
-            </label>
           </div>
 
           <div className="flex items-center gap-3 pt-2">
@@ -481,42 +427,6 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               type="button"
               variant="outline"
               onClick={() => setSelectedTitleId("")}
-              className="rounded-full border-line text-xs"
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Extend Window Dialog */}
-      {extendTitleId ? (
-        <div className="rounded-2xl border border-line bg-surface p-5 space-y-3">
-          <h4 className="font-semibold text-sm text-fg">Extend Distribution Window</h4>
-          <p className="text-xs text-muted">
-            Specify the new window end date for distribution entitlement.
-          </p>
-          <div className="flex items-center gap-3">
-            <input
-              type="datetime-local"
-              value={newExtendEnd}
-              onChange={(e) => setNewExtendEnd(e.target.value)}
-              className="h-9 rounded-xl border border-line bg-elevated px-3 text-xs text-fg focus:outline-none"
-            />
-            <Button
-              type="button"
-              disabled={!newExtendEnd || extendMut.isPending}
-              onClick={() =>
-                extendMut.mutate({ bridgeTitleId: extendTitleId, newWindowEnd: newExtendEnd })
-              }
-              className="rounded-full text-xs font-semibold px-4"
-            >
-              Save Extended Window
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setExtendTitleId(null)}
               className="rounded-full border-line text-xs"
             >
               Cancel
@@ -643,19 +553,6 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                       className="rounded-full border-line text-xs font-semibold h-9 hover:border-red-500/40 hover:text-red-400"
                     >
                       Revoke Authorization
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setExtendTitleId(t.id);
-                        setNewExtendEnd(
-                          pub.windowEnd ? new Date(pub.windowEnd).toISOString().slice(0, 16) : "",
-                        );
-                      }}
-                      className="rounded-full border-line text-xs font-semibold h-9"
-                    >
-                      Extend Window
                     </Button>
                   </>
                 ) : null}

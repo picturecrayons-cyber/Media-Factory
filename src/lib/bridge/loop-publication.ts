@@ -62,14 +62,6 @@ const publishInput = z.object({
   windowStart: z.string().datetime().nullable().optional(),
   windowEnd: z.string().datetime().nullable().optional(),
   accessTier: z.enum(["FREE", "SVOD", "TVOD"]),
-  commercialTerms: z
-    .object({
-      rightsOwnerSharePct: z.number().min(0).max(100).optional(),
-      distributorSharePct: z.number().min(0).max(100).optional(),
-      feePaise: z.number().nonnegative().optional(),
-      notes: z.string().max(500).optional(),
-    })
-    .optional(),
 });
 
 function iso(v: string | Date | null) {
