@@ -14,9 +14,6 @@ import { listAuditLogs, listTitles } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
   listLoopPublicationReadiness,
-  suspendLoopPublication,
-  revokeLoopPublication,
-  extendDistributionWindow,
   type ExploitationModel,
 } from "@/lib/bridge/loop-publication";
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
@@ -197,27 +194,6 @@ function DistributionDesk({ canPublish }: { canPublish: boolean }) {
     },
     onError: (err) =>
       toast.error(err instanceof Error ? err.message : "Distribution authorization failed"),
-  });
-
-  const suspendMut = useMutation({
-    mutationFn: (bridgeTitleId: string) =>
-      suspendLoopPublication({ data: { bridgeTitleId, reason: "Operator suspension" } }),
-    onSuccess: () => {
-      toast.success("Publication suspended");
-      void qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] });
-      void qc.invalidateQueries({ queryKey: ["bridge-audit"] });
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Suspension failed"),
-  });
-
-  const revokeMut = useMutation({
-    mutationFn: (bridgeTitleId: string) => revokeLoopPublication({ data: { bridgeTitleId } }),
-    onSuccess: () => {
-      toast.success("Distribution authorization revoked");
-      void qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] });
-      void qc.invalidateQueries({ queryKey: ["bridge-audit"] });
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Revocation failed"),
   });
 
   const allTitles = q.data?.titles ?? [];
@@ -532,30 +508,7 @@ function DistributionDesk({ canPublish }: { canPublish: boolean }) {
                   </Button>
                 ) : null}
 
-                {canRevoke &&
-                pub &&
-                (pub.authorizationStatus === "LIVE" || pub.authorizationStatus === "AUTHORIZED") ? (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={suspendMut.isPending}
-                      onClick={() => suspendMut.mutate(t.id)}
-                      className="rounded-full border-line text-xs font-semibold h-9 hover:border-amber-500/40 hover:text-amber-400"
-                    >
-                      Suspend
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={revokeMut.isPending}
-                      onClick={() => revokeMut.mutate(t.id)}
-                      className="rounded-full border-line text-xs font-semibold h-9 hover:border-red-500/40 hover:text-red-400"
-                    >
-                      Revoke Authorization
-                    </Button>
-                  </>
-                ) : null}
+
 
                 {pub?.published ? (
                   <a
