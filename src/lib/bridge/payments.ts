@@ -419,3 +419,163 @@ export async function ingestRazorpayWebhook(rawBody: string, signature: string |
     throw error;
   }
 }
+
+
+async function getPaidServiceRate(serviceCode: string) {
+  const sql = await getSql();
+  const rows = await sql.unsafe(
+    "select c.code,c.active as service_active,r.base_price_paise,r.active as rate_active,r.effective_from,r.effective_to from bridge_service_catalog c left join lateral (select base_price_paise,active,effective_from,effective_to from bridge_service_rates where service_code=c.code order by version desc limit 1) r on true where c.code=$1 limit 1",
+    [serviceCode],
+  ) as Array<{ code: string; service_active: boolean; base_price_paise: number | null; rate_active: boolean | null; effective_from: string | Date | null; effective_to: string | Date | null }>;
+  const row = rows[0];
+  const now = Date.now();
+  const start = row?.effective_from ? new Date(row.effective_from).getTime() : 0;
+  const end = row?.effective_to ? new Date(row.effective_to).getTime() : Number.POSITIVE_INFINITY;
+  const rateCurrent = Boolean(row?.rate_active) && start <= now && end > now;
+  return {
+    exists: Boolean(row),
+    serviceActive: Boolean(row?.service_active),
+    rateActive: rateCurrent,
+    amountPaise: row?.base_price_paise == null ? null : Number(row.base_price_paise),
+    available: Boolean(row?.service_active && rateCurrent && Number(row?.base_price_paise ?? 0) > 0),
+  };
+}
+
+async function createPaidServiceOrder(opts: {
+  userId: string;
+  purpose: "STORY_CONCEPT_NETWORK_SUBMISSION" | "DIT_AGENT";
+  serviceCode: string;
+  idempotencyKey: string;
+}) {
+  const sql = await getSql();
+  const rate = await getPaidServiceRate(opts.serviceCode);
+  if (!rate.available || !rate.amountPaise) {
+    throw new Error(rate.exists
+      ? "Paid feature is disabled or has no active rate; no Razorpay order was created"
+      : "Paid feature has no configured service/rate; no Razorpay order was created");
+  }
+  const { keyId } = requireRazorpayKeys();
+  const existing = await sql.unsafe(
+    "select id,provider_order_id,amount_paise,purpose from bridge_payments where user_id=$1 and purpose=$2 and idempotency_key=$3 limit 1",
+    [opts.userId, opts.purpose, opts.idempotencyKey],
+  ) as Array<{ id: string; provider_order_id: string | null; amount_paise: number; purpose: string }>;
+  if (existing[0]?.provider_order_id) {
+    if (existing[0].purpose !== opts.purpose || Number(existing[0].amount_paise) !== rate.amountPaise) {
+      throw new Error("Idempotency key belongs to another paid feature or price");
+    }
+    return { orderId: existing[0].provider_order_id, amountPaise: Number(existing[0].amount_paise), currency: "INR", keyId, paymentRecordId: existing[0].id };
+  }
+  const rz = await razorpayFetch<{ id: string; amount: number; currency: string }>("/orders", {
+    method: "POST",
+    body: JSON.stringify({
+      amount: rate.amountPaise,
+      currency: "INR",
+      receipt: opts.idempotencyKey.slice(0, 40),
+      notes: { purpose: opts.purpose, serviceCode: opts.serviceCode, userId: opts.userId },
+    }),
+  });
+  const paymentId = randomBytes(16).toString("hex");
+  const inserted = await sql.unsafe(
+    "insert into bridge_payments (id,user_id,title_id,package_id,purpose,provider_order_id,amount_paise,currency,status,idempotency_key) values ($1,$2,null,null,$3,$4,$5,'INR','created',$6) on conflict (user_id,purpose,idempotency_key) do nothing returning id",
+    [paymentId, opts.userId, opts.purpose, rz.id, rate.amountPaise, opts.idempotencyKey],
+  ) as Array<{ id: string }>;
+  if (!inserted[0]) {
+    const winner = await sql.unsafe(
+      "select id,provider_order_id,amount_paise from bridge_payments where user_id=$1 and purpose=$2 and idempotency_key=$3 limit 1",
+      [opts.userId, opts.purpose, opts.idempotencyKey],
+    ) as Array<{ id: string; provider_order_id: string | null; amount_paise: number }>;
+    if (!winner[0]?.provider_order_id || Number(winner[0].amount_paise) !== rate.amountPaise) {
+      throw new Error("Paid feature order idempotency conflict");
+    }
+    return { orderId: winner[0].provider_order_id, amountPaise: Number(winner[0].amount_paise), currency: "INR", keyId, paymentRecordId: winner[0].id };
+  }
+  await writeAudit({
+    actorUserId: opts.userId, action: "payment.order_created",
+    entityType: "bridge_payment", entityId: paymentId,
+    metadata: { purpose: opts.purpose, serviceCode: opts.serviceCode, amountPaise: rate.amountPaise },
+  });
+  return { orderId: rz.id, amountPaise: rate.amountPaise, currency: "INR", keyId, paymentRecordId: paymentId };
+}
+
+async function verifyPaidServiceOrder(opts: {
+  actorUserId: string;
+  purpose: "STORY_CONCEPT_NETWORK_SUBMISSION" | "DIT_AGENT";
+  orderId: string;
+  paymentId: string;
+  signature: string;
+}) {
+  const sql = await getSql();
+  const rows = await sql.unsafe(
+    "select id,user_id,purpose,status from bridge_payments where provider_order_id=$1 limit 1",
+    [opts.orderId],
+  ) as Array<{ id: string; user_id: string; purpose: string; status: string }>;
+  if (!rows[0] || rows[0].user_id !== opts.actorUserId || rows[0].purpose !== opts.purpose) {
+    throw new Error("Razorpay order does not belong to this paid feature or account");
+  }
+  const { keySecret } = requireRazorpayKeys();
+  const ok = verifyRazorpaySignature({
+    secret: keySecret,
+    body: paymentVerifyBody(opts.orderId, opts.paymentId),
+    signature: opts.signature,
+  });
+  if (!ok) throw new Error("Invalid payment signature");
+  return grantFromCapturedPayment({ orderId: opts.orderId, paymentId: opts.paymentId, actorUserId: opts.actorUserId });
+}
+
+export const getPaidFeaturePricing = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    if (!actor.internalRole && actor.accountType !== "independent_creator" && actor.accountType !== "studio") {
+      throw new Error("Creator or Studio account required");
+    }
+    const storyConcept = await getPaidServiceRate("STORY_CONCEPT_NETWORK_SUBMISSION");
+    const ditAgent = actor.accountType === "studio" ? await getPaidServiceRate("DIT_AGENT") : null;
+    return { storyConcept, ditAgent };
+  });
+
+export const createStoryConceptOrder = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ idempotencyKey: z.string().min(8).max(80) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType !== "independent_creator" && actor.accountType !== "studio") throw new Error("Creator or Studio account required");
+    assertPermission(actor, "story_concept.create");
+    assertPermission(actor, "payment.create_story_concept_order");
+    return createPaidServiceOrder({ userId: actor.userId, purpose: "STORY_CONCEPT_NETWORK_SUBMISSION", serviceCode: "STORY_CONCEPT_NETWORK_SUBMISSION", idempotencyKey: data.idempotencyKey });
+  });
+
+export const verifyStoryConceptPayment = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ orderId: z.string().min(4), paymentId: z.string().min(4), signature: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType !== "independent_creator" && actor.accountType !== "studio") throw new Error("Creator or Studio account required");
+    assertPermission(actor, "payment.create_story_concept_order");
+    return verifyPaidServiceOrder({ actorUserId: actor.userId, purpose: "STORY_CONCEPT_NETWORK_SUBMISSION", ...data });
+  });
+
+export const createDitAgentOrder = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ idempotencyKey: z.string().min(8).max(80) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType !== "studio") throw new Error("Studio account required");
+    assertPermission(actor, "dit.agent");
+    assertPermission(actor, "payment.create_dit_agent_order");
+    return createPaidServiceOrder({ userId: actor.userId, purpose: "DIT_AGENT", serviceCode: "DIT_AGENT", idempotencyKey: data.idempotencyKey });
+  });
+
+export const verifyDitAgentPayment = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ orderId: z.string().min(4), paymentId: z.string().min(4), signature: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType !== "studio") throw new Error("Studio account required");
+    assertPermission(actor, "payment.create_dit_agent_order");
+    return verifyPaidServiceOrder({ actorUserId: actor.userId, purpose: "DIT_AGENT", ...data });
+  });
