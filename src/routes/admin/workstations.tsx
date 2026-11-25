@@ -94,15 +94,12 @@ function WorkstationBody({ actor }: { actor: any }) {
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "content_type", "byte_size", "checksum_sha256", "storage_verified_at"]} />
-      ) : activeTab === "Buyers" ? (
-        <BuyerRelease titles={data.titles} qc={data.qc} legal={data.legal} gate={gate}
-          onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
           <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
             rows={ready} fields={["name", "status", "language", "licensing_fee_paise", "updated_at"]} />
           <SimpleTable title="Destination Packages" description={data.packages.length + " persisted packages"}
-            rows={data.packages} fields={["destination", "package_version", "readiness_state", "commercial_model", "authorized_at"]} />
+            rows={data.packages} fields={["destination", "package_version", "readiness_state", "monetization", "consumer_metadata", "authorized_at"]} />
           <SimpleTable title="Bridge Publications" description={data.publications.length + " persisted authorization records"}
             rows={data.publications} titleName={titleName} fields={["bridge_title_id", "authorization_status", "territories", "languages", "window_end"]} />
         </div>
