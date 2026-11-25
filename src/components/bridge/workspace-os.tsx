@@ -83,7 +83,19 @@ export function WorkspacePanel({
   children: ReactNode;
 }) {
   return (
-    <details id={id} data-workspace-panel open={id === "overview"} className="group scroll-mt-28 rounded-xl border border-line bg-surface p-4 sm:p-5">
+    <details
+      id={id}
+      data-workspace-panel
+      open={id === "overview"}
+      onToggle={(event) => {
+        const current = event.currentTarget;
+        if (!current.open) return;
+        document.querySelectorAll<HTMLDetailsElement>("[data-workspace-panel]").forEach((panel) => {
+          if (panel !== current) panel.open = false;
+        });
+      }}
+      className="group scroll-mt-28 rounded-xl border border-line bg-surface p-4 sm:p-5"
+    >
       <summary className="flex cursor-pointer list-none items-start justify-between gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
         <div className="min-w-0">
           {eyebrow ? <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent">{eyebrow}</p> : null}
@@ -101,6 +113,13 @@ export function WorkspaceAction({ href, children, secondary = false }: { href: s
   return (
     <a
       href={href}
+      onClick={() => {
+        const target = document.getElementById(href.slice(1));
+        if (!(target instanceof HTMLDetailsElement)) return;
+        document.querySelectorAll<HTMLDetailsElement>("[data-workspace-panel]").forEach((panel) => {
+          panel.open = panel === target;
+        });
+      }}
       className={secondary
         ? "inline-flex min-h-10 items-center rounded-lg border border-line-strong bg-white px-3.5 py-2 text-sm font-semibold text-fg transition hover:border-accent hover:text-accent"
         : "inline-flex min-h-10 items-center rounded-lg bg-accent px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-accent-strong"}
