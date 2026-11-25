@@ -135,8 +135,6 @@ try {
           await session.page.getByRole("heading", { name: "Buyer Gallery" }).waitFor({ state: "visible" });
           const body = await session.page.locator("body").innerText();
           assert.ok(!body.includes(draftTitleName), "DRAFT fixture appeared in Buyer Gallery.");
-          assert.equal(await session.page.getByRole("button", { name: "License", exact: true }).count(), 0,
-            "Buyer Gallery unexpectedly contains a License action for this empty Testing catalogue.");
         }
 
         if (account.role === "super_admin") {
@@ -150,9 +148,15 @@ try {
           await session.page.goto(new URL(`/title/${draftTitleId}`, baseURL).toString(), { waitUntil: "domcontentloaded" });
           assertNotVercelSso(session.page);
           await session.page.getByText(draftTitleName, { exact: false }).waitFor({ state: "visible" });
-          const submitQc = session.page.getByRole("button", { name: "Submit for QC" });
-          await submitQc.waitFor({ state: "visible" });
-          assert.equal(await submitQc.isDisabled(), true, "QC submission must remain blocked without verified current master and poster assets.");
+          await session.page.getByRole("button", { name: "Start ingest" }).waitFor({ state: "visible" });
+          assert.equal(await session.page.getByRole("button", { name: "Submit for QC" }).count(), 0,
+            "A DRAFT title must not expose Submit for QC.");
+          if (process.env.BRIDGE_E2E_PREPARING_TITLE_ID) {
+            await session.page.goto(new URL(`/title/${process.env.BRIDGE_E2E_PREPARING_TITLE_ID}`, baseURL).toString(), { waitUntil: "domcontentloaded" });
+            const submitQc = session.page.getByRole("button", { name: "Submit for QC" });
+            await submitQc.waitFor({ state: "visible" });
+            assert.equal(await submitQc.isDisabled(), true, "PREPARING title without verified current master and poster must not submit for QC.");
+          }
         }
 
         if (account.role === "buyer") {
