@@ -41,16 +41,16 @@ declare global {
 }
 
 const CATEGORIES = [
-  "Production & DIT",
-  "Post-production",
-  "QC & Technical",
-  "Rights & Legal Support",
-  "Distribution & Licensing",
-  "Localization",
-  "Accessibility",
-  "Finishing",
-  "Marketing Support",
-  "Media Protection",
+  { value: "Production & DIT", label: "Film Production Support" },
+  { value: "Post-production", label: "Editing & Post-Production" },
+  { value: "QC & Technical", label: "Film Quality Check" },
+  { value: "Rights & Legal Support", label: "Film Rights & Legal Support" },
+  { value: "Distribution & Licensing", label: "OTT & Distribution Opportunities" },
+  { value: "Localization", label: "Subtitles & Language Translation" },
+  { value: "Accessibility", label: "Accessibility Support" },
+  { value: "Finishing", label: "Colour & Sound Finishing" },
+  { value: "Marketing Support", label: "Film Marketing & Promotion" },
+  { value: "Media Protection", label: "Film Backup & Archiving" },
 ];
 
 const STATUS_HELP: Record<string, string> = {
@@ -110,7 +110,7 @@ export function ServiceCentre({ audience, userId }: { audience: Audience; userId
     queryFn: () => listMyBridgeServiceRequests(),
   });
   const [titleId, setTitleId] = useState("");
-  const [category, setCategory] = useState(CATEGORIES[0]);
+  const [category, setCategory] = useState(CATEGORIES[0].value);
   const [description, setDescription] = useState("");
   const [documentIds, setDocumentIds] = useState<string[]>([]);
   const documentsQuery = useQuery({ queryKey: ["service-centre-documents", userId], queryFn: () => listCreatorDocuments() });
@@ -211,7 +211,7 @@ export function ServiceCentre({ audience, userId }: { audience: Audience; userId
 
       <section id="service-products-services" className="scroll-mt-24">
         <h3 className="font-semibold">Products & Services</h3>
-        <p className="mt-1 text-sm text-muted">Production & DIT, post-production, QC, rights support, distribution, localization, accessibility, finishing, marketing and media protection. Availability and prices are confirmed only in a Super Admin quote.</p>
+        <p className="mt-1 text-sm text-muted">Film production, editing, quality checks, rights support, distribution opportunities, subtitles, accessibility, finishing, marketing and secure archiving. Availability and prices are confirmed only after Super Admin review.</p>
       </section>
 
       <details className="rounded-xl border border-line p-4">
@@ -234,7 +234,7 @@ export function ServiceCentre({ audience, userId }: { audience: Audience; userId
           <label className="space-y-1 text-xs text-muted">
             <span>Service category</span>
             <select value={category} onChange={(event) => setCategory(event.target.value)} className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm text-fg">
-              {CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}
+              {CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
           <label className="space-y-1 text-xs text-muted md:col-span-2">
