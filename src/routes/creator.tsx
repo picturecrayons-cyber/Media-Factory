@@ -6,7 +6,12 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { TitleAssetGallery } from "@/components/bridge/title-asset-gallery";
+import { ProductsServicesCatalogue } from "@/components/bridge/products-services-catalogue";
+import { ServiceCentre } from "@/components/bridge/service-centre";
+import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 import { listTitles } from "@/lib/bridge/titles";
+import { listMyOwnerSubmissionStatuses } from "@/lib/bridge/owner-submission-intake";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -144,6 +149,24 @@ function CreatorDashboard({
           </div>
         ) : null}
       </section>
+
+      <OwnerSubmissionStatus />
+
+      <section id="creator-artwork" className="scroll-mt-20 space-y-3">
+        <div>
+          <h2 className="font-display text-2xl font-semibold">Verified artwork gallery</h2>
+          <p className="mt-1 text-sm text-muted">Only verified image assets from your server-authorized Creator catalogue are previewed.</p>
+        </div>
+        <TitleAssetGallery userId={actor.userId} scopeLabel="Creator" />
+      </section>
+
+      <section id="creator-services" className="scroll-mt-20 space-y-3">
+        <h2 className="font-display text-2xl font-semibold">Products & Services</h2>
+        <ProductsServicesCatalogue audience="Creator" />
+      <ServiceCentre audience="Creator" userId={actor.userId} />
+      </section>
+
+      <CreatorDocumentVault userId={actor.userId} />
 
       <section id="my-titles" className="scroll-mt-20 space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -329,4 +352,33 @@ function formatDate(value: string) {
   return Number.isNaN(date.getTime())
     ? "date unavailable"
     : date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+
+function OwnerSubmissionStatus() {
+  const statusQ = useQuery({
+    queryKey: ["my-owner-submission-status"],
+    queryFn: () => listMyOwnerSubmissionStatuses(),
+    retry: false,
+  });
+  const rows = statusQ.data?.submissions ?? [];
+  return (
+    <section aria-labelledby="owner-submission-status-title" className="rounded-2xl border border-line bg-surface p-5">
+      <h2 id="owner-submission-status-title" className="font-display text-xl font-semibold">Bridge Admin Submission Status</h2>
+      <p className="mt-1 text-sm text-muted">Only your own Creator submissions are shown here. Admin decisions and internal notes are not exposed.</p>
+      {statusQ.isPending ? <p className="mt-3 text-sm text-muted">Loading your submission status…</p> : null}
+      {statusQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Your submission status is not available right now.</p> : null}
+      {statusQ.isSuccess && rows.length === 0 ? <p className="mt-3 text-sm text-muted">No owner submissions yet.</p> : null}
+      {statusQ.isSuccess && rows.length > 0 ? (
+        <ul className="mt-3 divide-y divide-line">
+          {rows.map((row) => (
+            <li key={row.title_id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <span className="font-medium">{row.title_name}</span>
+              <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{row.submission_status.replaceAll("_", " ")}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
 }

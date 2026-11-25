@@ -26,6 +26,39 @@ async function mail(opts: { to: string; subject: string; text: string }) {
 
 
 
+async function recordSignupLegalAcceptance(tx: Sql, bridgeUserId: string, authUserId: string): Promise<boolean> {
+  const metadataColumn = await tx<{ exists: boolean }>`
+    select exists (
+      select 1 from information_schema.columns
+      where table_schema='auth' and table_name='users' and column_name='raw_user_meta_data'
+    ) as exists
+  `;
+  if (!metadataColumn[0]?.exists) return false;
+  const rows = await tx<{ raw_user_meta_data: unknown }>`
+    select raw_user_meta_data from auth.users where id = ${authUserId}::uuid limit 1
+  `;
+  const metadata = rows[0]?.raw_user_meta_data;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return false;
+  const values = metadata as Record<string, unknown>;
+  const termsVersion = values.bridge_terms_version;
+  const privacyVersion = values.bridge_privacy_version;
+  const acknowledgedAt = values.bridge_legal_acknowledged_at;
+  if (typeof termsVersion !== "string" || typeof privacyVersion !== "string" || typeof acknowledgedAt !== "string") return false;
+  if (!/^[a-zA-Z0-9._-]{1,40}$/.test(termsVersion) || !/^[a-zA-Z0-9._-]{1,40}$/.test(privacyVersion)) return false;
+  const parsedAcknowledgedAt = Date.parse(acknowledgedAt);
+  if (!Number.isFinite(parsedAcknowledgedAt)) return false;
+  await tx`
+    insert into bridge_legal_acceptances (
+      bridge_user_id, auth_user_id, terms_version, privacy_version, client_acknowledged_at
+    ) values (
+      ${bridgeUserId}, ${authUserId}::uuid, ${termsVersion}, ${privacyVersion},
+      ${new Date(parsedAcknowledgedAt).toISOString()}
+    )
+    on conflict (bridge_user_id, terms_version, privacy_version) do nothing
+  `;
+  return true;
+}
+
 async function claimLegacyCreatorIntake(sql: Sql, email: string, bridgeUserId: string) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) return { claimed: false, titleCount: 0, reason: "missing_email" as const };
@@ -190,6 +223,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       const email = context.userEmail || existing.email;
       await sql.transaction(async (tx) => {
         await persistSupabaseIdentityLink(tx, existing.userId, context.userId);
+        await recordSignupLegalAcceptance(tx, existing.userId, context.userId);
         await claimLegacyCreatorIntake(tx, email, existing.userId);
       });
       return { home: workspaceHome(existing), profile: existing };
@@ -335,6 +369,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
           }
         }
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
+        await recordSignupLegalAcceptance(tx, bridgeUserId, context.userId);
         await claimLegacyCreatorIntake(tx, email, bridgeUserId);
         const roleForTransaction: string | null = internalRole;
         return roleForTransaction;
@@ -457,11 +492,12 @@ export const listAdminProfiles = createServerFn({ method: "GET" })
       display_name: string;
       account_type: string;
       organization_name: string | null;
+      organization_id: string | null;
       internal_role: string | null;
       email_verified: boolean;
       created_at: string | Date;
     }>`
-      select user_id, email, display_name, account_type, organization_name,
+      select user_id, email, display_name, account_type, organization_name, organization_id,
              internal_role, email_verified, created_at
       from bridge_profiles
       order by created_at desc
@@ -474,6 +510,7 @@ export const listAdminProfiles = createServerFn({ method: "GET" })
         displayName: row.display_name,
         accountType: row.account_type,
         organizationName: row.organization_name,
+        organizationId: row.organization_id,
         internalRole: row.internal_role,
         emailVerified: Boolean(row.email_verified),
         createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),

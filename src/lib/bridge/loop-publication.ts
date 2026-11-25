@@ -227,20 +227,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
+    // GET/readiness must remain read-only. Expired windows are derived in the
+    // result below; a separate approved lifecycle job may persist expiry state.
 
     const rows = await sql<{
       id: string;
@@ -273,9 +261,13 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     }>`
       select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
-             p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
+             p.loop_title_id,
+             case when p.window_end is not null and p.window_end < now()
+                  and p.authorization_status in ('authorized', 'live') then 'EXPIRED'
+                  else p.authorization_status end as authorization_status,
+             p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
-             l.status as loop_status, l.listed, l.published, l.playback_path,
+             l.status as loop_status, l.is_listed as listed, l.is_published as published, l.playback_path,
              exists(
                select 1 from bridge_qc_cases q
                where q.title_id=b.id and q.status='PASSED'
@@ -671,7 +663,7 @@ export const getLoopPublication = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     const rows = await sql<PublicationRow>`
-      select p.*, l.status as loop_status, l.listed, l.published, l.playback_path
+      select p.*, l.status as loop_status, l.is_listed as listed, l.is_published as published, l.playback_path
       from bridge_loop_publications p
       join loop_titles l on l.id = p.loop_title_id
       where p.bridge_title_id = ${data.bridgeTitleId}

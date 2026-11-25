@@ -7,6 +7,10 @@ import {
   submitLoopLicense,
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
+import {
+  getOwnerSubmissionReadiness,
+  submitTitleToBridgeAdmin,
+} from "@/lib/bridge/owner-submission-intake";
 import { advanceTitle } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
@@ -39,6 +43,14 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: title.id } }),
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
+  const ownerSubmission = useQuery({
+    queryKey: ["owner-submission-readiness", title.id],
+    queryFn: () => getOwnerSubmissionReadiness({ data: { titleId: title.id } }),
+    enabled:
+      !actor.internalRole &&
+      ["independent_creator", "studio"].includes(actor.accountType) &&
+      title.status === "PREPARING",
+  });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
@@ -57,6 +69,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] }),
         qc.invalidateQueries({ queryKey: ["bridge-audit"] }),
         qc.invalidateQueries({ queryKey: ["title-revenue", title.id] }),
+        qc.invalidateQueries({ queryKey: ["owner-submission-readiness", title.id] }),
+        qc.invalidateQueries({ queryKey: ["bridge-owner-submission-queue"] }),
       ]);
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Action failed"),
@@ -158,11 +172,18 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-3">
               <p>
                 {title.status === "PREPARING" || title.status === "UPLOADING" || title.status === "DRAFT"
-                  ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit for QC. QC is not reviewed yet."
+                  ? actor.internalRole
+                    ? "Prepare the package, then send an Admin-accepted title to the independent QC review queue. QC approval remains a separate reviewer decision."
+                    : "Prepare the main film and artwork, then submit to Bridge Admin. Admin intake is not QC approval; QC review remains a separate workflow."
                   : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
-              {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
-              ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
+              {(
+                (["DRAFT", "UPLOADING"].includes(title.status) &&
+                  canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal")) ||
+                (title.status === "PREPARING" &&
+                  ["admin", "super_admin"].includes(actor.internalRole ?? "") &&
+                  hasPermission(actor, "title.read_catalog"))
+              )
                 ? button(
                     title.status === "DRAFT"
                       ? "Start ingest"
@@ -183,6 +204,42 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       }),
                   )
                 : null}
+              {!actor.internalRole &&
+              ["independent_creator", "studio"].includes(actor.accountType) &&
+              title.status === "PREPARING" ? (
+                <div className="space-y-2 rounded-xl border border-line p-3">
+                  <h3 className="font-semibold">Submit to Bridge</h3>
+                  <p className="text-sm text-muted">
+                    Submission is an intake request only. It does not approve QC, Rights, Legal, Licensing or Marketplace publication.
+                  </p>
+                  {ownerSubmission.isPending ? <p className="text-sm">Verifying required assets…</p> : null}
+                  {ownerSubmission.isError ? (
+                    <p role="alert" className="text-sm text-red-500">
+                      Submission readiness could not be verified: {ownerSubmission.error.message}
+                    </p>
+                  ) : null}
+                  {ownerSubmission.data?.blockers?.length ? (
+                    <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
+                      {ownerSubmission.data.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+                    </ul>
+                  ) : null}
+                  {ownerSubmission.data?.canSubmit ? (
+                    button("Submit to Bridge", () =>
+                      submitTitleToBridgeAdmin({ data: { titleId: title.id } }),
+                    )
+                  ) : null}
+                  {ownerSubmission.data?.submissionStatus ? (
+                    <p role="status" className="text-sm font-medium text-muted">
+                      Submission status: {ownerSubmission.data.submissionStatus.replaceAll("_", " ")}
+                    </p>
+                  ) : null}
+                  {action.isSuccess ? (
+                    <p role="status" className="text-sm font-medium text-emerald-700">
+                      Submission recorded. Bridge intake has received this title; QC and rights decisions remain separate.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
                 <>
                   {input(

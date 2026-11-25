@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
+import { getOwnerSubmissionReadiness, submitTitleToBridgeAdmin } from "@/lib/bridge/owner-submission-intake";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   abortAssetMultipart,
@@ -119,6 +120,20 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     enabled: !buyerView,
   });
 
+  const canSubmitOwnerPackage = !actor.internalRole && ["independent_creator", "studio"].includes(actor.accountType);
+  const ownerIntakeQ = useQuery({
+    queryKey: ["owner-submission-readiness", id, actor.userId, actor.organizationId ?? null],
+    queryFn: () => getOwnerSubmissionReadiness({ data: { titleId: id } }),
+    enabled: canSubmitOwnerPackage && !buyerView,
+    retry: false,
+  });
+  const ownerSubmitMut = useMutation({
+    mutationFn: () => submitTitleToBridgeAdmin({ data: { titleId: id } }),
+    onSuccess: async () => {
+      await ownerIntakeQ.refetch();
+    },
+  });
+
   const reviewQ = useQuery({
     queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
@@ -214,6 +229,23 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 >
                   Upload Files
                 </button>
+                {canSubmitOwnerPackage && title.status === "PREPARING" ? (
+                  <div className="flex flex-col gap-1">
+                    <button
+                      type="button"
+                      disabled={ownerIntakeQ.isPending || ownerIntakeQ.isError || !ownerIntakeQ.data?.canSubmit || ownerSubmitMut.isPending || ownerSubmitMut.isSuccess}
+                      onClick={() => ownerSubmitMut.mutate()}
+                      className="rounded-full border border-line-strong px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {ownerSubmitMut.isPending ? "Submitting…" : ownerSubmitMut.isSuccess ? "Submitted to Bridge Admin" : "Submit to Bridge Admin"}
+                    </button>
+                    {ownerIntakeQ.isPending ? <span className="text-xs text-muted">Checking canonical master and artwork verification…</span> : null}
+                    {ownerIntakeQ.data?.blockers?.length ? <span className="max-w-xl text-xs text-muted">{ownerIntakeQ.data.blockers.join(" · ")}</span> : null}
+                    {ownerIntakeQ.isError ? <span role="alert" className="text-xs text-accent">Readiness could not be verified. Submission remains blocked.</span> : null}
+                    {ownerSubmitMut.isError ? <span role="alert" className="text-xs text-accent">{ownerSubmitMut.error instanceof Error ? ownerSubmitMut.error.message : "Submission failed."}</span> : null}
+                    {ownerSubmitMut.isSuccess ? <span className="text-xs text-muted">Admin intake recorded. Title remains PREPARING; QC is a separate action.</span> : null}
+                  </div>
+                ) : null}
                 
               </div>
             ) : null}
@@ -351,7 +383,7 @@ function ProductionAssetsPanel({
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Production</p>
           <h2 className="mt-1 font-display text-xl font-semibold">Linked production assets</h2>
-          <p className="mt-1 text-sm text-muted">References to verified files already stored in Bridge. Originals remain in their existing OCI locations.</p>
+          <p className="mt-1 text-sm text-muted">Only rows linked to an active, restored Bridge asset are verified. Unlinked legacy entries remain visible as references and do not count as ready files. Originals remain in their existing OCI locations.</p>
         </div>
         <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
           {assets.length} linked
@@ -412,7 +444,7 @@ function ProductionAssetsPanel({
                           </p>
                         </div>
                         <span className="rounded-full border border-line px-2 py-1 text-[10px] font-semibold">
-                          {asset.verifiedSource ? "Verified source" : "Reference"}
+                          {asset.verifiedSource ? "Verified source" : "Reference only · not verified"}
                         </span>
                       </div>
                     </article>

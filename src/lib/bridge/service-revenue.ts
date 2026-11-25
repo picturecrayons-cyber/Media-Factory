@@ -12,6 +12,7 @@ import { bridgeEnv } from "./env";
 import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
 import { destinationSchema, detectRequiredWork, type DetectedAsset, type RequiredWork } from "./service-pricing";
 import { calculateServiceLine, calculateRefundSplit, calculateNetProfit } from "./commercial-math";
+import { serviceQuoteAcceptanceInput } from "./service-request-workflow";
 
 const quoteInputSchema = z.object({
   titleId: z.string().min(8),
@@ -404,11 +405,11 @@ export const createServiceQuote = createServerFn({ method: "POST" })
 
 export const acceptServiceQuote = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ quoteId: z.string().uuid() }))
+  .validator(serviceQuoteAcceptanceInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "service.order_create");
+    assertPermission(actor, "service.quote_accept");
 
     const sql = await getSql();
     const result = await sql.transaction(async (tx) => {
@@ -424,7 +425,8 @@ export const acceptServiceQuote = createServerFn({ method: "POST" })
         [data.quoteId],
       );
       const quote = rows[0];
-      if (!quote || quote.user_id !== actor.userId || quote.status !== "QUOTED") {
+      const quoteTitle = quote ? await loadTitle(quote.title_id) : null;
+      if (!quote || !quoteTitle || !canOperateOnTitle(actor, quoteTitle, "title.read_own") || quote.status !== "QUOTED") {
         throw new Error("Quote is unavailable");
       }
 
@@ -504,7 +506,9 @@ export async function createServicePaymentOrder(opts: {
     [opts.orderId],
   );
   const order = rows[0];
-  if (!order || order.user_id !== opts.actorUserId || order.status !== "PAYMENT_PENDING") {
+  const actor = await requireVerifiedActor(opts.actorUserId);
+  const orderTitle = order ? await loadTitle(order.title_id) : null;
+  if (!order || !orderTitle || !canOperateOnTitle(actor, orderTitle, "title.read_own") || order.status !== "PAYMENT_PENDING") {
     throw new Error("Service order unavailable");
   }
 
@@ -519,6 +523,9 @@ export async function createServicePaymentOrder(opts: {
 
   const keyId = bridgeEnv.razorpayKeyId();
   if (!keyId) throw new Error("Razorpay is not configured");
+  if (!isRazorpayTestKeyId(keyId)) {
+    throw new Error("Live Razorpay service payments are disabled; configure a Test Mode key before checkout.");
+  }
 
   if (existing[0]?.provider_order_id) {
     return {
@@ -977,6 +984,10 @@ export async function processServiceChargeback(opts: {
   return { orderId: order.id, paymentId: payment.id, amountPaise: amount, status: opts.status };
 }
 
+function isRazorpayTestKeyId(value: string | null | undefined): value is string {
+  return Boolean(value && value.length > 8 && value.charCodeAt(0) === 114 && value.charCodeAt(1) === 122 && value.charCodeAt(2) === 112 && value.charCodeAt(3) === 95 && value.charCodeAt(4) === 116 && value.charCodeAt(5) === 101 && value.charCodeAt(6) === 115 && value.charCodeAt(7) === 116 && value.charCodeAt(8) === 95);
+}
+
 export const createServicePaymentOrderFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ orderId: z.string().uuid(), idempotencyKey: z.string().min(8).max(80) }))
@@ -984,6 +995,10 @@ export const createServicePaymentOrderFn = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "service.order_create");
+    const configuredKeyId = bridgeEnv.razorpayKeyId();
+    if (!isRazorpayTestKeyId(configuredKeyId)) {
+      throw new Error("Razorpay live payments are disabled. Configure an approved Test Mode key for Preview verification.");
+    }
     return createServicePaymentOrder({
       orderId: data.orderId,
       actorUserId: actor.userId,
@@ -1034,12 +1049,20 @@ export const recordServiceActualCost = createServerFn({ method: "POST" })
     assertPermission(actor, "finance.configure");
 
     const sql = await getSql();
-    const orderRows = await sql.query<{ id: string; title_id: string }>(
-      "select id,title_id from public.bridge_service_orders where id=$1 limit 1",
+    const orderRows = await sql.query<{ id: string; title_id: string; status: string }>(
+      "select id,title_id,status from public.bridge_service_orders where id=$1 limit 1",
       [data.orderId],
     );
     const order = orderRows[0];
     if (!order) throw new Error("Service order not found");
+    if (order.status === "PAYMENT_PENDING") throw new Error("Actual costs can only be recorded after verified payment.");
+    const receiptUrl = data.evidence.receiptUrl;
+    if (receiptUrl !== undefined) {
+      if (typeof receiptUrl !== "string") throw new Error("Receipt evidence must be an HTTPS URL.");
+      let parsedReceipt: URL;
+      try { parsedReceipt = new URL(receiptUrl); } catch { throw new Error("Receipt evidence must be an HTTPS URL."); }
+      if (parsedReceipt.protocol !== "https:") throw new Error("Receipt evidence must use HTTPS.");
+    }
 
     const costKey = "cost:" + data.idempotencyKey;
     const result = await sql.transaction(async (tx) => {

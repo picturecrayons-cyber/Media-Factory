@@ -18,6 +18,7 @@ import {
 } from "@/lib/bridge/loop-publication";
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
+import { decideBridgeOwnerSubmission, listBridgeAdminOwnerSubmissionQueue } from "@/lib/bridge/owner-submission-intake";
 
 export const Route = createFileRoute("/internal")({ component: Internal });
 
@@ -33,6 +34,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            canManageOwnerSubmission={actor.internalRole === "admin" || actor.internalRole === "super_admin"}
           />
         </BridgeShell>
       )}
@@ -44,10 +46,12 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  canManageOwnerSubmission,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  canManageOwnerSubmission: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -62,6 +66,9 @@ function InternalBody({
 
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
+
+      {/* Owner submissions are a distinct Admin intake queue; they do not advance QC or rights. */}
+      {canManageOwnerSubmission ? <OwnerSubmissionQueue /> : null}
 
       {/* 3. Catalog Queue */}
       <section className="space-y-4">
@@ -138,6 +145,101 @@ const DISTRIBUTION_TABS = [
 ] as const;
 
 type DistTab = (typeof DISTRIBUTION_TABS)[number];
+
+
+function OwnerSubmissionQueue() {
+  const qc = useQueryClient();
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const queueQ = useQuery({
+    queryKey: ["bridge-admin-owner-submission-queue"],
+    queryFn: () => listBridgeAdminOwnerSubmissionQueue(),
+    retry: false,
+  });
+  const decisionMut = useMutation({
+    mutationFn: (input: { titleId: string; decision: "ACCEPT" | "REQUEST_CORRECTIONS"; reason?: string }) =>
+      decideBridgeOwnerSubmission({ data: input }),
+    onSuccess: async (result) => {
+      toast.success(result.submissionStatus === "ACCEPTED_INTAKE" ? "Owner submission accepted" : "Corrections requested");
+      await qc.invalidateQueries({ queryKey: ["bridge-admin-owner-submission-queue"] });
+      await qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Decision could not be saved"),
+  });
+  const submissions = queueQ.data?.submissions ?? [];
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-2xl font-semibold text-fg">Owner Submissions · Admin Intake</h2>
+          <p className="text-xs text-muted">Creator and Studio packages awaiting Admin review. Accepting intake does not approve QC, Rights, Legal, Licensing or Loop publication.</p>
+        </div>
+        <span className="text-xs font-mono text-muted">
+          {queueQ.isSuccess ? `${submissions.length} pending` : "Not available"}
+        </span>
+      </div>
+      {queueQ.isPending ? <p className="text-sm text-muted">Loading owner submissions…</p> : null}
+      {queueQ.isError ? <p role="alert" className="text-sm text-accent">Owner submission queue is unavailable. Refresh to retry.</p> : null}
+      {!queueQ.isPending && !queueQ.isError ? (
+        <ul className="divide-y divide-line rounded-2xl border border-line bg-surface">
+          {submissions.length ? submissions.map((item) => (
+            <li key={item.title_id} className="space-y-3 px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-fg">{item.title_name}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {item.owner_organization_name || item.owner_display_name || item.owner_email || item.owner_user_id}
+                    {item.submitted_at ? ` · Submitted ${new Date(item.submitted_at).toLocaleString()}` : ""}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">Title status: {item.title_status} · Intake: {item.submission_status}</p>
+                </div>
+                <Link to="/title/$id" params={{ id: item.title_id }} className="rounded-full border border-line-strong px-4 py-2 text-xs font-semibold hover:bg-elevated">
+                  Open title
+                </Link>
+              </div>
+              <label className="block text-xs font-semibold text-muted">
+                Correction reason (required only when requesting corrections)
+                <textarea
+                  value={reasons[item.title_id] ?? ""}
+                  onChange={(event) => setReasons((current) => ({ ...current, [item.title_id]: event.target.value }))}
+                  rows={2}
+                  maxLength={2000}
+                  className="mt-1 w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm font-normal text-fg"
+                  placeholder="Explain what the Creator or Studio must correct…"
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  disabled={decisionMut.isPending}
+                  onClick={() => decisionMut.mutate({ titleId: item.title_id, decision: "ACCEPT" })}
+                  className="rounded-full px-4 text-xs font-semibold"
+                >
+                  Accept submission
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={decisionMut.isPending || !(reasons[item.title_id] ?? "").trim()}
+                  onClick={() => decisionMut.mutate({
+                    titleId: item.title_id,
+                    decision: "REQUEST_CORRECTIONS",
+                    reason: reasons[item.title_id].trim(),
+                  })}
+                  className="rounded-full border-line px-4 text-xs font-semibold"
+                >
+                  Request corrections
+                </Button>
+              </div>
+            </li>
+          )) : (
+            <li className="px-5 py-8 text-center text-sm text-muted">No pending submissions.</li>
+          )}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
 
 function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canRevoke: boolean }) {
   const qc = useQueryClient();

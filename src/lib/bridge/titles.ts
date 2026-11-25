@@ -11,8 +11,9 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
+import { isFinishedFilmSubmission } from "./studio-title-classification";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
-import { submitTitleForQc } from "./title-submission";
+import { isAdminAcceptedOwnerIntake, submitTitleForQc } from "./title-submission";
 
 type TitleRow = {
   id: string;
@@ -22,6 +23,7 @@ type TitleRow = {
   owner_user_id: string;
   owner_account_type: string;
   owner_organization_id?: string | null;
+  submission_type?: string | null;
   status: string;
   synopsis: string;
   language: string;
@@ -94,15 +96,16 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
   const orgId = organizationId || null;
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+  let rows: TitleRow[];
   if (!orgId) {
-    return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
-  }
-  return mergeColumnAvailable
-    ? sql<TitleRow>`
+    rows = mergeColumnAvailable
+      ? await sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and submission_type = 'finished_film' and merged_into_title_id is null order by updated_at desc limit 200`
+      : await sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and submission_type = 'finished_film' order by updated_at desc limit 200`;
+  } else if (mergeColumnAvailable) {
+    rows = await sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.merged_into_title_id is null
+        where t.submission_type = 'finished_film'
+          and t.merged_into_title_id is null
           and (
             t.owner_user_id = ${userId}
             or (
@@ -117,22 +120,46 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
             )
           )
         order by t.updated_at desc limit 200
-      `
-    : sql<TitleRow>`
+      `;
+  } else {
+    rows = await sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
-          or (
-            t.owner_account_type = 'studio'
-            and t.owner_organization_id = ${orgId}
-            and exists (
-              select 1 from bridge_organization_memberships m
-              where m.organization_id = ${orgId}
-                and m.user_id = ${userId}
-                and m.status = 'active'
+        where t.submission_type = 'finished_film'
+          and (
+            t.owner_user_id = ${userId}
+            or (
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id = ${orgId}
+              and exists (
+                select 1 from bridge_organization_memberships m
+                where m.organization_id = ${orgId}
+                  and m.user_id = ${userId}
+                  and m.status = 'active'
+              )
             )
           )
         order by t.updated_at desc limit 200
       `;
+  }
+
+  // Fail-safe against legacy/misclassified concepts: a title linked to a
+  // concept submission must never also appear in the Finished Films catalogue.
+  if (!rows.length) return rows;
+  const conceptTable = await sql<{ exists: boolean }>`
+    select exists (
+      select 1 from information_schema.tables
+      where table_schema = 'public'
+        and table_name = 'bridge_story_concept_submissions'
+    ) as exists
+  `;
+  if (!conceptTable[0]?.exists) return rows;
+  const conceptRows = await sql<{ title_id: string }>`
+    select title_id::text as title_id
+    from bridge_story_concept_submissions
+    where title_id::text = any(${rows.map((row) => row.id)}::text[])
+  `;
+  const conceptTitleIds = new Set(conceptRows.map((row) => row.title_id));
+  return rows.filter((row) => isFinishedFilmSubmission(row, conceptTitleIds));
 }
 
 function slugify(name: string, id: string): string {
@@ -603,19 +630,38 @@ export const advanceTitle = createServerFn({ method: "POST" })
     assertTransition(title.status, data.to);
     const perm = permissionForTransition(title.status, data.to);
     if (!perm) throw new Error("Transition is not available");
-    assertPermission(actor, perm);
-    if (
-      perm === "title.advance_upload" &&
-      title.ownerUserId !== actor.userId &&
-      !canMutateTitle(actor, title, perm, perm)
-    ) {
-      throw new Error("Forbidden");
+    // PREPARING -> QC_REVIEW is an Admin handoff after owner-intake acceptance,
+    // not an owner upload permission. The handler below rechecks ACCEPTED_INTAKE
+    // and canonical master/artwork readiness inside the transaction.
+    if (data.to === "QC_REVIEW") {
+      if (!actor.internalRole || !["admin", "super_admin"].includes(actor.internalRole)) {
+        throw new Error("Only Bridge Admin can send an Admin-accepted title to QC");
+      }
+    } else {
+      assertPermission(actor, perm);
+      if (
+        perm === "title.advance_upload" &&
+        title.ownerUserId !== actor.userId &&
+        !canMutateTitle(actor, title, perm, perm)
+      ) {
+        throw new Error("Forbidden");
+      }
     }
     const expected = nextStatus(title.status);
     if (expected !== data.to) throw new Error("Illegal title transition");
     const sql = await getSql();
     if (data.to === "QC_REVIEW") {
-      return submitTitleForQc(sql, title, actor.userId, data.note);
+      if (!actor.internalRole || !["admin", "super_admin"].includes(actor.internalRole)) {
+        throw new Error("Only Bridge Admin can send an Admin-accepted title to QC");
+      }
+      const intake = await sql<{ submission_status: string }>`
+        select submission_status from bridge_title_owner_submissions
+        where title_id = ${title.id} limit 1
+      `;
+      if (!isAdminAcceptedOwnerIntake(intake[0]?.submission_status)) {
+        throw new Error("Submit to Bridge Admin and receive Admin acceptance before QC handoff");
+      }
+      return submitTitleForQc(sql, title, actor.userId, data.note, true);
     }
     return sql.transaction(async (tx) => {
       const [locked] = await tx<{
@@ -677,3 +723,64 @@ export const listAuditLogs = createServerFn({ method: "GET" })
       })),
     };
   });
+
+
+export const deleteDraftTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ id: z.string().min(8).max(100), confirmation: z.literal("DELETE DRAFT") }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const title = await loadTitle(data.id);
+    if (!title || title.status !== "DRAFT" || !canMutateTitle(actor, title, "title.update_own", "title.approve")) {
+      throw new Error("Only a DRAFT title that you are authorized to manage can be deleted");
+    }
+
+    const sql = await getSql();
+    await sql.transaction(async (tx) => {
+      const locked = await tx.query<{ status: string; name: string; submission_type: string | null }>(
+        "select status,name,submission_type from public.bridge_titles where id=$1 for update",
+        [data.id],
+      );
+      if (!locked[0] || locked[0].status !== "DRAFT") {
+        throw new Error("Title is no longer a DRAFT; deletion is blocked");
+      }
+      if (locked[0].submission_type && locked[0].submission_type !== "finished_film") {
+        throw new Error("Story Concepts must remain in their separate submission workflow");
+      }
+
+      const references = await tx.query<{ table_name: string; column_name: string }>(
+        "select kcu.table_name,kcu.column_name from information_schema.table_constraints tc join information_schema.key_column_usage kcu on tc.constraint_name=kcu.constraint_name and tc.constraint_schema=kcu.constraint_schema join information_schema.constraint_column_usage ccu on ccu.constraint_name=tc.constraint_name and ccu.constraint_schema=tc.constraint_schema where tc.constraint_type='FOREIGN KEY' and tc.constraint_schema='public' and ccu.table_schema='public' and ccu.table_name='bridge_titles' and ccu.column_name='id'",
+      );
+      const blocked: string[] = [];
+      for (const ref of references) {
+        if (ref.table_name === "bridge_title_events") {
+          await tx.query("delete from public.bridge_title_events where title_id=$1", [data.id]);
+          continue;
+        }
+        const count = await tx.query<{ count: number }>(
+          'select count(*)::int as count from public."' + ref.table_name.replaceAll('"', '""') + '" where "' + ref.column_name.replaceAll('"', '""') + '"=$1',
+          [data.id],
+        );
+        if (Number(count[0]?.count ?? 0) > 0) blocked.push(ref.table_name);
+      }
+      if (blocked.length) {
+        throw new Error("Deletion blocked: linked records or storage-backed assets remain (" + [...new Set(blocked)].join(", ") + "). Use the verified asset cleanup workflow first.");
+      }
+
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.draft_deleted",
+        entityType: "bridge_title",
+        entityId: data.id,
+        metadata: { titleName: locked[0].name, priorStatus: "DRAFT", relatedRowsChecked: references.length },
+      }, tx);
+      const deleted = await tx.query<{ id: string }>(
+        "delete from public.bridge_titles where id=$1 and status='DRAFT' returning id",
+        [data.id],
+      );
+      if (!deleted[0]) throw new Error("Draft changed during deletion; no record was removed");
+    });
+    return { id: data.id, deleted: true as const };
+  });
+

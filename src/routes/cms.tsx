@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -7,10 +8,14 @@ import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { listTitles } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { hasPermission } from "@/lib/bridge/rbac";
+import {
+  decideBridgeOwnerSubmission,
+  listBridgeAdminOwnerSubmissionQueue,
+} from "@/lib/bridge/owner-submission-intake";
 
 export const Route = createFileRoute("/cms")({ component: OperationalCms });
 
-const tabs = ["ingest", "licensing", "publishing"] as const;
+const tabs = ["ingest", "submissions", "licensing", "publishing"] as const;
 type Tab = (typeof tabs)[number];
 
 function OperationalCms() {
@@ -79,6 +84,7 @@ function CmsBody({ actor }: { actor: any }) {
 
       <div className="mt-6">
         {tab === "ingest" ? <IngestDesk actor={actor} /> : null}
+        {tab === "submissions" ? <SubmissionIntakeDesk /> : null}
         {tab === "licensing" ? <LicensingDesk titles={titles} /> : null}
         {tab === "publishing" ? <PublishingDesk publications={publications} /> : null}
       </div>
@@ -136,6 +142,104 @@ function IngestDesk({ actor }: { actor: any }) {
         >
           Browse ingested titles →
         </Link>
+      </div>
+    </section>
+  );
+}
+
+function SubmissionIntakeDesk() {
+  const queryClient = useQueryClient();
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const queue = useQuery({
+    queryKey: ["bridge-owner-submission-queue"],
+    queryFn: () => listBridgeAdminOwnerSubmissionQueue(),
+  });
+  const decision = useMutation({
+    mutationFn: (input: {
+      titleId: string;
+      decision: "ACCEPT" | "REQUEST_CORRECTIONS";
+      reason?: string;
+    }) => decideBridgeOwnerSubmission({ data: input }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["bridge-owner-submission-queue"] });
+    },
+  });
+
+  if (queue.isPending) return <p>Loading new submissions…</p>;
+  if (queue.isError) {
+    return (
+      <section className="rounded-3xl border border-line bg-surface p-6">
+        <h3 className="font-display text-2xl font-semibold">New Submissions</h3>
+        <p className="mt-2 text-sm text-muted" role="alert">
+          Submission queue unavailable. Access is restricted to Super Admin; retry after verifying the authenticated session.
+        </p>
+      </section>
+    );
+  }
+
+  const rows = queue.data?.submissions ?? [];
+  return (
+    <section className="rounded-3xl border border-line bg-surface p-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Owner intake</p>
+          <h3 className="mt-1 font-display text-2xl font-semibold">New Submissions</h3>
+          <p className="mt-2 text-sm text-muted">
+            Intake decisions acknowledge receipt only. They do not approve QC, Rights, Legal, Licensing or Marketplace publication.
+          </p>
+        </div>
+        <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{rows.length} pending</span>
+      </div>
+      <div className="mt-5 space-y-4">
+        {rows.map((row) => (
+          <article key={row.title_id} className="rounded-2xl border border-line bg-elevated p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="font-semibold">{row.title_name}</h4>
+                <p className="mt-1 text-xs text-muted">
+                  Owner: {row.owner_display_name || row.owner_email || row.owner_user_id}
+                  {row.owner_organization_name ? ` · ${row.owner_organization_name}` : ""}
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  Submitted: {row.submitted_at ? new Date(row.submitted_at).toLocaleString() : "Timestamp unavailable"} · Title status: {row.title_status}
+                </p>
+              </div>
+              <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{row.submission_status}</span>
+            </div>
+            <label className="mt-4 grid gap-1 text-sm">
+              Correction reason (required only when requesting corrections)
+              <textarea
+                value={reasons[row.title_id] ?? ""}
+                onChange={(event) => setReasons((current) => ({ ...current, [row.title_id]: event.target.value }))}
+                className="min-h-20 w-full rounded-lg border border-line bg-surface p-3"
+                maxLength={2000}
+              />
+            </label>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                disabled={decision.isPending}
+                onClick={() => decision.mutate({ titleId: row.title_id, decision: "ACCEPT" })}
+              >
+                Accept Intake
+              </Button>
+              <Button
+                variant="outline"
+                disabled={decision.isPending || !(reasons[row.title_id] ?? "").trim()}
+                onClick={() => decision.mutate({
+                  titleId: row.title_id,
+                  decision: "REQUEST_CORRECTIONS",
+                  reason: reasons[row.title_id].trim(),
+                })}
+              >
+                Request Corrections
+              </Button>
+              <Link to="/title/$id" params={{ id: row.title_id }} className="inline-flex items-center rounded-lg border border-line px-4 py-2 text-sm font-semibold">
+                Open title
+              </Link>
+            </div>
+          </article>
+        ))}
+        {!rows.length ? <p className="py-8 text-center text-sm text-muted">No pending owner submissions.</p> : null}
       </div>
     </section>
   );

@@ -25,6 +25,7 @@ function Signup() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [accountType, setAccountType] = useState<AccountChoice>(initialChoice);
+  const [legalAcknowledged, setLegalAcknowledged] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -38,6 +39,11 @@ function Signup() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!legalAcknowledged) {
+      setError("Please acknowledge the current B2B Terms and Privacy Policy before creating an account.");
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
@@ -57,6 +63,7 @@ function Signup() {
         password,
         name: name.trim(),
         accountType,
+        legalAcknowledgement: { termsVersion: "1.0-draft", privacyVersion: "1.0-draft", acknowledgedAt: new Date().toISOString() },
       });
 
       const signupState = classifySignupResult(result);
@@ -161,6 +168,16 @@ function Signup() {
               {resendStatus}
             </div>
           ) : null}
+
+          <label className="flex items-start gap-3 rounded-xl border border-line bg-elevated p-3 text-sm text-muted">
+            <input type="checkbox" required checked={legalAcknowledged} onChange={(event) => setLegalAcknowledged(event.target.checked)} className="mt-1 accent-current" />
+            <span>
+              I acknowledge the current Crayons Bridge B2B Terms of Use and Privacy Policy (version 1.0 draft).
+              {" "}<Link to="/terms" className="font-semibold text-accent underline">Terms</Link>
+              {" "}·{" "}<Link to="/privacy" className="font-semibold text-accent underline">Privacy</Link>.
+              These documents remain subject to final legal review.
+            </span>
+          </label>
 
           {error ? (
             <div
