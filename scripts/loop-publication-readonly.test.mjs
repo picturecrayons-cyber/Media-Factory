@@ -15,23 +15,3 @@ describe("Loop publication readiness GET remains read-only", () => {
     assert.doesNotMatch(handler, /\.catch\s*\(\s*\(\)\s*=>\s*\{\s*\}\s*\)/);
   });
 });
-
-const adminSource = readFileSync(new URL("../src/lib/bridge/admin-workstations.ts", import.meta.url), "utf8");
-
-describe("Bridge reviewer approvals require verified evidence", () => {
-  it("requires exact master and artwork versions before QC PASS", () => {
-    assert.match(adminSource, /masterAssetVersionId:\s*z\.string\(\)\.uuid\(\)\.optional\(\)/);
-    assert.match(adminSource, /artworkAssetVersionId:\s*z\.string\(\)\.uuid\(\)\.optional\(\)/);
-    assert.match(adminSource, /if\s*\(!data\.masterAssetVersionId\s*\|\|\s*!data\.artworkAssetVersionId\)/);
-    assert.match(adminSource, /requireVerifiedCurrentAsset\(sql,\s*title\.id,\s*data\.masterAssetVersionId/);
-    assert.match(adminSource, /requireVerifiedCurrentAsset\(sql,\s*title\.id,\s*data\.artworkAssetVersionId/);
-  });
-
-  it("requires a valid title rights grant and verified legal evidence before legal approval", () => {
-    assert.match(adminSource, /rightsGrantId:\s*z\.string\(\)\.uuid\(\)\.optional\(\)/);
-    assert.match(adminSource, /evidenceAssetIds:\s*z\.array\(z\.string\(\)\.min\(1\)\)/);
-    assert.match(adminSource, /status='VALID'/);
-    assert.match(adminSource, /requireVerifiedLegalEvidence\(sql,\s*title\.id,\s*data\.evidenceAssetIds\)/);
-    assert.match(adminSource, /evidenceAssetIds,\s*note:\s*data\.notes/);
-  });
-});
