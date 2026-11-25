@@ -109,3 +109,50 @@ jobs:
       - name: Stop isolated Supabase stack
         if: always()
         run: supabase stop --no-backup
+
+  testing-ledger-replay:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.80.0
+
+      # Do not auto-apply the canonical Production migration directory. The
+      # recovered Testing SQL is replayed separately in a disposable DB.
+      - name: Quarantine canonical Production migrations
+        run: |
+          test -d supabase/migrations
+          test ! -e "$RUNNER_TEMP/bridge-production-ledger-migrations"
+          mv supabase/migrations "$RUNNER_TEMP/bridge-production-ledger-migrations"
+          mkdir -p supabase/migrations
+
+      - name: Start disposable local Supabase PostgreSQL 17
+        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector
+
+      - name: Restore canonical Production migration files
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/bridge-production-ledger-migrations" ]; then
+            rm -rf supabase/migrations
+            mv "$RUNNER_TEMP/bridge-production-ledger-migrations" supabase/migrations
+          fi
+
+      - name: Replay all 98 recovered Testing migrations
+        run: node scripts/supabase-testing-ledger-replay.mjs
+        env:
+          TESTING_LEDGER_REPLAY_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/postgres
+
+      - name: Stop disposable local Supabase
+        if: always()
+        run: supabase stop --no-backup
