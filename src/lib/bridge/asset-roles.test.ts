@@ -30,6 +30,20 @@ test("rejects null master or artwork pointers", () => {
   );
 });
 
+test("rejects matching pointers that still reference unsealed upload objects", () => {
+  assert.equal(
+    hasVerifiedMasterAndArtwork(
+      [
+        { kind: "master", s3_key: "bridge/master.mp4" },
+        { kind: "poster_vertical", s3_key: "bridge/poster.jpg" },
+      ],
+      "bridge/master.mp4",
+      "bridge/poster.jpg",
+    ),
+    false,
+  );
+});
+
 test("rejects an unreferenced legacy poster when the current pointer is vertical", () => {
   assert.equal(
     hasVerifiedMasterAndArtwork(exactVerticalArtwork, "bridge/master.mp4.verified/asset-master", "bridge/poster-stale.jpg.verified/asset-stale"),
