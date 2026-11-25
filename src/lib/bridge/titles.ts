@@ -12,7 +12,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
-import { submitTitleForQc } from "./title-submission";
+import { isAdminAcceptedOwnerIntake, submitTitleForQc } from "./title-submission";
 
 type TitleRow = {
   id: string;
@@ -615,7 +615,17 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (expected !== data.to) throw new Error("Illegal title transition");
     const sql = await getSql();
     if (data.to === "QC_REVIEW") {
-      return submitTitleForQc(sql, title, actor.userId, data.note);
+      if (!actor.internalRole || !["admin", "super_admin"].includes(actor.internalRole)) {
+        throw new Error("Only Bridge Admin can send an Admin-accepted title to QC");
+      }
+      const intake = await sql<{ submission_status: string }>`
+        select submission_status from bridge_title_owner_submissions
+        where title_id = ${title.id} limit 1
+      `;
+      if (!isAdminAcceptedOwnerIntake(intake[0]?.submission_status)) {
+        throw new Error("Submit to Bridge Admin and receive Admin acceptance before QC handoff");
+      }
+      return submitTitleForQc(sql, title, actor.userId, data.note, true);
     }
     return sql.transaction(async (tx) => {
       const [locked] = await tx<{
