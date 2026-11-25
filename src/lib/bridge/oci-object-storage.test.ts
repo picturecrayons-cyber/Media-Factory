@@ -220,6 +220,7 @@ test("OCI copy work-request fails closed on persistent 404 after propagation gra
 
   try {
     globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
       const method = init?.method || "GET";
       if (method === "POST") {
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-persistent-404" } });
