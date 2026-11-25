@@ -342,10 +342,8 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    // The only Super Admin workspace write is the explicitly authorized final
-    // publication action. All other workspace and buyer mutations remain guarded.
-    if (actor.internalRole === "super_admin") {
-      assertPermission(actor, "title.final_approve");
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "workspace")) {
+      throw new Error("Super admin is read-only on the workspace surface");
     }
     assertPermission(actor, "loop.publish");
 

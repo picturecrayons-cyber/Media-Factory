@@ -7,6 +7,7 @@ import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { sendBridgeMail } from "./mail.server";
 
 const submissionSchema = z.object({
   name: z.string().trim().min(1).max(160),
@@ -133,5 +134,186 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       },
     });
 
-    return { titleId: id, status: "DRAFT" as const };
+    const emailDelivery = await recordSubmissionEmailStatus(actor.userId, id, data.name);
+    return { titleId: id, status: "DRAFT" as const, emailDelivery };
+  });
+
+async function recordSubmissionEmailStatus(actorUserId: string, titleId: string, titleName: string) {
+  let status: "SENT" | "FAILED" = "FAILED";
+  let messageId: string | null = null;
+  let failure: string | null = null;
+  try {
+    const result = await sendBridgeMail({
+      to: "admin@crayonspictures.in",
+      subject: `New QC submission: ${titleName}`,
+      text: `A title was submitted to Crayons Bridge: ${titleName}. Review it in /admin/submissions.`,
+    });
+    status = result.ok ? "SENT" : "FAILED";
+    messageId = result.messageId ?? null;
+  } catch (error) {
+    failure = error instanceof Error ? error.message.slice(0, 500) : "Email delivery failed";
+  }
+  try {
+    await writeAudit({
+      actorUserId,
+      action: status === "SENT" ? "email.delivery.sent" : "email.delivery.failed",
+      entityType: "bridge_title",
+      entityId: titleId,
+      metadata: { category: "submission", recipient: "admin@crayonspictures.in", status, messageId, failure },
+    });
+  } catch (error) {
+    console.error("[bridge-submission] email status audit failed", error);
+  }
+  return { status, messageId, failure };
+}
+
+const adminQueueInput = z.object({
+  search: z.string().trim().max(160).optional(),
+  status: z.string().trim().max(40).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+const submissionProofSql = `
+  select coalesce(json_agg(json_build_object(
+    'kind', a.kind,
+    'byteSize', a.byte_size,
+    'contentType', a.content_type,
+    'checksumSha256', coalesce(to_jsonb(a)->>'checksum_sha256', to_jsonb(a)->>'sha256'),
+    'verifiedAt', to_jsonb(a)->>'storage_verified_at',
+    'verified', a.byte_size > 0
+      and coalesce(to_jsonb(a)->>'checksum_sha256', to_jsonb(a)->>'sha256') is not null
+      and to_jsonb(a)->>'storage_verified_at' is not null
+  ) order by a.created_at desc), '[]'::json)
+  from bridge_assets a where a.title_id = t.id
+`;
+
+export const listAdminSubmissions = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(adminQueueInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") {
+      throw new Error("Admin submissions access required");
+    }
+    assertPermission(actor, "title.admin_queue_read");
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; name: string; status: string; owner_user_id: string;
+      owner_account_type: string; owner_name: string | null; owner_email: string | null;
+      created_at: string | Date; updated_at: string | Date;
+      storage_proof: unknown; qc_notes: unknown; email_delivery: unknown;
+    }>`
+      select t.id, t.name, t.status, t.owner_user_id, t.owner_account_type,
+        p.display_name as owner_name, p.email as owner_email, t.created_at, t.updated_at,
+        (${sql.unsafe(submissionProofSql)}) as storage_proof,
+        (select coalesce(json_agg(json_build_object(
+          'status', q.status, 'notes', q.reviewer_findings,
+          'reviewedBy', q.reviewed_by, 'reviewedAt', q.reviewed_at
+        ) order by q.created_at desc), '[]'::json)
+         from bridge_qc_cases q where q.title_id = t.id) as qc_notes,
+        (select coalesce(json_agg(json_build_object(
+          'status', case when a.action = 'email.delivery.sent' then 'SENT' else 'FAILED' end,
+          'metadata', a.metadata, 'createdAt', a.created_at
+        ) order by a.created_at desc), '[]'::json)
+         from bridge_audit_logs a
+         where a.entity_type = 'bridge_title' and a.entity_id = t.id
+           and a.action in ('email.delivery.sent','email.delivery.failed')) as email_delivery
+      from bridge_titles t
+      left join bridge_profiles p on p.user_id = t.owner_user_id
+      where t.archived_at is null
+        and (${data.search ?? ""} = '' or t.name ilike '%' || ${data.search ?? ""} || '%'
+          or t.id ilike '%' || ${data.search ?? ""} || '%'
+          or coalesce(p.display_name,'') ilike '%' || ${data.search ?? ""} || '%')
+        and (${data.status ?? null}::text is null or t.status = ${data.status ?? null})
+      order by t.updated_at desc
+      limit ${data.limit ?? 50}
+    `;
+    return { submissions: JSON.parse(JSON.stringify(rows)) };
+  });
+
+export const getAdminSubmission = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") {
+      throw new Error("Admin submission detail access required");
+    }
+    assertPermission(actor, "title.admin_queue_read");
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; name: string; status: string; synopsis: string;
+      owner_user_id: string; owner_account_type: string; owner_name: string | null;
+      owner_email: string | null; created_at: string | Date; storage_proof: unknown;
+      qc_notes: unknown; intake: unknown; email_delivery: unknown;
+    }>`
+      select t.id,t.name,t.status,t.synopsis,t.owner_user_id,t.owner_account_type,
+        p.display_name as owner_name,p.email as owner_email,t.created_at,
+        (${sql.unsafe(submissionProofSql)}) as storage_proof,
+        (select coalesce(json_agg(json_build_object(
+          'status',q.status,'notes',q.reviewer_findings,'reviewedBy',q.reviewed_by,'reviewedAt',q.reviewed_at
+        ) order by q.created_at desc),'[]'::json) from bridge_qc_cases q where q.title_id=t.id) as qc_notes,
+        (select to_jsonb(i) from bridge_title_submission_intake i where i.title_id=t.id limit 1) as intake,
+        (select coalesce(json_agg(json_build_object(
+          'status',case when a.action='email.delivery.sent' then 'SENT' else 'FAILED' end,
+          'metadata',a.metadata,'createdAt',a.created_at
+        ) order by a.created_at desc),'[]'::json) from bridge_audit_logs a
+          where a.entity_type='bridge_title' and a.entity_id=t.id
+          and a.action in ('email.delivery.sent','email.delivery.failed')) as email_delivery
+      from bridge_titles t left join bridge_profiles p on p.user_id=t.owner_user_id
+      where t.id=${data.titleId} and t.archived_at is null limit 1
+    `;
+    if (!rows[0]) throw new Error("Submission not found");
+    return { submission: JSON.parse(JSON.stringify(rows[0])) };
+  });
+
+export const listQcQueue = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "qc_reviewer") throw new Error("QC Reviewer access required");
+    assertPermission(actor, "title.qc_queue_read");
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; name: string; status: string; created_at: string | Date;
+      storage_proof: unknown; qc_notes: unknown;
+    }>`
+      select t.id,t.name,t.status,t.created_at,
+        (select coalesce(json_agg(json_build_object(
+          'kind',a.kind,'byteSize',a.byte_size,'contentType',a.content_type,
+          'checksumSha256',coalesce(to_jsonb(a)->>'checksum_sha256',to_jsonb(a)->>'sha256'),
+          'verifiedAt',to_jsonb(a)->>'storage_verified_at',
+          'verified',a.byte_size>0 and coalesce(to_jsonb(a)->>'checksum_sha256',to_jsonb(a)->>'sha256') is not null
+            and to_jsonb(a)->>'storage_verified_at' is not null
+        ) order by a.created_at desc),'[]'::json) from bridge_assets a where a.title_id=t.id) as storage_proof,
+        (select coalesce(json_agg(json_build_object('status',q.status,'notes',q.reviewer_findings,'reviewedAt',q.reviewed_at)
+          order by q.created_at desc),'[]'::json) from bridge_qc_cases q where q.title_id=t.id) as qc_notes
+      from bridge_titles t where t.status='QC_REVIEW' and t.archived_at is null
+      order by t.updated_at asc limit 100
+    `;
+    return { queue: JSON.parse(JSON.stringify(rows)) };
+  });
+
+export const listLegalQueue = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "legal_reviewer") throw new Error("Legal access required");
+    assertPermission(actor, "title.legal_queue_read");
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; name: string; status: string; created_at: string | Date; legal_cases: unknown;
+    }>`
+      select t.id,t.name,t.status,t.created_at,
+        (select coalesce(json_agg(json_build_object('status',l.status,'classification',l.classification,
+          'evidence',l.evidence,'restrictions',l.restrictions,'reviewedAt',l.reviewed_at)
+          order by l.created_at desc),'[]'::json) from bridge_legal_cases l where l.title_id=t.id) as legal_cases
+      from bridge_titles t where t.status='RIGHTS_REVIEW' and t.archived_at is null
+      order by t.updated_at asc limit 100
+    `;
+    return { queue: JSON.parse(JSON.stringify(rows)) };
   });
