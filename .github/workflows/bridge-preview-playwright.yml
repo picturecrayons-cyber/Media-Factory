@@ -35,5 +35,6 @@ jobs:
           BRIDGE_E2E_ACCOUNTS_JSON: ${{ secrets.BRIDGE_E2E_ACCOUNTS_JSON }}
           BRIDGE_E2E_DRAFT_TITLE_ID: test-fixture-free-video-20261124
           BRIDGE_E2E_DRAFT_TITLE_NAME: "[TEST ONLY] Free Video Route Fixture"
+          BRIDGE_E2E_PREPARING_TITLE_ID: ${{ secrets.BRIDGE_E2E_PREPARING_TITLE_ID }}
           CI: "true"
         run: npm run test:e2e:bridge-preview
