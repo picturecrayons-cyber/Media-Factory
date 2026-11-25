@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
+import { PaidFeaturesPanel } from "@/components/bridge/paid-features-panel";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -16,6 +17,7 @@ function Creator() {
             opportunity="Submit a title. Bridge clears QC and rights before any buyer can see it."
             steps={["Create title", "Upload assets", "QC and rights", "License", "Delivery"]}
           />
+          <div className="mt-8"><PaidFeaturesPanel mode="creator" /></div>
           <section className="mt-8">
             <h2 className="text-lg font-semibold">New title</h2>
             <div className="mt-3"><CreateTitleForm /></div>

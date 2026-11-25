@@ -3,6 +3,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
+import { PaidFeaturesPanel } from "@/components/bridge/paid-features-panel";
 import { Desk } from "./creator";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
@@ -19,6 +20,7 @@ function Studio() {
               opportunity="Submit a slate. Production services stay optional and separate from licensing."
               steps={["Add title", "Prepare assets", "Rights clearance", "License", "Deliver"]}
             />
+            <PaidFeaturesPanel mode="studio" />
             <section id="add-title">
               <h2 className="text-lg font-semibold">Add title</h2>
               <div className="mt-3"><CreateTitleForm concise /></div>
