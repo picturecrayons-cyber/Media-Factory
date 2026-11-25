@@ -143,20 +143,6 @@ const adminQueueInput = z.object({
   limit: z.number().int().min(1).max(100).optional(),
 });
 
-const submissionProofSql = `
-  select coalesce(json_agg(json_build_object(
-    'kind', a.kind,
-    'byteSize', a.byte_size,
-    'contentType', a.content_type,
-    'checksumSha256', to_jsonb(a)->>'checksum_sha256',
-    'verifiedAt', to_jsonb(a)->>'storage_verified_at',
-    'verified', a.byte_size > 0
-      and length(to_jsonb(a)->>'checksum_sha256') = 64
-      and to_jsonb(a)->>'storage_verified_at' is not null
-  ) order by a.created_at desc), '[]'::json)
-  from bridge_assets a where a.title_id = t.id
-`;
-
 export const listAdminSubmissions = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(adminQueueInput)
@@ -176,7 +162,12 @@ export const listAdminSubmissions = createServerFn({ method: "GET" })
     }>`
       select t.id, t.name, t.status, t.owner_user_id, t.owner_account_type,
         p.display_name as owner_name, p.email as owner_email, t.created_at, t.updated_at,
-        (${sql.unsafe(submissionProofSql)}) as storage_proof,
+        (select coalesce(json_agg(json_build_object(
+          'kind',a.kind,'byteSize',a.byte_size,'contentType',a.content_type,
+          'checksumSha256',a.checksum_sha256,'verifiedAt',a.storage_verified_at,
+          'verified',a.byte_size>0 and length(a.checksum_sha256)=64
+            and a.storage_verified_at is not null and a.storage_provider='oci' and a.storage_bucket is not null
+        ) order by a.created_at desc),'[]'::json) from bridge_assets a where a.title_id=t.id) as storage_proof,
         (select coalesce(json_agg(json_build_object(
           'status', q.status, 'notes', q.reviewer_findings,
           'reviewedBy', q.reviewed_by, 'reviewedAt', q.reviewed_at
@@ -254,9 +245,9 @@ export const listQcQueue = createServerFn({ method: "GET" })
       select t.id,t.name,t.status,t.created_at,
         (select coalesce(json_agg(json_build_object(
           'kind',a.kind,'byteSize',a.byte_size,'contentType',a.content_type,
-          'checksumSha256',coalesce(to_jsonb(a)->>'checksum_sha256',to_jsonb(a)->>'sha256'),
+          'checksumSha256',to_jsonb(a)->>'checksum_sha256',
           'verifiedAt',to_jsonb(a)->>'storage_verified_at',
-          'verified',a.byte_size>0 and coalesce(to_jsonb(a)->>'checksum_sha256',to_jsonb(a)->>'sha256') is not null
+          'verified',a.byte_size>0 and length(to_jsonb(a)->>'checksum_sha256')=64
             and to_jsonb(a)->>'storage_verified_at' is not null
         ) order by a.created_at desc),'[]'::json) from bridge_assets a where a.title_id=t.id) as storage_proof,
         (select coalesce(json_agg(json_build_object('status',q.status,'notes',q.reviewer_findings,'reviewedAt',q.reviewed_at)
