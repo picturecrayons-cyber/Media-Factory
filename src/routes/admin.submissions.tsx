@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listAdminSubmissions, getAdminSubmission } from "@/lib/bridge/submissions";
+import { listAdminSubmissions, getAdminSubmission, listStoryConceptSubmissions } from "@/lib/bridge/submissions";
 
 export const Route = createFileRoute("/admin/submissions")({ component: AdminSubmissions });
 
@@ -27,6 +27,10 @@ function SubmissionDesk() {
   const query = useQuery({
     queryKey: ["admin-submissions", search, status],
     queryFn: () => listAdminSubmissions({ data: { search, status, limit: 100 } }),
+  });
+  const storyConceptsQ = useQuery({
+    queryKey: ["admin-story-concept-submissions"],
+    queryFn: () => listStoryConceptSubmissions(),
   });
   const detail = useQuery({
     queryKey: ["admin-submission-detail", selected],
@@ -94,6 +98,21 @@ function SubmissionDesk() {
           )}
         </section>
       </div>
+
+      <section className="rounded-2xl border border-line bg-surface p-5">
+        <h3 className="font-display text-xl font-semibold">Story Concept submissions</h3>
+        <p className="mt-1 text-sm text-muted">Paid status, Legal and Editorial review, and Super Admin introduction status. Story Concept download access is not exposed in this Admin queue.</p>
+        {storyConceptsQ.isError ? <p role="alert" className="mt-3 text-sm">Story Concept submissions unavailable.</p> : null}
+        <div className="mt-3 space-y-2">
+          {(storyConceptsQ.data?.storyConcepts ?? []).map((item: any) => (
+            <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-3">
+              <div><p className="text-sm font-semibold">{item.title_name}</p><p className="mt-1 text-xs text-muted">{item.owner_name ?? item.owner_user_id} · {item.owner_account_type}</p><p className="mt-1 text-xs text-muted">Fee: {item.fee_certified_at ? "PAID / VERIFIED" : "NOT PAID"} · Legal: {item.legal_status} · Editorial: {item.editorial_status}</p></div>
+              <span className="rounded-full border border-line px-2 py-1 text-xs">{item.introduced_to_buyers_at ? "Introduced" : item.curation_status ?? "Pending"}</span>
+            </div>
+          ))}
+          {!storyConceptsQ.isPending && (storyConceptsQ.data?.storyConcepts ?? []).length === 0 ? <p className="text-sm text-muted">No Story Concept submissions recorded.</p> : null}
+        </div>
+      </section>
     </div>
   );
 }
