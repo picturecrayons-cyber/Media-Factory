@@ -19,3 +19,14 @@ export function hasVerifiedMasterAndArtwork(
   );
   return masterReady && artworkReady;
 }
+
+
+/** Only the master referenced by the title's canonical pointer belongs in the primary preview gallery. */
+export function isCanonicalGalleryAsset(
+  asset: { id: string; kind: string; s3_key: string },
+  masterKey: string | null,
+): boolean {
+  if (asset.kind !== "master") return true;
+  if (!masterKey) return false;
+  return asset.s3_key === masterKey || masterKey.endsWith(`/${asset.id}`);
+}
