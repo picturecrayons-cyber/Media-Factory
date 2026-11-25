@@ -244,7 +244,7 @@ export const mapLegacyBuyer = createServerFn({ method: "POST" })
       [data.sourceTable, data.legacyId],
     ) as Array<{ title_id: string; review_status: string; buyer_name: string | null; buyer_user_id: string | null; evidence_type: string | null; evidence_reference: string | null }>;
     const link = links[0];
-    if (!link || !link.buyer_user_id || !link.buyer_name || !link.evidence_reference ||
+    if (!link || !link.buyer_user_id || !link.buyer_name || !["bookmyshow","sun nxt"].includes(link.buyer_name.toLowerCase()) || !link.evidence_reference ||
         !["SIGNED_CONTRACT","PURCHASE_ORDER","PAYMENT_RECEIPT"].includes(String(link.evidence_type).toUpperCase()) ||
         !["VERIFIED","APPROVED"].includes(link.review_status.toUpperCase())) {
       throw new Error("Mapping blocked: verified buyer identity and contract/order/payment evidence are missing");
@@ -270,4 +270,18 @@ export const mapLegacyBuyer = createServerFn({ method: "POST" })
       metadata: { sourceTable: data.sourceTable, legacyId: data.legacyId, titleId: link.title_id, buyerName: link.buyer_name, evidenceType: link.evidence_type, evidenceReference: link.evidence_reference },
     });
     return { mapped: true, accessId: inserted[0].id, alreadyMapped: false };
+  });
+
+
+export const listInvestmentInterestActivity = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
+    assertPermission(actor, "buyer.read");
+    const sql = await getSql();
+    const rows = await sql.unsafe(
+      "select bi.id::text,bt.name as title_name,bi.interest_level,bi.created_at,p.display_name as buyer_name,p.email as buyer_email,p.account_type,(select case when a.action='email.delivery.sent' then 'SENT' else 'FAILED' end from bridge_audit_logs a where a.entity_type='bridge_buyer_interest' and a.entity_id=bi.id::text and a.action in ('email.delivery.sent','email.delivery.failed') order by a.created_at desc limit 1) as email_status from bridge_buyer_interest bi join bridge_story_concept_submissions sc on sc.id=bi.concept_submission_id join bridge_titles bt on bt.id=sc.title_id left join bridge_profiles p on p.user_id=bi.buyer_user_id order by bi.created_at desc limit 100",
+    );
+    return { activity: JSON.parse(JSON.stringify(rows)) };
   });
