@@ -261,7 +261,8 @@ async function readObjectSha256(key: string, expectedByteSize: number, bucket?: 
   const targetBucket = bucket?.trim() || cfg.bucket;
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
-  const res = await signedFetch({ cfg, method: "GET", path });
+  const checksumTimeoutMs = Math.min(15 * 60_000, Math.max(120_000, Math.ceil(expectedByteSize / (2 * 1024 * 1024)) * 1000 + 60_000));
+  const res = await signedFetch({ cfg, method: "GET", path, timeoutMs: checksumTimeoutMs });
   if (!res.ok || !res.body) throw new Error(`OCI object download for checksum failed (${res.status})`);
   const declaredSize = Number(res.headers.get("content-length") || 0);
   if (declaredSize !== expectedByteSize) {
