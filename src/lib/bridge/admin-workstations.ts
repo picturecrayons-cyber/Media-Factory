@@ -19,7 +19,7 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
     if (!canAccessAdminWorkstations(actor)) throw new Error("Forbidden");
     const sql = await getSql();
     const [titles, assets, assetVersions, qc, legal, rights, packages, publications, audit] = await Promise.all([
-      sql`select id, name, owner_user_id, owner_account_type, status, language, updated_at from bridge_titles order by updated_at desc limit 200`,
+      sql`select id, name, owner_user_id, owner_account_type, owner_organization_id, status, submission_type, language, updated_at from bridge_titles order by updated_at desc limit 200`,
       sql`select id, title_id, kind, s3_key, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
       sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`,
       sql`select id, title_id, asset_version_id, status, automated_findings, reviewer_findings, reviewed_by, reviewed_at, created_at from bridge_qc_cases order by created_at desc limit 200`,
@@ -29,7 +29,11 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
       sql`select id, bridge_title_id, loop_title_id, authorization_status, territories, languages, exploitation_models, window_start, window_end, approved_by, approved_at, revoked_at, updated_at from bridge_loop_publications order by updated_at desc limit 200`,
       sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs order by created_at desc limit 200`,
     ]);
-    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
+    const [intake, concepts] = await Promise.all([
+      sql`select title_id, authority_type, authorization_evidence_type, authorization_confirmed, buyer_channels, screener_mode, created_at from bridge_title_submission_intake order by created_at desc limit 200`,
+      sql`select c.id, c.title_id, t.name as title_name, t.owner_user_id, t.owner_account_type, c.curation_status, c.admin_notes, c.created_at, c.updated_at from bridge_story_concept_submissions c join bridge_titles t on t.id=c.title_id order by c.created_at desc limit 200`,
+    ]);
+    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, intake, concepts, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
   });
 
 const reviewInput = z.object({
@@ -43,7 +47,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
   .validator(reviewInput)
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    if (!actor.internalRole) throw new Error("Forbidden");
+    if (!actor.internalRole || !canAccessAdminWorkstations(actor)) throw new Error("Forbidden");
     const sql = await getSql();
     const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
     const title = rows[0];
