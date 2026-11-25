@@ -114,6 +114,15 @@ function DashboardBody() {
   </div>;
 }
 
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <article className="rounded-sm border border-line p-4">
+      <p className="text-xs uppercase tracking-widest text-muted">{label}</p>
+      <p className="mt-2 font-display text-2xl font-semibold tabular-nums">{value}</p>
+    </article>
+  );
+}
+
 function PanelMessage({ children, role }: { children: React.ReactNode; role?: "alert" }) {
   return <div role={role} className="rounded-sm border border-dashed border-line px-4 py-5 text-sm text-muted">{children}</div>;
 }
