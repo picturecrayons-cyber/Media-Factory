@@ -3,7 +3,8 @@ import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { assertPermission } from "./rbac";
+import { assertPermission, canMutateTitle } from "./rbac";
+import { loadTitle } from "./titles";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -134,4 +135,111 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
     });
 
     return { titleId: id, status: "DRAFT" as const };
+  });
+
+
+const reviewRequestInput = z.object({ titleId: z.string().min(8) });
+
+/**
+ * Studio / Creator requests an independent Super Admin intake review.
+ * This records a queue request only: it does not change title status, approve
+ * rights, create a QC result, or publish the title.
+ */
+export const requestSuperAdminReview = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(reviewRequestInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!["studio", "independent_creator"].includes(actor.accountType)) {
+      throw new Error("Only Studio and Creator accounts can request intake review");
+    }
+    const title = await loadTitle(data.titleId);
+    if (
+      !title ||
+      !canMutateTitle(actor, title, "title.update_own", "title.license")
+    ) {
+      throw new Error("You cannot submit this title for review");
+    }
+    if (!["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)) {
+      throw new Error("This title is not in a state that accepts an intake review request");
+    }
+
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const [locked] = await tx<{ status: string }>`
+        select status from bridge_titles where id = ${data.titleId} for update
+      `;
+      if (!locked || locked.status !== title.status) {
+        throw new Error("Title changed; refresh before requesting review");
+      }
+      const existing = await tx<{ title_id: string }>`
+        select title_id from bridge_title_submission_intake
+        where title_id = ${data.titleId} limit 1
+      `;
+      if (existing[0]) return { submitted: false, alreadySubmitted: true };
+
+      await tx`
+        insert into bridge_title_submission_intake (
+          title_id, authority_type, authorization_evidence_type,
+          authorization_confirmed, buyer_channels, screener_mode, screener_url
+        ) values (
+          ${data.titleId}, 'RIGHTS_OWNER', 'OTHER', false,
+          '[]'::jsonb, 'NONE', null
+        )
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.super_admin_review_requested",
+        entityType: "bridge_title",
+        entityId: data.titleId,
+        metadata: {
+          titleStatus: title.status,
+          rightsEvidenceStatus: "PENDING_SUPER_ADMIN_VERIFICATION",
+          note: "Intake request only; no QC, Legal, rights or publication approval",
+        },
+      }, tx);
+      return { submitted: true, alreadySubmitted: false };
+    });
+  });
+
+export const listSuperAdminReviewRequests = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") {
+      throw new Error("Super Admin access required");
+    }
+    const sql = await getSql();
+    const rows = await sql<{
+      title_id: string;
+      name: string;
+      status: string;
+      language: string;
+      year: number | null;
+      authority_type: string;
+      authorization_evidence_type: string;
+      authorization_confirmed: boolean;
+      submitted_at: string | Date;
+    }>`
+      select i.title_id, t.name, t.status, t.language, t.year,
+        i.authority_type, i.authorization_evidence_type,
+        i.authorization_confirmed, i.submitted_at
+      from bridge_title_submission_intake i
+      join bridge_titles t on t.id = i.title_id
+      order by i.submitted_at asc
+      limit 200
+    `;
+    return {
+      requests: rows.map((row) => ({
+        ...row,
+        submitted_at: row.submitted_at instanceof Date
+          ? row.submitted_at.toISOString()
+          : String(row.submitted_at),
+        reviewStatus: row.authorization_confirmed
+          ? "OWNER_DECLARATION_RECORDED_EVIDENCE_PENDING"
+          : "EVIDENCE_PENDING",
+      })),
+    };
   });
