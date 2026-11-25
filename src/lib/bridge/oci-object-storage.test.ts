@@ -375,7 +375,7 @@ test("OCI Recovery copy uses a distinct destination bucket and verifies the Reco
     const result = await sealVerifiedObject("source-key", "recovery-key", "source-etag", undefined, "recovery-vault");
     assert.equal(result.byteSize, 12);
     assert.equal(result.etag, "recovery-etag");
-    assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
+    assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD", "GET"]);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
