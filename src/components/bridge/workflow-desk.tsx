@@ -68,7 +68,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [exclusive, setExclusive] = useState(false);
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
-  const [ownerShare, setOwnerShare] = useState("");
+  const [ownerShare, setOwnerShare] = useState("50");
+  const [selfOwnedDeclaration, setSelfOwnedDeclaration] = useState(false);
   const [selectedGrantByAgreement, setSelectedGrantByAgreement] = useState<Record<string, string>>({});
   function downloadStatement() {
     const safe = (v: string) =>
@@ -249,8 +250,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             windowStart: new Date(start).toISOString(),
                             windowEnd: new Date(end).toISOString(),
                             exclusivity: exclusive ? "EXCLUSIVE" : "NON_EXCLUSIVE",
-                            agreementReference: agreement,
-                            ownershipReference: ownership,
+                            agreementReference: agreement.trim() || (selfOwnedDeclaration ? "SELF_OWNED_RIGHTS_DECLARATION_PENDING_REVIEW" : ""),
+                            ownershipReference: ownership.trim() || (selfOwnedDeclaration ? "STUDIO_OWNER_DECLARATION_PENDING_VERIFICATION" : ""),
                             rightsOwnerSharePct: Number(ownerShare),
                             distributorSharePct: 100 - Number(ownerShare),
                           },
@@ -259,9 +260,13 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   >
                     {input("License starts", start, setStart, "datetime-local")}
                     {input("License ends", end, setEnd, "datetime-local")}
-                    {input("Agreement reference", agreement, setAgreement)}
-                    {input("Ownership evidence reference", ownership, setOwnership)}
-                    {input("Rights owner share (%)", ownerShare, setOwnerShare, "number")}
+                    <label className="sm:col-span-2 flex items-start gap-2 rounded-lg border border-line bg-elevated p-3 text-sm">
+                      <input type="checkbox" checked={selfOwnedDeclaration} onChange={(e) => setSelfOwnedDeclaration(e.target.checked)} className="mt-1" />
+                      <span><strong>Studio-owned digital rights declaration</strong><span className="mt-1 block text-xs text-muted">I confirm this Studio controls the digital distribution rights for this title. This records a declaration only; documentary verification and Super Admin approval are still required before Loop publication.</span></span>
+                    </label>
+                    {input("Agreement reference (if applicable)", agreement, setAgreement)}
+                    {input("Ownership evidence reference (if available)", ownership, setOwnership)}
+                    <label className="grid gap-1 text-sm">Rights owner share (%)<input type="number" min="0" max="100" step="1" value={ownerShare} onChange={(e) => setOwnerShare(e.target.value)} className="rounded-lg border border-line bg-elevated p-2" required /></label>
                     <label className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
@@ -271,7 +276,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       Exclusive license
                     </label>
                     <button
-                      disabled={action.isPending || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
+                      disabled={action.isPending || !start || !end || new Date(end).getTime() <= new Date(start).getTime() || (!selfOwnedDeclaration && (agreement.trim().length < 8 || ownership.trim().length < 8)) || !Number.isInteger(Number(ownerShare)) || Number(ownerShare) < 0 || Number(ownerShare) > 100}
                       className="rounded-lg border border-line px-4 py-2 text-sm sm:col-span-2"
                     >
                       {action.isPending ? "Saving…" : "Save draft"}
@@ -312,7 +317,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       >
                         {agreementGrants.map((grant, index) => (
                           <option key={grant.id} value={grant.id}>
-                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · {new Date(grant.window_start).toLocaleDateString()}
+                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · {Number.isNaN(new Date(grant.window_start).getTime()) ? "date unavailable" : new Date(grant.window_start).toLocaleDateString()}
                           </option>
                         ))}
                       </select>
