@@ -107,6 +107,7 @@ test("same-organization verified Studio member can confirm upload, other organiz
       checksumSha256: "b".repeat(64),
       checksumAlgorithm: "SHA256_MULTIPART",
       format: "ISO-BMFF",
+      storageBucket: "test-bucket",
     };
     assert.equal(await persistVerifiedAsset(sql, {
       ...common,
