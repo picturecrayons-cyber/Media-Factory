@@ -50,3 +50,19 @@ The earlier PR #683 audit recorded 10 exact original-source matches and one norm
 ## Release boundary
 
 PR #835 remains a separate asset-verification change. Its successful GitHub/Vercel checks do not replace the skipped Supabase Preview check or the required OCI object verification. Production film release remains HOLD pending independently verified assets, QC, rights/legal approval, protected playback, and LOOP publication gates.
+
+## Exact body comparison against the canonical Production manifest
+
+A read-only SHA-256 comparison of the 98 recovered Testing statement sequences against the 69-entry canonical Production source manifest found **7 exact SQL-body matches**. Their Testing ledger versions/names differ from the corresponding Production version/name:
+
+| Testing version | Testing ledger name | Matching Production version | Production migration name |
+|---|---|---|---|
+| 20261028180900 | test_only_bridge_commercial_engine_20261006230000 | 20261006185556 | bridge_commercial_engine_20261006230000 |
+| 20261028180912 | test_only_harden_commercial_server_only_20261028 | 20261006185640 | harden_bridge_commercial_server_only_20261007000000 |
+| 20261028180915 | test_only_commercial_control_plane_20261028 | 20261006195531 | bridge_commercial_control_plane_20261007013000 |
+| 20261028180918 | test_only_financial_reversal_hardening_20261028 | 20261006195536 | bridge_financial_reversal_hardening_20261007020000 |
+| 20261114075718 | bridge_dit_ingest_testing_20261114 | 20261114074642 | bridge_dit_ingest_20261114 |
+| 20261114093221 | bridge_site_content_cms_20261114 | 20261114093357 | bridge_site_content_cms_20261114 |
+| 20261124225934 | reconcile_duplicate_title_merge_gate_20261008 | 20261008113911 | reconcile_duplicate_title_merge_gate_20261008 |
+
+These are exact statement-sequence matches against the Production manifest, not matching migration versions. They confirm reuse of those seven SQL bodies; they do not establish that the entire Testing schema is equivalent to Production or that the remaining Testing entries should be discarded. The prior PR #683 source-provenance audit's 10 exact + 1 normalized source matches remain a separate historical finding and are not arithmetically combined with this comparison.
