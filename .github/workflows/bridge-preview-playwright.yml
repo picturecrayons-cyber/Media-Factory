@@ -1,0 +1,39 @@
+name: Crayons Bridge Preview Playwright
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Exact dedicated Vercel Preview deployment URL (not a Production/custom domain)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  preview-e2e:
+    name: Read-only Preview browser checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run read-only Preview checks
+        env:
+          BRIDGE_BASE_URL: ${{ inputs.base_url }}
+          VERCEL_PROTECTION_BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
+          BRIDGE_E2E_ACCOUNTS_JSON: ${{ secrets.BRIDGE_E2E_ACCOUNTS_JSON }}
+          BRIDGE_E2E_DRAFT_TITLE_ID: test-fixture-free-video-20261124
+          BRIDGE_E2E_DRAFT_TITLE_NAME: "[TEST ONLY] Free Video Route Fixture"
+          CI: "true"
+        run: npm run test:e2e:bridge-preview
