@@ -9,41 +9,41 @@ const exactVerticalArtwork = [
 ];
 
 test("accepts exact non-null master and current vertical poster pointers", () => {
+  assert.equal(hasVerifiedMasterAndArtwork(exactVerticalArtwork, "verified/master", "verified/current-vertical-poster"), true);
+});
+
+test("accepts a sealed master pointer only when source key and asset ID both match", () => {
   assert.equal(
     hasVerifiedMasterAndArtwork(
-      exactVerticalArtwork,
-      "verified/master",
-      "verified/current-vertical-poster",
+      [{ id: "asset-123", kind: "master", s3_key: "bridge/title/master/source.mov" },
+       { kind: "poster", s3_key: "bridge/title/poster/current.jpg.verified/poster-123" }],
+      "bridge/title/master/source.mov.verified/asset-123",
+      "bridge/title/poster/current.jpg.verified/poster-123",
     ),
     true,
+  );
+});
+
+test("rejects a sealed pointer with a different asset ID", () => {
+  assert.equal(
+    hasVerifiedMasterAndArtwork(
+      [{ id: "asset-123", kind: "master", s3_key: "bridge/title/master/source.mov" }, { kind: "poster", s3_key: "verified/poster" }],
+      "bridge/title/master/source.mov.verified/other-asset",
+      "verified/poster",
+    ),
+    false,
   );
 });
 
 test("rejects null master or artwork pointers", () => {
-  assert.equal(
-    hasVerifiedMasterAndArtwork(exactVerticalArtwork, null, "verified/current-vertical-poster"),
-    false,
-  );
-  assert.equal(
-    hasVerifiedMasterAndArtwork(exactVerticalArtwork, "verified/master", null),
-    false,
-  );
+  assert.equal(hasVerifiedMasterAndArtwork(exactVerticalArtwork, null, "verified/current-vertical-poster"), false);
+  assert.equal(hasVerifiedMasterAndArtwork(exactVerticalArtwork, "verified/master", null), false);
 });
 
 test("rejects an unreferenced legacy poster when the current pointer is vertical", () => {
-  assert.equal(
-    hasVerifiedMasterAndArtwork(exactVerticalArtwork, "verified/master", "stale/poster"),
-    false,
-  );
+  assert.equal(hasVerifiedMasterAndArtwork(exactVerticalArtwork, "verified/master", "stale/poster"), false);
 });
 
 test("retains compatibility with a legacy poster when its pointer matches exactly", () => {
-  assert.equal(
-    hasVerifiedMasterAndArtwork(
-      [{ kind: "master", s3_key: "verified/master" }, { kind: "poster", s3_key: "verified/poster" }],
-      "verified/master",
-      "verified/poster",
-    ),
-    true,
-  );
+  assert.equal(hasVerifiedMasterAndArtwork([{ kind: "master", s3_key: "verified/master" }, { kind: "poster", s3_key: "verified/poster" }], "verified/master", "verified/poster"), true);
 });

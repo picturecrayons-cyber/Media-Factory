@@ -14,8 +14,8 @@ export async function submitTitleForQc(
   note?: string,
 ): Promise<{ title: Pick<BridgeTitle, "id" | "status"> & { status: TitleStatus } }> {
   if (title.status !== "PREPARING") throw new Error("Title is not ready for QC submission");
-  const assets = await sql<{ kind: string; s3_key: string }>`
-    select kind, s3_key
+  const assets = await sql<{ id: string; kind: string; s3_key: string }>`
+    select id, kind, s3_key
     from bridge_assets
     where title_id = ${title.id} and coalesce(byte_size, 0) > 0
   `;
