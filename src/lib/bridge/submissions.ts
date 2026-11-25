@@ -7,7 +7,6 @@ import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
-import { sendBridgeMail } from "./mail.server";
 
 const submissionSchema = z.object({
   name: z.string().trim().min(1).max(160),
@@ -178,10 +177,10 @@ const submissionProofSql = `
     'kind', a.kind,
     'byteSize', a.byte_size,
     'contentType', a.content_type,
-    'checksumSha256', coalesce(to_jsonb(a)->>'checksum_sha256', to_jsonb(a)->>'sha256'),
+    'checksumSha256', to_jsonb(a)->>'checksum_sha256',
     'verifiedAt', to_jsonb(a)->>'storage_verified_at',
     'verified', a.byte_size > 0
-      and coalesce(to_jsonb(a)->>'checksum_sha256', to_jsonb(a)->>'sha256') is not null
+      and length(to_jsonb(a)->>'checksum_sha256') = 44
       and to_jsonb(a)->>'storage_verified_at' is not null
   ) order by a.created_at desc), '[]'::json)
   from bridge_assets a where a.title_id = t.id
