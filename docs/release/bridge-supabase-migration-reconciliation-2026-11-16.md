@@ -88,7 +88,7 @@
 | 20261115165233 | bridge_production_owner_helper_revoke_anon | 155 | `d4a980b33b895324231304f17fbaf912043d5659c6cf43e78421a00ed568a71e` |
 | 20261116090923 | bridge_title_owner_helper_search_path_hardening_20261116 | 824 | `486eba102805b78a28a4509466eecab3f2557cb4093dac20d619f51c6a946fba` |
 | 20261118123335 | bridge_master_language | 459 | `3a22cd57e41d7b0cbf0a40489c9b448981a9540bec672b0be34768213fc6b53c` |
-| 20261125150000 | bridge_qc_sealed_pointer_trigger_fix | 1917 | `c4ce98104b99e431baf316e16117bcd414ea48ebfbf9b2531fca9b4634d5d156` |
+| 20261125150000 | bridge_qc_sealed_pointer_trigger_fix | 3083 | `ae1701d451ecbfd692bca56a81a15eafa3e12f096841e45d565372152f54ac46` |
 
 ## Previously committed files
 
