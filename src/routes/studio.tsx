@@ -17,14 +17,10 @@ export const Route = createFileRoute("/studio")({ component: Studio });
 const NAV = [
   { label: "Overview", href: "#overview" },
   { label: "My Titles", href: "#my-titles" },
-  { label: "Productions", href: "#productions" },
   { label: "Production & DIT", href: "#production-dit" },
-  { label: "Members & Roles", href: "#members" },
   { label: "QC & Rights", href: "#qc-rights" },
   { label: "Deliveries", href: "#deliveries" },
-  { label: "Documents", href: "#documents" },
-  { label: "Statements", href: "#statements" },
-  { label: "Updates", href: "#updates" },
+  { label: "More Modules", href: "#more" },
 ] as const;
 
 function Studio() {
@@ -109,16 +105,47 @@ function StudioDashboard({ actor }: { actor: { userId: string; displayName: stri
         ) : null}
       </WorkspacePanel>
 
-      <WorkspacePanel id="productions" eyebrow="Production tracking" title="Productions" description="Production project, crew, schedule and DIT assignment feeds are not connected in this dashboard yet. No placeholder production records or activity counts are shown.">
-        <Unavailable label="Production project management" />
+      <WorkspacePanel id="more" eyebrow="Additional studio tools" title="More Studio Modules" description="Secondary organization, document, finance and activity tools are grouped here so the main workflow stays simple.">
+        <div className="space-y-3">
+          <details className="rounded-lg border border-line p-3">
+            <summary className="cursor-pointer text-sm font-semibold">Productions</summary>
+            <div className="mt-3">
+              <p className="mb-2 text-xs text-muted">Production project, crew, schedule and DIT assignment feeds are not connected in this dashboard yet. No placeholder production records or activity counts are shown.</p>
+              <Unavailable label="Production project management" />
+            </div>
+          </details>
+          <details className="rounded-lg border border-line p-3">
+            <summary className="cursor-pointer text-sm font-semibold">Members & Roles</summary>
+            <div className="mt-3">
+              <p className="mb-2 text-xs text-muted">Verified roster only. Invitations, role changes, suspensions and removals are not enabled here.</p>
+              <StudioMemberDesk actor={actor} />
+            </div>
+          </details>
+          <details className="rounded-lg border border-line p-3">
+            <summary className="cursor-pointer text-sm font-semibold">Documents & Vault</summary>
+            <p className="mt-3 text-sm text-muted">Open the relevant title or DIT ingest session to access verified documents, manifests and secure asset records. A standalone Studio Document Vault is not connected yet.</p>
+          </details>
+          <details className="rounded-lg border border-line p-3">
+            <summary className="cursor-pointer text-sm font-semibold">Statements</summary>
+            <div className="mt-3">
+              <p className="mb-2 text-xs text-muted">Licensing statements, studio payable allocations and settlement records appear only when verified ledger and reconciliation data are available.</p>
+              <Unavailable label="Studio statements and settlement feed" />
+            </div>
+          </details>
+          <details className="rounded-lg border border-line p-3">
+            <summary className="cursor-pointer text-sm font-semibold">Recent Updates</summary>
+            <div className="mt-3">
+              {titlesQ.isPending ? <p className="text-sm text-muted">Loading recent updates…</p> : null}
+              {titlesQ.isError ? <p className="text-sm text-muted">Updates unavailable while title records cannot be loaded.</p> : null}
+              {!titlesQ.isPending && !titlesQ.isError && recent.length ? <TitleRows titles={recent} showDate /> : null}
+              {!titlesQ.isPending && !titlesQ.isError && !recent.length ? <p className="text-sm text-muted">No title updates yet.</p> : null}
+            </div>
+          </details>
+        </div>
       </WorkspacePanel>
 
       <WorkspacePanel id="production-dit" eyebrow="Media handover" title="Production Intake & DIT" description="Retain the existing DIT Agent workflow: source-card manifests, checksum verification, OCI Primary and Recovery copies, and operator sign-off. Use only a title available to the authenticated Studio workspace.">
         <DitAgentDesk actor={actor} />
-      </WorkspacePanel>
-
-      <WorkspacePanel id="members" eyebrow="Organization access" title="Members & Roles" description="Verified roster only. Invitations, role changes, suspensions and removals are not enabled here.">
-        <StudioMemberDesk actor={actor} />
       </WorkspacePanel>
 
       <WorkspacePanel id="qc-rights" eyebrow="Independent review controls" title="QC & Rights" description="Follow title-level review status and provide requested evidence. Studio users cannot approve their own QC, Legal or rights decisions.">
@@ -128,21 +155,6 @@ function StudioDashboard({ actor }: { actor: { userId: string; displayName: stri
 
       <WorkspacePanel id="deliveries" eyebrow="Release control" title="Deliveries" description="Delivery records are available only after the required Bridge authorization. Submission and upload do not publish a title to Loop or buyers.">
         <Link to="/deliveries" className="inline-flex min-h-10 items-center rounded-lg border border-line-strong px-3.5 py-2 text-sm font-semibold hover:border-accent hover:text-accent">Open Deliveries workspace</Link>
-      </WorkspacePanel>
-
-      <WorkspacePanel id="documents" eyebrow="Secure records" title="Documents & Vault" description="Open the relevant title or DIT ingest session to access verified documents, manifests and secure asset records.">
-        <p className="text-sm text-muted">A standalone Studio Document Vault is not included until its supporting schema and migration compatibility are reconciled. Document availability remains NOT VERIFIED while Preview database binding is unresolved.</p>
-      </WorkspacePanel>
-
-      <WorkspacePanel id="statements" eyebrow="Studio finance" title="Statements" description="Licensing statements, studio payable allocations and settlement records are shown only when verified ledger and reconciliation data are available.">
-        <Unavailable label="Studio statements and settlement feed" />
-      </WorkspacePanel>
-
-      <WorkspacePanel id="updates" eyebrow="Operations feed" title="Recent Updates" description="Latest title changes returned by the authenticated Studio title query.">
-        {titlesQ.isPending ? <p className="text-sm text-muted">Loading recent updates…</p> : null}
-        {titlesQ.isError ? <p className="text-sm text-muted">Updates unavailable while title records cannot be loaded.</p> : null}
-        {!titlesQ.isPending && !titlesQ.isError && recent.length ? <TitleRows titles={recent} showDate /> : null}
-        {!titlesQ.isPending && !titlesQ.isError && !recent.length ? <p className="text-sm text-muted">No title updates yet.</p> : null}
       </WorkspacePanel>
 
       <WorkspacePanel id="new-title" eyebrow="Start a submission" title="New Studio Title" description="Create a finished-film draft or a separate Story / Concept submission. A submission does not bypass QC, rights or licensing approval.">
