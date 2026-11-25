@@ -75,6 +75,14 @@ function iso(v: string | Date | null) {
   return v instanceof Date ? v.toISOString() : String(v);
 }
 
+/** Only fully cleared lifecycle states may authorize consumer distribution. */
+const DISTRIBUTION_READY_TITLE_STATUSES = [
+  "LICENSING_READY",
+  "LIVE_FOR_BUYERS",
+  "LICENSED",
+  "DELIVERED",
+] as const;
+
 /**
  * The Testing and Production databases currently constrain publication status
  * with different case vocabularies. Resolve the exact allowed value from the
@@ -150,14 +158,7 @@ export async function verifyDistributionPreflight(
   }
 
   // 2. Rights readiness verification
-  const validRightsStatuses = [
-    "LICENSING_READY",
-    "LIVE_FOR_BUYERS",
-    "IN_NEGOTIATION",
-    "LICENSED",
-    "DELIVERED",
-  ];
-  if (!validRightsStatuses.includes(title.status)) {
+  if (!(DISTRIBUTION_READY_TITLE_STATUSES as readonly string[]).includes(title.status)) {
     reasons.push(
       `Underlying rights clearance and lifecycle status (${title.status}) is not distribution-ready. Must reach at least LICENSING_READY.`,
     );
@@ -342,13 +343,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           legalApproved &&
           Boolean(r.qc_approved) &&
           gatesReady &&
-          [
-            "LICENSING_READY",
-            "LIVE_FOR_BUYERS",
-            "IN_NEGOTIATION",
-            "LICENSED",
-            "DELIVERED",
-          ].includes(r.status) &&
+          (DISTRIBUTION_READY_TITLE_STATUSES as readonly string[]).includes(r.status) &&
           Boolean(r.master_key) &&
           Boolean(r.poster_key);
 
@@ -361,15 +356,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         if (r.packaging_status !== "COMPLETE") blockers.push("Consumer packaging is not certified COMPLETE");
         if (r.curation_status !== "APPROVED") blockers.push("Editorial curation is not APPROVED");
         if (r.delivery_status !== "READY") blockers.push("Final delivery is not certified READY");
-        if (
-          ![
-            "LICENSING_READY",
-            "LIVE_FOR_BUYERS",
-            "IN_NEGOTIATION",
-            "LICENSED",
-            "DELIVERED",
-          ].includes(r.status)
-        ) {
+        if (!(DISTRIBUTION_READY_TITLE_STATUSES as readonly string[]).includes(r.status)) {
           blockers.push(`Rights status (${r.status}) is not cleared for distribution`);
         }        if (!r.master_key) blockers.push("QC master video is missing");
         if (!r.poster_key) blockers.push("Artwork/poster is missing");
