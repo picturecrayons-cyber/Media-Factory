@@ -606,18 +606,24 @@ export const listAuditLogs = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "audit.read");
     const sql = await getSql();
-    const rows = await sql<{
-      id: number;
-      actor_user_id: string;
-      action: string;
-      entity_type: string;
-      entity_id: string | null;
-      metadata: string;
-      created_at: string | Date;
-    }>`
-      select id, actor_user_id, action, entity_type, entity_id, metadata, created_at
-      from bridge_audit_logs order by created_at desc limit 100
-    `;
+    const rows = actor.internalRole === "super_admin"
+      ? await sql<{
+          id: number; actor_user_id: string; action: string; entity_type: string;
+          entity_id: string | null; metadata: string; created_at: string | Date;
+        }>`
+          select id,actor_user_id,action,entity_type,entity_id,metadata,created_at
+          from bridge_audit_logs order by created_at desc limit 100
+        `
+      : await sql<{
+          id: number; actor_user_id: string; action: string; entity_type: string;
+          entity_id: string | null; metadata: string; created_at: string | Date;
+        }>`
+          select id,actor_user_id,action,entity_type,entity_id,metadata,created_at
+          from bridge_audit_logs
+          where action not like 'buyer.%' and action not like 'payment.%'
+            and entity_type not in ('bridge_payment','bridge_buyer_interest','buyer')
+          order by created_at desc limit 100
+        `;
     return {
       logs: rows.map((r) => ({
         id: Number(r.id),

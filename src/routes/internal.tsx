@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -7,6 +7,9 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { inviteInternalRole } from "@/lib/bridge/profiles";
+import { listQcQueue, listLegalQueue } from "@/lib/bridge/submissions";
+import { listFinanceDashboard } from "@/lib/bridge/finance";
+import { reviewTitleWorkflow } from "@/lib/bridge/workflow";
 import { listAuditLogs, listTitles } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
@@ -24,18 +27,31 @@ export const Route = createFileRoute("/internal")({ component: Internal });
 function Internal() {
   return (
     <RequireBridge allow="internal">
-      {(actor) => (
-        <BridgeShell actor={actor} title="Distribution & Operations Desk">
-          <p className="mb-6 text-xs text-muted">
-            {actor.internalRole?.replaceAll("_", " ")} · {actor.email}
-          </p>
-          <InternalBody
-            canInvite={hasPermission(actor, "users.invite_internal")}
-            canPublish={hasPermission(actor, "loop.publish")}
-            canRevoke={hasPermission(actor, "loop.revoke")}
-          />
-        </BridgeShell>
-      )}
+      {(actor) => {
+        const role = actor.internalRole;
+        if (role === "viewer") return <Navigate to="/buyer-loop" />;
+        if (role === "qc_reviewer") return <BridgeShell actor={actor} title="QC Review Desk"><QcReviewerDesk /></BridgeShell>;
+        if (role === "legal_reviewer") return <BridgeShell actor={actor} title="Legal Review Desk"><LegalReviewerDesk /></BridgeShell>;
+        if (role === "finance") return <BridgeShell actor={actor} title="Finance Desk"><FinanceDesk /></BridgeShell>;
+        if (role !== "admin" && role !== "super_admin") {
+          return <BridgeShell actor={actor} title="Internal Desk"><p className="rounded-xl border border-line p-5 text-sm">This internal role has no configured desk.</p></BridgeShell>;
+        }
+        return (
+          <BridgeShell actor={actor} title={role === "super_admin" ? "Super Admin Control" : "Admin Workspace"}>
+            <p className="mb-4 text-xs text-muted">{role?.replaceAll("_", " ")} · {actor.email}</p>
+            <nav className="mb-6 flex flex-wrap gap-2">
+              <Link to="/admin/submissions" className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Submissions</Link>
+              <Link to="/admin/workstations" className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Business / Revenue / Distribution</Link>
+              {role === "super_admin" ? <Link to="/buyer-loop" className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Buyer Loop / Legacy Mapping</Link> : null}
+            </nav>
+            <InternalBody
+              canInvite={hasPermission(actor, "users.invite_internal")}
+              canPublish={hasPermission(actor, "loop.publish")}
+              canRevoke={hasPermission(actor, "loop.revoke")}
+            />
+          </BridgeShell>
+        );
+      }}
     </RequireBridge>
   );
 }
@@ -747,5 +763,92 @@ function InviteForm() {
         </Button>
       </div>
     </form>
+  );
+}
+
+
+function QcReviewerDesk() {
+  const qc = useQueryClient();
+  const queue = useQuery({ queryKey: ["qc-review-queue"], queryFn: () => listQcQueue() });
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const review = useMutation({
+    mutationFn: (input: { titleId: string; decision: "APPROVE" | "REJECT"; note: string }) =>
+      reviewTitleWorkflow({ data: { ...input, stage: "QC" } }),
+    onSuccess: async () => {
+      toast.success("QC decision recorded");
+      await qc.invalidateQueries({ queryKey: ["qc-review-queue"] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "QC review failed"),
+  });
+  const items = queue.data?.queue ?? [];
+  return (
+    <section className="space-y-4">
+      <p className="text-sm text-muted">QC Reviewer can access only the QC queue. Approval requires verified master and artwork checksum proof.</p>
+      {queue.isError ? <p role="alert">QC queue unavailable.</p> : null}
+      {items.map((item: any) => (
+        <article key={item.id} className="space-y-3 rounded-2xl border border-line bg-surface p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-display text-xl font-semibold">{item.name}</h2><StatusChip status={item.status} /></div>
+          <pre className="whitespace-pre-wrap break-words rounded-xl bg-elevated p-3 text-xs text-muted">{JSON.stringify(item.storage_proof, null, 2)}</pre>
+          <textarea value={notes[item.id] ?? ""} onChange={(e) => setNotes((old) => ({ ...old, [item.id]: e.target.value }))} placeholder="QC notes (minimum 8 characters)" className="min-h-24 w-full rounded-xl border border-line bg-bg p-3 text-sm" />
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" disabled={review.isPending || (notes[item.id] ?? "").trim().length < 8} onClick={() => review.mutate({ titleId: item.id, decision: "APPROVE", note: notes[item.id] })}>Approve QC</Button>
+            <Button type="button" variant="outline" disabled={review.isPending || (notes[item.id] ?? "").trim().length < 8} onClick={() => review.mutate({ titleId: item.id, decision: "REJECT", note: notes[item.id] })}>Reject QC</Button>
+          </div>
+        </article>
+      ))}
+      {!queue.isPending && items.length === 0 ? <p className="rounded-xl border border-line p-5 text-sm text-muted">No titles are waiting for QC review.</p> : null}
+    </section>
+  );
+}
+
+function LegalReviewerDesk() {
+  const qc = useQueryClient();
+  const queue = useQuery({ queryKey: ["legal-review-queue"], queryFn: () => listLegalQueue() });
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const review = useMutation({
+    mutationFn: (input: { titleId: string; grantId: string; decision: "APPROVE" | "REJECT"; note: string }) =>
+      reviewTitleWorkflow({ data: { ...input, stage: "LEGAL" } }),
+    onSuccess: async () => {
+      toast.success("Legal decision recorded");
+      await qc.invalidateQueries({ queryKey: ["legal-review-queue"] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Legal review failed"),
+  });
+  const items = queue.data?.queue ?? [];
+  return (
+    <section className="space-y-4">
+      <p className="text-sm text-muted">Legal Reviewer can access contracts and legal cases in the Legal queue only. Finance and Buyer data are not exposed.</p>
+      {queue.isError ? <p role="alert">Legal queue unavailable.</p> : null}
+      {items.map((item: any) => (
+        <article key={item.id} className="space-y-3 rounded-2xl border border-line bg-surface p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-display text-xl font-semibold">{item.name}</h2><StatusChip status={item.status} /></div>
+          <pre className="whitespace-pre-wrap break-words rounded-xl bg-elevated p-3 text-xs text-muted">{JSON.stringify(item.grant_details ?? item.legal_cases, null, 2)}</pre>
+          <textarea value={notes[item.id] ?? ""} onChange={(e) => setNotes((old) => ({ ...old, [item.id]: e.target.value }))} placeholder="Legal review notes (minimum 8 characters)" className="min-h-24 w-full rounded-xl border border-line bg-bg p-3 text-sm" />
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" disabled={!item.grant_id || review.isPending || (notes[item.id] ?? "").trim().length < 8} onClick={() => review.mutate({ titleId: item.id, grantId: item.grant_id, decision: "APPROVE", note: notes[item.id] })}>Approve Legal</Button>
+            <Button type="button" variant="outline" disabled={!item.grant_id || review.isPending || (notes[item.id] ?? "").trim().length < 8} onClick={() => review.mutate({ titleId: item.id, grantId: item.grant_id, decision: "REJECT", note: notes[item.id] })}>Reject Legal</Button>
+          </div>
+        </article>
+      ))}
+      {!queue.isPending && items.length === 0 ? <p className="rounded-xl border border-line p-5 text-sm text-muted">No titles are waiting for Legal review.</p> : null}
+    </section>
+  );
+}
+
+function FinanceDesk() {
+  const q = useQuery({ queryKey: ["finance-dashboard"], queryFn: () => listFinanceDashboard() });
+  const data = q.data as any;
+  const payments = data?.payments ?? [];
+  const payouts = data?.payouts ?? [];
+  const channelPayments = data?.channelPayments ?? [];
+  const money = (paise: number | null | undefined) => paise == null ? "—" : "₹" + (Number(paise) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (q.isError) return <p role="alert">Finance records unavailable.</p>;
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-muted">Read-only Finance view: Revenue, Razorpay orders and payout/settlement records. No QC approval, title editing or publishing controls.</p>
+      <section className="space-y-3"><h2 className="font-display text-xl font-semibold">Razorpay orders</h2><div className="overflow-x-auto rounded-2xl border border-line bg-surface"><table className="w-full text-left text-xs"><thead><tr className="border-b border-line text-muted"><th className="p-3">Purpose</th><th className="p-3">Order / Payment</th><th className="p-3">Amount</th><th className="p-3">Status</th><th className="p-3">Verified</th></tr></thead><tbody>{payments.map((p:any)=><tr key={p.id} className="border-b border-line/60"><td className="p-3">{p.purpose}</td><td className="p-3 break-all">{p.provider_order_id ?? "—"}<br/>{p.provider_payment_id ?? "—"}</td><td className="p-3">{money(p.amount_paise)}</td><td className="p-3">{p.status}</td><td className="p-3">{p.verified_at ?? "—"}</td></tr>)}</tbody></table>{!q.isPending && payments.length===0 ? <p className="p-4 text-sm text-muted">No payment orders recorded.</p> : null}</div></section>
+      <section className="space-y-3"><h2 className="font-display text-xl font-semibold">Payout / settlement lines</h2><div className="overflow-x-auto rounded-2xl border border-line bg-surface"><table className="w-full text-left text-xs"><thead><tr className="border-b border-line text-muted"><th className="p-3">Beneficiary</th><th className="p-3">Basis</th><th className="p-3">Amount</th><th className="p-3">Status</th><th className="p-3">Paid at</th></tr></thead><tbody>{payouts.map((p:any)=><tr key={p.id} className="border-b border-line/60"><td className="p-3">{p.beneficiary_type}<br/>{p.beneficiary_user_id}</td><td className="p-3">{p.basis} · {p.percentage_bps ?? "—"} bps</td><td className="p-3">{money(p.amount_paise)}</td><td className="p-3">{p.status}</td><td className="p-3">{p.paid_at ?? "—"}</td></tr>)}</tbody></table>{!q.isPending && payouts.length===0 ? <p className="p-4 text-sm text-muted">No payout lines recorded.</p> : null}</div></section>
+      <section className="space-y-3"><h2 className="font-display text-xl font-semibold">Channel payment schedule</h2><div className="overflow-x-auto rounded-2xl border border-line bg-surface"><table className="w-full text-left text-xs"><thead><tr className="border-b border-line text-muted"><th className="p-3">Payment reference</th><th className="p-3">Due</th><th className="p-3">Amount (minor)</th><th className="p-3">Status</th><th className="p-3">Posted</th></tr></thead><tbody>{channelPayments.map((p:any)=><tr key={p.id} className="border-b border-line/60"><td className="p-3">{p.payment_reference ?? "—"}</td><td className="p-3">{p.payment_due_at ?? "—"}</td><td className="p-3">{p.paid_amount_minor ?? "—"}</td><td className="p-3">{p.payment_status}</td><td className="p-3">{p.payment_posted_at ?? "—"}</td></tr>)}</tbody></table>{!q.isPending && channelPayments.length===0 ? <p className="p-4 text-sm text-muted">No channel payment schedule records.</p> : null}</div></section>
+    </div>
   );
 }
