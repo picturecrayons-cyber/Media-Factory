@@ -94,6 +94,7 @@ function signHeaders(opts: {
   url: URL;
   body?: string;
   contentType?: string;
+  extraHeaders?: Record<string, string>;
 }) {
   const method = opts.method.toLowerCase();
   const date = new Date().toUTCString();
@@ -102,6 +103,12 @@ function signHeaders(opts: {
   const lines = [`(request-target): ${requestTarget}`, `host: ${host}`, `date: ${date}`];
   const signedHeaders = ["(request-target)", "host", "date"];
   const headers: Record<string, string> = { host, date };
+  for (const [key, value] of Object.entries(opts.extraHeaders ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
+    const lower = key.toLowerCase();
+    headers[lower] = value;
+    lines.push(`${lower}: ${value}`);
+    signedHeaders.push(lower);
+  }
 
   if (opts.body !== undefined) {
     const contentType = opts.contentType || "application/json";
@@ -133,6 +140,7 @@ async function signedFetch(opts: {
   method: "GET" | "HEAD" | "POST" | "DELETE";
   path: string;
   body?: unknown;
+  headers?: Record<string, string>;
 }) {
   const url = new URL(opts.path, endpoint(opts.cfg.region));
   const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
@@ -142,6 +150,7 @@ async function signedFetch(opts: {
     url,
     body,
     contentType: body === undefined ? undefined : "application/json",
+    extraHeaders: opts.headers,
   });
   const safeHeaders = Object.fromEntries(
     Object.entries(headers).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
@@ -197,7 +206,7 @@ export async function signUpload(opts: { key: string; contentType: string; expir
     accessType: "ObjectWrite",
     expiresIn: opts.expiresIn ?? 900,
   });
-  return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "PUT" as const };
+  return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "PUT" as const, checksumAlgorithm: "SHA256" as const };
 }
 
 export async function signDownload(opts: { key: string; expiresIn?: number }) {
@@ -207,6 +216,64 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
     expiresIn: opts.expiresIn ?? 300,
   });
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
+}
+
+async function verifyObjectFormat(key: string, contentType: string | null) {
+  if (!contentType) throw new Error("OCI object format verification failed: content type is missing");
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path, headers: { range: "bytes=0-4095" } });
+  if (res.status !== 206) {
+    await res.body?.cancel().catch(() => undefined);
+    throw new Error(`OCI format verification requires ranged reads (received ${res.status})`);
+  }
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const ascii = (from: number, length: number) => Buffer.from(bytes.subarray(from, from + length)).toString("ascii");
+  const starts = (...values: number[]) => values.every((value, index) => bytes[index] === value);
+  if (contentType === "video/mp4" || contentType === "video/quicktime") {
+    if (ascii(4, 4) !== "ftyp") throw new Error("OCI object format mismatch: expected MP4/QuickTime ftyp box");
+    return "ISO-BMFF";
+  }
+  if (contentType === "video/x-matroska") {
+    if (!starts(0x1a, 0x45, 0xdf, 0xa3)) throw new Error("OCI object format mismatch: expected Matroska EBML signature");
+    return "MATROSKA";
+  }
+  if (contentType === "application/mxf" || contentType === "video/mxf") {
+    if (!starts(0x06, 0x0e, 0x2b, 0x34)) throw new Error("OCI object format mismatch: expected MXF header partition");
+    return "MXF";
+  }
+  if (contentType === "image/jpeg") {
+    if (!starts(0xff, 0xd8, 0xff)) throw new Error("OCI object format mismatch: expected JPEG signature");
+    return "JPEG";
+  }
+  if (contentType === "image/png") {
+    if (!starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) throw new Error("OCI object format mismatch: expected PNG signature");
+    return "PNG";
+  }
+  if (contentType === "application/pdf") {
+    if (!ascii(0, 5).startsWith("%PDF-")) throw new Error("OCI object format mismatch: expected PDF signature");
+    return "PDF";
+  }
+  if (contentType === "text/vtt") {
+    if (!ascii(0, 6).startsWith("WEBVTT")) throw new Error("OCI object format mismatch: expected WebVTT signature");
+    return "WEBVTT";
+  }
+  if (contentType === "text/plain" || contentType === "application/x-subrip") {
+    if (!ascii(0, bytes.length).includes("-->")) throw new Error("OCI object format mismatch: expected SubRip subtitle cues");
+    return "SRT";
+  }
+  if (contentType === "audio/wav" || contentType === "audio/wave") {
+    if (ascii(0, 4) !== "RIFF" || ascii(8, 4) !== "WAVE") throw new Error("OCI object format mismatch: expected WAV RIFF/WAVE signature");
+    return "WAV";
+  }
+  if (contentType === "audio/mpeg") {
+    if (!(ascii(0, 3) === "ID3" || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0))) {
+      throw new Error("OCI object format mismatch: expected MP3 frame or ID3 signature");
+    }
+    return "MP3";
+  }
+  throw new Error(`OCI object format verification is not supported for ${contentType}`);
 }
 
 export async function verifyObject(key: string, expectedContentType?: string | null) {
@@ -221,10 +288,18 @@ export async function verifyObject(key: string, expectedContentType?: string | n
     throw new Error(`OCI object content type mismatch: expected ${expectedContentType}, received ${contentType || "missing"}`);
   }
   if (!Number.isSafeInteger(contentLength) || contentLength <= 0) throw new Error("Uploaded object is empty");
+  const checksumSha256 = res.headers.get("opc-content-sha256") || res.headers.get("opc-multipart-sha256");
+  const checksumAlgorithm = res.headers.get("opc-multipart-sha256") ? "SHA256_MULTIPART" : "SHA256";
+  if (!checksumSha256) throw new Error("OCI SHA-256 checksum is missing; upload must use opc-checksum-algorithm: SHA256");
+  const format = await verifyObjectFormat(key, contentType);
   return {
     byteSize: contentLength,
     contentType,
     etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
+    checksumSha256,
+    checksumAlgorithm,
+    format,
+    formatVerified: true,
   };
 }
 
@@ -287,6 +362,7 @@ export async function sealVerifiedObject(
   destinationKey: string,
   expectedEtag: string,
   pollOpts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number },
+  expectedChecksumSha256?: string,
 ) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
@@ -307,7 +383,11 @@ export async function sealVerifiedObject(
   if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId, pollOpts);
-  return verifyObject(destinationKey);
+  const sealed = await verifyObject(destinationKey);
+  if (expectedChecksumSha256 && sealed.checksumSha256 !== expectedChecksumSha256) {
+    throw new Error("Verified copy checksum differs from the uploaded object");
+  }
+  return sealed;
 }
 
 export async function deleteObject(key: string) {
