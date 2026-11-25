@@ -85,9 +85,10 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
   if (title.status !== expected) throw new Error(`Title must be in ${expected}`);
   if (data.stage === "QC") {
     const assets = await tx<{
+      id: string;
       kind: string;
       s3_key: string;
-    }>`select kind,s3_key from bridge_assets where title_id=${data.titleId} and byte_size>0`;
+    }>`select id,kind,s3_key from bridge_assets where title_id=${data.titleId} and byte_size>0`;
     if (
       data.decision === "APPROVE" &&
       !hasVerifiedMasterAndArtwork(assets, title.master_key, title.poster_key)
