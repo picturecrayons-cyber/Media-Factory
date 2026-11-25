@@ -30,8 +30,6 @@
     "test:staging-rbac": "node --experimental-strip-types scripts/staging-rbac-smoke.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.864.0",
-    "@aws-sdk/s3-request-presigner": "^3.864.0",
     "@electric-sql/pglite": "^0.5.4",
     "@hookform/resolvers": "^5.7.0",
     "@radix-ui/react-accordion": "^1.2.12",
