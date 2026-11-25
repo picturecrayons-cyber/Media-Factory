@@ -415,18 +415,11 @@ export async function verifyObjectSha256(
   if (sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
     throw new Error(`OCI object SHA-256 mismatch for ${key}`);
   }
-  const cfg = config();
-  const targetBucket = bucket?.trim() || cfg.bucket;
-  const namespace = await resolveNamespace(cfg);
-  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
-  const res = await signedFetch({ cfg, method: "HEAD", path });
-  if (!res.ok) throw new Error(`OCI object metadata verification failed (${res.status})`);
   return {
     key,
-    bucket: targetBucket,
+    bucket: bucket?.trim() || config().bucket,
     byteSize: expectedByteSize,
     sha256,
-    etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
     verified: true as const,
   };
 }
