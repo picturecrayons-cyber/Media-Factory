@@ -241,6 +241,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
             ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
           }
+          canDownload={!actor.internalRole && (actor.accountType === "independent_creator" || actor.accountType === "studio")}
           titleId={id}
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
@@ -294,8 +295,10 @@ function FilesPanel({
   assets,
   onAssetsChanged,
   canUpload,
+  canDownload,
 }: {
   canUpload: boolean;
+  canDownload: boolean;
   titleId: string;
   assets: Array<{
     id: string;
@@ -303,6 +306,8 @@ function FilesPanel({
     contentType: string | null;
     byteSize: number | null;
     verified: boolean;
+    checksumSha256: string | null;
+    storageVerifiedAt: string | null;
   }>;
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
@@ -345,6 +350,7 @@ function FilesPanel({
       const startedAt = Date.now();
       xhr.open(method, url, true);
       xhr.setRequestHeader("content-type", contentType);
+      xhr.setRequestHeader("opc-checksum-algorithm", "SHA256");
       xhr.timeout = 120_000;
       xhr.upload.onprogress = (event) => {
         const total = event.lengthComputable ? event.total : file.size;
@@ -368,7 +374,7 @@ function FilesPanel({
       };
       xhr.onerror = () => {
         uploadXhrRef.current = null;
-        reject(new TypeError("The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header."));
+        reject(new TypeError("The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method, Content-Type and opc-checksum-algorithm headers."));
       };
       xhr.ontimeout = () => {
         uploadXhrRef.current = null;
@@ -438,7 +444,7 @@ function FilesPanel({
       await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
       assertAttemptActive();
       setProgress(null);
-      announce(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`, "success", true);
+      announce(`${kind[0].toUpperCase() + kind.slice(1)} is Verified after checksum and format verification.`, "success", true);
     } catch (error) {
       // A cancelled/superseded attempt must not overwrite the status of a newer upload.
       if (uploadAttemptRef.current !== attemptId) return;
@@ -449,7 +455,7 @@ function FilesPanel({
       if (raw.includes("STORAGE_UNAVAILABLE")) {
         detail = "Storage service is currently unavailable. Check the isolated Preview configuration, then select the file again to retry.";
       } else if (error instanceof TypeError) {
-        detail = "The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header, then select the file again to retry.";
+        detail = "The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method, Content-Type and opc-checksum-algorithm headers, then select the file again to retry.";
       } else if (raw.includes("Stored-object verification timed out")) {
         // A browser timeout cannot cancel server-side verification. Avoid claiming
         // the asset is unverified or encouraging a blind retry while that request runs.
@@ -544,7 +550,7 @@ function FilesPanel({
               style={progress.percent === null ? undefined : { width: `${progress.percent}%` }}
             />
           </div>
-          <p className="mt-2 text-xs text-muted">The file is not Ready until server-side storage verification succeeds.</p>
+          <p className="mt-2 text-xs text-muted">The asset remains Failed until OCI SHA-256 checksum and format verification both succeed.</p>
         </div>
       ) : null}
 
@@ -554,7 +560,7 @@ function FilesPanel({
             key={kind}
             kind={kind}
             label={label}
-            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
+            status={assets.some((a) => a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) ? (assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Verified" : "Failed") : empty}
             busy={uploading === kind}
             canUpload={canUpload}
             onFile={(file) => void uploadFile(kind, file)}
@@ -596,9 +602,9 @@ function FilesPanel({
           <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4">
             <div>
               <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
+              <p className="text-xs text-muted">{a.verified ? "Verified" : "Failed"}</p>
             </div>
-            {a.verified ? (
+            {a.verified && canDownload ? (
               <button
                 onClick={() => void download(a.id)}
                 className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
@@ -639,7 +645,7 @@ function FileTypeCard({
           </p>
         </div>
         <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-          {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
+          {busy ? "Uploading…" : status === "Verified" ? "Replace" : "Upload"}
           <input
             className="sr-only"
             type="file"
