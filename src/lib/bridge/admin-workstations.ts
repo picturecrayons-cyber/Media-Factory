@@ -36,7 +36,6 @@ const reviewInput = z.object({
   titleId: z.string().min(1),
   decision: z.enum(["ACCEPT", "PASS", "FAIL", "APPROVE", "REJECT"]),
   notes: z.string().max(4000).optional(),
-  // Evidence identifiers are mandatory for approvals; notes alone never approve.
   masterAssetVersionId: z.string().uuid().optional(),
   artworkAssetVersionId: z.string().uuid().optional(),
   rightsGrantId: z.string().uuid().optional(),
@@ -68,8 +67,45 @@ async function requireVerifiedCurrentAsset(
       and a.asset_version_id=${assetVersionId}::uuid
       and a.verified_object_key=${expectedPointer}
       and a.storage_verified_at is not null
-      and a.checksum_sha256 ~ '^[0-9a-fA-F]{64}
+      and a.checksum_sha256 ~ '^[0-9a-fA-F]{64}$'
+      and v.processing_state='READY'
+    limit 1
+  `;
+  if (!rows[0]) throw new Error(`The selected ${label} version is not the current verified Bridge asset; approval is blocked.`);
+  return rows[0];
+}
 
+async function requireVerifiedLegalEvidence(
+  sql: Awaited<ReturnType<typeof getSql>>,
+  titleId: string,
+  evidenceAssetIds: string[] | undefined,
+) {
+  if (!evidenceAssetIds?.length) throw new Error("At least one verified, title-linked legal evidence asset is required.");
+  const columns = await sql<{ column_name: string }>`
+    select column_name from information_schema.columns
+    where table_schema='public' and table_name='bridge_assets'
+      and column_name in ('verified_object_key','checksum_sha256','storage_verified_at')
+  `;
+  const available = new Set(columns.map((row) => row.column_name));
+  if (['verified_object_key','checksum_sha256','storage_verified_at'].some((name) => !available.has(name))) {
+    throw new Error("Verified legal evidence provenance is unavailable; legal approval fails closed.");
+  }
+  const verified: Array<{ id: string; kind: string; verified_object_key: string; checksum_sha256: string }> = [];
+  for (const evidenceAssetId of evidenceAssetIds) {
+    const rows = await sql<{ id: string; kind: string; verified_object_key: string; checksum_sha256: string }>`
+      select id, kind, verified_object_key, checksum_sha256
+      from bridge_assets
+      where id=${evidenceAssetId} and title_id=${titleId}
+        and verified_object_key is not null and storage_verified_at is not null
+        and checksum_sha256 ~ '^[0-9a-fA-F]{64}$'
+        and lower(kind) ~ '(legal|rights|contract|agreement|certificate|chain|loa)'
+      limit 1
+    `;
+    if (!rows[0]) throw new Error("Every legal evidence reference must be a verified legal/rights document belonging to this title.");
+    verified.push(rows[0]);
+  }
+  return verified;
+}
 export const reviewAdminTitle = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(reviewInput)
