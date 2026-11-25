@@ -104,6 +104,20 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   }, {});
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
+  const revenueReceipts = revenue.data?.receipts ?? [];
+  const capturedTotalPaise = revenueReceipts.reduce(
+    (total, receipt) => total + (receipt.amountPaise ?? 0),
+    0,
+  );
+  const producerShareTotalPaise = revenueReceipts.reduce(
+    (total, receipt) => total + (receipt.grossProducerSharePaise ?? 0),
+    0,
+  );
+  const allCapturedAmountsKnown =
+    revenueReceipts.length > 0 && revenueReceipts.every((receipt) => receipt.amountPaise !== null);
+  const allProducerSharesKnown =
+    revenueReceipts.length > 0 &&
+    revenueReceipts.every((receipt) => receipt.grossProducerSharePaise !== null);
   const button = (
     label: string,
     run: () => Promise<unknown>,
@@ -489,10 +503,29 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               ) : (
                 <>
                   <p>
-                    Captured rental receipts: {revenue.data?.receipts.length ?? 0}. Settlement
-                    requires reconciliation of refunds, fees, tax and agreed terms; no payout is
-                    implied.
+                    Captured rental receipts: {revenueReceipts.length}. Settlement requires
+                    reconciliation of refunds, fees, tax and agreed terms; no payout is implied.
                   </p>
+                  {revenueReceipts.length ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl border border-line p-4">
+                        <p className="text-xs text-muted">Gross captured</p>
+                        <p className="mt-1 text-xl font-semibold">
+                          {allCapturedAmountsKnown
+                            ? `₹${(capturedTotalPaise / 100).toFixed(2)}`
+                            : `₹${(capturedTotalPaise / 100).toFixed(2)} + amount evidence missing`}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-line p-4">
+                        <p className="text-xs text-muted">Gross producer share · before deductions</p>
+                        <p className="mt-1 text-xl font-semibold">
+                          {allProducerSharesKnown
+                            ? `₹${(producerShareTotalPaise / 100).toFixed(2)}`
+                            : `₹${(producerShareTotalPaise / 100).toFixed(2)} + approved share evidence missing`}
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     className="rounded-lg border border-line p-2"
