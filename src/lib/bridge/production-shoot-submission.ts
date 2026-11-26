@@ -124,3 +124,39 @@ export const submitProductionUpdate = createServerFn({ method: "POST" })
       return { titleId: data.titleId, recorded: true };
     });
   });
+
+export const getProductionWorkspace = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Creator or Studio account required");
+    }
+    const sql = await getSql();
+    const titles = await sql<{
+      owner_user_id: string; owner_account_type: string; owner_organization_id: string | null;
+    }>`
+      select owner_user_id, owner_account_type, owner_organization_id
+      from bridge_titles where id = ${data.titleId} limit 1
+    `;
+    const title = titles[0];
+    if (!title || !canMutateTitle(actor, {
+      ownerUserId: title.owner_user_id,
+      ownerAccountType: title.owner_account_type as "studio" | "independent_creator",
+      ownerOrganizationId: title.owner_organization_id,
+    }, "title.update_own", "title.license")) throw new Error("Not found");
+    const rows = await sql<{
+      production_no: string; production_title: string; development_stage: string;
+      planned_start_date: string | null; planned_end_date: string | null;
+      shoot_days: number | null; primary_location: string | null;
+      shoot_progress: string; media_handover_status: string; production_notes: string | null;
+    }>`
+      select production_no, production_title, development_stage,
+        planned_start_date::text, planned_end_date::text, shoot_days,
+        primary_location, shoot_progress, media_handover_status, production_notes
+      from bridge_production_shoots where title_id = ${data.titleId} limit 1
+    `;
+    return { production: rows[0] ?? null, studioEditor: actor.accountType === "studio" };
+  });
