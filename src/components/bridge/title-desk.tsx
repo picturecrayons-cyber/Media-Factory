@@ -64,22 +64,18 @@ export function TitleList({ empty, query = "", excludeTestFixtures = false }: { 
         ))}
       </div>
       {!titles.length ? <p className="text-sm text-muted">{category === "finished_film" ? "No Finished Films are available in this workspace yet." : category === "story_concept" ? "No Stories / Concepts are available in this workspace yet." : empty}</p> : (
-        <ul className="divide-y divide-line rounded-sm border border-line">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {titles.map((t) => (
-            <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <Link to="/title/$id" params={{ id: t.id }} className="min-w-0 flex-1 rounded-md py-1 hover:text-accent">
-                <p className="font-medium">{t.name}</p>
-                <p className="text-sm text-muted">
-                  {t.submissionType === "story_concept" ? "Story / Concept" : "Finished Film"}
-                  {t.contentType ? ` · ${t.contentType}` : ""}
-                  {t.language ? ` · ${t.language}` : ""}
-                  {t.year ? ` · ${t.year}` : ""}
-                </p>
-              </Link>
-              <div className="flex shrink-0 items-center gap-3"><StatusChip status={t.status} /></div>
-            </li>
+            <article key={t.id} className="flex min-h-40 flex-col justify-between rounded-xl border border-line bg-surface p-4 transition hover:border-accent">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">{t.submissionType === "story_concept" ? "Story / Concept" : "Finished Film"}</p>
+                <Link to="/title/$id" params={{ id: t.id }} className="mt-2 block font-display text-lg font-semibold leading-snug hover:text-accent">{t.name}</Link>
+                <p className="mt-2 text-xs text-muted">{[t.contentType, t.language, t.year ? String(t.year) : null].filter(Boolean).join(" · ") || "Details pending"}</p>
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3"><StatusChip status={t.status} /><Link to="/title/$id" params={{ id: t.id }} className="text-sm font-semibold text-accent hover:underline">Open →</Link></div>
+            </article>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

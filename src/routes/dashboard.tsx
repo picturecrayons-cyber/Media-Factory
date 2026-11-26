@@ -154,35 +154,18 @@ function DashboardBody() {
             The action queue could not be loaded. Refresh to retry; no zero values are assumed.
           </p>
         ) : actionItems.length ? (
-          <ul className="divide-y divide-line">
-            {actionItems.slice(0, 6).map((title) => (
-              <li
-                key={title.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium">{title.name}</p>
-                  <p className="mt-1 text-xs text-muted">
-                    {ACTION_GUIDANCE[title.status]} · {title.status.replaceAll("_", " ").toLowerCase()}
-                  </p>
-                </div>
-                <Link
-                  to="/workspace"
-                  className="shrink-0 text-sm font-semibold text-accent hover:underline"
-                >
-                  Review in workspace →
-                </Link>
-              </li>
-            ))}
-            {actionItems.length > 6 && (
-              <li className="px-4 py-3 text-sm text-muted">
+          <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
+            {actionItems.slice(0, 6).map((title) => <article key={title.id} className="flex min-h-36 flex-col justify-between rounded-xl border border-line bg-surface p-4">
+              <div><p className="font-semibold">{title.name}</p><p className="mt-2 text-xs text-muted">{ACTION_GUIDANCE[title.status]}</p></div>
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3"><span className="text-xs text-muted">{title.status.replaceAll("_", " ").toLowerCase()}</span><Link to="/title/$id" params={{ id: title.id }} className="text-sm font-semibold text-accent hover:underline">Review →</Link></div>
+            </article>)}
+            {actionItems.length > 6 ? (
+              <p className="self-center px-2 py-3 text-sm text-muted">
                 Showing 6 of {actionItems.length}.{" "}
-                <Link to="/workspace" className="font-semibold text-accent hover:underline">
-                  View all titles
-                </Link>
-              </li>
-            )}
-          </ul>
+                <Link to="/workspace" className="font-semibold text-accent hover:underline">View all titles</Link>
+              </p>
+            ) : null}
+          </div>
         ) : (
           <div className="px-4 py-6">
             <p className="font-medium">No title decision is waiting in these states.</p>
@@ -274,26 +257,14 @@ function DashboardBody() {
           <p role="alert" className="px-4 py-6 text-sm text-accent">
             Title records could not be loaded. Refresh to retry.
           </p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {titles.slice(0, 6).map((title) => (
-              <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
-                <div className="min-w-0">
-                  <p className="font-medium">{title.name}</p>
-                  <p className="break-all font-mono text-[10px] text-muted">ID: {title.id}</p>
-                </div>
-                <span className="shrink-0 rounded-sm border border-line px-2 py-1 text-xs text-muted">
-                  {title.status.replaceAll("_", " ").toLowerCase()}
-                </span>
-              </li>
-            ))}
-            {!titles.length && (
-              <li className="px-4 py-6 text-sm text-muted">
-                No title records were returned by the canonical query.
-              </li>
-            )}
-          </ul>
-        )}
+        ) : titles.length ? (
+          <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
+            {titles.slice(0, 6).map((title) => <article key={title.id} className="flex min-h-32 flex-col justify-between rounded-xl border border-line bg-surface p-4">
+              <Link to="/title/$id" params={{ id: title.id }} className="font-semibold hover:text-accent">{title.name}</Link>
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3"><span className="text-xs text-muted">{title.status.replaceAll("_", " ").toLowerCase()}</span><span className="font-mono text-[10px] text-muted">{title.id.slice(0, 8)}</span></div>
+            </article>)}
+          </div>
+        ) : <p className="px-4 py-6 text-sm text-muted">No title records were returned by the canonical query.</p>}
       </section>
     </div>
   );

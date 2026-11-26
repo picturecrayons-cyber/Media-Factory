@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { isStudioTestFixtureTitle } from "@/components/bridge/title-desk";
 import {
+  createDitProductionProject,
+  linkDitFinishedFilmOutput,
   createDitIngestSession,
   getDitWorkspace,
   recordDitCopyVerification,
@@ -39,7 +41,11 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
   const queryClient = useQueryClient();
   const queryKey = ["bridge-dit-workspace", actor.userId, actor.organizationId];
   const workspace = useQuery({ queryKey, queryFn: () => getDitWorkspace() });
-  const [titleId, setTitleId] = useState("");
+  const [productionProjectId, setProductionProjectId] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [projectCode, setProjectCode] = useState("");
+  const [projectLocation, setProjectLocation] = useState("");
+  const [outputTitleByProject, setOutputTitleByProject] = useState<Record<string, string>>({});
   const [cameraUnit, setCameraUnit] = useState<"A" | "B" | "C">("A");
   const [cameraLabel, setCameraLabel] = useState("Main Camera");
   const [cardLabel, setCardLabel] = useState("");
@@ -56,6 +62,24 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
   const [fileError, setFileError] = useState("");
 
   const refresh = async () => queryClient.invalidateQueries({ queryKey });
+  const projectMutation = useMutation({
+    mutationFn: () => createDitProductionProject({ data: {
+      name: projectName, projectCode: projectCode || undefined,
+      primaryLocation: projectLocation || undefined, productionType: "FEATURE",
+    } }),
+    onSuccess: async (project) => {
+      setProjectName("");
+      setProjectCode("");
+      setProjectLocation("");
+      setProductionProjectId(project.id);
+      await refresh();
+    },
+  });
+  const outputMutation = useMutation({
+    mutationFn: (args: { productionProjectId: string; titleId: string }) =>
+      linkDitFinishedFilmOutput({ data: args }),
+    onSuccess: refresh,
+  });
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!sourceManifest) throw new Error("Select the source-card manifest first");
@@ -78,8 +102,9 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
         }
       }
 
+      if (!activeSessionId && !productionProjectId) throw new Error("Select a production project before registering a camera card");
       const sessionId = activeSessionId ?? (await createDitIngestSession({ data: {
-        titleId, cameraUnit, cameraLabel, cardLabel, shootDate, sourceVolume, sourceRoot,
+        productionProjectId, cameraUnit, cameraLabel, cardLabel, shootDate, sourceVolume, sourceRoot,
         manifest: sourceManifest,
       } })).sessionId;
       if (!activeSessionId) setActiveSessionId(sessionId);
@@ -175,17 +200,54 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
       <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-display text-xl font-semibold">DIT ingest desk</h2>
-            <p className="mt-1 text-sm text-muted">Camera-card inventory, checksum evidence and two-copy verification for {actor.organizationName || "this Studio"}.</p>
+            <h3 className="font-display text-lg font-semibold">Production projects</h3>
+            <p className="mt-1 text-sm text-muted">Create the production record before shooting. Finished-film titles are linked only after post-production.</p>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_180px_1fr_auto]">
+          <input className="h-11 rounded-lg border border-line bg-bg px-3 text-sm" placeholder="Production / project name" value={projectName} onChange={(event) => setProjectName(event.target.value)} />
+          <input className="h-11 rounded-lg border border-line bg-bg px-3 text-sm" placeholder="Project code (optional)" value={projectCode} onChange={(event) => setProjectCode(event.target.value)} />
+          <input className="h-11 rounded-lg border border-line bg-bg px-3 text-sm" placeholder="Primary location (optional)" value={projectLocation} onChange={(event) => setProjectLocation(event.target.value)} />
+          <Button disabled={projectMutation.isPending || projectName.trim().length < 2} onClick={() => projectMutation.mutate()}>{projectMutation.isPending ? "Creating…" : "Create project"}</Button>
+        </div>
+        {projectMutation.error ? <p role="alert" className="mt-2 text-sm text-red-600">{projectMutation.error.message}</p> : null}
+        {workspace.data?.projects?.length ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {workspace.data.projects.map((project) => (
+              <article key={project.id} className="rounded-xl border border-line p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div><p className="font-semibold">{project.name}</p><p className="text-xs text-muted">{project.project_code || project.production_type} · {project.status.replaceAll("_", " ")}</p></div>
+                  <span className="text-xs text-muted">{project.primary_location || "Location not set"}</span>
+                </div>
+                {project.outputTitles.map((output) => <p key={output.titleId} className="mt-2 text-xs text-muted">Finished-film output: {output.titleName}</p>)}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <select className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-bg px-2 text-xs" value={outputTitleByProject[project.id] || ""} onChange={(event) => setOutputTitleByProject((current) => ({ ...current, [project.id]: event.target.value }))}>
+                    <option value="">Link finished-film output after post</option>
+                    {(workspace.data?.titles ?? []).filter((title) => !isStudioTestFixtureTitle(title) && !project.outputTitles.some((output) => output.titleId === title.id)).map((title) => <option key={title.id} value={title.id}>{title.name}</option>)}
+                  </select>
+                  <Button size="sm" variant="outline" disabled={!outputTitleByProject[project.id] || outputMutation.isPending} onClick={() => outputMutation.mutate({ productionProjectId: project.id, titleId: outputTitleByProject[project.id] })}>Link output</Button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : <p className="mt-3 text-sm text-muted">No production projects registered yet.</p>}
+        {outputMutation.error ? <p role="alert" className="mt-2 text-sm text-red-600">{outputMutation.error.message}</p> : null}
+      </section>
+
+      <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-xl font-semibold">Production-stage DIT ingest</h2>
+            <p className="mt-1 text-sm text-muted">Register camera cards against an active production project and shooting day. No finished-film record is required.</p>
           </div>
           <span className="rounded-full border border-line px-3 py-1 text-xs text-muted">Camera A / B / C</span>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="space-y-1 text-sm">
-            <span className="font-medium">Finished film</span>
-            <select className="h-11 w-full rounded-lg border border-line bg-bg px-3" value={titleId} onChange={(event) => setTitleId(event.target.value)}>
-              <option value="">Select a finished film</option>
-              {(workspace.data?.titles ?? []).filter((title) => !isStudioTestFixtureTitle(title)).map((title) => <option key={title.id} value={title.id}>{title.name}</option>)}
+            <span className="font-medium">Production project</span>
+            <select className="h-11 w-full rounded-lg border border-line bg-bg px-3" value={productionProjectId} onChange={(event) => setProductionProjectId(event.target.value)}>
+              <option value="">Select a production project</option>
+              {(workspace.data?.projects ?? []).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
           </label>
           <label className="space-y-1 text-sm">
@@ -203,7 +265,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
             <input className="h-11 w-full rounded-lg border border-line bg-bg px-3" placeholder="A001 / CARD-01" value={cardLabel} onChange={(event) => setCardLabel(event.target.value)} />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="font-medium">Shoot date</span>
+            <span className="font-medium">Shooting day / date</span>
             <input type="date" className="h-11 w-full rounded-lg border border-line bg-bg px-3" value={shootDate} onChange={(event) => setShootDate(event.target.value)} />
           </label>
           <label className="space-y-1 text-sm">
@@ -235,7 +297,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
         {fileError ? <p role="alert" className="mt-3 text-sm text-red-600">{fileError}</p> : null}
         {createMutation.error ? <p role="alert" className="mt-3 text-sm text-red-600">{createMutation.error.message}</p> : null}
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button disabled={createMutation.isPending || !titleId || !cardLabel.trim() || !sourceVolume.trim() || !sourceRoot.trim() || !sourceManifest || !sourceMediaFiles.length} onClick={() => createMutation.mutate()}>
+          <Button disabled={createMutation.isPending || (!activeSessionId && !productionProjectId) || !cardLabel.trim() || !sourceVolume.trim() || !sourceRoot.trim() || !sourceManifest || !sourceMediaFiles.length} onClick={() => createMutation.mutate()}>
             {createMutation.isPending ? "Uploading and verifying…" : activeSessionId ? "Resume camera-card ingest" : "Register and ingest camera card"}
           </Button>
           <span className="text-xs text-muted">Original files upload to OCI Primary; Bridge creates and verifies the Recovery copy independently.</span>
@@ -261,14 +323,14 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h4 className="font-semibold">{session.camera_unit} · {session.camera_label} · {session.card_label}</h4>
-                  <p className="mt-1 text-xs text-muted">{session.title_id} · {session.shoot_date} · {session.source_file_count} files · {formatBytes(Number(session.source_total_bytes))}</p>
+                  <p className="mt-1 text-xs text-muted">{session.production_project_name || (session.title_id ? "Legacy title-linked session" : "Production project")} · {session.shoot_date} · {session.source_file_count} files · {formatBytes(Number(session.source_total_bytes))}</p>
                   <p className="mt-1 break-all text-xs text-muted">Source: {session.source_root}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{session.status.replaceAll("_", " ")}</span>
                   {!signedOff ? <Button size="sm" variant="outline" onClick={() => {
                     setActiveSessionId(session.id);
-                    setTitleId(session.title_id);
+                    setProductionProjectId(session.production_project_id ?? "");
                     setCameraUnit(session.camera_unit as "A" | "B" | "C");
                     setCameraLabel(session.camera_label);
                     setCardLabel(session.card_label);
@@ -316,7 +378,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
         })}
       </section>
       <p className="rounded-xl border border-line p-4 text-xs leading-5 text-muted">
-        Production boundary: the browser uploads original camera files directly to the OCI Primary Vault. Bridge copies each file to a separately configured OCI Recovery Vault, reads both objects back and verifies SHA-256 against the registered source manifest before it permits DIT sign-off.
+        Production boundary: original camera files upload to OCI Primary and are copied to the independently configured Recovery Vault. Both copies are read back and SHA-256 verified before DIT sign-off. Finished-film output remains a separate post-production record linked to this production project; DIT sign-off does not approve QC, rights or publication.
       </p>
     </div>
   );

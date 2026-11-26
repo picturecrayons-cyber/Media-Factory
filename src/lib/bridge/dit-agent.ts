@@ -25,7 +25,7 @@ const manifestInput = z.object({
 });
 const copyType = z.enum(["PRIMARY", "RECOVERY"]);
 const createInput = z.object({
-  titleId: z.string().min(8).max(160),
+  productionProjectId: z.string().uuid(),
   cameraUnit: z.enum(["A", "B", "C"]),
   cameraLabel: z.string().trim().min(1).max(160),
   cardLabel: z.string().trim().min(1).max(120),
@@ -33,6 +33,18 @@ const createInput = z.object({
   sourceVolume: z.string().trim().min(1).max(160),
   sourceRoot: z.string().trim().min(1).max(1000),
   manifest: manifestInput,
+});
+const createProductionProjectInput = z.object({
+  name: z.string().trim().min(2).max(180),
+  projectCode: z.string().trim().max(60).optional(),
+  productionType: z.enum(["FEATURE", "SHORT", "SERIES", "DOCUMENTARY", "OTHER"]).default("FEATURE"),
+  plannedStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  plannedEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  primaryLocation: z.string().trim().max(240).optional(),
+});
+const linkOutputInput = z.object({
+  productionProjectId: z.string().uuid(),
+  titleId: z.string().min(8).max(160),
 });
 const copyInput = z.object({
   sessionId: z.string().uuid(),
@@ -59,7 +71,10 @@ const signoffInput = z.object({
 type DitRoleRow = { membership_role: string };
 type SessionRow = {
   id: string;
-  title_id: string;
+  title_id: string | null;
+  production_project_id?: string | null;
+  shoot_day_id?: string | null;
+  production_project_name?: string | null;
   organization_id: string;
   camera_unit: string;
   camera_label: string;
@@ -122,6 +137,21 @@ async function requireStudioTitle(sql: Awaited<ReturnType<typeof getSql>>, title
   return rows[0];
 }
 
+async function requireStudioProductionProject(
+  sql: Awaited<ReturnType<typeof getSql>>,
+  projectId: string,
+  organizationId: string,
+) {
+  const rows = await sql<{ id: string; name: string }>`
+    select id, name
+    from bridge_production_projects
+    where id = ${projectId}::uuid and organization_id = ${organizationId}
+    limit 1
+  `;
+  if (!rows[0]) throw new Error("Production project was not found in the active Studio organization");
+  return rows[0];
+}
+
 async function requireSession(sql: Awaited<ReturnType<typeof getSql>>, sessionId: string, organizationId: string) {
   const rows = await sql<SessionRow>`
     select id, title_id, organization_id, camera_unit, camera_label, card_label, shoot_date,
@@ -148,6 +178,19 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireDitOperator(context.userId);
     const sql = await getSql();
+    const projects = await sql<{
+      id: string; name: string; project_code: string | null; production_type: string;
+      status: string; planned_start_date: string | null; planned_end_date: string | null;
+      primary_location: string | null;
+    }>`
+      select id, name, project_code, production_type, status,
+        planned_start_date::text as planned_start_date,
+        planned_end_date::text as planned_end_date, primary_location
+      from bridge_production_projects
+      where organization_id = ${actor.organizationId}
+      order by updated_at desc
+      limit 100
+    `;
     const titles = await sql<{ id: string; name: string; status: string; year: number | null }>`
       select id, name, status, year
       from bridge_titles
@@ -169,12 +212,25 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
       order by updated_at desc
       limit 200
     `;
+    const outputLinks = await sql<{
+      production_project_id: string; title_id: string; title_name: string; linked_at: string | Date;
+    }>`
+      select l.production_project_id, l.title_id, t.name as title_name, l.created_at as linked_at
+      from bridge_production_title_links l
+      join bridge_titles t on t.id = l.title_id
+      join bridge_production_projects p on p.id = l.production_project_id
+      where p.organization_id = ${actor.organizationId}
+      order by l.created_at desc
+    `;
     const sessions = await sql<SessionRow>`
-      select s.id, s.title_id, s.organization_id, s.camera_unit, s.camera_label, s.card_label,
-        s.shoot_date::text as shoot_date, s.source_volume, s.source_root,
-        s.source_manifest_sha256, s.source_file_count, s.source_total_bytes, s.status,
-        s.signoff_note, s.created_at, s.signed_off_at
+      select s.id, s.title_id, s.production_project_id, s.shoot_day_id,
+        p.name as production_project_name, s.organization_id, s.camera_unit,
+        s.camera_label, s.card_label, s.shoot_date::text as shoot_date,
+        s.source_volume, s.source_root, s.source_manifest_sha256,
+        s.source_file_count, s.source_total_bytes, s.status, s.signoff_note,
+        s.created_at, s.signed_off_at
       from bridge_dit_ingest_sessions s
+      left join bridge_production_projects p on p.id = s.production_project_id
       where s.organization_id = ${actor.organizationId}
       order by s.created_at desc
       limit 50
@@ -195,6 +251,13 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
       : [];
     return {
       organizationId: actor.organizationId,
+      projects: projects.map((project) => ({
+        ...project,
+        outputTitles: outputLinks.filter((link) => link.production_project_id === project.id).map((link) => ({
+          titleId: link.title_id, titleName: link.title_name,
+          linkedAt: link.linked_at instanceof Date ? link.linked_at.toISOString() : String(link.linked_at),
+        })),
+      })),
       titles,
       sessions: sessions.map((session) => ({
         ...session,
@@ -216,6 +279,82 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
     };
   });
 
+export const createDitProductionProject = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(createProductionProjectInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireDitOperator(context.userId);
+    if (data.plannedStartDate && data.plannedEndDate && data.plannedEndDate < data.plannedStartDate) {
+      throw new Error("Planned end date cannot be earlier than planned start date");
+    }
+    const sql = await getSql();
+    const id = randomUUID();
+    return sql.transaction(async (tx) => {
+      const rows = await tx<{ id: string; name: string }>`
+        insert into bridge_production_projects (
+          id, organization_id, name, project_code, production_type, status,
+          planned_start_date, planned_end_date, primary_location, created_by, updated_by
+        ) values (
+          ${id}::uuid, ${actor.organizationId}, ${data.name}, ${data.projectCode || null},
+          ${data.productionType}, 'PRE_PRODUCTION',
+          ${data.plannedStartDate || null}, ${data.plannedEndDate || null},
+          ${data.primaryLocation || null}, ${actor.userId}, ${actor.userId}
+        )
+        returning id, name
+      `;
+      await tx`
+        insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+        values (${actor.userId}, 'dit.production_project_created', 'bridge_production_project',
+          ${id}, ${JSON.stringify({ name: data.name, productionType: data.productionType })})
+      `;
+      return rows[0];
+    });
+  });
+
+export const linkDitFinishedFilmOutput = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(linkOutputInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireDitOperator(context.userId);
+    const sql = await getSql();
+    const project = await requireStudioProductionProject(sql, data.productionProjectId, actor.organizationId!);
+    const title = await requireStudioTitle(sql, data.titleId, actor.organizationId!);
+    await sql.transaction(async (tx) => {
+      await tx`
+        insert into bridge_production_title_links (
+          production_project_id, title_id, link_type, created_by
+        ) values (
+          ${project.id}::uuid, ${title.id}, 'FINISHED_FILM_OUTPUT', ${actor.userId}
+        )
+        on conflict (production_project_id, title_id, link_type) do nothing
+      `;
+      await tx`
+        update bridge_dit_ingest_sessions
+        set title_id = ${title.id}, updated_at = now()
+        where production_project_id = ${project.id}::uuid
+          and organization_id = ${actor.organizationId}
+          and title_id is null
+      `;
+      await tx`
+        update bridge_production_projects
+        set status = case
+            when status in ('PRE_PRODUCTION', 'IN_PRODUCTION', 'WRAP') then 'POST_PRODUCTION'
+            else status
+          end,
+          updated_by = ${actor.userId}, updated_at = now()
+        where id = ${project.id}::uuid and organization_id = ${actor.organizationId}
+      `;
+      await tx`
+        insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+        values (${actor.userId}, 'dit.finished_film_output_linked', 'bridge_production_project',
+          ${project.id}, ${JSON.stringify({ titleId: title.id, titleName: title.name })})
+      `;
+    });
+    return { productionProjectId: project.id, titleId: title.id, titleName: title.name };
+  });
+
 export const createDitIngestSession = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(createInput)
@@ -223,7 +362,7 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireDitOperator(context.userId);
     const sql = await getSql();
-    const title = await requireStudioTitle(sql, data.titleId, actor.organizationId!);
+    const project = await requireStudioProductionProject(sql, data.productionProjectId, actor.organizationId!);
     const files = normalizeDitFiles(data.manifest.files);
     const digest = ditManifestDigest(files);
     const totals = ditManifestTotals(files);
@@ -231,15 +370,37 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
 
     await sql.transaction(async (tx) => {
       await tx`
-        insert into bridge_dit_ingest_sessions (
-          id, title_id, organization_id, created_by, camera_unit, camera_label, card_label,
-          shoot_date, source_volume, source_root, source_manifest_sha256, source_file_count,
-          source_total_bytes, status
+        select id from bridge_production_projects
+        where id = ${project.id}::uuid and organization_id = ${actor.organizationId}
+        for update
+      `;
+      const shootDays = await tx<{ id: string }>`
+        insert into bridge_production_shoot_days (
+          project_id, shoot_date, created_by, updated_by
         ) values (
-          ${id}::uuid, ${title.id}, ${actor.organizationId}, ${actor.userId},
-          ${data.cameraUnit}, ${data.cameraLabel}, ${data.cardLabel}, ${data.shootDate},
-          ${data.sourceVolume}, ${data.sourceRoot}, ${digest}, ${totals.fileCount},
-          ${totals.totalBytes}, 'SOURCE_VERIFIED'
+          ${project.id}::uuid, ${data.shootDate}, ${actor.userId}, ${actor.userId}
+        )
+        on conflict (project_id, shoot_date) do update set updated_by = excluded.updated_by, updated_at = now()
+        returning id
+      `;
+      const shootDay = shootDays[0];
+      if (!shootDay) throw new Error("Could not register the production shoot day");
+      await tx`
+        update bridge_production_projects
+        set status = case when status = 'PRE_PRODUCTION' then 'IN_PRODUCTION' else status end,
+          updated_by = ${actor.userId}, updated_at = now()
+        where id = ${project.id}::uuid and organization_id = ${actor.organizationId}
+      `;
+      await tx`
+        insert into bridge_dit_ingest_sessions (
+          id, title_id, production_project_id, shoot_day_id, organization_id, created_by,
+          camera_unit, camera_label, card_label, shoot_date, source_volume, source_root,
+          source_manifest_sha256, source_file_count, source_total_bytes, status
+        ) values (
+          ${id}::uuid, null, ${project.id}::uuid, ${shootDay.id}::uuid,
+          ${actor.organizationId}, ${actor.userId}, ${data.cameraUnit}, ${data.cameraLabel},
+          ${data.cardLabel}, ${data.shootDate}, ${data.sourceVolume}, ${data.sourceRoot},
+          ${digest}, ${totals.fileCount}, ${totals.totalBytes}, 'SOURCE_VERIFIED'
         )
       `;
       await tx`
@@ -249,10 +410,16 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
           as f(relative_path text, byte_size bigint, sha256 text)
       `;
       await audit(tx, actor.userId, "dit.source_manifest_registered", id, {
-        titleId: title.id, fileCount: totals.fileCount, totalBytes: totals.totalBytes, manifestSha256: digest,
+        productionProjectId: project.id, productionProjectName: project.name,
+        shootDate: data.shootDate, fileCount: totals.fileCount, totalBytes: totals.totalBytes,
+        manifestSha256: digest,
       });
     });
-    return { sessionId: id, titleName: title.name, fileCount: totals.fileCount, totalBytes: totals.totalBytes, manifestSha256: digest };
+    return {
+      sessionId: id, productionProjectId: project.id, productionProjectName: project.name,
+      shootDate: data.shootDate, fileCount: totals.fileCount, totalBytes: totals.totalBytes,
+      manifestSha256: digest,
+    };
   });
 
 /** Issue a short-lived OCI upload URL for one manifest file in the Primary Vault. */

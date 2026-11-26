@@ -121,18 +121,12 @@ function StudioHome({ userId, organizationId }: { userId: string; organizationId
           </div>
         ) : null}
         {!titlesQ.isPending && !titlesQ.isError ? (
-          <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
-            {recentFilms.map((title) => (
-              <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <Link to="/title/$id" params={{ id: title.id }} className="font-medium hover:text-accent">{title.name}</Link>
-                  <p className="text-xs text-muted">{title.contentType} · {title.language}{title.year ? ` · ${title.year}` : ""}</p>
-                </div>
-                <span className="rounded-full border border-line px-2.5 py-1 text-xs text-muted">{title.status.replaceAll("_", " ")}</span>
-              </li>
-            ))}
-            {!recentFilms.length ? <li className="px-4 py-7 text-center text-sm text-muted">No Finished Film records are available for this Studio account yet.</li> : null}
-          </ul>
+          recentFilms.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {recentFilms.map((title) => <article key={title.id} className="flex min-h-36 flex-col justify-between rounded-xl border border-line bg-surface p-4">
+              <div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">Finished Film</p><Link to="/title/$id" params={{ id: title.id }} className="mt-2 block font-semibold hover:text-accent">{title.name}</Link><p className="mt-1 text-xs text-muted">{title.contentType} · {title.language}{title.year ? ` · ${title.year}` : ""}</p></div>
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3"><span className="text-xs text-muted">{title.status.replaceAll("_", " ")}</span><Link to="/title/$id" params={{ id: title.id }} className="text-sm font-semibold text-accent hover:underline">Open →</Link></div>
+            </article>)}
+          </div> : <p className="rounded-xl border border-dashed border-line p-7 text-center text-sm text-muted">No Finished Film records are available for this Studio account yet.</p>
         ) : null}
       </section>
 
@@ -153,18 +147,12 @@ function StudioHome({ userId, organizationId }: { userId: string; organizationId
             </div>
           ) : null}
           {!conceptsQ.isPending && !conceptsQ.isError ? (
-            <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
-              {recentConcepts.map((concept) => (
-                <li key={concept.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0">
-                    <Link to="/title/$id" params={{ id: concept.title_id }} className="font-medium hover:text-accent">{concept.titleName}</Link>
-                    <p className="text-xs text-muted">{CONCEPT_STATUS[concept.curation_status] ?? concept.curation_status}</p>
-                  </div>
-                  <span className="rounded-full border border-line px-2.5 py-1 text-xs text-muted">Story / Concept</span>
-                </li>
-              ))}
-              {!recentConcepts.length ? <li className="px-4 py-7 text-center text-sm text-muted">No Story / Concept submissions yet. Submit a concept to start this pipeline.</li> : null}
-            </ul>
+            recentConcepts.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {recentConcepts.map((concept) => <article key={concept.id} className="flex min-h-36 flex-col justify-between rounded-xl border border-line bg-surface p-4">
+                <div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">Story / Concept</p><Link to="/title/$id" params={{ id: concept.title_id }} className="mt-2 block font-semibold hover:text-accent">{concept.titleName}</Link></div>
+                <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3"><span className="text-xs text-muted">{CONCEPT_STATUS[concept.curation_status] ?? concept.curation_status}</span><Link to="/title/$id" params={{ id: concept.title_id }} className="text-sm font-semibold text-accent hover:underline">Open →</Link></div>
+              </article>)}
+            </div> : <p className="rounded-xl border border-dashed border-line p-7 text-center text-sm text-muted">No Story / Concept submissions yet. Submit a concept to start this pipeline.</p>
           ) : null}
         </section>
       ) : null}

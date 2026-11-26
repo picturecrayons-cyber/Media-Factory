@@ -154,7 +154,6 @@ async function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs = 
 function BuyerBody({ userId }: { userId: string }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
-  const [view, setView] = useState<"gallery" | "list">("gallery");
   const [query, setQuery] = useState("");
   const [galleryPage, setGalleryPage] = useState(0);
   // Buyer-sensitive responses must never share a React Query cache entry across accounts.
@@ -168,9 +167,17 @@ function BuyerBody({ userId }: { userId: string }) {
   const titles = titlesQ.data?.titles ?? [];
   const needle = query.trim().toLowerCase();
   const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
-  const pageCount = Math.max(1, Math.ceil(visible.length / BUYER_GALLERY_PAGE_SIZE));
+  const entQ = useQuery({
+    queryKey: entitlementsKey,
+    queryFn: () => withTimeout(listOwnEntitlements(), "Buyer licenses"),
+    retry: 1,
+  });
+  const entitled = new Set(entQ.data?.entitlements.map((e) => e.titleId));
+  const licensed = visible.filter((t) => entitled.has(t.id));
+  const galleryTitles = tab === "licenses" ? licensed : visible;
+  const pageCount = Math.max(1, Math.ceil(galleryTitles.length / BUYER_GALLERY_PAGE_SIZE));
   const currentPage = Math.min(galleryPage, pageCount - 1);
-  const pageTitles = visible.slice(
+  const pageTitles = galleryTitles.slice(
     currentPage * BUYER_GALLERY_PAGE_SIZE,
     (currentPage + 1) * BUYER_GALLERY_PAGE_SIZE,
   );
@@ -179,15 +186,9 @@ function BuyerBody({ userId }: { userId: string }) {
     queryKey: ["bridge-buyer-poster-artwork", userId, posterTitleIds],
     queryFn: ({ signal }) =>
       withTimeout(fetchBuyerPosterArtwork(posterTitleIds, signal), "Buyer artwork", 120_000),
-    enabled: tab !== "licenses" && view === "gallery" && posterTitleIds.length > 0,
+    enabled: posterTitleIds.length > 0,
     retry: 1,
   });
-  const entQ = useQuery({
-    queryKey: entitlementsKey,
-    queryFn: () => withTimeout(listOwnEntitlements(), "Buyer licenses"),
-    retry: 1,
-  });
-  const entitled = new Set(entQ.data?.entitlements.map((e) => e.titleId));
   const order = useMutation({
     mutationFn: async (titleId: string) => {
       const created = await createLicenseOrder({
@@ -227,7 +228,6 @@ function BuyerBody({ userId }: { userId: string }) {
     onError: (err) => toast(err instanceof Error ? err.message : "Payment did not complete"),
   });
 
-  const licensed = visible.filter((t) => entitled.has(t.id));
   const artworkByTitle = postersQ.data ?? new Map<string, Blob>();
   if (titlesQ.isPending || entQ.isPending) {
     return <p role="status" aria-live="polite">Loading your Buyer catalogue and licenses…</p>;
@@ -263,27 +263,15 @@ function BuyerBody({ userId }: { userId: string }) {
           </button>
         ))}
       </div>
-      {tab !== "licenses" && (
-        <div className="flex flex-wrap items-center gap-3">
-          <input value={query} onChange={(e) => { setQuery(e.target.value); setGalleryPage(0); }} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
-          <div className="inline-flex rounded-sm border border-line p-1" role="group" aria-label="Catalogue view">
-            <button type="button" onClick={() => setView("gallery")} aria-pressed={view === "gallery"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "gallery" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
-              Gallery
-            </button>
-            <button type="button" onClick={() => setView("list")} aria-pressed={view === "list"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "list" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
-              List
-            </button>
-          </div>
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <input value={query} onChange={(e) => { setQuery(e.target.value); setGalleryPage(0); }} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
+      </div>
       {!titles.length ? (
         <BuyerEmptyState />
-      ) : tab === "licenses" ? (
-        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
-      ) : view === "gallery" ? (
+      ) : (
         <div className="space-y-4">
-          <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
-          {visible.length > BUYER_GALLERY_PAGE_SIZE ? (
+          {tab === "licenses" && !licensed.length ? <p className="text-sm text-muted">No licenses yet. Discover a title and complete payment.</p> : <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />}
+          {galleryTitles.length > BUYER_GALLERY_PAGE_SIZE ? (
             <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
               <button
                 type="button"
@@ -305,8 +293,6 @@ function BuyerBody({ userId }: { userId: string }) {
             </div>
           ) : null}
         </div>
-      ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
       )}
       {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
         <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>
@@ -455,25 +441,5 @@ function BuyerPosterImage({ blob, title }: { blob: Blob | undefined; title: stri
       <p className="mt-4 line-clamp-4 font-display text-2xl font-semibold text-white">{title}</p>
       <p className="mt-4 text-xs text-white/60">Poster artwork unavailable</p>
     </div>
-  );
-}
-
-function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
-  if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
-  return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
-      {titles.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-          <div>
-            <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">{t.name}</Link>
-            <p className="text-sm text-muted">{t.language}{t.licensingFeePaise > 0 ? ` · ${formatLicensingFeePaise(t.licensingFeePaise)}` : " · fee unset"}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <StatusChip status={t.status as never} />
-            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
-          </div>
-        </li>
-      ))}
-    </ul>
   );
 }

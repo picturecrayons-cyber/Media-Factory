@@ -106,22 +106,15 @@ function AdminBody({ actor }: { actor: any }) {
             </div>
             <Link to="/admin/workstations" className="text-sm font-semibold text-accent hover:underline">View all work →</Link>
           </div>
-          <div className="mt-3 divide-y divide-line">
-            {attention.map((title) => (
-              <div key={title.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{title.name}</p>
-                  <span className="mt-1 inline-flex rounded-full border border-line px-2 py-0.5 text-xs text-muted">
-                    {title.status.replaceAll("_", " ").toLowerCase()}
-                  </span>
-                </div>
-                <Link to="/title/$id" params={{ id: title.id }} className="shrink-0 text-sm font-semibold text-accent hover:underline">Open title →</Link>
-              </div>
-            ))}
-            {loading ? <p className="py-5 text-sm text-muted">Loading title queue…</p> : null}
-            {titlesQ.isError ? <div role="alert" className="flex flex-wrap items-center gap-2 py-5 text-sm text-muted"><span>Could not load titles.</span><Button type="button" variant="outline" onClick={() => void titlesQ.refetch()}>Retry titles</Button></div> : null}
-            {!loading && !titlesQ.isError && attention.length === 0 ? <p className="py-5 text-sm text-muted">Nothing needs attention in these stages.</p> : null}
-          </div>
+          {attention.length ? <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {attention.map((title) => <article key={title.id} className="flex min-h-32 flex-col justify-between rounded-xl border border-line bg-surface p-4">
+              <p className="font-semibold">{title.name}</p>
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3"><span className="text-xs text-muted">{title.status.replaceAll("_", " ").toLowerCase()}</span><Link to="/title/$id" params={{ id: title.id }} className="text-sm font-semibold text-accent hover:underline">Open →</Link></div>
+            </article>)}
+          </div> : null}
+          {loading ? <p className="py-5 text-sm text-muted">Loading title queue…</p> : null}
+          {titlesQ.isError ? <div role="alert" className="flex flex-wrap items-center gap-2 py-5 text-sm text-muted"><span>Could not load titles.</span><Button type="button" variant="outline" onClick={() => void titlesQ.refetch()}>Retry titles</Button></div> : null}
+          {!loading && !titlesQ.isError && attention.length === 0 ? <p className="py-5 text-sm text-muted">Nothing needs attention in these stages.</p> : null}
         </section>
 
         <section className="grid gap-3 lg:grid-cols-2">
