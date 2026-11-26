@@ -102,6 +102,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   }, {});
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
+  const visibleStages = stages.filter((s) =>
+    s !== "Business" || hasPermission(actor, "title.license") || hasPermission(actor, "title.rights_review"),
+  );
   const button = (label: string, run: () => Promise<unknown>, disabled = false) => (
     <button
       type="button"
@@ -129,7 +132,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl">Title operations</h2>
       <nav className="flex flex-wrap gap-2" aria-label="Operational workflow">
-        {stages.map((s) => (
+        {visibleStages.map((s) => (
           <button
             type="button"
             key={s}
@@ -211,7 +214,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               ))}
             </div>
           ) : null}
-          {stage === "Business" ? (
+          {stage === "Business" && (hasPermission(actor, "title.license") || hasPermission(actor, "title.rights_review")) ? (
             <div className="space-y-4">
               <details className="rounded-xl border border-line p-3">
                 <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
