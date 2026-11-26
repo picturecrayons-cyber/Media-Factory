@@ -408,9 +408,16 @@ export const getTitle = createServerFn({ method: "GET" })
       `;
       if (!buyerAccess[0]?.allowed) throw new Error("Not found");
     } else if (actor.accountType === "investor" && !actor.internalRole) {
-      const assigned = await sql<{ id: string }>
-        `select id from bridge_title_investors where title_id = ${title.id} and investor_user_id = ${actor.userId} limit 1`;
-      if (!assigned[0]) throw new Error("Not found");
+      const assigned = await sql<{ allowed: boolean }>`
+        select (
+          exists (select 1 from bridge_investor_title_access
+            where title_id=${title.id} and investor_user_id=${actor.userId}
+              and revoked_at is null and (expires_at is null or expires_at > now()))
+          or exists (select 1 from bridge_title_investors
+            where title_id=${title.id} and investor_user_id=${actor.userId})
+        ) as allowed
+      `;
+      if (!assigned[0]?.allowed) throw new Error("Not found");
     } else if (!canReadTitle(actor, title)) {
       throw new Error("Not found");
     }
