@@ -1,10 +1,10 @@
--- Three distinct owner submission lanes: finished film, story/concept, production shoot.
--- Production-shoot records are structured separately from finished-film rights/QC records.
+-- Owner submission lanes are limited to finished film and story/concept.
+-- Studio production management is an internal workflow, not an owner submission.
 alter table public.bridge_titles
   drop constraint if exists bridge_titles_submission_type_check;
 alter table public.bridge_titles
   add constraint bridge_titles_submission_type_check
-  check (submission_type = any (array['finished_film'::text, 'story_concept'::text, 'production_shoot'::text]));
+  check (submission_type = any (array['finished_film'::text, 'story_concept'::text]));
 
 alter table public.bridge_owner_submission_events
   drop constraint if exists bridge_owner_submission_events_submission_kind_check;
