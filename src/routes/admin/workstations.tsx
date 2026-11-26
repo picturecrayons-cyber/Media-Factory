@@ -40,7 +40,12 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
     mutationFn: setBuyerPublicationGate,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
-  const [activeTab, setActiveTab] = useState<Tab>("Titles");
+  const visibleTabs: Tab[] =
+    actor.internalRole === "qc_reviewer" ? ["QC"] :
+    actor.internalRole === "legal_reviewer" ? ["Rights"] :
+    actor.internalRole === "viewer" ? ["Titles", "Audit"] : [...TABS];
+  const initialTab: Tab = visibleTabs[0] ?? "Titles";
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
   const data = query.data;
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading Admin…</div>;
@@ -65,7 +70,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
       </section>
 
       <nav className="flex gap-2 overflow-x-auto border-b border-line pb-2">
-        {TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button key={tab} type="button" onClick={() => setActiveTab(tab)}
             className={"whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition " + (activeTab === tab ? "bg-fg text-bg" : "border border-line bg-surface text-muted hover:text-fg")}>
             {tab}
@@ -74,15 +79,24 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
       </nav>
 
       {activeTab === "Titles" ? (
-        <TitleQueue titles={data.titles} review={review} />
+        <TitleQueue titles={data.titles} review={review} canAccept={hasPermission(actor, "title.advance_upload")} />
       ) : activeTab === "Concepts" ? (
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
         <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
           canAct={hasPermission(actor, "title.qc_review")} assetVersions={data.assetVersions} actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
       ) : activeTab === "Rights" ? (
-        <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
-          canAct={hasPermission(actor, "title.rights_review")} actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
+        actor.internalRole === "legal_reviewer" ? (
+          <div className="space-y-6">
+            <SimpleTable title="Independent Legal Evidence Review" description="Legal case evidence and linked rights records. This role-scoped view is read-only until a dedicated Legal decision action is available."
+              rows={data.legal} fields={["title_id", "status", "classification", "evidence", "restrictions", "reviewed_by", "reviewed_at"]} titleName={titleName} />
+            <SimpleTable title="Rights Grants Under Review" description="Rights grant records associated with titles currently in Rights Review."
+              rows={data.rights} fields={["title_id", "grant_type", "territories", "languages", "media", "window_start", "window_end", "status"]} titleName={titleName} />
+          </div>
+        ) : (
+          <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
+            canAct={actor.internalRole === "super_admin" && hasPermission(actor, "title.rights_review")} actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
+        ) : null
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
@@ -108,7 +122,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
   );
 }
 
-function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
+function TitleQueue({ titles, review, canAccept }: { titles: any[]; review: any; canAccept: boolean }) {
   return (
     <section className="space-y-3">
       <SectionHeader title="Titles" description="One canonical Title ID from intake through delivery." />
@@ -120,7 +134,7 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
               <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
+              {canAccept && title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
               <Link to="/title/$id" params={{ id: title.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open</Link>
             </div>
           </div>
