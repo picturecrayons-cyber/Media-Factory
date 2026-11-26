@@ -52,11 +52,11 @@ export function SignInButtons() {
   );
 }
 
-export function UserButton() {
+export function UserButton({ label: labelOverride }: { label?: string }) {
   const user = useCurrentUser();
   const [signingOut, setSigningOut] = useState(false);
   if (!user) return null;
-  const label = user.displayName ?? user.primaryEmail ?? "Account";
+  const label = labelOverride ?? user.displayName ?? user.primaryEmail ?? "Account";
   return (
     <div className="flex items-center gap-2">
       {user.profileImageUrl ? (
