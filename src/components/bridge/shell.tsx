@@ -36,6 +36,7 @@ function navigationFor(actor: BridgeActor): NavItem[] {
       { to: "/workspace", label: "My Titles" },
     ],
     studio: [
+      { to: "/studio-dit", label: "Production & DIT" },
       { to: "/studio", label: "Studio Home" },
       { to: "/workspace", label: "Titles" },
     ],
