@@ -71,7 +71,7 @@ export function NewSubmissionPanel() {
         )}
         <button type="button" onClick={() => setPath("production_shoot")} className="rounded-xl border border-line p-4 text-left hover:border-line-strong">
           <p className="font-medium">Production Shoot</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted">Production No. · Production Title · schedule · crew · shoot progress · DIT handover.</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">Production No. · Production Title · schedule · production stage · media handover.</p>
         </button>
       </div>
 
