@@ -114,10 +114,6 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
     return { id, status: "requested" as const };
   });
 
-function hasDeliveryPermission(actor: Awaited<ReturnType<typeof actorFor>>) {
-  try { assertPermission(actor, "title.deliver"); return true; } catch { return false; }
-}
-
 export const assignBridgeDeliveryJob = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ jobId: z.string().uuid(), vendor: z.string().trim().min(2).max(160) }))
