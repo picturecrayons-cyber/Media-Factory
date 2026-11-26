@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
-import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
+import { assertPermission, canReadTitle, canOperateOnTitle, hasPermission, type Actor } from "./rbac";
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
@@ -27,15 +27,8 @@ export async function saveLoopLicense(
     owner_organization_id: string | null;
     status: string;
   }>`select owner_user_id,owner_account_type,owner_organization_id,status from bridge_titles where id=${data.titleId} for update`;
-  if (
-    !title ||
-    !canOperateOnTitle(
-      actor,
-      { ownerUserId: title.owner_user_id, ownerAccountType: title.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor", ownerOrganizationId: title.owner_organization_id },
-      "title.update_own",
-      "title.license",
-    )
-  )
+  // Commercial license drafts are internal operations, never Studio self-service.
+  if (!title || !actor.internalRole || !hasPermission(actor, "title.license"))
     throw new Error("Forbidden");
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
@@ -153,7 +146,9 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     )
       throw new Error("Not found");
     const sql = await getSql();
-    const grants = await sql<{
+    // Studio/creator owners may see QC feedback, but never private rights evidence,
+    // license records, or Legal case data. Internal roles use their explicit UI gates.
+    const grants = actor.internalRole ? await sql<{
       id: string;
       status: string;
       territories: string[];
@@ -166,7 +161,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
       }>;
-    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc` : [];
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
@@ -176,10 +171,10 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         posterKey: string | null;
       }>;
     }>`select status,reviewed_at,reviewer_findings from bridge_qc_cases where title_id=${data.titleId} order by created_at desc limit 1`;
-    const legal = await sql<{
+    const legal = actor.internalRole ? await sql<{
       status: string;
       reviewed_at: string | Date;
-    }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+    }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1` : [];
     return {
       grants: grants.map((g) => ({
         ...g,
