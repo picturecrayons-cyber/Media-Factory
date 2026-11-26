@@ -205,6 +205,6 @@ export const listTitlesForClassification = createServerFn({ method: "GET" })
     const actor = await verifiedActor(context.userId);
     if (actor.internalRole !== "super_admin") throw new Error("Super Admin classification authority required");
     const sql = await getSql();
-    return sql`select id,name,status,record_classification,updated_at
+    return sql<{ id: string; name: string; status: string; record_classification: string; updated_at: string }>`select id,name,status,record_classification,updated_at::text as updated_at
       from bridge_titles order by updated_at desc limit 300`;
   });
