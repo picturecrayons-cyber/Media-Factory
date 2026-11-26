@@ -212,64 +212,24 @@ function LicensingDesk({ titles }: { titles: Array<any> }) {
 }
 
 function PublishingDesk({ publications }: { publications: Array<any> }) {
+  const submitted = publications.filter((item) => ["QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(item.bridgeStatus));
+  const listed = publications.filter((item) => item.publication?.published === true && item.publication?.listed === true && Boolean(item.publication?.playbackPath) && ["AUTHORIZED", "LIVE"].includes(item.publication?.authorizationStatus));
+  const listedIds = new Set(listed.map((item) => item.id));
+  const ready = publications.filter((item) => item.ready && !listedIds.has(item.id));
+  const card = (item: any, label: string, detail: string) => (
+    <article key={item.id} className="rounded-2xl border border-line bg-elevated p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h4 className="font-semibold">{item.name}</h4><p className="mt-1 text-xs text-muted">{item.language} · {String(item.bridgeStatus).replaceAll("_", " ")}</p></div><span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{label}</span></div>
+      <p className="mt-3 text-xs text-muted">{detail}</p>
+      <Link to="/title/$id" params={{ id: item.id }} className="mt-3 inline-block text-sm font-semibold text-accent hover:underline">Open title workspace →</Link>
+    </article>
+  );
   return (
-    <section className="rounded-3xl border border-line bg-surface p-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-            Publishing desk
-          </p>
-          <h3 className="mt-1 font-display text-2xl font-semibold">
-            Crayons Loop authorization queue
-          </h3>
-          <p className="mt-2 text-sm text-muted">
-            Publication remains gated by active rights coverage, title status and required
-            master/artwork readiness.
-          </p>
-        </div>
-        <Link to="/internal">
-          <Button>Open distribution controls</Button>
-        </Link>
-      </div>
-      <div className="mt-5 space-y-3">
-        {publications.map((item) => (
-          <article key={item.id} className="rounded-2xl border border-line bg-elevated p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h4 className="font-semibold">{item.name}</h4>
-                <p className="mt-1 text-xs text-muted">
-                  {item.language} · {String(item.bridgeStatus).replaceAll("_", " ")}
-                </p>
-              </div>
-              <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
-                {item.publication?.published ? "LIVE" : item.ready ? "READY" : "BLOCKED"}
-              </span>
-            </div>
-            {!item.ready && item.blockers?.length ? (
-              <ul className="mt-3 space-y-1 text-xs text-muted">
-                {item.blockers.map((b: string) => (
-                  <li key={b}>• {b}</li>
-                ))}
-              </ul>
-            ) : null}
-            <div className="mt-3">
-              <Link to="/internal" className="text-sm font-semibold text-accent hover:underline">
-                {item.publication?.published
-                  ? "Manage publication"
-                  : item.ready
-                    ? "Authorize publication"
-                    : "Review blockers"}{" "}
-                →
-              </Link>
-            </div>
-          </article>
-        ))}
-        {!publications.length ? (
-          <p className="py-8 text-center text-sm text-muted">
-            No publication candidates available.
-          </p>
-        ) : null}
-      </div>
+    <section className="space-y-5 rounded-3xl border border-line bg-surface p-6">
+      <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Publishing desk</p><h3 className="mt-1 font-display text-2xl font-semibold">Crayons Loop market pipeline</h3><p className="mt-2 text-sm text-muted">Only submitted, fully eligible or verifiably published titles appear here. Draft and uploading records remain in the Title Library.</p></div><Link to="/internal"><Button>Open distribution controls</Button></Link></div>
+      <section aria-labelledby="cms-submitted-title"><div className="mb-3 flex items-center justify-between"><h4 id="cms-submitted-title" className="font-semibold">Submitted / in review</h4><span className="text-xs text-muted">{submitted.length} titles</span></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{submitted.map((item: any) => card(item, "IN REVIEW", "Entered a review or licensing decision state; complete its assigned workflow in the title workspace."))}{!submitted.length ? <p className="text-sm text-muted">No submitted titles are currently in review.</p> : null}</div></section>
+      <section aria-labelledby="cms-ready-title"><div className="mb-3 flex items-center justify-between"><h4 id="cms-ready-title" className="font-semibold">Ready for Market</h4><span className="text-xs text-muted">{ready.length} titles</span></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{ready.map((item: any) => card(item, "READY", "All publication preflight requirements currently pass. Final authorization remains a separate Super Admin action."))}{!ready.length ? <p className="text-sm text-muted">No titles have passed every market publication gate.</p> : null}</div></section>
+      <section aria-labelledby="cms-listed-title"><div className="mb-3 flex items-center justify-between"><h4 id="cms-listed-title" className="font-semibold">Market Listed</h4><span className="text-xs text-muted">{listed.length} titles</span></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{listed.map((item: any) => card(item, "PUBLISHED", "Crayons Loop · " + item.publication.playbackPath))}{!listed.length ? <p className="text-sm text-muted">No active, verifiably listed Loop titles were returned.</p> : null}</div></section>
+      <p className="border-t border-line pt-4 text-xs text-muted">Blocked titles and their exact blockers remain visible in each Title Workspace. No blocker is cleared by this dashboard.</p>
     </section>
   );
 }
