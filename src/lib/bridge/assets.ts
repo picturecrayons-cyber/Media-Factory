@@ -10,11 +10,31 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
+import { assertPersistedAssetVerified } from "./asset-verification";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
+
+async function getVerifiedAuditEtag(assetId: string): Promise<string | null> {
+  const sql = await getSql();
+  const rows = await sql<{ checksum: string | null }>`
+    select metadata::jsonb->>'checksum' as checksum
+    from bridge_audit_logs
+    where action = 'asset.upload_verified'
+      and entity_type = 'bridge_asset'
+      and entity_id = ${assetId}
+    order by created_at desc
+    limit 1
+  `;
+  return rows[0]?.checksum ?? null;
+}
+
+async function verifyStoredObject(key: string, contentType: string | null) {
+  const { verifyObject } = await import("./oci-object-storage.server");
+  return verifyObject(key, contentType);
+}
 
 async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
   const sql = await getSql();
@@ -88,11 +108,12 @@ async function openUploadAsset(userId: string, assetId: string) {
   const rows = await sql<{
     id: string;
     title_id: string;
+    kind: string;
     s3_key: string;
     content_type: string | null;
     byte_size: number | null;
   }>`
-    select id, title_id, s3_key, content_type, byte_size
+    select id, title_id, kind, s3_key, content_type, byte_size
     from bridge_assets where id = ${assetId} limit 1
   `;
   const asset = rows[0];
@@ -112,7 +133,12 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
   }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
-    if (asset.byte_size != null) return { assetId: asset.id, alreadyVerified: true as const };
+    if (asset.byte_size != null) {
+      const title = await loadTitle(asset.title_id);
+      if (!title) throw new Error("Title not found");
+      await assertPersistedAssetVerified(asset, title, await getVerifiedAuditEtag(asset.id), verifyStoredObject);
+      return { assetId: asset.id, alreadyVerified: true as const };
+    }
     const { beginMultipartUpload } = await import("./oci-object-storage.server");
     const expiresIn = uploadUrlLifetimeSeconds(data.byteSize);
     const started = await beginMultipartUpload({
@@ -134,7 +160,12 @@ export const commitAssetMultipart = createServerFn({ method: "POST" })
   .validator(z.object({ assetId: z.string().min(8), partBaseUrl: z.string().url().max(2000) }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
-    if (asset.byte_size != null) return { committed: true };
+    if (asset.byte_size != null) {
+      const title = await loadTitle(asset.title_id);
+      if (!title) throw new Error("Title not found");
+      await assertPersistedAssetVerified(asset, title, await getVerifiedAuditEtag(asset.id), verifyStoredObject);
+      return { committed: true };
+    }
     const { commitMultipartUpload } = await import("./oci-object-storage.server");
     await commitMultipartUpload(data.partBaseUrl, asset.s3_key);
     return { committed: true };
@@ -181,10 +212,20 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
     }
-    if (asset.byte_size != null)
-      return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
-
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    if (asset.byte_size != null) {
+      const verifiedAudit = await sql<{ checksum: string | null }>`
+        select metadata::jsonb->>'checksum' as checksum
+        from bridge_audit_logs
+        where action = 'asset.upload_verified'
+          and entity_type = 'bridge_asset'
+          and entity_id = ${asset.id}
+        order by created_at desc
+        limit 1
+      `;
+      await assertPersistedAssetVerified(asset, title, verifiedAudit[0]?.checksum ?? null, verifyObject);
+      return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
+    }
     const object = await verifyObject(asset.s3_key, asset.content_type);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
@@ -322,23 +363,46 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       s3_key: string;
       content_type: string | null;
       byte_size: number | null;
+      verified_etag: string | null;
       created_at: string | Date;
     }>`
-      select id, kind, s3_key, content_type, byte_size, created_at
+      select id, kind, s3_key, content_type, byte_size, created_at,
+        (
+          select audit.metadata::jsonb->>'checksum'
+          from bridge_audit_logs audit
+          where audit.action = 'asset.upload_verified'
+            and audit.entity_type = 'bridge_asset'
+            and audit.entity_id = bridge_assets.id
+          order by audit.created_at desc
+          limit 1
+        ) as verified_etag
       from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
     `;
     return {
-      assets: rows
+      assets: await Promise.all(rows
         .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
-        .map((r) => ({
-          id: r.id,
-          kind: r.kind,
-          key: buyer ? null : r.s3_key,
-          contentType: r.content_type,
-          byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0,
-          createdAt:
-            r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+        .map(async (r) => {
+          let verified = false;
+          try {
+            await assertPersistedAssetVerified(
+              r,
+              title,
+              r.verified_etag,
+              verifyStoredObject,
+            );
+            verified = true;
+          } catch {
+            // A byte-size value alone is not proof of a sealed, audited asset.
+          }
+          return {
+            id: r.id,
+            kind: r.kind,
+            key: buyer ? null : r.s3_key,
+            contentType: r.content_type,
+            byteSize: r.byte_size,
+            verified,
+            createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+          };
         })),
     };
   });
