@@ -71,6 +71,11 @@ export const Route = createFileRoute("/api/buyer/poster")({
               and t.status in ('LIVE_FOR_BUYERS', 'IN_NEGOTIATION', 'LICENSED', 'DELIVERED')
               and public.bridge_title_buyer_visibility(t.id)
               and exists (
+                select 1 from bridge_buyer_title_access ba
+                where ba.title_id=t.id and ba.buyer_user_id=${actor.userId}
+                  and ba.revoked_at is null and (ba.expires_at is null or ba.expires_at > now())
+              )
+              and exists (
                 select 1
                 from bridge_qc_cases q
                 where q.title_id = t.id
