@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listTitles } from "@/lib/bridge/titles";
+import { listTitles, listQcSubmissionCandidates } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { getDashboardSession } from "@/lib/bridge/session";
 
@@ -71,6 +71,12 @@ function DashboardBody() {
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
     queryFn: () => listTitles(),
+    enabled: dashboardQ.isSuccess,
+    retry: 1,
+  });
+  const qcCandidatesQ = useQuery({
+    queryKey: ["bridge-qc-submission-candidates"],
+    queryFn: () => listQcSubmissionCandidates(),
     enabled: dashboardQ.isSuccess,
     retry: 1,
   });
@@ -188,6 +194,16 @@ function DashboardBody() {
         )}
       </section>
 
+      <section aria-labelledby="qc-submit-title" className="rounded-sm border border-line">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-4">
+          <div><h3 id="qc-submit-title" className="font-display text-xl font-semibold">Verified assets · Awaiting QC submission</h3>
+            <p className="mt-1 text-sm text-muted">PREPARING titles whose current master and artwork match verified asset records. Studio submits; QC reviews independently.</p></div>
+          <p className="text-sm font-semibold">{qcCandidatesQ.isPending || qcCandidatesQ.isError ? "—" : qcCandidatesQ.data.candidates.length} awaiting submission</p>
+        </div>
+        {qcCandidatesQ.isPending ? <p className="px-4 py-5 text-sm text-muted">Checking verified submission readiness…</p> : qcCandidatesQ.isError ? <p role="alert" className="px-4 py-5 text-sm text-accent">QC submission candidates could not be checked. Open the Title Library to review.</p> : qcCandidatesQ.data.candidates.length ? <ul className="divide-y divide-line">
+          {qcCandidatesQ.data.candidates.map((title) => <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"><div><p className="font-medium">{title.name}</p><p className="mt-1 text-xs text-muted">Verified master + artwork · PREPARING</p></div><Link to="/title/$id" params={{ id: title.id }} className="text-sm font-semibold text-accent hover:underline">Open Studio workspace →</Link></li>)}
+        </ul> : <p className="px-4 py-5 text-sm text-muted">No PREPARING title currently matches the verified master and artwork submission gate.</p>}
+      </section>
       <section aria-labelledby="business-title" className="space-y-3">
         <div>
           <h3 id="business-title" className="font-display text-xl font-semibold">Business snapshot</h3>
@@ -220,11 +236,16 @@ function DashboardBody() {
               <p className="mt-1 text-2xl font-semibold">
                 {titlesQ.isPending || reportingUnavailable
                   ? "—"
-                  : titles.filter((title) => loopStageType(title.contentType) === lane.loopType).length}
+                  : titles.filter((title) => title.contentType && title.contentType.toUpperCase() !== "OTHER" && loopStageType(title.contentType) === lane.loopType).length}
               </p>
               <p className="mt-1 text-xs text-muted">Titles in this content lane</p>
             </article>
           ))}
+          <article className="rounded-sm border border-line px-4 py-3">
+            <p className="text-xs uppercase tracking-widest text-muted">Unclassified</p>
+            <p className="mt-1 text-2xl font-semibold">{titlesQ.isPending || reportingUnavailable ? "—" : titles.filter((title) => !title.contentType || title.contentType.toUpperCase() === "OTHER").length}</p>
+            <p className="mt-1 text-xs text-muted">Content type needs review</p>
+          </article>
         </div>
       </section>
 
