@@ -18,6 +18,7 @@ import {
 } from "@/lib/bridge/loop-publication";
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
+import { ProductionAssetReconciliationPanel } from "@/components/bridge/asset-reconciliation-panel";
 
 export const Route = createFileRoute("/internal")({ component: Internal });
 
@@ -33,6 +34,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            canReconcile={actor.internalRole === "super_admin"}
           />
         </BridgeShell>
       )}
@@ -44,10 +46,12 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  canReconcile,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  canReconcile: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -59,6 +63,9 @@ function InternalBody({
     <div className="grid gap-12">
       {/* 1. Master Distribution Desk */}
       <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
+
+      {/* Super Admin production asset verification and title-pointer reconciliation */}
+      {canReconcile ? <ProductionAssetReconciliationPanel /> : null}
 
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
