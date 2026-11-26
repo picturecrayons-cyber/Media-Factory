@@ -20,7 +20,10 @@ const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
 const EXPECTED_HISTORICAL_MIGRATIONS = 70;
 const EXPECTED_PENDING_MIGRATIONS = 2;
 const EXPECTED_MIGRATIONS = EXPECTED_HISTORICAL_MIGRATIONS + EXPECTED_PENDING_MIGRATIONS;
-const PENDING_PR_MIGRATION = "20261126031932_bridge_three_submission_workflows.sql";
+const PENDING_PR_MIGRATIONS = new Set([
+  "20261126031932_bridge_three_submission_workflows.sql",
+  "20261126050239_reconcile_owner_submission_kinds_forward_only.sql",
+]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -57,7 +60,11 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS || !names.includes(PENDING_PR_MIGRATION) || names.length - 1 !== EXPECTED_HISTORICAL_MIGRATIONS) {
+if (
+  names.length !== EXPECTED_MIGRATIONS ||
+  [...PENDING_PR_MIGRATIONS].some((name) => !names.includes(name)) ||
+  names.length - EXPECTED_PENDING_MIGRATIONS !== EXPECTED_HISTORICAL_MIGRATIONS
+) {
   throw new Error(
     `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
   );
