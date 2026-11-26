@@ -30,6 +30,7 @@ type ConceptRow = {
   estimated_budget_range: string | null;
   target_platforms: string[] | null;
   curation_status: string;
+  owner_submission_status?: string;
   admin_notes: string | null;
   introduced_to_buyers_at: string | Date | null;
   created_at: string | Date;
@@ -262,7 +263,9 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name, t.owner_user_id
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
+        join bridge_title_owner_submissions s on s.title_id = t.id
+        where s.submission_status = 'ACCEPTED_INTAKE'
+          and c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
         order by c.created_at asc
         limit 200
       `;
@@ -296,7 +299,12 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
     const sql = await getSql();
     try {
       const existing = await sql<ConceptRow>`
-        select * from bridge_story_concept_submissions where id = ${data.id} limit 1
+        select c.*
+        from bridge_story_concept_submissions c
+        join bridge_title_owner_submissions s on s.title_id = c.title_id
+        where c.id = ${data.id}
+          and s.submission_status = 'ACCEPTED_INTAKE'
+        limit 1
       `;
       const current = existing[0];
       if (!current) throw new Error("Not found");
