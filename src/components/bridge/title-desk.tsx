@@ -8,7 +8,7 @@ import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { saveOwnerSubmission } from "@/lib/bridge/owner-submissions";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", submissionType }: { empty: string; query?: string; submissionType?: "finished_film" | "story_concept" }) {
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
     queryFn: () => listTitles(),
@@ -17,7 +17,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
     refetchOnWindowFocus: false,
     retry: 1,
   });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const titles = (titlesQ.data?.titles ?? []).filter((t) => (!submissionType || t.submissionType === submissionType) && (!query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase())));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
