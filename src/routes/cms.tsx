@@ -212,10 +212,10 @@ function LicensingDesk({ titles }: { titles: Array<any> }) {
 }
 
 function PublishingDesk({ publications }: { publications: Array<any> }) {
-  const submitted = publications.filter((item) => ["QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(item.bridgeStatus));
-  const listed = publications.filter((item) => item.publication?.published === true && item.publication?.listed === true && Boolean(item.publication?.playbackPath) && ["AUTHORIZED", "LIVE"].includes(item.publication?.authorizationStatus));
+  const submitted = publications.filter((item) => ["QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(item.bridgeStatus));
+  const listed = publications.filter((item) => item.publication?.published === true && item.publication?.listed === true && Boolean(item.publication?.playbackPath) && ["AUTHORIZED", "LIVE"].includes(item.publication?.authorizationStatus) && item.publication?.loopStatus === "approved");
   const listedIds = new Set(listed.map((item) => item.id));
-  const ready = publications.filter((item) => item.ready && !listedIds.has(item.id));
+  const ready = publications.filter((item) => item.ready && !item.publication?.published && !item.publication?.listed && !listedIds.has(item.id));
   const card = (item: any, label: string, detail: string) => (
     <article key={item.id} className="rounded-2xl border border-line bg-elevated p-4">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h4 className="font-semibold">{item.name}</h4><p className="mt-1 text-xs text-muted">{item.language} · {String(item.bridgeStatus).replaceAll("_", " ")}</p></div><span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{label}</span></div>
