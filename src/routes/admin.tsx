@@ -50,6 +50,10 @@ function AdminBody({ actor }: { actor: any }) {
   const live = distribution.filter((title) => title.publication?.published).length;
   const attention = titles.filter((title) => ["PREPARING", "QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(title.status)).slice(0, 5);
   const loading = titlesQ.isPending;
+  const titleMetric = titlesQ.isPending || titlesQ.isError ? "—" : String(titles.length);
+  const publicationMetric = distQ.isPending || distQ.isError ? "—" : String(live);
+  const profileMetric = profilesQ.isPending || profilesQ.isError ? "—" : String(profiles.length);
+  const organizationMetric = profilesQ.isPending || profilesQ.isError ? "—" : String(organizations.size);
 
   return (
     <BridgeShell actor={actor} title="Admin dashboard">
@@ -68,10 +72,10 @@ function AdminBody({ actor }: { actor: any }) {
         </section>
 
         <section aria-label="Title overview" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="All titles" value={loading ? "—" : String(titles.length)} detail="Canonical catalog" />
-          <Metric label="QC / intake" value={loading ? "—" : String(qcQueue)} detail="Awaiting review" />
-          <Metric label="Rights review" value={loading ? "—" : String(rightsQueue)} detail="Clearance queue" />
-          <Metric label="Buyer-ready" value={loading ? "—" : String(buyerReady)} detail="Licensing stages" />
+          <Metric label="All titles" value={titleMetric} detail="Canonical catalog" />
+          <Metric label="QC / intake" value={titlesQ.isPending || titlesQ.isError ? "—" : String(qcQueue)} detail="Awaiting review" />
+          <Metric label="Rights review" value={titlesQ.isPending || titlesQ.isError ? "—" : String(rightsQueue)} detail="Clearance queue" />
+          <Metric label="Buyer-ready" value={titlesQ.isPending || titlesQ.isError ? "—" : String(buyerReady)} detail="Licensing stages" />
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4">
@@ -80,10 +84,17 @@ function AdminBody({ actor }: { actor: any }) {
             <span className="text-xs text-muted">Live records</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <CompactMetric label="Loop publications" value={distQ.isPending ? "—" : String(live)} />
-            <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "—" : String(profiles.length)} />
-            <CompactMetric label="Organizations" value={profilesQ.isPending ? "—" : String(organizations.size)} />
+            <CompactMetric label="Loop publications" value={publicationMetric} />
+            <CompactMetric label="Bridge profiles" value={profileMetric} />
+            <CompactMetric label="Organizations" value={organizationMetric} />
           </div>
+          {(distQ.isError || profilesQ.isError) ? (
+            <div role="alert" className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted">
+              <span>{distQ.isError ? "Loop publication data could not be loaded." : ""} {profilesQ.isError ? "Profile data could not be loaded." : ""}</span>
+              {distQ.isError ? <Button type="button" variant="outline" onClick={() => void distQ.refetch()}>Retry publications</Button> : null}
+              {profilesQ.isError ? <Button type="button" variant="outline" onClick={() => void profilesQ.refetch()}>Retry profiles</Button> : null}
+            </div>
+          ) : null}
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
@@ -107,7 +118,7 @@ function AdminBody({ actor }: { actor: any }) {
               </div>
             ))}
             {loading ? <p className="py-5 text-sm text-muted">Loading title queue…</p> : null}
-            {titlesQ.isError ? <p role="alert" className="py-5 text-sm text-muted">Could not load titles. Refresh to retry.</p> : null}
+            {titlesQ.isError ? <div role="alert" className="flex flex-wrap items-center gap-2 py-5 text-sm text-muted"><span>Could not load titles.</span><Button type="button" variant="outline" onClick={() => void titlesQ.refetch()}>Retry titles</Button></div> : null}
             {!loading && !titlesQ.isError && attention.length === 0 ? <p className="py-5 text-sm text-muted">Nothing needs attention in these stages.</p> : null}
           </div>
         </section>
@@ -116,7 +127,7 @@ function AdminBody({ actor }: { actor: any }) {
           <details className="min-w-0 rounded-2xl border border-line bg-surface p-4">
             <summary className="cursor-pointer list-none font-semibold">Users & organizations <span className="ml-1 text-sm font-normal text-muted">({profiles.length})</span></summary>
             <p className="mt-2 text-sm text-muted">Read-only Bridge profile view. Role changes remain controlled by the invitation and onboarding flow.</p>
-            {profilesQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Profiles could not be loaded.</p> : null}
+            {profilesQ.isError ? <div role="alert" className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted"><span>Profiles could not be loaded.</span><Button type="button" variant="outline" onClick={() => void profilesQ.refetch()}>Retry profiles</Button></div> : null}
             <div className="mt-3 max-h-80 overflow-auto">
               <table className="w-full min-w-[560px] text-left text-sm">
                 <thead className="sticky top-0 border-b border-line bg-surface text-xs uppercase tracking-wider text-muted">
@@ -141,7 +152,7 @@ function AdminBody({ actor }: { actor: any }) {
           <details className="min-w-0 rounded-2xl border border-line bg-surface p-4">
             <summary className="cursor-pointer list-none font-semibold">Recent operator activity</summary>
             <p className="mt-2 text-sm text-muted">Latest events from the persisted Bridge audit log.</p>
-            {auditQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Audit history is temporarily unavailable.</p> : null}
+            {auditQ.isError ? <div role="alert" className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted"><span>Audit history is temporarily unavailable.</span><Button type="button" variant="outline" onClick={() => void auditQ.refetch()}>Retry activity</Button></div> : null}
             <ul className="mt-3 divide-y divide-line">
               {(auditQ.data?.logs ?? []).slice(0, 8).map((log) => (
                 <li key={log.id} className="flex flex-col gap-1 py-3">
