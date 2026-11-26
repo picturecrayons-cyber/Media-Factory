@@ -57,7 +57,6 @@ function CreatorHome({ userId, organizationId }: { userId: string; organizationI
           <Action to="/submit-film" title="Finished Films" detail="Submit and manage completed film records" />
           <Action to="/submit-concept" title="Stories / Concepts" detail="Submit and manage development-stage projects" />
           <Action to="/workspace" title="Product Library" detail="Open canonical Film and Story records" />
-          <Action to="/deliveries" title="Deliveries" detail="Track authorized deliveries" />
         </div>
       </section>
 
