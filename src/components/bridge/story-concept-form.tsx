@@ -26,7 +26,6 @@ const PLATFORMS = [
   "Broadcast",
   "Festival",
   "International",
-  "Investor pitch",
 ];
 
 export function StoryConceptForm() {
@@ -162,7 +161,7 @@ export function StoryConceptForm() {
       </div>
 
       <div className="sm:col-span-2">
-        <p className="text-sm font-medium">Target platforms / outcome</p>
+        <p className="text-sm font-medium">Intended distribution channels</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {PLATFORMS.map((p) => (
             <label key={p} className="rounded-full border border-line px-3 py-1.5 text-sm">
@@ -201,9 +200,8 @@ export function StoryConceptForm() {
       </label>
 
       <div className="rounded-xl border border-line bg-elevated p-4 text-xs leading-relaxed text-muted sm:col-span-2">
-        Submitting places this concept in the admin curation queue. It does not publish to
-        Loop or the public buyer catalog. Payment gate remains locked until the fee is
-        certified.
+        Submitting sends this concept to Bridge intake for review. It does not publish to
+        Loop, create a public investment offer, promise funding or returns, or authorize a license.
       </div>
 
       <div className="flex flex-wrap gap-2 sm:col-span-2">
@@ -211,7 +209,7 @@ export function StoryConceptForm() {
           {mut.isPending && mut.variables === false ? "Saving…" : "Save Draft"}
         </Button>
         <Button type="button" disabled={mut.isPending} onClick={() => mut.mutate(true)} className="rounded-full sm:px-8">
-          {mut.isPending && mut.variables === true ? "Submitting…" : "Submit to Network"}
+          {mut.isPending && mut.variables === true ? "Submitting…" : "Submit for intake"}
         </Button>
       </div>
     </form>

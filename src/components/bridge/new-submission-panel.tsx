@@ -57,7 +57,7 @@ export function NewSubmissionPanel() {
           >
             <p className="font-medium">Story / Concept</p>
             <p className="mt-1 text-xs leading-relaxed text-muted">
-              Network submission. Admin curation → buyers & investors.
+              Bridge intake and curation. Buyer access and investor records remain separately authorized.
             </p>
           </button>
         ) : (
@@ -89,7 +89,7 @@ export function NewSubmissionPanel() {
         <div className="mt-6 border-t border-line pt-6">
           <h2 className="text-sm font-semibold">Story / Concept</h2>
           <p className="mt-1 text-xs text-muted">
-            Submit for admin curation. Not published to Loop automatically.
+            Submit to Bridge intake for curation. This does not create an investment offer or publish to Loop.
           </p>
           <div className="mt-4">
             <StoryConceptForm />
