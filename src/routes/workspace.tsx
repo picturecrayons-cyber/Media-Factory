@@ -1,9 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
-import { Link } from "@tanstack/react-router";
 import { hasPermission } from "@/lib/bridge/rbac";
 
 export const Route = createFileRoute("/workspace")({ component: Workspace });
