@@ -173,8 +173,15 @@ async function assignTitleAccess(userId: string, data: z.infer<typeof titleAssig
     limit 1
   `;
   if (!profiles[0]) throw new Error(`A verified ${accountType} account is required`);
-  const titles = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
-  if (!titles[0]) throw new Error("Canonical title not found");
+  const titles = await sql<{ id: string; submission_type: string | null }>`select id, submission_type from bridge_titles where id = ${data.titleId} limit 1`;
+  const title = titles[0];
+  if (!title) throw new Error("Canonical title not found");
+  if (accountType === "buyer" && title.submission_type === "story_concept") {
+    throw new Error("Buyer access is restricted to Finished Films; assign Stories / Concepts to Investor accounts");
+  }
+  if (accountType === "investor" && title.submission_type !== "story_concept") {
+    throw new Error("Investor title access is restricted to Stories / Concepts");
+  }
   if (accountType === "buyer") {
     if (data.action === "GRANT") {
       await sql`insert into bridge_buyer_title_access (title_id, buyer_user_id, granted_by, granted_at, expires_at, revoked_at)
