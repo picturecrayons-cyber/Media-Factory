@@ -28,9 +28,15 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
       sql`select id, title_id, destination, package_version, rights_grant_id, qc_case_id, legal_case_id, readiness_state, authorized_by, authorized_at, created_at, commercial_model, distributor_exclusivity, revenue_share_percent from bridge_destination_packages order by created_at desc limit 200`,
       sql`select id, bridge_title_id, loop_title_id, authorization_status, territories, languages, exploitation_models, window_start, window_end, approved_by, approved_at, revoked_at, updated_at from bridge_loop_publications order by updated_at desc limit 200`,
       sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs order by created_at desc limit 200`,
-      sql`select user_id, email, display_name, account_type, organization_name from bridge_profiles where email_verified = true and internal_role is null and account_type in ('buyer','investor') order by account_type, display_name limit 500`,
-      sql`select a.title_id, a.buyer_user_id as user_id, p.display_name, p.email, a.granted_at, a.expires_at, a.revoked_at from bridge_buyer_title_access a join bridge_profiles p on p.user_id=a.buyer_user_id order by a.granted_at desc limit 1000`,
-      sql`select a.title_id, a.investor_user_id as user_id, p.display_name, p.email, a.granted_at, a.expires_at, a.revoked_at from bridge_investor_title_access a join bridge_profiles p on p.user_id=a.investor_user_id order by a.granted_at desc limit 1000`,
+      actor.internalRole === "super_admin"
+        ? sql`select user_id, email, display_name, account_type, organization_name from bridge_profiles where email_verified = true and internal_role is null and account_type in ('buyer','investor') order by account_type, display_name limit 500`
+        : Promise.resolve([]),
+      actor.internalRole === "super_admin"
+        ? sql`select a.title_id, a.buyer_user_id as user_id, p.display_name, p.email, a.granted_at, a.expires_at, a.revoked_at from bridge_buyer_title_access a join bridge_profiles p on p.user_id=a.buyer_user_id order by a.granted_at desc limit 1000`
+        : Promise.resolve([]),
+      actor.internalRole === "super_admin"
+        ? sql`select a.title_id, a.investor_user_id as user_id, p.display_name, p.email, a.granted_at, a.expires_at, a.revoked_at from bridge_investor_title_access a join bridge_profiles p on p.user_id=a.investor_user_id order by a.granted_at desc limit 1000`
+        : Promise.resolve([]),
     ]);
     return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, audit, eligibleAccounts, buyerAccess, investorAccess }, (_, value) => typeof value === "bigint" ? value.toString() : value));
   });
