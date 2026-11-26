@@ -34,7 +34,8 @@ create table if not exists public.bridge_production_shoot_days (
   updated_by text not null references public.bridge_profiles(user_id) on delete restrict,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique(project_id, shoot_date)
+  unique(project_id, shoot_date),
+  unique(id, project_id)
 );
 create index if not exists bridge_production_shoot_days_project_date_idx
   on public.bridge_production_shoot_days(project_id, shoot_date);
@@ -48,6 +49,9 @@ create table if not exists public.bridge_production_title_links (
   created_at timestamptz not null default now(),
   unique(production_project_id, title_id, link_type)
 );
+create unique index if not exists bridge_production_title_links_one_project_per_output_uidx
+  on public.bridge_production_title_links(title_id)
+  where link_type = 'FINISHED_FILM_OUTPUT';
 create index if not exists bridge_production_title_links_title_idx
   on public.bridge_production_title_links(title_id);
 
@@ -58,8 +62,11 @@ alter table public.bridge_dit_ingest_sessions
 alter table public.bridge_dit_ingest_sessions
   add constraint bridge_dit_ingest_sessions_project_fk
     foreign key (production_project_id) references public.bridge_production_projects(id) on delete restrict,
-  add constraint bridge_dit_ingest_sessions_shoot_day_fk
-    foreign key (shoot_day_id) references public.bridge_production_shoot_days(id) on delete restrict;
+  add constraint bridge_dit_ingest_sessions_shoot_day_project_fk
+    foreign key (shoot_day_id, production_project_id)
+    references public.bridge_production_shoot_days(id, project_id) on delete restrict,
+  add constraint bridge_dit_ingest_sessions_project_day_pair_check
+    check ((production_project_id is null) = (shoot_day_id is null));
 create index if not exists bridge_dit_ingest_sessions_project_created_idx
   on public.bridge_dit_ingest_sessions(production_project_id, created_at desc);
 create index if not exists bridge_dit_ingest_sessions_shoot_day_idx

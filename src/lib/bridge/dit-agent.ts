@@ -38,8 +38,8 @@ const createProductionProjectInput = z.object({
   name: z.string().trim().min(2).max(180),
   projectCode: z.string().trim().max(60).optional(),
   productionType: z.enum(["FEATURE", "SHORT", "SERIES", "DOCUMENTARY", "OTHER"]).default("FEATURE"),
-  plannedStartDate: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/).optional(),
-  plannedEndDate: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/).optional(),
+  plannedStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  plannedEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   primaryLocation: z.string().trim().max(240).optional(),
 });
 const linkOutputInput = z.object({
@@ -369,7 +369,7 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
         ) values (
           ${project.id}::uuid, ${data.shootDate}, ${actor.userId}, ${actor.userId}
         )
-        on conflict (project_id, shoot_date) do update set updated_at = now()
+        on conflict (project_id, shoot_date) do update set updated_by = excluded.updated_by, updated_at = now()
         returning id
       `;
       const shootDay = shootDays[0];

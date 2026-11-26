@@ -24,6 +24,7 @@ const ADDITIVE_MIGRATIONS = new Set([
   "20261127090000_bridge_membership_control_plane.sql",
   "20261127091500_bridge_membership_immutable_records.sql",
   "20261126214411_bridge_super_admin_buyer_investor_title_assignment_20261127.sql",
+  "20261127093000_bridge_production_projects_dit_lifecycle.sql",
 ]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
