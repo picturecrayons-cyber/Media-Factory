@@ -11,8 +11,6 @@ The following six versions are present in the live Production `supabase_migratio
 
 | Version | Recorded name | Source status |
 |---|---|---|
-| 20261116114408 | secure_public_loop_catalog_production | SQL source/hash not yet reconciled |
-| 20261119203855 | bridge_story_concept_author_rights_declaration_20261120 | SQL source/hash not yet reconciled |
 | 20261121042907 | secure_production_asset_owner_helper | SQL source/hash not yet reconciled |
 | 20261122082934 | bridge_creator_document_vault_20261122 | SQL source/hash not yet reconciled |
 | 20261122083819 | bridge_title_owner_submissions_20261122 | SQL source/hash not yet reconciled |
