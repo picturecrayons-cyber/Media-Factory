@@ -5,7 +5,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
-import { assertPermission, canReadTitle } from "./rbac";
+import { assertPermission } from "./rbac";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 
@@ -32,11 +32,9 @@ export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await actorFor(context.userId);
+    const internal = actor.internalRole === "admin" || actor.internalRole === "super_admin";
+    if (!internal) throw new Error("Deliveries and Vendor Jobs are restricted to Bridge operations staff");
     const sql = await getSql();
-    const internal = Boolean(actor.internalRole && (actor.internalRole === "admin" || actor.internalRole === "super_admin"));
-    if (!internal && !actor.organizationId && !["independent_creator", "studio"].includes(actor.accountType)) {
-      throw new Error("Delivery workspace access required");
-    }
     const rows = internal
       ? await sql<{
           id: string; title_id: string; job_type: string; status: string; assigned_vendor: string | null;
@@ -99,13 +97,10 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Title not found");
-    const canManage = Boolean(actor.internalRole && hasDeliveryPermission(actor));
-    if (!canManage && (!canReadTitle(actor, title) || actor.internalRole)) {
-      throw new Error("You can request delivery services only for titles you are authorized to access");
+    if (!actor.internalRole || !["admin", "super_admin"].includes(actor.internalRole)) {
+      throw new Error("Only authorized Bridge operations staff can create vendor jobs");
     }
-    if (!canManage && !["independent_creator", "studio"].includes(actor.accountType)) {
-      throw new Error("Delivery requests are not enabled for this account type");
-    }
+    assertPermission(actor, "title.deliver");
     const id = randomUUID();
     const sql = await getSql();
     await sql`
