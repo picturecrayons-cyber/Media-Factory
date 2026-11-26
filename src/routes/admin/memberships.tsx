@@ -25,6 +25,15 @@ const ACCOUNT_LABELS: Record<string, string> = {
   investor: "Investor",
 };
 
+function moneyLabel(paise: string | number | null) {
+  if (paise === null || paise === undefined) return "Not configured";
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(paise) / 100);
+}
+
+function percentageLabel(basisPoints: number | null) {
+  return basisPoints === null ? "Not configured" : `${(basisPoints / 100).toFixed(2)}%`;
+}
+
 function dateLabel(value: string | null) {
   if (!value) return "—";
   const date = new Date(value);
@@ -264,6 +273,37 @@ function MembershipControlBody() {
       </section>
 
       <section className="rounded-2xl border border-line bg-surface p-5">
+        <h3 className="font-display text-xl font-semibold">Versioned plan register</h3>
+        <p className="mt-1 text-sm text-muted">Historical versions are retained; commercial terms are immutable after creation.</p>
+        {plans.length === 0 ? <p className="py-5 text-sm text-muted">No plan versions configured.</p> : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead><tr className="border-b border-line text-xs text-muted">
+                <th className="px-3 py-3 font-medium">Plan</th><th className="px-3 py-3 font-medium">Eligible accounts</th>
+                <th className="px-3 py-3 font-medium">Trial</th><th className="px-3 py-3 font-medium">Cadence</th>
+                <th className="px-3 py-3 font-medium">Price</th><th className="px-3 py-3 font-medium">GST</th>
+                <th className="px-3 py-3 font-medium">Grace</th><th className="px-3 py-3 font-medium">Status</th>
+                <th className="px-3 py-3 font-medium">Billing</th>
+              </tr></thead>
+              <tbody>{plans.map((plan: any) => (
+                <tr key={plan.id} className="border-b border-line last:border-0">
+                  <td className="px-3 py-3 font-medium">{plan.display_name} · v{plan.version}</td>
+                  <td className="px-3 py-3">{plan.account_types.map((type: string) => ACCOUNT_LABELS[type] || type).join(", ")}</td>
+                  <td className="px-3 py-3">{plan.trial_days} days</td>
+                  <td className="px-3 py-3 capitalize">{plan.billing_interval === "unconfigured" ? "Not configured" : plan.billing_interval}</td>
+                  <td className="px-3 py-3">{moneyLabel(plan.price_amount_paise)}</td>
+                  <td className="px-3 py-3">{percentageLabel(plan.gst_basis_points)}</td>
+                  <td className="px-3 py-3">{plan.grace_period_days === null ? "Not configured" : `${plan.grace_period_days} days`}</td>
+                  <td className="px-3 py-3">{plan.plan_status}</td>
+                  <td className="px-3 py-3">{plan.billing_enabled ? "Enabled" : "Disabled"}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-line bg-surface p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="font-display text-xl font-semibold">Membership register</h3>
@@ -306,6 +346,34 @@ function MembershipControlBody() {
         <label className="mt-4 block max-w-xl text-sm font-medium">Suspension reason (required)
           <input value={suspensionReason} onChange={(e) => setSuspensionReason(e.target.value)} maxLength={500} className="mt-1.5 h-10 w-full rounded-lg border border-line bg-elevated px-3" placeholder="Enter reason before selecting Suspend" />
         </label>
+      </section>
+
+      <section className="rounded-2xl border border-line bg-surface p-5">
+        <h3 className="font-display text-xl font-semibold">Membership payment ledger</h3>
+        <p className="mt-1 text-sm text-muted">Separate from Loop payments. Collection and payment webhooks are not enabled.</p>
+        {data.payments.length === 0 ? (
+          <p className="py-6 text-sm text-muted">No Bridge membership payments recorded. Billing is disabled.</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead><tr className="border-b border-line text-xs text-muted">
+                <th className="px-3 py-3 font-medium">Date</th><th className="px-3 py-3 font-medium">Account</th>
+                <th className="px-3 py-3 font-medium">Provider</th><th className="px-3 py-3 font-medium">Payment reference</th>
+                <th className="px-3 py-3 font-medium">Amount</th><th className="px-3 py-3 font-medium">Status</th>
+              </tr></thead>
+              <tbody>{data.payments.map((payment: any) => (
+                <tr key={payment.id} className="border-b border-line last:border-0">
+                  <td className="px-3 py-3">{dateLabel(payment.created_at)}</td>
+                  <td className="px-3 py-3">{payment.email}</td>
+                  <td className="px-3 py-3 uppercase">{payment.provider}</td>
+                  <td className="px-3 py-3">{payment.provider_payment_id || payment.receipt_reference || "—"}</td>
+                  <td className="px-3 py-3">{moneyLabel(payment.amount_paise)}</td>
+                  <td className="px-3 py-3">{payment.status}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl border border-line bg-surface p-5">
