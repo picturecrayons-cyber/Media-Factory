@@ -171,7 +171,8 @@ const license = {
 test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
   const f = await fixture();
   try {
-    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+    const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
+    const saved = (await f.sql.transaction((tx) => f.save(tx, admin, license))) as {
       grantId: string;
     };
     await f.sql.transaction((tx) =>
@@ -204,6 +205,21 @@ test("real SQL services persist QC, independently approved license, lifecycle an
     await f.db.close();
   }
 });
+test("Studio owner cannot create commercial license drafts", async () => {
+  const f = await fixture();
+  try {
+    const studio = { ...owner, accountType: "studio" as const };
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, studio, license)),
+      /Forbidden/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 0);
+    assert.equal((await f.sql.query("select * from bridge_audit_logs")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("unauthorized review and unverified current assets cannot clear QC", async () => {
   const f = await fixture();
   try {

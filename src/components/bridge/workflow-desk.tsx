@@ -37,13 +37,22 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const publication = useQuery({
     queryKey: ["loop-pub", title.id],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: title.id } }),
-    enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
+    enabled: Boolean(actor.internalRole),
   });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
+  // Studio and creator accounts only prepare and submit their own titles.
+  // Commercial licensing, rights review and distribution are internal workstations.
+  const visibleStages = stages.filter((candidate) => {
+    if (candidate === "Prepare") return true;
+    if (candidate === "Business") return Boolean(actor.internalRole) && (hasPermission(actor, "title.license") || hasPermission(actor, "title.rights_review"));
+    if (candidate === "Distribution") return Boolean(actor.internalRole) && (hasPermission(actor, "loop.publish") || hasPermission(actor, "loop.revoke") || hasPermission(actor, "title.deliver"));
+    return Boolean(actor.internalRole) && hasPermission(actor, "finance.read");
+  });
+  const activeStage = visibleStages.includes(stage) ? stage : "Prepare";
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
     queryFn: () => getTitleRevenue({ data: { titleId: title.id } }),
-    enabled: stage === "Revenue" && canFinance,
+    enabled: activeStage === "Revenue" && canFinance,
   });
   const action = useMutation({
     mutationFn: async (run: () => Promise<unknown>) => run(),
@@ -129,12 +138,12 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl">Title operations</h2>
       <nav className="flex flex-wrap gap-2" aria-label="Operational workflow">
-        {stages.map((s) => (
+        {visibleStages.map((s) => (
           <button
             type="button"
             key={s}
-            aria-pressed={stage === s}
-            className={`rounded-full border border-line px-4 py-2 text-sm ${stage === s ? "bg-fg text-bg" : ""}`}
+            aria-pressed={activeStage === s}
+            className={`rounded-full border border-line px-4 py-2 text-sm ${activeStage === s ? "bg-fg text-bg" : ""}`}
             onClick={() => setStage(s)}
           >
             {s}
@@ -154,7 +163,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         </p>
       ) : (
         <>
-          {stage === "Prepare" ? (
+          {activeStage === "Prepare" ? (
             <div className="space-y-3">
               <p role="status" aria-live="polite">
                 {title.status === "QC_REVIEW" && !hasPermission(actor, "title.qc_review")
@@ -211,7 +220,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               ))}
             </div>
           ) : null}
-          {stage === "Business" ? (
+          {activeStage === "Business" ? (
             <div className="space-y-4">
               <details className="rounded-xl border border-line p-3">
                 <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
@@ -411,7 +420,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               {!grants.length ? <p>No license draft recorded.</p> : null}
             </div>
           ) : null}
-          {stage === "Distribution" ? (
+          {activeStage === "Distribution" ? (
             <div className="space-y-3">
               {publication.isError ? (
                 <p role="alert">Publication unavailable: {publication.error.message}</p>
@@ -472,7 +481,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               ) : null}
             </div>
           ) : null}
-          {stage === "Revenue" ? (
+          {activeStage === "Revenue" ? (
             <div className="space-y-3">
               {!canFinance ? (
                 <p>Revenue access requires title ownership or finance permission.</p>
