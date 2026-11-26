@@ -200,14 +200,12 @@ export function StoryConceptForm() {
       </label>
 
       <div className="rounded-xl border border-line bg-elevated p-4 text-xs leading-relaxed text-muted sm:col-span-2">
-        Submitting places this concept in the admin curation queue. It does not publish to
-        Loop or the public buyer catalog. Payment gate remains locked until the fee is
-        certified.
+        Submitting creates a canonical Story / Concept record for admin curation. No fee is collected at submission. Buyer / investor introduction remains disabled until the commercial terms and any applicable fee are approved.
       </div>
 
       <div className="sm:col-span-2">
         <Button type="submit" disabled={mut.isPending} className="w-full rounded-full sm:w-auto sm:px-8">
-          {mut.isPending ? "Submitting…" : "Submit to Network"}
+          {mut.isPending ? "Submitting…" : "Submit for Curation"}
         </Button>
       </div>
     </form>
