@@ -218,12 +218,20 @@ export const getStoryConceptForTitle = createServerFn({ method: "GET" })
     });
     const buyerView = actor.accountType === "buyer" && !actor.internalRole;
     const investorView = actor.accountType === "investor" && !actor.internalRole;
-    if (buyerView || investorView) {
+    if (buyerView) {
       const access = await sql<{ allowed: boolean }>`
         select exists (
-          select 1 from ${buyerView ? sql`bridge_buyer_title_access` : sql`bridge_investor_title_access`}
-          where title_id=${data.titleId}
-            and ${buyerView ? sql`buyer_user_id` : sql`investor_user_id`}=${actor.userId}
+          select 1 from bridge_buyer_title_access
+          where title_id=${data.titleId} and buyer_user_id=${actor.userId}
+            and revoked_at is null and (expires_at is null or expires_at > now())
+        ) as allowed
+      `;
+      allowed = access[0]?.allowed === true;
+    } else if (investorView) {
+      const access = await sql<{ allowed: boolean }>`
+        select exists (
+          select 1 from bridge_investor_title_access
+          where title_id=${data.titleId} and investor_user_id=${actor.userId}
             and revoked_at is null and (expires_at is null or expires_at > now())
         ) as allowed
       `;
