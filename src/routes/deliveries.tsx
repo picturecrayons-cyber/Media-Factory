@@ -30,8 +30,7 @@ function Deliveries() {
     <RequireBridge>
       {(actor) => (
         <BridgeShell actor={actor} title="Deliveries">
-          <VendorJobs actor={actor} />
-          <DeliveryList />
+          {actor.internalRole || actor.accountType !== "studio" ? <><VendorJobs actor={actor} /><DeliveryList /></> : <section className="rounded-2xl border border-line bg-surface p-5"><h2 className="font-display text-xl font-semibold">Delivery operations unavailable</h2><p className="mt-2 text-sm text-muted">Vendor coordination and delivery administration are restricted to authorized Bridge operations roles.</p></section>}
         </BridgeShell>
       )}
     </RequireBridge>
