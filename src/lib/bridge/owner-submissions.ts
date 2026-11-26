@@ -24,6 +24,9 @@ export const saveOwnerSubmission = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     if (actor.internalRole || !["studio", "independent_creator"].includes(actor.accountType)) throw new Error("Owner account required");
     if (!canMutateTitle(actor, { ownerUserId: actor.userId, ownerAccountType: actor.accountType, ownerOrganizationId: actor.organizationId }, "title.update_own", "title.license")) throw new Error("Forbidden");
+    const conceptGenres = Array.isArray(data.details.genre) ? data.details.genre.filter((value): value is string => typeof value === "string") : null;
+    const conceptPlatforms = Array.isArray(data.details.targetPlatforms) ? data.details.targetPlatforms.filter((value): value is string => typeof value === "string") : null;
+    const canEditOrganization = actor.accountType === "studio" && Boolean(actor.organizationId);
     const sql = await getSql();
     return sql.transaction(async (tx) => {
       const titleRows = await tx<{ id: string; owner_user_id: string; owner_account_type: string; owner_organization_id: string | null; submission_type: string; status: string }>`
@@ -50,7 +53,7 @@ export const saveOwnerSubmission = createServerFn({ method: "POST" })
       }
       await tx`update bridge_titles set name = case when ${data.details.name !== undefined || data.details.titleName !== undefined} then coalesce(nullif(${String(data.details.name ?? data.details.titleName ?? "")}, ''), name) else name end, synopsis = case when ${data.details.synopsis !== undefined} then coalesce(nullif(${String(data.details.synopsis ?? "")}, ''), synopsis) else synopsis end, language = case when ${data.details.language !== undefined} then coalesce(nullif(${String(data.details.language ?? "")}, ''), language) else language end, updated_at = now() where id = ${data.titleId}`;
       if (data.submissionKind === "story_concept") {
-        await tx`update bridge_story_concept_submissions set logline = coalesce(nullif(${String(data.details.logline ?? "")}, ''), logline), synopsis = coalesce(nullif(${String(data.details.synopsis ?? "")}, ''), synopsis), treatment_url = case when ${data.details.treatmentUrl !== undefined} then nullif(${String(data.details.treatmentUrl ?? "")}, '') else treatment_url end, screenplay_url = case when ${data.details.screenplayUrl !== undefined} then nullif(${String(data.details.screenplayUrl ?? "")}, '') else screenplay_url end, genre = case when ${Array.isArray(data.details.genre)} then ${JSON.stringify(data.details.genre)}::jsonb else to_jsonb(genre) end, estimated_budget_range = case when ${data.details.estimatedBudgetRange !== undefined} then nullif(${String(data.details.estimatedBudgetRange ?? "")}, '') else estimated_budget_range end, target_platforms = case when ${Array.isArray(data.details.targetPlatforms)} then ${JSON.stringify(data.details.targetPlatforms)}::jsonb else to_jsonb(target_platforms) end, owner_submission_status = ${nextStatus}, updated_at = now() where title_id = ${data.titleId}`;
+            genre = coalesce(${conceptGenres}, genre),
       }
       await writeAudit({ actorUserId: actor.userId, action: data.submit ? "owner_submission.submitted" : "owner_submission.draft_saved", entityType: "bridge_title_owner_submission", entityId: data.titleId, metadata: { submissionKind: data.submissionKind, status: nextStatus } }, tx);
       return { titleId: data.titleId, submissionStatus: nextStatus };
@@ -69,7 +72,7 @@ export const listMyEditableOwnerSubmissions = createServerFn({ method: "GET" })
       from bridge_title_owner_submissions s join bridge_titles t on t.id = s.title_id
       where s.submission_status in ('DRAFT', 'NEEDS_CORRECTION')
         and t.submission_type in ('finished_film', 'story_concept')
-        and (t.owner_user_id = ${actor.userId} or (actor.accountType = "studio" and t.owner_account_type = "studio" and t.owner_organization_id = ${actor.organizationId ?? null} and exists (select 1 from bridge_organization_memberships m where m.organization_id = t.owner_organization_id and m.user_id = ${actor.userId} and m.status = "active")))
+        and (t.owner_user_id = ${actor.userId} or (${canEditOrganization} and t.owner_account_type = 'studio' and t.owner_organization_id = ${actor.organizationId ?? null} and exists (select 1 from bridge_organization_memberships m where m.organization_id = t.owner_organization_id and m.user_id = ${actor.userId} and m.status = 'active')))
       order by s.updated_at desc limit 100
     `;
     return { submissions: rows.map(row => ({ ...row, details: row.details ?? {} })) };
