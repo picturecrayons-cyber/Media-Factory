@@ -74,13 +74,20 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     } else if (data.decision === "APPROVE") {
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
-      const [validGrant, legalApproval, qcApproval] = await Promise.all([
-        sql`select id from bridge_rights_grants where title_id = ${title.id} and status = 'VALID' limit 1`,
-        sql`select id from bridge_legal_cases where title_id = ${title.id} and status = 'APPROVED' and reviewed_by is not null and reviewed_at is not null limit 1`,
+      const validGrant = await sql<{ id: string }>`select id from bridge_rights_grants where title_id = ${title.id} and status = 'VALID' order by created_at desc limit 1`;
+      if (!validGrant[0]) throw new Error("Rights approval blocked: no VALID rights grant is recorded");
+      const [legalApproval, qcApproval] = await Promise.all([
+        sql`select id from bridge_legal_cases
+          where title_id = ${title.id} and status = 'APPROVED'
+            and reviewed_by is not null and reviewed_at is not null
+            and exists (
+              select 1 from jsonb_array_elements(evidence) as item
+              where item->>'grantId' = ${validGrant[0].id}::text
+            )
+          order by created_at desc limit 1`,
         sql`select id from bridge_qc_cases where title_id = ${title.id} and status = 'PASSED' and asset_version_id is not null and reviewed_by is not null and reviewed_at is not null limit 1`,
       ]);
-      if (!validGrant[0]) throw new Error("Rights approval blocked: no VALID rights grant is recorded");
-      if (!legalApproval[0]) throw new Error("Rights approval blocked: independent Legal approval is missing");
+      if (!legalApproval[0]) throw new Error("Rights approval blocked: independent Legal approval for the active rights grant is missing");
       if (!qcApproval[0]) throw new Error("Rights approval blocked: current asset-version QC approval is missing");
       next = "LICENSING_READY"; action = "rights.approve";
     } else {
