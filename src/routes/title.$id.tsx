@@ -320,7 +320,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <Metric label="Director" value={title.credits?.filter((c) => c.role === "Director").map((c) => c.name).join(", ") || "—"} />
             <Metric label="Producer" value={title.credits?.filter((c) => c.role === "Producer").map((c) => c.name).join(", ") || "—"} />
           </div>
-          {!buyerView ? (
+          {!limitedView ? (
             <>
               <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
               {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
@@ -333,7 +333,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             </>
           ) : null}
         </section>
-      ) : activeTab === "Files" && !buyerView ? (
+      ) : activeTab === "Files" && !limitedView ? (
         <FilesPanel
           canUpload={
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
@@ -343,7 +343,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
         />
-      ) : activeTab === "Production" && !buyerView ? (
+      ) : activeTab === "Production" && !limitedView ? (
         <ProductionAssetsPanel
           titleId={title.id}
           masterLanguage={title.masterLanguage ?? null}
