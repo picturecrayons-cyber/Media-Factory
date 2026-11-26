@@ -42,9 +42,6 @@ create table if not exists public.bridge_production_shoots (
   constraint bridge_production_shoots_handover_check check (media_handover_status in ('NOT_STARTED','IN_PROGRESS','PARTIAL','COMPLETE','QC_PENDING'))
 );
 
-create unique index if not exists bridge_production_shoots_production_no_owner_uidx
-  on public.bridge_production_shoots (production_no, title_id);
-
 create index if not exists bridge_production_shoots_stage_idx
   on public.bridge_production_shoots (development_stage, updated_at desc);
 
