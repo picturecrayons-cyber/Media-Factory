@@ -8,6 +8,8 @@ type PreviewAsset = {
   contentType: string | null;
   byteSize: number | null;
   verified: boolean;
+  key?: string | null;
+  createdAt?: string;
 };
 
 function isVideo(asset: PreviewAsset) {
@@ -66,7 +68,7 @@ export function AssetPosterSlot({ assets }: { assets: PreviewAsset[] }) {
   );
 }
 
-export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
+export function AssetPreviewGallery({ assets, currentMasterKey, currentPosterKey }: { assets: PreviewAsset[]; currentMasterKey?: string | null; currentPosterKey?: string | null }) {
   const [selected, setSelected] = useState<PreviewAsset | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -98,6 +100,16 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
   }
 
   const mediaAssets = assets.filter((asset) => asset.verified && (isImage(asset) || isVideo(asset)));
+  const currentScreenerId = mediaAssets.find((asset) => asset.kind === "screener")?.id;
+  const pointerMatches = (pointer: string | null | undefined, asset: PreviewAsset) =>
+    Boolean(pointer && asset.key && (pointer === asset.key || pointer === asset.key + ".verified/" + asset.id));
+  const versionLabel = (asset: PreviewAsset) => {
+    if (asset.kind === "master") return pointerMatches(currentMasterKey, asset) ? "Current verified master" : "Previous master version";
+    if (asset.kind === "screener") return asset.id === currentScreenerId ? "Latest verified screener" : "Previous screener version";
+    if (["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(asset.kind))
+      return pointerMatches(currentPosterKey, asset) ? "Current artwork" : "Verified artwork";
+    return "Verified asset";
+  };
 
   if (!mediaAssets.length) {
     return (
@@ -137,6 +149,7 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
                 </div>
                 <div className="p-4">
                   <p className="text-sm font-semibold capitalize">{asset.kind.replaceAll("_", " ")}</p>
+                  <p className="mt-1 text-xs font-medium text-accent">{versionLabel(asset)}</p>
                   <p className="mt-1 text-xs text-muted">{prettySize(asset.byteSize)} · Storage verified</p>
                 </div>
               </button>
