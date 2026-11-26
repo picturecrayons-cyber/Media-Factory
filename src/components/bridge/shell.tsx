@@ -17,6 +17,7 @@ function navigationFor(actor: BridgeActor): NavItem[] {
       items.push(
         { to: "/admin", label: "Admin" },
         { to: "/admin-cms", label: "Website CMS" },
+        { to: "/deliveries", label: "Deliveries & Vendor Jobs" },
       );
     }
 
@@ -33,12 +34,10 @@ function navigationFor(actor: BridgeActor): NavItem[] {
     independent_creator: [
       { to: "/creator", label: "Creator Home" },
       { to: "/workspace", label: "My Titles" },
-      { to: "/deliveries", label: "Updates & Deliveries" },
     ],
     studio: [
       { to: "/studio", label: "Studio Home" },
       { to: "/workspace", label: "Titles" },
-      { to: "/deliveries", label: "Deliveries" },
     ],
     buyer: [{ to: "/buyer", label: "Buyer Desk" }],
     investor: [{ to: "/investor", label: "Portfolio" }],
