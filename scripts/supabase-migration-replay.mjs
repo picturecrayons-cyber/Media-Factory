@@ -50,16 +50,11 @@ if (
   );
 }
 
-const names = (await readdir(MIGRATIONS_DIR))
+const migrationFiles = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
-  throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
-  );
-}
-if (new Set(names).size !== names.length) {
+if (new Set(migrationFiles).size !== migrationFiles.length) {
   throw new Error("Duplicate migration filenames detected");
 }
 
@@ -89,6 +84,28 @@ for (const line of manifest.split(String.fromCharCode(10))) {
 if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   throw new Error(
     `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
+  );
+}
+
+// Keep the canonical Production history separate from the not-yet-released
+// migration. The reconciliation manifest is the source of truth for the
+// 70 historical Production-ledger files; the one explicit candidate is
+// replayed only after that history has passed, never counted as Production history.
+const CANDIDATE_MIGRATION =
+  "20261126071702_bridge_complete_internal_workflows_20261126.sql";
+const names = migrationFiles.filter((name) => manifestRows.has(name));
+const unmanifestedFiles = migrationFiles.filter((name) => !manifestRows.has(name));
+if (names.length !== EXPECTED_MIGRATIONS) {
+  throw new Error(
+    `Expected ${EXPECTED_MIGRATIONS} manifest-backed Production migrations; found ${names.length}`,
+  );
+}
+if (
+  unmanifestedFiles.length !== 1 ||
+  unmanifestedFiles[0] !== CANDIDATE_MIGRATION
+) {
+  throw new Error(
+    "Unexpected unmanifested migration files: " + unmanifestedFiles.join(", "),
   );
 }
 
@@ -447,6 +464,66 @@ try {
     console.log(`[migration-replay] applied ${name}`);
   }
 
+  // Apply the one proposed release migration only after all 70 canonical
+  // Production-ledger files have replayed and passed their source-integrity checks.
+  // This validates forward compatibility without rewriting or inflating history.
+  const candidateSql = await readFile(
+    join(MIGRATIONS_DIR, CANDIDATE_MIGRATION),
+    "utf8",
+  );
+  await client.query("BEGIN");
+  try {
+    await client.query(candidateSql);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw new Error(
+      `Candidate migration failed after canonical Production replay: ${CANDIDATE_MIGRATION}: ${error?.message || error}`,
+    );
+  }
+
+  const candidateState = await client.query(`
+    select
+      exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'bridge_titles'
+          and column_name = 'record_classification'
+      ) as classification_column,
+      exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'bridge_legal_cases'
+          and column_name = 'rights_grant_id'
+      ) as legal_grant_link,
+      to_regclass('public.bridge_internal_tasks') is not null as task_table,
+      coalesce((
+        select relrowsecurity from pg_class
+        where oid = to_regclass('public.bridge_internal_tasks')
+      ), false) as task_rls,
+      has_table_privilege('anon', 'public.bridge_internal_tasks', 'SELECT') as anon_task_read,
+      has_table_privilege('authenticated', 'public.bridge_internal_tasks', 'SELECT') as authenticated_task_read,
+      has_table_privilege('anon', 'public.bridge_legal_cases', 'SELECT') as anon_legal_read,
+      has_table_privilege('authenticated', 'public.bridge_legal_cases', 'SELECT') as authenticated_legal_read
+  `);
+  const candidate = candidateState.rows[0];
+  if (
+    !candidate.classification_column ||
+    !candidate.legal_grant_link ||
+    !candidate.task_table ||
+    !candidate.task_rls ||
+    candidate.anon_task_read ||
+    candidate.authenticated_task_read ||
+    candidate.anon_legal_read ||
+    candidate.authenticated_legal_read
+  ) {
+    throw new Error(
+      "Candidate release migration schema/security verification failed: " +
+        JSON.stringify(candidate),
+    );
+  }
+  console.log(
+    `[migration-replay] candidate migration PASS: ${CANDIDATE_MIGRATION}; canonical 70-file Production history remains unchanged`,
+  );
+
   // Production's current Bridge Data API security baseline is not fully
   // represented by the 69-row migration ledger. Recreate it locally after
   // replay from read-only Production catalog evidence only.
@@ -732,7 +809,7 @@ try {
   }
 
   console.log(
-    `[migration-replay] PASS: all ${names.length} Production-ledger migrations replayed in a fresh local Supabase stack.`,
+    `[migration-replay] PASS: all ${names.length} canonical Production-ledger migrations plus the separately validated release candidate replayed in a fresh local Supabase stack.`,
   );
 } finally {
   client.release();
