@@ -87,7 +87,7 @@ function TitlePage() {
   return (
     <RequireBridge>
       {(actor) => (
-        <BridgeShell actor={actor} title={actor.accountType === "buyer" && !actor.internalRole ? "Buyer listing" : "Title Workspace"}>
+        <BridgeShell actor={actor} title={!actor.internalRole && ["buyer", "investor"].includes(actor.accountType) ? "Assigned title" : "Title Workspace"}>
           <TitleBody id={id} actor={actor} />
         </BridgeShell>
       )}
@@ -155,6 +155,8 @@ function StoryConceptWorkspace({ titleId, titleName }: { titleId: string; titleN
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [chosenTab, setChosenTab] = useState<WorkspaceTab | null>(null);
   const buyerView = actor.accountType === "buyer" && !actor.internalRole;
+  const investorView = actor.accountType === "investor" && !actor.internalRole;
+  const limitedView = buyerView || investorView;
 
   const titleQ = useQuery({
     // The same title has a redacted Buyer DTO and a full internal DTO.
@@ -164,32 +166,32 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const assetsQ = useQuery({
     queryKey: ["bridge-assets", id, actor.userId],
     queryFn: () => listTitleAssets({ data: { titleId: id } }),
-    enabled: !buyerView && Boolean(titleQ.data?.title) && titleQ.data?.title?.submissionType !== "story_concept",
+    enabled: !limitedView && Boolean(titleQ.data?.title) && titleQ.data?.title?.submissionType !== "story_concept",
   });
   const productionAssetsQ = useQuery({
     queryKey: ["bridge-production-assets", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => listProductionAssets({ data: { titleId: id } }),
-    enabled: !buyerView && Boolean(titleQ.data?.title) && titleQ.data?.title?.submissionType !== "story_concept",
+    enabled: !limitedView && Boolean(titleQ.data?.title) && titleQ.data?.title?.submissionType !== "story_concept",
   });
   const pubQ = useQuery({
     queryKey: ["loop-pub", id, actor.userId],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }),
-    enabled: !buyerView && Boolean(titleQ.data?.title) && titleQ.data?.title?.submissionType !== "story_concept",
+    enabled: !limitedView && Boolean(titleQ.data?.title) && titleQ.data?.title?.submissionType !== "story_concept",
   });
 
   const reviewQ = useQuery({
     queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
-    enabled: !buyerView && Boolean(titleQ.data?.title) && titleQ.data?.title?.submissionType !== "story_concept",
+    enabled: !limitedView && Boolean(titleQ.data?.title) && titleQ.data?.title?.submissionType !== "story_concept",
   });
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
   const productionAssets = productionAssetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
-  const activeTab: WorkspaceTab = buyerView
+  const activeTab: WorkspaceTab = limitedView
     ? "Overview"
     : chosenTab ?? (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Files" : "Overview");
-  const visibleTabs = buyerView ? (["Overview"] as const) : WORKSPACE_TABS;
+  const visibleTabs = limitedView ? (["Overview"] as const) : WORKSPACE_TABS;
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
@@ -219,7 +221,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <WorkflowDesk title={title} actor={actor} />
+      {!limitedView ? <WorkflowDesk title={title} actor={actor} /> : null}
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
@@ -266,7 +268,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 </span>
               ) : null}
             </div>
-            {!buyerView ? (
+            {!limitedView ? (
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
