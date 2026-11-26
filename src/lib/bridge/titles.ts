@@ -349,24 +349,36 @@ export const listTitles = createServerFn({ method: "GET" })
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
           where t.merged_into_title_id is null
-            and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-            and public.bridge_title_buyer_visibility(t.id)
             and exists (
               select 1 from bridge_buyer_title_access ba
               where ba.title_id=t.id and ba.buyer_user_id=${actor.userId}
                 and ba.revoked_at is null and (ba.expires_at is null or ba.expires_at > now())
+            )
+            and (
+              t.submission_type = 'story_concept'
+              or (
+                t.submission_type is distinct from 'story_concept'
+                and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+                and public.bridge_title_buyer_visibility(t.id)
+              )
             )
           order by t.updated_at desc limit 200
         `;
       } else {
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
-          where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-            and public.bridge_title_buyer_visibility(t.id)
-            and exists (
+          where exists (
               select 1 from bridge_buyer_title_access ba
               where ba.title_id=t.id and ba.buyer_user_id=${actor.userId}
                 and ba.revoked_at is null and (ba.expires_at is null or ba.expires_at > now())
+            )
+            and (
+              t.submission_type = 'story_concept'
+              or (
+                t.submission_type is distinct from 'story_concept'
+                and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+                and public.bridge_title_buyer_visibility(t.id)
+              )
             )
           order by t.updated_at desc limit 200
         `;
