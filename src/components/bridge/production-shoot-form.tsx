@@ -21,6 +21,9 @@ export function ProductionShootForm() {
   const [primaryLocation, setPrimaryLocation] = useState("");
   const [producerName, setProducerName] = useState("");
   const [directorName, setDirectorName] = useState("");
+  const [crewText, setCrewText] = useState("");
+  const [shootProgress, setShootProgress] = useState("NOT_STARTED");
+  const [mediaHandoverStatus, setMediaHandoverStatus] = useState("NOT_STARTED");
   const [productionNotes, setProductionNotes] = useState("");
 
   const mutation = useMutation({
@@ -31,6 +34,9 @@ export function ProductionShootForm() {
       plannedStartDate: plannedStartDate || undefined,
       plannedEndDate: plannedEndDate || undefined,
       shootDays: shootDays ? Number(shootDays) : undefined,
+      crew: crewText.split("\n").map(line => line.trim()).filter(Boolean).map(line => { const [role, ...name] = line.split(":"); return { role: role.trim(), name: name.join(":").trim() }; }),
+      shootProgress: shootProgress as "NOT_STARTED" | "IN_PROGRESS" | "WRAPPED" | "ON_HOLD",
+      mediaHandoverStatus: mediaHandoverStatus as "NOT_STARTED" | "IN_PROGRESS" | "PARTIAL" | "COMPLETE" | "QC_PENDING",
       primaryLocation: primaryLocation || undefined,
       producerName: producerName || undefined,
       directorName: directorName || undefined,
@@ -50,6 +56,8 @@ export function ProductionShootForm() {
       toast("Planned end date must not be before start date");
       return;
     }
+    const malformedCrewLine = crewText.split("\n").find(line => line.trim() && (!line.includes(":") || !line.split(":").slice(1).join(":").trim()));
+    if (malformedCrewLine) { toast("Crew entries must use Role: Name format"); return; }
     mutation.mutate();
   }
 
@@ -69,6 +77,9 @@ export function ProductionShootForm() {
       <label className={labelClass}>Primary location<input maxLength={240} value={primaryLocation} onChange={e => setPrimaryLocation(e.target.value)} className={inputClass} /></label>
       <label className={labelClass}>Producer<input maxLength={160} value={producerName} onChange={e => setProducerName(e.target.value)} className={inputClass} /></label>
       <label className={labelClass}>Director<input maxLength={160} value={directorName} onChange={e => setDirectorName(e.target.value)} className={inputClass} /></label>
+      <label className={`${labelClass} sm:col-span-2`}>Crew (one per line: Role: Name)<textarea rows={4} maxLength={8000} value={crewText} onChange={e => setCrewText(e.target.value)} className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2" placeholder={"Producer: Name\nCinematographer: Name\nProduction Manager: Name"} /></label>
+      <label className={labelClass}>Shoot progress<select value={shootProgress} onChange={e => setShootProgress(e.target.value)} className={inputClass}>{["NOT_STARTED","IN_PROGRESS","WRAPPED","ON_HOLD"].map(v => <option key={v} value={v}>{v.replaceAll("_"," ")}</option>)}</select></label>
+      <label className={labelClass}>DIT / media handover<select value={mediaHandoverStatus} onChange={e => setMediaHandoverStatus(e.target.value)} className={inputClass}>{["NOT_STARTED","IN_PROGRESS","PARTIAL","COMPLETE","QC_PENDING"].map(v => <option key={v} value={v}>{v.replaceAll("_"," ")}</option>)}</select></label>
       <label className={`${labelClass} sm:col-span-2`}>Production notes<textarea rows={4} maxLength={4000} value={productionNotes} onChange={e => setProductionNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2" /></label>
       <div className="rounded-lg border border-line bg-elevated p-3 text-xs leading-relaxed text-muted sm:col-span-2">
         Submission status will be recorded separately from the title workflow. QC, rights, legal review, media verification and delivery are not approved by this submission.
