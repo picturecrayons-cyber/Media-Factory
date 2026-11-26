@@ -5,9 +5,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { saveOwnerSubmission } from "@/lib/bridge/owner-submissions";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", submissionType }: { empty: string; query?: string; submissionType?: "finished_film" | "story_concept" }) {
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
     queryFn: () => listTitles(),
@@ -16,7 +17,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
     refetchOnWindowFocus: false,
     retry: 1,
   });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const titles = (titlesQ.data?.titles ?? []).filter((t) => (!submissionType || t.submissionType === submissionType) && (!query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase())));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
@@ -53,7 +54,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   );
 }
 
-export function CreateTitleForm({ concise = false }: { concise?: boolean } = {}) {
+export function CreateTitleForm({ concise = false, ownerSubmission = false }: { concise?: boolean; ownerSubmission?: boolean } = {}) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [name, setName] = useState("");
@@ -70,8 +71,23 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
   const [year, setYear] = useState("");
   const [fee, setFee] = useState("");
   const mut = useMutation({
-    mutationFn: () =>
-      createTitle({
+    mutationFn: async (submit: boolean) => {
+      const details = {
+        name,
+        nameMl: nameMl || null,
+        synopsis,
+        language,
+        year: year ? Number(year) : null,
+        runtimeMinutes: runtimeMinutes ? Number(runtimeMinutes) : null,
+        contentType,
+        countryOfOrigin: country,
+        releaseDate: releaseDate || null,
+        director: director || null,
+        producer: producer || null,
+        cast: cast ? cast.split(",").map((v) => v.trim()).filter(Boolean) : [],
+        licensingFeePaise: fee ? Math.round(Number(fee) * 100) : 0,
+      };
+      const res = await createTitle({
         data: {
           name,
           nameMl: nameMl || undefined,
@@ -86,10 +102,18 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
           director: director || undefined,
           producer: producer || undefined,
           cast: cast ? cast.split(",").map((v) => v.trim()).filter(Boolean) : undefined,
+          ownerSubmissionDetails: ownerSubmission ? details : undefined,
         },
-      }),
-    onSuccess: (res) => {
-      toast("Title opened as DRAFT");
+      });
+      if (ownerSubmission) {
+        await saveOwnerSubmission({
+          data: { titleId: res.title.id, submissionKind: "finished_film", details, submit },
+        });
+      }
+      return res;
+    },
+    onSuccess: (res, submit) => {
+      toast(ownerSubmission ? (submit ? "Finished Film submitted for intake" : "Finished Film draft saved") : "Title opened as DRAFT");
       void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
       if (res.title) navigate({ to: "/title/$id", params: { id: res.title.id } });
     },
@@ -103,7 +127,7 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
       toast("License fee must be between ₹0 and ₹2,00,00,000");
       return;
     }
-    mut.mutate();
+    mut.mutate(false);
   }
 
   return (
@@ -127,7 +151,20 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
         <label className="text-sm sm:col-span-2">Synopsis<textarea value={synopsis} onChange={(e) => setSynopsis(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2" /></label>
         <label className="text-sm">License fee (INR)<input inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="Optional" className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
       </>}
-      <div className="flex items-end sm:col-span-2"><Button type="submit" disabled={mut.isPending} className="rounded-full px-6">{mut.isPending ? "Creating…" : "Create Title"}</Button></div>
+      <div className="flex flex-wrap items-end gap-2 sm:col-span-2">
+        {ownerSubmission ? (
+          <>
+            <Button type="button" disabled={mut.isPending} onClick={() => mut.mutate(false)} variant="outline" className="rounded-full px-6">
+              {mut.isPending && mut.variables === false ? "Saving…" : "Save Draft"}
+            </Button>
+            <Button type="button" disabled={mut.isPending} onClick={() => mut.mutate(true)} className="rounded-full px-6">
+              {mut.isPending && mut.variables === true ? "Submitting…" : "Submit Finished Film"}
+            </Button>
+          </>
+        ) : (
+          <Button type="submit" disabled={mut.isPending} className="rounded-full px-6">{mut.isPending ? "Creating…" : "Create Title"}</Button>
+        )}
+      </div>
     </form>
   );
 }

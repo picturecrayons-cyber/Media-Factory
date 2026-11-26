@@ -4,6 +4,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { OwnerSubmissionCorrections } from "@/components/bridge/owner-submission-corrections";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 
@@ -49,6 +50,7 @@ function Studio() {
                 <p className="mt-1 text-sm text-muted">Finished films and story concepts remain separate. A title upload does not bypass QC, rights or licensing approvals.</p>
               </div>
               <NewSubmissionPanel />
+              <OwnerSubmissionCorrections />
             </section>
 
             <section id="studio-titles" className="space-y-4">
@@ -56,7 +58,7 @@ function Studio() {
                 <h3 className="font-display text-xl font-semibold">Finished films</h3>
                 <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
               </div>
-              <TitleList empty="No finished films are currently returned for this studio account." />
+              <TitleList submissionType="finished_film" empty="No finished films are currently returned for this studio account." />
               <MyStoryConcepts />
             </section>
 

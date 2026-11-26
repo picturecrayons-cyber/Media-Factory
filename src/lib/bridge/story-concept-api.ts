@@ -30,6 +30,7 @@ type ConceptRow = {
   estimated_budget_range: string | null;
   target_platforms: string[] | null;
   curation_status: string;
+  owner_submission_status?: string;
   admin_notes: string | null;
   introduced_to_buyers_at: string | Date | null;
   created_at: string | Date;
@@ -103,7 +104,7 @@ const createPayloadSchema = z.object({
 
 export const createStoryConceptSubmission = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(createPayloadSchema)
+  .validator(createPayloadSchema.extend({ submit: z.boolean().default(true) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     if (!STORY_CONCEPT_ENABLED) {
@@ -111,68 +112,100 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     }
 
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
+    if (actor.internalRole || !["studio", "independent_creator"].includes(actor.accountType)) {
+      throw new Error("Owner account required");
+    }
+    assertPermission(actor, "title.create");
 
     const titleId = randomBytes(16).toString("hex");
     const slug = slugify(data.titleName, titleId);
     const sql = await getSql();
+    const details = {
+      titleName: data.titleName,
+      logline: data.logline,
+      synopsis: data.synopsis,
+      language: data.language,
+      genre: data.genre,
+      targetPlatforms: data.targetPlatforms,
+      estimatedBudgetRange: data.estimatedBudgetRange ?? null,
+      treatmentUrl: data.treatmentUrl || null,
+      screenplayUrl: data.screenplayUrl || null,
+    };
+    const nextStatus = data.submit ? "SUBMITTED" : "DRAFT";
 
     try {
-      await sql`
-        insert into bridge_titles (
-          id, slug, name, owner_user_id, owner_account_type, status,
-          synopsis, language, content_type, owner_organization_id, submission_type
-        ) values (
-          ${titleId},
-          ${slug},
-          ${data.titleName},
-          ${actor.userId},
-          ${actor.accountType},
-          ${"DRAFT"},
-          ${data.synopsis},
-          ${data.language},
-          ${"OTHER"},
-          ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
-          ${"story_concept"}
-        )
-      `;
+      const concept = await sql.transaction(async (tx) => {
+        await tx`
+          insert into bridge_titles (
+            id, slug, name, owner_user_id, owner_account_type, status,
+            synopsis, language, content_type, owner_organization_id, submission_type
+          ) values (
+            ${titleId}, ${slug}, ${data.titleName}, ${actor.userId},
+            ${actor.accountType}, 'DRAFT', ${data.synopsis}, ${data.language},
+            'OTHER', ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
+            'story_concept'
+          )
+        `;
 
-      await sql`
-        insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
-        values (${titleId}, null, ${"DRAFT"}, ${actor.userId}, ${"story concept submission received"})
-      `;
+        await tx`
+          insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
+          values (${titleId}, null, 'DRAFT', ${actor.userId}, 'story concept draft created')
+        `;
 
-      const conceptRows = await sql<ConceptRow>`
-        insert into bridge_story_concept_submissions (
-          title_id, logline, synopsis, treatment_url, screenplay_url,
-          genre, estimated_budget_range, target_platforms, curation_status
-        ) values (
-          ${titleId},
-          ${data.logline},
-          ${data.synopsis},
-          ${data.treatmentUrl || null},
-          ${data.screenplayUrl || null},
-          ${data.genre},
-          ${data.estimatedBudgetRange ?? null},
-          ${data.targetPlatforms},
-          ${"PENDING"}
-        )
-        returning *
-      `;
+        const conceptRows = await tx<ConceptRow>`
+          insert into bridge_story_concept_submissions (
+            title_id, logline, synopsis, treatment_url, screenplay_url,
+            genre, estimated_budget_range, target_platforms, curation_status,
+            owner_submission_status
+          ) values (
+            ${titleId}, ${data.logline}, ${data.synopsis},
+            ${data.treatmentUrl || null}, ${data.screenplayUrl || null},
+            ${data.genre}, ${data.estimatedBudgetRange ?? null},
+            ${data.targetPlatforms}, 'PENDING', ${nextStatus}
+          )
+          returning *
+        `;
+        const created = conceptRows[0];
+        if (!created) throw new Error("Story concept create failed");
 
-      const concept = conceptRows[0];
-      if (!concept) throw new Error("Story concept create failed");
+        await tx`
+          insert into bridge_title_owner_submissions (
+            id, title_id, owner_user_id, owner_organization_id, details,
+            submission_status, submitted_at, submitted_by, updated_by
+          ) values (
+            ${randomBytes(16).toString("hex")}, ${titleId}, ${actor.userId},
+            ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
+            ${JSON.stringify(details)}::jsonb, ${nextStatus},
+            case when ${data.submit} then now() else null end,
+            case when ${data.submit} then ${actor.userId} else null end,
+            ${actor.userId}
+          )
+        `;
 
-      await writeAudit({
-        actorUserId: actor.userId,
-        action: "story_concept.create",
-        entityType: "bridge_story_concept_submission",
-        entityId: concept.id,
-        metadata: { titleId },
+        if (data.submit) {
+          await tx`
+            insert into bridge_owner_submission_events (
+              title_id, submission_kind, action, from_status, to_status, actor_user_id, reason
+            ) values (
+              ${titleId}, 'story_concept', 'SUBMITTED', 'DRAFT', 'SUBMITTED',
+              ${actor.userId}, 'Owner submitted story / concept'
+            )
+          `;
+        }
+
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: data.submit ? "story_concept.submitted" : "story_concept.draft_saved",
+          entityType: "bridge_story_concept_submission",
+          entityId: created.id,
+          metadata: { titleId, submissionStatus: nextStatus },
+        }, tx);
+        return created;
       });
 
       return {
         titleId,
+        submissionStatus: nextStatus,
         concept: mapConcept(concept),
       };
     } catch (err) {
@@ -197,6 +230,13 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
              t.owner_account_type = 'studio'
              and t.owner_organization_id is not null
              and t.owner_organization_id = ${actor.organizationId ?? null}
+             and exists (
+               select 1
+               from bridge_organization_memberships m
+               where m.organization_id = t.owner_organization_id
+                 and m.user_id = ${actor.userId}
+                 and m.status = 'active'
+             )
            )
         order by c.created_at desc
         limit 100
@@ -206,6 +246,7 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         concepts: rows.map((r) => ({
           ...mapConcept(r),
           titleName: r.title_name,
+          ownerSubmissionStatus: r.owner_submission_status ?? "DRAFT",
         })),
       };
     } catch (err) {
@@ -230,7 +271,9 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name, t.owner_user_id
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
+        join bridge_title_owner_submissions s on s.title_id = t.id
+        where s.submission_status = 'ACCEPTED_INTAKE'
+          and c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
         order by c.created_at asc
         limit 200
       `;
@@ -264,7 +307,12 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
     const sql = await getSql();
     try {
       const existing = await sql<ConceptRow>`
-        select * from bridge_story_concept_submissions where id = ${data.id} limit 1
+        select c.*
+        from bridge_story_concept_submissions c
+        join bridge_title_owner_submissions s on s.title_id = c.title_id
+        where c.id = ${data.id}
+          and s.submission_status = 'ACCEPTED_INTAKE'
+        limit 1
       `;
       const current = existing[0];
       if (!current) throw new Error("Not found");

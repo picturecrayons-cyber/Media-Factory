@@ -40,6 +40,7 @@ import {
   sessionStorageKey,
 } from "@/lib/bridge/multipart-upload";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
+import { ProductionShootForm } from "@/components/bridge/production-shoot-form";
 
 export const Route = createFileRoute("/title/$id")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -347,6 +348,7 @@ function ProductionAssetsPanel({
   const other = assets.filter((asset) => !["raw_video", "stills", "documents"].includes(asset.category));
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <ProductionShootForm titleId={titleId} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Production</p>

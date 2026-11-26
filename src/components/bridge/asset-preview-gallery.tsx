@@ -71,6 +71,41 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [failedId, setFailedId] = useState<string | null>(null);
+  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
+  const [thumbnailFailures, setThumbnailFailures] = useState<Record<string, boolean>>({});
+
+  const mediaAssets = assets.filter((asset) => asset.verified && (isImage(asset) || isVideo(asset)));
+  const posterAsset = mediaAssets.find((asset) =>
+    isImage(asset) && ["thumbnail", "poster_horizontal", "poster", "poster_vertical"].includes(asset.kind)
+  );
+  const posterUrl = posterAsset ? thumbnailUrls[posterAsset.id] : undefined;
+
+  useEffect(() => {
+    let active = true;
+    setThumbnailUrls({});
+    setThumbnailFailures({});
+    const images = mediaAssets.filter(isImage);
+    void Promise.all(images.map(async (asset) => {
+      try {
+        const signed = await requestAssetDownload({ data: { assetId: asset.id } });
+        if (!signed?.url) throw new Error("Thumbnail URL unavailable");
+        return [asset.id, previewUrlFor(signed.url, asset.kind, asset.contentType)] as const;
+      } catch {
+        return [asset.id, null] as const;
+      }
+    })).then((entries) => {
+      if (!active) return;
+      const urls: Record<string, string> = {};
+      const failures: Record<string, boolean> = {};
+      for (const [id, url] of entries) {
+        if (url) urls[id] = url;
+        else failures[id] = true;
+      }
+      setThumbnailUrls(urls);
+      setThumbnailFailures(failures);
+    });
+    return () => { active = false; };
+  }, [assets]);
 
   async function openPreview(asset: PreviewAsset) {
     if (!asset.verified || loadingId) return;
@@ -79,7 +114,6 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
     setFailedId(null);
     setLoadingId(asset.id);
     try {
-      // Resolve an expiring, server-authorized URL only after the user requests a preview.
       const signed = await requestAssetDownload({ data: { assetId: asset.id } });
       if (!signed?.url) throw new Error("Preview URL unavailable");
       setPreviewUrl(previewUrlFor(signed.url, asset.kind, asset.contentType));
@@ -96,8 +130,6 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
     setFailedId(null);
     setLoadingId(null);
   }
-
-  const mediaAssets = assets.filter((asset) => asset.verified && (isImage(asset) || isVideo(asset)));
 
   if (!mediaAssets.length) {
     return (
@@ -121,27 +153,44 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
           <span className="text-xs text-muted">{mediaAssets.length} item{mediaAssets.length === 1 ? "" : "s"}</span>
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {mediaAssets.map((asset) => (
-            <article key={asset.id} className="overflow-hidden rounded-xl border border-line bg-elevated/30">
-              <button
-                type="button"
-                onClick={() => void openPreview(asset)}
-                disabled={loadingId !== null}
-                className="group block w-full text-left disabled:cursor-wait"
-                aria-label={`Preview ${asset.kind.replaceAll("_", " ")}`}
-              >
-                <div className={`grid place-items-center bg-black/5 ${isVideo(asset) ? "aspect-video" : "aspect-[4/3]"}`}>
-                  <span className="rounded-full border border-line bg-surface px-4 py-2 text-sm font-semibold group-hover:border-accent">
-                    {loadingId === asset.id ? "Loading preview…" : isVideo(asset) ? "▶ Play video" : "View image"}
-                  </span>
-                </div>
-                <div className="p-4">
-                  <p className="text-sm font-semibold capitalize">{asset.kind.replaceAll("_", " ")}</p>
-                  <p className="mt-1 text-xs text-muted">{prettySize(asset.byteSize)} · Storage verified</p>
-                </div>
-              </button>
-            </article>
-          ))}
+          {mediaAssets.map((asset) => {
+            const imageUrl = isImage(asset) ? thumbnailUrls[asset.id] : posterUrl;
+            return (
+              <article key={asset.id} className="overflow-hidden rounded-xl border border-line bg-elevated/30">
+                <button
+                  type="button"
+                  onClick={() => void openPreview(asset)}
+                  disabled={loadingId !== null}
+                  className="group block w-full text-left disabled:cursor-wait"
+                  aria-label={`Preview ${asset.kind.replaceAll("_", " ")}`}
+                >
+                  <div className={`relative grid place-items-center overflow-hidden bg-black/5 ${isVideo(asset) ? "aspect-video" : "aspect-[4/3]"}`}>
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt={isVideo(asset) ? `Film artwork for ${asset.kind.replaceAll("_", " ")}` : `Verified ${asset.kind.replaceAll("_", " ")} thumbnail`}
+                        loading="lazy"
+                        className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+                        onError={() => setThumbnailFailures((current) => ({ ...current, [isImage(asset) ? asset.id : posterAsset?.id ?? "poster"]: true }))}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 grid place-items-center text-muted">
+                        <span className="text-xs">{thumbnailFailures[asset.id] ? "Thumbnail unavailable" : isVideo(asset) ? "Video preview" : "Image preview"}</span>
+                      </div>
+                    )}
+                    {isVideo(asset) ? (
+                      <span className="relative grid h-12 w-12 place-items-center rounded-full border border-white/80 bg-black/65 text-xl text-white shadow-lg" aria-hidden="true">▶</span>
+                    ) : null}
+                    {loadingId === asset.id ? <span className="absolute bottom-2 rounded-full bg-black/75 px-3 py-1 text-xs text-white">Opening preview…</span> : null}
+                  </div>
+                  <div className="p-4">
+                    <p className="text-sm font-semibold capitalize">{asset.kind.replaceAll("_", " ")}</p>
+                    <p className="mt-1 text-xs text-muted">{prettySize(asset.byteSize)} · Storage verified</p>
+                  </div>
+                </button>
+              </article>
+            );
+          })}
         </div>
       </section>
 
@@ -159,9 +208,7 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
                 <h4 id="asset-preview-title" className="truncate text-base font-semibold capitalize">{selected.kind.replaceAll("_", " ")}</h4>
                 <p className="text-xs text-muted">Authorized, time-limited preview</p>
               </div>
-              <button type="button" onClick={closePreview} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">
-                Close
-              </button>
+              <button type="button" onClick={closePreview} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">Close</button>
             </div>
             <div className="grid min-h-48 flex-1 place-items-center overflow-auto bg-black p-3 sm:p-6">
               {loadingId === selected.id ? (
@@ -170,29 +217,12 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
                 <div className="text-center text-white">
                   <p className="text-sm font-semibold">Preview unavailable</p>
                   <p className="mt-1 text-xs text-white/70">In-page playback failed. The stored file was not uploaded again.</p>
-                  <button type="button" onClick={() => void openPreview(selected)} className="mt-4 rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">
-                    Retry preview
-                  </button>
+                  <button type="button" onClick={() => void openPreview(selected)} className="mt-4 rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">Retry preview</button>
                 </div>
               ) : previewUrl && isVideo(selected) ? (
-                <video
-                  key={previewUrl}
-                  src={previewUrl}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  className="max-h-[75vh] w-full"
-                  onError={() => setFailedId(selected.id)}
-                  aria-label={`${selected.kind} preview`}
-                />
+                <video key={previewUrl} src={previewUrl} controls playsInline preload="metadata" className="max-h-[75vh] w-full" onError={() => setFailedId(selected.id)} aria-label={`${selected.kind} preview`} />
               ) : previewUrl && isImage(selected) ? (
-                <img
-                  key={previewUrl}
-                  src={previewUrl}
-                  alt={`${selected.kind.replaceAll("_", " ")} preview`}
-                  className="max-h-[75vh] max-w-full object-contain"
-                  onError={() => setFailedId(selected.id)}
-                />
+                <img key={previewUrl} src={previewUrl} alt={`${selected.kind.replaceAll("_", " ")} preview`} className="max-h-[75vh] max-w-full object-contain" onError={() => setFailedId(selected.id)} />
               ) : previewUrl ? (
                 <p className="text-sm text-white">Preview is not supported for this file type.</p>
               ) : null}
