@@ -11,6 +11,23 @@ import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
 
+async function getBridgeSessionWithTimeout() {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      getBridgeSession(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("WORKSPACE_QUERY_FAILED: Bridge access verification timed out. Retry without signing out.")),
+          12_000,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 function Frame({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-screen place-items-center bg-bg p-6">
@@ -35,7 +52,7 @@ export function RequireBridge({
   const { user, isPending } = useCurrentUserState();
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
-    queryFn: () => getBridgeSession(),
+    queryFn: () => getBridgeSessionWithTimeout(),
     enabled: !isPending && Boolean(user),
     retry: false,
   });
@@ -49,7 +66,7 @@ export function RequireBridge({
   if (isPending || (user && sessionQ.isPending)) {
     return (
       <Frame>
-        <p className="text-sm text-muted">Opening your desk…</p>
+        <p className="text-sm text-muted">Verifying Bridge access…</p>
       </Frame>
     );
   }

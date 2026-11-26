@@ -26,8 +26,10 @@ function normalize(user: ReturnType<typeof getStoredSupabaseUser>): AppUser | nu
 
 export function useCurrentUserState(): CurrentUserState {
   const [state, setState] = useState<CurrentUserState>(() => ({
-    user: null,
-    isPending: true,
+    // This cached identity is only a loading hint. Protected data still waits
+    // for getBridgeSession(), which verifies the bearer token server-side.
+    user: normalize(getStoredSupabaseUser()),
+    isPending: !getStoredSupabaseUser(),
   }));
 
   useEffect(() => {
@@ -36,7 +38,7 @@ export function useCurrentUserState(): CurrentUserState {
     const unsubscribe = subscribeAuthChange((_event, session) => {
       authChanged = true;
       if (alive) {
-        setState({ user: normalize(session?.user ?? null), isPending: false });
+        setState({ user: normalize(session?.user ?? getStoredSupabaseUser()), isPending: false });
       }
     });
     void getSupabaseSession().then((session) => {

@@ -48,6 +48,7 @@ export type BridgeTitle = {
   ownerAccountType: AccountType;
   /** Canonical organization UUID used for Studio authorization. */
   ownerOrganizationId?: string | null;
+  submissionType?: "finished_film" | "story_concept";
   status: TitleStatus;
   synopsis: string;
   language: string;

@@ -22,6 +22,7 @@ type TitleRow = {
   owner_user_id: string;
   owner_account_type: string;
   owner_organization_id?: string | null;
+  submission_type?: string | null;
   status: string;
   synopsis: string;
   language: string;
@@ -53,6 +54,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     ownerUserId: r.owner_user_id,
     ownerAccountType: r.owner_account_type as AccountType,
     ownerOrganizationId: r.owner_organization_id ?? null,
+    submissionType: (r.submission_type ?? "finished_film") as BridgeTitle["submissionType"],
     status: r.status as TitleStatus,
     synopsis: r.synopsis,
     language: r.language,
@@ -86,9 +88,14 @@ async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
 
 async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   if (!(await hasTitleMergeColumn(sql))) {
-    return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
+    return sql<TitleRow>`select * from bridge_titles
+      where coalesce(submission_type, 'finished_film') = 'finished_film'
+      order by updated_at desc limit 200`;
   }
-  return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
+  return sql<TitleRow>`select * from bridge_titles
+    where merged_into_title_id is null
+      and coalesce(submission_type, 'finished_film') = 'finished_film'
+    order by updated_at desc limit 200`;
 }
 
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
@@ -96,13 +103,18 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
   if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
+      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null
+          and coalesce(submission_type, 'finished_film') = 'finished_film'
+        order by updated_at desc limit 200`
+      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId}
+          and coalesce(submission_type, 'finished_film') = 'finished_film'
+        order by updated_at desc limit 200`;
   }
   return mergeColumnAvailable
     ? sql<TitleRow>`
         select t.* from bridge_titles t
         where t.merged_into_title_id is null
+          and coalesce(t.submission_type, 'finished_film') = 'finished_film'
           and (
             t.owner_user_id = ${userId}
             or (
@@ -120,15 +132,18 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
       `
     : sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
-          or (
-            t.owner_account_type = 'studio'
-            and t.owner_organization_id = ${orgId}
-            and exists (
-              select 1 from bridge_organization_memberships m
-              where m.organization_id = ${orgId}
-                and m.user_id = ${userId}
-                and m.status = 'active'
+        where coalesce(t.submission_type, 'finished_film') = 'finished_film'
+          and (
+            t.owner_user_id = ${userId}
+            or (
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id = ${orgId}
+              and exists (
+                select 1 from bridge_organization_memberships m
+                where m.organization_id = ${orgId}
+                  and m.user_id = ${userId}
+                  and m.status = 'active'
+              )
             )
           )
         order by t.updated_at desc limit 200
@@ -347,6 +362,7 @@ export const listTitles = createServerFn({ method: "GET" })
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
           where t.merged_into_title_id is null
+            and coalesce(t.submission_type, 'finished_film') = 'finished_film'
             and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
           order by t.updated_at desc limit 200
@@ -354,7 +370,8 @@ export const listTitles = createServerFn({ method: "GET" })
       } else {
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
-          where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+          where coalesce(t.submission_type, 'finished_film') = 'finished_film'
+            and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
           order by t.updated_at desc limit 200
         `;
@@ -380,7 +397,7 @@ export const getTitle = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
-    if (!title) throw new Error("Not found");
+    if (!title || title.submissionType === "story_concept") throw new Error("Not found");
     const sql = await getSql();
     const buyerView = actor.accountType === "buyer" && !actor.internalRole;
     if (buyerView) {
@@ -440,7 +457,9 @@ export const updateTitle = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
-    if (!title) throw new Error("Not found");
+    if (!title || title.submissionType === "story_concept") {
+      throw new Error("Story / Concept records use the separate submission and curation workflow.");
+    }
     const owns = !actor.internalRole && canMutateTitle(actor, title, "title.update_own", "title.license");
     if (!canMutateTitle(actor, title, "title.update_own", "title.license"))
       throw new Error("Forbidden");
@@ -595,6 +614,9 @@ export const advanceTitle = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (title.submissionType === "story_concept") {
+      throw new Error("Story / Concept records use the separate curation workflow and cannot enter film lifecycle or licensing.");
+    }
     if (data.to === "LICENSED") {
       throw new Error("LICENSED is granted only after a captured Razorpay payment");
     }

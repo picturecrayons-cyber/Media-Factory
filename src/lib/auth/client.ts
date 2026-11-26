@@ -21,20 +21,44 @@ export async function hasSupabaseRecoverySession(): Promise<boolean> {
     window.sessionStorage.getItem(RECOVERY_MARKER_KEY) === data.session.access_token;
 }
 
+const SESSION_RESTORE_TIMEOUT_MS = 8_000;
+
 export async function getSupabaseSession(
   opts: { forceRefresh?: boolean } = {},
 ): Promise<Session | null> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await restoreSupabaseSession(supabase.auth, opts);
+    return await Promise.race([
+      restoreSupabaseSession(supabase.auth, opts),
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), SESSION_RESTORE_TIMEOUT_MS);
+      }),
+    ]);
   } catch (err) {
     console.warn("[auth] Session restoration failed:", err);
+    return null;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+function getStoredSupabaseAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = window.localStorage.getItem("crayons-bridge.sb-auth-token");
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as { access_token?: unknown };
+    return typeof parsed.access_token === "string" ? parsed.access_token : null;
+  } catch {
     return null;
   }
 }
 
 export async function getBearerToken(): Promise<string | null> {
   const session = await getSupabaseSession();
-  return session?.access_token ?? null;
+  // A cached token is only a transport fallback. Every protected server
+  // function still verifies it with Supabase Auth before granting access.
+  return session?.access_token ?? getStoredSupabaseAccessToken();
 }
 
 export async function signUpWithEmail(input: {

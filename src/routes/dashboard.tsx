@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
-import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
-import { getDashboardSession } from "@/lib/bridge/session";
+import { getFounderOperationalSnapshot, getFounderTrackedProductions } from "@/lib/bridge/founder-dashboard";
+import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -63,44 +63,56 @@ const ACTION_GUIDANCE: Record<string, string> = {
 };
 
 function DashboardBody() {
-  const dashboardQ = useQuery({
-    queryKey: ["bridge-dashboard-session"],
-    queryFn: () => getDashboardSession(),
-    retry: false,
-  });
+  // RequireBridge has already completed the verified Super Admin check.
+  // Do not repeat the same auth/profile lookup here: a second session request
+  // previously left the live Founder Centre stuck at "Checking access…".
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
     queryFn: () => listTitles(),
-    enabled: dashboardQ.isSuccess,
     retry: 1,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
-
-  if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
-  if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
+  const founderProductionsQ = useQuery({
+    queryKey: ["bridge-founder-tracked-productions"],
+    queryFn: () => getFounderTrackedProductions(),
+    retry: 1,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+  const operationalQ = useQuery({
+    queryKey: ["bridge-founder-operational-snapshot"],
+    queryFn: () => getFounderOperationalSnapshot(),
+    retry: 1,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
 
   const titles = titlesQ.data?.titles ?? [];
   const actionItems = titles.filter((title) => title.status in ACTION_GUIDANCE);
-  const liveOrCommercial = titles.filter((title) =>
-    ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status),
-  );
-  const readyToList = titles.filter((title) => title.status === "LICENSING_READY").length;
-  const activeDeals = titles.filter((title) =>
-    title.status === "LICENSED" || title.status === "IN_NEGOTIATION",
-  ).length;
-  const licensedValuePaise = titles.reduce(
-    (sum, title) =>
-      title.status === "LICENSED" || title.status === "DELIVERED"
-        ? sum + title.licensingFeePaise
-        : sum,
-    0,
-  );
+  const founderProductions = founderProductionsQ.data?.productions ?? [];
   const reportingUnavailable = titlesQ.isError;
-  const metricValue = (value: number) =>
-    titlesQ.isPending || reportingUnavailable ? "—" : String(value);
-  const moneyValue =
-    titlesQ.isPending || reportingUnavailable
-      ? "—"
-      : `₹${(licensedValuePaise / 100).toLocaleString("en-IN")}`;
+  const operational = operationalQ.data;
+  const sumCount = (items: { count: number }[] | undefined) =>
+    (items ?? []).reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+  const formatStatuses = (items: { status: string; count: number }[] | undefined) =>
+    items?.length
+      ? items.map((item) => `${item.status.replaceAll("_", " ")}: ${item.count}`).join(" · ")
+      : "No records";
+  const formatProfiles = (items: { account_type: string; internal_role: string; count: number }[] | undefined) =>
+    items?.length
+      ? items.map((item) => `${item.account_type.replaceAll("_", " ")} / ${item.internal_role.replaceAll("_", " ")}: ${item.count}`).join(" · ")
+      : "No profile records";
+  const formatLedger = (items: { entry_type: string; classification: string; count: number; amount_paise: number }[] | undefined) =>
+    items?.length
+      ? items.map((item) => `${item.entry_type} / ${item.classification}: ${item.count} · ₹${(Number(item.amount_paise) / 100).toLocaleString("en-IN")}`).join(" | ")
+      : "No ledger entries";
+  const operationalReady = !operationalQ.isPending && !operationalQ.isError && Boolean(operational);
+  const reviewCount = operational
+    ? sumCount(operational.qc) + sumCount(operational.legal) + sumCount(operational.rights)
+    : 0;
+  const countByStatus = (items: { status: string; count: number }[] | undefined, predicate: (status: string) => boolean) =>
+    (items ?? []).filter((item) => predicate(item.status.toLowerCase())).reduce((sum, item) => sum + item.count, 0);
 
   return (
     <div className="space-y-7">
@@ -162,10 +174,11 @@ function DashboardBody() {
                   </p>
                 </div>
                 <Link
-                  to="/workspace"
+                  to="/title/$id"
+                  params={{ id: title.id }}
                   className="shrink-0 text-sm font-semibold text-accent hover:underline"
                 >
-                  Review in workspace →
+                  Open this title →
                 </Link>
               </li>
             ))}
@@ -190,20 +203,179 @@ function DashboardBody() {
 
       <section aria-labelledby="business-title" className="space-y-3">
         <div>
-          <h3 id="business-title" className="font-display text-xl font-semibold">Business snapshot</h3>
+          <h3 id="business-title" className="font-display text-xl font-semibold">Live business snapshot</h3>
           <p className="mt-1 text-sm text-muted">
-            Values are derived from the current title list; they are not payment-settlement or accounting reports.
+            Direct aggregates from canonical Bridge tables. These are record counts, not estimates or manually entered figures.
           </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Stat label="Licensed value*" value={moneyValue} />
-          <Stat label="Live / commercial titles" value={metricValue(liveOrCommercial.length)} />
-          <Stat label="Ready for licensing review" value={metricValue(readyToList)} />
-          <Stat label="Licensed or negotiating deals" value={metricValue(activeDeals)} />
+        {operationalQ.isPending ? (
+          <p className="rounded-sm border border-line px-4 py-5 text-sm text-muted">Loading verified business totals…</p>
+        ) : operationalQ.isError || !operational ? (
+          <p role="alert" className="rounded-sm border border-line px-4 py-5 text-sm text-accent">Business totals are unavailable; no zero values are assumed.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Stat label="Finished-film records" value={String(sumCount(operational.titleStatuses))} />
+            <Stat label="QC / Legal / Rights cases" value={String(reviewCount)} />
+            <Stat label="Bridge payment records" value={String(sumCount(operational.payments))} />
+            <Stat label="Active buyer access" value={String(operational.activeBuyerAccess)} />
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="operations-title" className="space-y-3">
+        <div>
+          <h3 id="operations-title" className="font-display text-xl font-semibold">Payments, licensing & operations</h3>
+          <p className="mt-1 text-sm text-muted">
+            Live counts from Bridge payment, entitlement, QC, legal, rights and distribution records. Other StreamVista products are not included.
+          </p>
         </div>
-        <p className="text-xs text-muted">
-          *Sum of recorded licensing fees for licensed or delivered titles; not cash received.
-        </p>
+        {operationalQ.isPending ? (
+          <p className="rounded-sm border border-line px-4 py-5 text-sm text-muted">Loading operational records…</p>
+        ) : operationalQ.isError || !operational ? (
+          <p role="alert" className="rounded-sm border border-line px-4 py-5 text-sm text-accent">
+            Operational records could not be verified. No zero values are assumed.
+          </p>
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Stat label="Bridge payment records" value={String(sumCount(operational.payments))} />
+              <Stat label="Film entitlements" value={String(operational.entitlements)} />
+              <Stat label="License packages" value={String(sumCount(operational.licensePackages))} />
+              <Stat label="Package entitlements" value={String(operational.packageEntitlements)} />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <article className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">Payments</h4>
+                <p className="mt-2 text-xs text-muted">
+                  {operational.payments.length
+                    ? operational.payments.map((item) => `${item.purpose}: ${item.status} · ${item.count}`).join(" | ")
+                    : "No Bridge payment records"}
+                </p>
+              </article>
+              <article className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">QC / Legal / Rights</h4>
+                <p className="mt-2 text-xs text-muted">QC: {formatStatuses(operational.qc)}</p>
+                <p className="mt-1 text-xs text-muted">Legal: {formatStatuses(operational.legal)}</p>
+                <p className="mt-1 text-xs text-muted">Rights: {formatStatuses(operational.rights)}</p>
+              </article>
+              <article className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">Distribution</h4>
+                <p className="mt-2 text-xs text-muted">
+                  Packages: {operational.distributionPackages.length
+                    ? operational.distributionPackages.map((item) => `${item.readiness_state}: ${item.count}`).join(" · ")
+                    : "No destination packages"}
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  Loop: {operational.loopPublications.length
+                    ? operational.loopPublications.map((item) => `${item.authorization_status}: ${item.count}`).join(" · ")
+                    : "No Loop publication records"}
+                </p>
+              </article>
+              <article className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">Services</h4>
+                <p className="mt-2 text-xs text-muted">{formatStatuses(operational.serviceOrders)}</p>
+              </article>
+              <article className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">License package delivery</h4>
+                <p className="mt-2 text-xs text-muted">
+                  {operational.licensePackages.length
+                    ? operational.licensePackages.map((item) => `${item.status} / ${item.delivery_status}: ${item.count}`).join(" · ")
+                    : "No license package records"}
+                </p>
+              </article>
+              <article className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">Entitlement access types</h4>
+                <p className="mt-2 text-xs text-muted">
+                  {operational.entitlementsByAccessType.length
+                    ? operational.entitlementsByAccessType.map((item) => `${item.access_type}: ${item.count}`).join(" · ")
+                    : "No film entitlements"}
+                </p>
+              </article>
+            </div>
+          </>
+        )}
+      </section>
+
+      <section aria-labelledby="live-modules-title" className="space-y-3">
+        <div>
+          <h3 id="live-modules-title" className="font-display text-xl font-semibold">Live module status</h3>
+          <p className="mt-1 text-sm text-muted">
+            Each summary is read from its owning Bridge table. Open the linked workspace for full records and authorized actions.
+          </p>
+        </div>
+        {operationalQ.isPending ? (
+          <p className="rounded-sm border border-line px-4 py-5 text-sm text-muted">Loading module sources…</p>
+        ) : operationalQ.isError || !operational ? (
+          <p role="alert" className="rounded-sm border border-line px-4 py-5 text-sm text-accent">Module data could not be verified. Retry before taking action.</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <article className="rounded-sm border border-line p-4">
+              <h4 className="font-semibold">Titles & media</h4>
+              <p className="mt-2 text-sm text-muted">Films: {sumCount(operational.titleStatuses)} · Assets: {sumCount(operational.assets)}</p>
+              <p className="mt-1 text-xs text-muted">Title status: {formatStatuses(operational.titleStatuses)}</p>
+              <p className="mt-1 text-xs text-muted">Asset processing: {formatStatuses(operational.assetProcessing)}</p>
+              <Link to="/workspace" className="mt-3 inline-flex text-xs font-semibold text-accent hover:underline">Open title workspace →</Link>
+            </article>
+            <article className="rounded-sm border border-line p-4">
+              <h4 className="font-semibold">Creators & producers</h4>
+              <p className="mt-2 text-xs text-muted">{formatProfiles(operational.profiles)}</p>
+              <p className="mt-1 text-xs text-muted">Organizations: {formatStatuses(operational.organizations)}</p>
+              <Link to="/internal" className="mt-3 inline-flex text-xs font-semibold text-accent hover:underline">Open people & access →</Link>
+            </article>
+            <article className="rounded-sm border border-line p-4">
+              <h4 className="font-semibold">QC, legal & rights</h4>
+              <p className="mt-2 text-xs text-muted">QC: {formatStatuses(operational.qc)}</p>
+              <p className="mt-1 text-xs text-muted">Legal: {formatStatuses(operational.legal)}</p>
+              <p className="mt-1 text-xs text-muted">Rights: {formatStatuses(operational.rights)}</p>
+              <p className="mt-2 text-xs font-semibold text-accent">
+                Awaiting QC: {countByStatus(operational.qc, (status) => /pending|review|submitted|open/.test(status))}
+                {" · "}Legal: {countByStatus(operational.legal, (status) => /pending|review|submitted|open/.test(status))}
+                {" · "}Rights: {countByStatus(operational.rights, (status) => /pending|review|submitted|open/.test(status))}
+              </p>
+              <Link to="/admin/workstations" className="mt-3 inline-flex text-xs font-semibold text-accent hover:underline">Open review workstations →</Link>
+            </article>
+            <article className="rounded-sm border border-line p-4">
+              <h4 className="font-semibold">Buyers & licensing</h4>
+              <p className="mt-2 text-xs text-muted">Buyer interest: {formatStatuses(operational.buyerInterest)}</p>
+              <p className="mt-1 text-xs text-muted">Active title access: {operational.activeBuyerAccess}</p>
+              <p className="mt-1 text-xs text-muted">Film entitlements: {operational.entitlements} · Package entitlements: {operational.packageEntitlements}</p>
+              <Link to="/buyer" className="mt-3 inline-flex text-xs font-semibold text-accent hover:underline">Open buyer & licensing →</Link>
+            </article>
+            <article className="rounded-sm border border-line p-4">
+              <h4 className="font-semibold">Distribution & delivery</h4>
+              <p className="mt-2 text-xs text-muted">Destination packages: {operational.distributionPackages.map((item) => `${item.readiness_state}: ${item.count}`).join(" · ") || "No records"}</p>
+              <p className="mt-1 text-xs text-muted">Loop authorizations: {operational.loopPublications.map((item) => `${item.authorization_status}: ${item.count}`).join(" · ") || "No records"}</p>
+              <p className="mt-1 text-xs text-muted">Ingest: {formatStatuses(operational.ingestSessions)}</p>
+              <Link to="/deliveries" className="mt-3 inline-flex text-xs font-semibold text-accent hover:underline">Open deliveries →</Link>
+            </article>
+            <article className="rounded-sm border border-line p-4">
+              <h4 className="font-semibold">Payments & finance</h4>
+              <p className="mt-2 text-xs text-muted">Payments: {operational.payments.map((item) => `${item.purpose} / ${item.status}: ${item.count}`).join(" · ") || "No records"}</p>
+              <p className="mt-1 text-xs text-muted">Ledger: {formatLedger(operational.ledger)}</p>
+              <Link to="/buyer" className="mt-3 inline-flex text-xs font-semibold text-accent hover:underline">Open licensing workspace →</Link>
+            </article>
+            <article className="rounded-sm border border-line p-4">
+              <h4 className="font-semibold">People & access</h4>
+              <p className="mt-2 text-xs text-muted">Pending invitations: {operational.pendingInvites}</p>
+              <p className="mt-1 text-xs text-muted">{formatProfiles(operational.profiles)}</p>
+              <Link to="/internal" className="mt-3 inline-flex text-xs font-semibold text-accent hover:underline">Open internal access →</Link>
+            </article>
+            <article className="rounded-sm border border-line p-4">
+              <h4 className="font-semibold">CMS & website</h4>
+              <p className="mt-2 text-xs text-muted">Managed content records: {operational.cmsRecords}</p>
+              <Link to="/cms" className="mt-3 inline-flex text-xs font-semibold text-accent hover:underline">Open website CMS →</Link>
+            </article>
+            <article className="rounded-sm border border-line p-4">
+              <h4 className="font-semibold">Audit & failed workflows</h4>
+              <p className="mt-2 text-xs text-muted">Recent audit activity: {operational.auditActivity.map((item) => `${item.action}: ${item.count}`).join(" · ") || "No recent audit events"}</p>
+              <p className="mt-1 text-xs text-muted">Webhook processing: {formatStatuses(operational.webhooks)}</p>
+              <p className="mt-1 text-xs text-muted">Failed webhooks: {countByStatus(operational.webhooks, (status) => /fail|error|dead/.test(status))}</p>
+              <p className="mt-1 text-xs text-muted">Failed ingest: {countByStatus(operational.ingestSessions, (status) => /fail|error|rejected/.test(status))}</p>
+              <p className="mt-1 text-xs text-muted">Failed service orders: {countByStatus(operational.serviceOrders, (status) => /fail|error|cancelled/.test(status))}</p>
+              <Link to="/admin/workstations" className="mt-3 inline-flex text-xs font-semibold text-accent hover:underline">Open operational review →</Link>
+            </article>
+          </div>
+        )}
       </section>
 
       <section aria-labelledby="portfolio-title" className="space-y-3">
@@ -214,19 +386,86 @@ function DashboardBody() {
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {BRIDGE_LOOP_LANES.map((lane) => (
-            <article key={lane.id} className="rounded-sm border border-line px-4 py-3">
-              <p className="text-xs uppercase tracking-widest text-muted">{lane.label}</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {titlesQ.isPending || reportingUnavailable
-                  ? "—"
-                  : titles.filter((title) => loopStageType(title.contentType) === lane.loopType).length}
-              </p>
-              <p className="mt-1 text-xs text-muted">Titles in this content lane</p>
-            </article>
-          ))}
+          {operational && !operationalQ.isError ? (
+            operational.titleLanes.map((lane) => (
+              <article key={lane.content_type} className="rounded-sm border border-line px-4 py-3">
+                <p className="text-xs uppercase tracking-widest text-muted">{lane.content_type.replaceAll("_", " ")}</p>
+                <p className="mt-1 text-2xl font-semibold">{lane.count}</p>
+                <p className="mt-1 text-xs text-muted">Finished-film records</p>
+              </article>
+            ))
+          ) : (
+            <p className="text-sm text-muted">Title-lane totals unavailable until the canonical data source responds.</p>
+          )}
         </div>
       </section>
+
+      <section aria-labelledby="founder-productions-title" className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 id="founder-productions-title" className="font-display text-xl font-semibold">Crayons Loop · Featured productions</h3>
+            <p className="mt-1 text-sm text-muted">
+              Live workflow status from the canonical Bridge title records. This overview does not approve rights or publish films.
+            </p>
+          </div>
+          <Link to="/workspace" className="text-sm font-semibold text-accent hover:underline">
+            Open title workspace →
+          </Link>
+        </div>
+        {founderProductionsQ.isPending ? (
+          <p className="rounded-sm border border-line px-4 py-5 text-sm text-muted">Loading production workflow…</p>
+        ) : founderProductionsQ.isError ? (
+          <p role="alert" className="rounded-sm border border-line px-4 py-5 text-sm text-accent">
+            Workflow records could not be verified. Refresh to retry; no completion status is assumed.
+          </p>
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-3">
+            {founderProductions.map((item) => (
+              <article key={item.key} className="rounded-sm border border-line p-4">
+                <h4 className="font-semibold">{item.label}</h4>
+                {item.matchStatus === "found" && item.record ? (
+                  <>
+                    <p className="mt-3 text-xs uppercase tracking-widest text-muted">Current workflow stage</p>
+                    <p className="mt-1 text-sm font-semibold text-accent">
+                      {item.record.status.replaceAll("_", " ")}
+                    </p>
+                    <p className="mt-2 break-all font-mono text-[10px] text-muted">Record: {item.record.id}</p>
+                    <p className="mt-2 text-sm text-muted">
+                      Creator / Producer: {item.record.ownerDisplayName || item.record.ownerOrganizationName || "Not available"}
+                    </p>
+                    {item.record.credits.length > 0 ? (
+                      <ul className="mt-2 space-y-1 text-xs text-muted">
+                        {item.record.credits.slice(0, 4).map((credit, index) => (
+                          <li key={`${credit.role}-${credit.name}-${index}`}>{credit.role}: {credit.name}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </>
+                ) : item.matchStatus === "ambiguous" ? (
+                  <p className="mt-3 text-sm text-accent">
+                    Multiple matching records found ({item.matchCount}). Manual record reconciliation is required; no record was selected.
+                  </p>
+                ) : (
+                  <p className="mt-3 text-sm text-muted">No exact canonical Bridge title record found.</p>
+                )}
+                {item.record ? (
+                  <Link
+                    to="/title/$id"
+                    params={{ id: item.record.id }}
+                    className="mt-4 inline-flex text-xs font-semibold text-accent hover:underline"
+                  >
+                    Open title workspace →
+                  </Link>
+                ) : (
+                  <p className="mt-4 text-xs text-muted">Workspace link unavailable until one record is verified.</p>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <StoryConceptDesk />
 
       <section aria-labelledby="workspaces-title" className="space-y-3">
         <div>
