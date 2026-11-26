@@ -50,6 +50,11 @@ const ADMIN_MODULES = [
     to: "/internal",
   },
   {
+    title: "Membership & commercial controls",
+    description: "Bridge plans, trials, complimentary access and suspensions.",
+    to: "/admin/memberships",
+  },
+  {
     title: "CMS & site content",
     description: "Bridge-managed website content.",
     to: "/cms",
