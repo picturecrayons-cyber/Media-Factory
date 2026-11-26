@@ -164,48 +164,18 @@ function LicensingDesk({ titles }: { titles: Array<any> }) {
           <Button variant="outline">Open buyer view</Button>
         </Link>
       </div>
-      <div className="mt-5 overflow-x-auto">
-        <table className="w-full min-w-[760px] text-left text-sm">
-          <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
-            <tr>
-              <th className="px-3 py-3">Title</th>
-              <th className="px-3 py-3">Status</th>
-              <th className="px-3 py-3">Language</th>
-              <th className="px-3 py-3">Fee</th>
-              <th className="px-3 py-3">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {rows.map((title) => (
-              <tr key={title.id}>
-                <td className="px-3 py-3 font-medium">{title.name}</td>
-                <td className="px-3 py-3">{String(title.status).replaceAll("_", " ")}</td>
-                <td className="px-3 py-3">{title.language}</td>
-                <td className="px-3 py-3">
-                  {title.licensingFeePaise > 0
-                    ? `₹${Math.round(title.licensingFeePaise / 100)}`
-                    : "Unset"}
-                </td>
-                <td className="px-3 py-3">
-                  <Link
-                    to="/title/$id"
-                    params={{ id: title.id }}
-                    className="font-semibold text-accent hover:underline"
-                  >
-                    Open title
-                  </Link>
-                </td>
-              </tr>
-            ))}
-            {!rows.length ? (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-muted">
-                  No titles have cleared licensing readiness yet.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {rows.map((title) => (
+          <article key={title.id} className="flex min-h-40 flex-col justify-between rounded-2xl border border-line bg-elevated p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted">{String(title.status).replaceAll("_", " ")}</p>
+              <h4 className="mt-2 font-semibold">{title.name}</h4>
+              <p className="mt-1 text-sm text-muted">{title.language} · {title.licensingFeePaise > 0 ? `₹${Math.round(title.licensingFeePaise / 100)}` : "Fee unset"}</p>
+            </div>
+            <Link to="/title/$id" params={{ id: title.id }} className="mt-4 border-t border-line pt-3 text-sm font-semibold text-accent hover:underline">Open title →</Link>
+          </article>
+        ))}
+        {!rows.length ? <p className="col-span-full py-8 text-center text-sm text-muted">No titles have cleared licensing readiness yet.</p> : null}
       </div>
     </section>
   );
