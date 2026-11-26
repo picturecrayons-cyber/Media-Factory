@@ -6,12 +6,6 @@ alter table public.bridge_titles
   add constraint bridge_titles_submission_type_check
   check (submission_type = any (array['finished_film'::text, 'story_concept'::text]));
 
-alter table public.bridge_owner_submission_events
-  drop constraint if exists bridge_owner_submission_events_submission_kind_check;
-alter table public.bridge_owner_submission_events
-  add constraint bridge_owner_submission_events_submission_kind_check
-  check (submission_kind = any (array['finished_film'::text, 'story_concept'::text, 'production_shoot'::text]));
-
 create table if not exists public.bridge_production_shoots (
   title_id text primary key references public.bridge_titles(id) on delete restrict,
   production_no text not null,
