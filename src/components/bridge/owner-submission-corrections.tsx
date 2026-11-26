@@ -40,8 +40,8 @@ export function OwnerSubmissionCorrections() {
         <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-semibold">{item.title_name}</p><p className="text-xs text-muted">{item.submission_type.replaceAll("_", " ")} · {item.submission_status}</p></div><span className="text-xs text-muted">Editable by owner</span></div>
         <label className="block text-xs text-muted">Submission details (JSON)<textarea spellCheck={false} rows={10} value={value} onChange={event => setValues(current => ({ ...current, [item.title_id]: event.target.value }))} className="mt-1 w-full rounded-lg border border-line-strong bg-elevated p-3 font-mono text-xs" /></label>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate({ titleId: item.title_id, submissionKind: item.submission_type, submit: false })}>Save changes</Button>
-          {item.submission_status === "NEEDS_CORRECTION" ? <Button size="sm" disabled={mutation.isPending} onClick={() => mutation.mutate({ titleId: item.title_id, submissionKind: item.submission_type, submit: true })}>Resubmit correction</Button> : null}
+          <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate({ titleId: item.title_id, submissionKind: item.submission_type === "story_concept" ? "story_concept" : "finished_film", submit: false })}>Save changes</Button>
+          {item.submission_status === "NEEDS_CORRECTION" ? <Button size="sm" disabled={mutation.isPending} onClick={() => mutation.mutate({ titleId: item.title_id, submissionKind: item.submission_type === "story_concept" ? "story_concept" : "finished_film", submit: true })}>Resubmit correction</Button> : null}
         </div>
       </article>;
     })}
