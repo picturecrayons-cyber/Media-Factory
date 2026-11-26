@@ -70,6 +70,10 @@ function Home() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-3.5 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-6 lg:gap-8">
             <BrandMark />
+            <nav aria-label="Public site navigation" className="hidden items-center gap-5 text-sm text-muted md:flex">
+              <a href="#how-it-works" className="transition-colors hover:text-fg">How it works</a>
+              <a href="#creators" className="transition-colors hover:text-fg">For media businesses</a>
+            </nav>
           </div>
 
           <div className="flex items-center gap-3 text-sm">
