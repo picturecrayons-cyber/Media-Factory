@@ -97,6 +97,8 @@ This migration already exists in the Testing ledger as version `20261126031932`.
 |---|---|---:|---|
 | 20261126031932 | bridge_three_submission_workflows | 3142 | `31d2c1dd3d1500b187bb4d910b414fe780028566ab4c14b88345eab77779fff4` |
 
+| 20261126050000 | reconcile_owner_submission_kinds_forward_only | 1787 | `51fda67cfb1673ad658b63a38234243a6afd640c9a1310b46247af16c0309fa3` |
+
 ## Previously committed files
 
 All 17 files previously under `supabase/migrations/` are preserved byte-for-byte under `supabase/migrations_archive_unreconciled_20261116/`.
