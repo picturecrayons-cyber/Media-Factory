@@ -65,7 +65,7 @@ export function UserButton({ label: labelOverride }: { label?: string }) {
           alt=""
           className="h-8 w-8 rounded-full object-cover"
         />
-      ) : (
+      ) : labelOverride ? null : (
         <span className="grid h-8 w-8 place-items-center rounded-full bg-black/10 text-sm font-medium dark:bg-white/20">
           {label.charAt(0).toUpperCase()}
         </span>
