@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
@@ -43,7 +44,7 @@ export const saveOwnerSubmission = createServerFn({ method: "POST" })
       if (existing) {
         await tx`update bridge_title_owner_submissions set details = ${JSON.stringify(data.details)}::jsonb, submission_status = ${nextStatus}, submitted_at = case when ${data.submit} then now() else submitted_at end, submitted_by = case when ${data.submit} then ${actor.userId} else submitted_by end, updated_by = ${actor.userId}, updated_at = now() where id = ${existing.id}`;
       } else {
-        await tx`insert into bridge_title_owner_submissions (id,title_id,owner_user_id,owner_organization_id,details,submission_status,submitted_at,submitted_by,updated_by) values (${crypto.randomUUID()},${data.titleId},${actor.userId},${actor.organizationId ?? null},${JSON.stringify(data.details)}::jsonb,${nextStatus},case when ${data.submit} then now() else null end,case when ${data.submit} then ${actor.userId} else null end,${actor.userId})`;
+        await tx`insert into bridge_title_owner_submissions (id,title_id,owner_user_id,owner_organization_id,details,submission_status,submitted_at,submitted_by,updated_by) values (${randomUUID()},${data.titleId},${actor.userId},${actor.organizationId ?? null},${JSON.stringify(data.details)}::jsonb,${nextStatus},case when ${data.submit} then now() else null end,case when ${data.submit} then ${actor.userId} else null end,${actor.userId})`;
       }
       if (data.submit) {
         await tx`insert into bridge_owner_submission_events (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason) values (${data.titleId},${data.submissionKind},case when ${existing?.submission_status === "NEEDS_CORRECTION"} then 'RESUBMITTED' else 'SUBMITTED' end,${existing?.submission_status ?? "DRAFT"},'SUBMITTED',${actor.userId},'Owner submitted canonical submission')`;
