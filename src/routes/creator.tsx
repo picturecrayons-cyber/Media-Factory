@@ -266,16 +266,23 @@ function CreatorDashboard({
         )}
       </section>
 
-      <section id="statements" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted">Creator finance</p>
-        <h2 className="mt-1 font-display text-2xl font-semibold">Statements</h2>
+      <section id="statements" className="scroll-mt-20 rounded-2xl border border-dashed border-line bg-surface p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted">Creator finance</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold">Creator Statements</h2>
+          </div>
+          <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted">
+            Coming Soon
+          </span>
+        </div>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">
-          Creator earnings, commissions, adjustments and downloadable statements are shown only when
-          verified creator-payable ledger and reconciliation data are available. Title licensing values
-          are not treated as creator earnings.
+          Creator statements are not available yet. This section will open when the verified creator-payable
+          ledger, commission and adjustment records, and payment reconciliation feed are connected and tested.
+          Title licensing values will never be presented as creator earnings.
         </p>
-        <p className="mt-4 inline-flex rounded-full border border-line px-3 py-1 text-xs font-semibold text-muted">
-          NOT VERIFIED · No statement feed connected
+        <p className="mt-3 text-xs text-muted">
+          No earnings, payable balance or downloadable statement is currently being reported here.
         </p>
       </section>
 
