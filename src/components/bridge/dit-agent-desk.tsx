@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { isStudioTestFixtureTitle } from "@/components/bridge/title-desk";
 import {
   createDitIngestSession,
   getDitWorkspace,
@@ -184,7 +185,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
             <span className="font-medium">Finished film</span>
             <select className="h-11 w-full rounded-lg border border-line bg-bg px-3" value={titleId} onChange={(event) => setTitleId(event.target.value)}>
               <option value="">Select a finished film</option>
-              {(workspace.data?.titles ?? []).map((title) => <option key={title.id} value={title.id}>{title.name}</option>)}
+              {(workspace.data?.titles ?? []).filter((title) => !isStudioTestFixtureTitle(title)).map((title) => <option key={title.id} value={title.id}>{title.name}</option>)}
             </select>
           </label>
           <label className="space-y-1 text-sm">
