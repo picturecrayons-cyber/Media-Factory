@@ -10,7 +10,8 @@ export function OwnerSubmissionCorrections() {
   const [values, setValues] = useState<Record<string, string>>({});
   const mutation = useMutation({
     mutationFn: async ({ titleId, submissionKind, submit }: { titleId: string; submissionKind: "finished_film" | "story_concept"; submit: boolean }) => {
-      const raw = values[titleId];
+      const current = query.data?.submissions.find(item => item.title_id === titleId);
+      const raw = values[titleId] ?? JSON.stringify(current?.details ?? {});
       let details: Record<string, unknown>;
       try {
         const parsed: unknown = JSON.parse(raw ?? "{}");
