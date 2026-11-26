@@ -450,19 +450,20 @@ function BuyerPosterImage({ blob, title }: { blob: Blob | undefined; title: stri
 function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {titles.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+        <article key={t.id} className="flex min-h-44 flex-col justify-between rounded-2xl border border-line bg-surface p-4">
           <div>
-            <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">{t.name}</Link>
-            <p className="text-sm text-muted">{t.language}{t.licensingFeePaise > 0 ? ` · ${formatLicensingFeePaise(t.licensingFeePaise)}` : " · fee unset"}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t.language}</p>
+            <Link to="/title/$id" params={{ id: t.id }} className="mt-2 block font-semibold hover:text-accent">{t.name}</Link>
+            <p className="mt-1 text-sm text-muted">{t.licensingFeePaise > 0 ? formatLicensingFeePaise(t.licensingFeePaise) : "Fee unset"}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3">
             <StatusChip status={t.status as never} />
-            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
+            {entitled.has(t.id) ? <span className="text-sm font-semibold text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
           </div>
-        </li>
+        </article>
       ))}
-    </ul>
+    </div>
   );
 }
