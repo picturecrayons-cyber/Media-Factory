@@ -19,6 +19,9 @@ const productionShootSchema = z.object({
   primaryLocation: z.string().trim().max(240).optional(),
   producerName: z.string().trim().max(160).optional(),
   directorName: z.string().trim().max(160).optional(),
+  crew: z.array(z.object({ role: z.string().trim().min(1).max(100), name: z.string().trim().min(1).max(160) })).max(100),
+  shootProgress: z.enum(["NOT_STARTED","IN_PROGRESS","WRAPPED","ON_HOLD"]),
+  mediaHandoverStatus: z.enum(["NOT_STARTED","IN_PROGRESS","PARTIAL","COMPLETE","QC_PENDING"]),
   productionNotes: z.string().trim().max(4000).optional(),
 }).superRefine((data, ctx) => {
   if (data.plannedStartDate && data.plannedEndDate && data.plannedEndDate < data.plannedStartDate) {
