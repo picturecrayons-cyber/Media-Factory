@@ -65,7 +65,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
             <h2 className="font-display text-3xl font-semibold">Control titles. Clear gates. Release safely.</h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">Internal controls only. Buyer visibility stays fail-closed until the canonical title clears its required gates.</p>
           </div>
-          <Link to="/admin" className="text-sm text-accent hover:underline">← Admin overview</Link>
+          <div className="flex flex-wrap gap-3"><Link to="/admin/tasks" className="text-sm text-accent hover:underline">Persisted Task Inbox →</Link>{actor.internalRole === "legal_reviewer" ? <Link to="/admin/legal-review" className="text-sm text-accent hover:underline">Independent Legal Review →</Link> : null}<Link to="/admin" className="text-sm text-accent hover:underline">← Admin overview</Link></div>
         </div>
       </section>
 
