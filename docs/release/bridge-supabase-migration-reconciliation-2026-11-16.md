@@ -97,7 +97,7 @@ This migration already exists in the Testing ledger as version `20261126031932`.
 |---|---|---:|---|
 | 20261126031932 | bridge_three_submission_workflows | 2957 | `c7cd4488889b650c465f3446cd8e591e5fe00de5bee4ddf58f349bae839fb830` |
 
-| 20261126050239 | reconcile_owner_submission_kinds_forward_only | 1787 | `51fda67cfb1673ad658b63a38234243a6afd640c9a1310b46247af16c0309fa3` |
+| 20261126050239 | reconcile_owner_submission_kinds_forward_only | 1821 | `653e01171943514e8596361b8e6752c5e540843bf4f6ad3e2a8fbe91856a4e0e` |
 
 ## Previously committed files
 
