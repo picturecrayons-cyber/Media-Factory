@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const migration = await readFile(new URL("../supabase/migrations/20261127093000_bridge_production_projects_dit_lifecycle.sql", import.meta.url), "utf8");
+const migration = await readFile(new URL("../supabase/migrations/20261126221143_bridge_production_projects_dit_lifecycle.sql", import.meta.url), "utf8");
 const api = await readFile(new URL("../src/lib/bridge/dit-agent.ts", import.meta.url), "utf8");
 const desk = await readFile(new URL("../src/components/bridge/dit-agent-desk.tsx", import.meta.url), "utf8");
 
