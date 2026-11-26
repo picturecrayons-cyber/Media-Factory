@@ -70,7 +70,7 @@ alter table public.bridge_dit_ingest_sessions
 create index if not exists bridge_dit_ingest_sessions_project_created_idx
   on public.bridge_dit_ingest_sessions(production_project_id, created_at desc);
 create index if not exists bridge_dit_ingest_sessions_shoot_day_idx
-  on public.bridge_dit_ingest_sessions(shoot_day_id);
+  on public.bridge_dit_ingest_sessions(shoot_day_id, production_project_id);
 
 alter table public.bridge_production_projects enable row level security;
 alter table public.bridge_production_projects force row level security;
