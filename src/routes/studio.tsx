@@ -3,9 +3,19 @@ import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
+import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
+import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
 import { isStudioTestFixtureTitle } from "@/components/bridge/title-desk";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
+
+const CONCEPT_STATUS: Record<string, string> = {
+  PENDING: "Pending curation",
+  UNDER_REVIEW: "Under review",
+  APPROVED: "Approved",
+  REJECTED: "Not approved",
+  INTRODUCED_TO_BUYERS: "Introduced to buyers",
+};
 
 function Studio() {
   return (
@@ -25,13 +35,21 @@ function StudioHome({ userId, organizationId }: { userId: string; organizationId
     queryFn: () => listTitles(),
     retry: 1,
   });
-  const titles = (titlesQ.data?.titles ?? []).filter((title) => !isStudioTestFixtureTitle(title));
-  const pending = titles.filter((title) =>
+  const conceptsQ = useQuery({
+    queryKey: ["my-story-concepts", userId, organizationId],
+    queryFn: () => listMyStoryConcepts(),
+    enabled: STORY_CONCEPT_ENABLED,
+    retry: 1,
+  });
+
+  const allTitles = (titlesQ.data?.titles ?? []).filter((title) => !isStudioTestFixtureTitle(title));
+  const finishedFilms = allTitles.filter((title) => (title.submissionType ?? "finished_film") === "finished_film");
+  const pendingFilms = finishedFilms.filter((title) =>
     ["UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVIEW"].includes(title.status),
-  ).length;
-  const recent = [...titles]
-    .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
-    .slice(0, 5);
+  );
+  const recentFilms = [...finishedFilms].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).slice(0, 5);
+  const concepts = conceptsQ.data?.concepts ?? [];
+  const recentConcepts = [...concepts].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, 5);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-16">
@@ -39,56 +57,106 @@ function StudioHome({ userId, organizationId }: { userId: string; organizationId
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Studio workspace</p>
           <h2 className="mt-1 font-display text-2xl font-semibold sm:text-3xl">Your studio at a glance</h2>
-          <p className="mt-1 text-sm text-muted">Manage titles, submissions and deliveries from one place.</p>
+          <p className="mt-1 text-sm text-muted">Manage Bridge’s two primary product lines from one workspace.</p>
         </div>
         <Link to="/account" className="text-sm font-semibold text-accent hover:underline">Account settings →</Link>
       </section>
 
-      <section aria-label="Studio overview" className="grid gap-3 sm:grid-cols-2">
-        <Metric label="My titles" value={titlesQ.isPending || titlesQ.isError ? "—" : String(titles.length)} note="Verified records in this Studio workspace" />
-        <Metric label="Pending actions" value={titlesQ.isPending || titlesQ.isError ? "—" : String(pending)} note="Upload, preparation, QC or rights stages" />
+      <section aria-label="Studio product overview" className="grid gap-3 sm:grid-cols-3">
+        <Metric label="Finished Films" value={titlesQ.isPending || titlesQ.isError ? "—" : String(finishedFilms.length)} note="Completed-film product records" />
+        <Metric label="Stories / Concepts" value={!STORY_CONCEPT_ENABLED || conceptsQ.isPending || conceptsQ.isError ? "—" : String(concepts.length)} note="Development-stage product records" />
+        <Metric label="Film workflow actions" value={titlesQ.isPending || titlesQ.isError ? "—" : String(pendingFilms.length)} note="Upload, preparation, QC or rights" />
       </section>
 
       <section className="space-y-3">
-        <h3 className="font-display text-lg font-semibold">Quick actions</h3>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Action to="/submit-film" title="Submit Film" detail="Add a completed film" />
-          <Action to="/submit-concept" title="Submit Story" detail="Add a story or concept" />
-          <Action to="/workspace" title="My Titles" detail="View and manage titles" />
-          <Action to="/deliveries" title="Deliveries" detail="Track authorized deliveries" />
+        <h3 className="font-display text-lg font-semibold">Your Bridge products</h3>
+        <div className="grid gap-4 md:grid-cols-2">
+          <article className="rounded-2xl border border-line bg-surface p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Product 01</p>
+            <h3 className="mt-2 font-display text-xl font-semibold">Finished Films</h3>
+            <p className="mt-2 text-sm text-muted">Completed films follow the production and rights lifecycle: assets → QC → rights → licensing → delivery → revenue.</p>
+            <p className="mt-4 text-2xl font-semibold tabular-nums">{titlesQ.isPending || titlesQ.isError ? "—" : finishedFilms.length}</p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link to="/submit-film" className="rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg">Submit Finished Film</Link>
+              <Link to="/workspace" className="self-center text-sm font-semibold text-accent hover:underline">Open product library →</Link>
+            </div>
+          </article>
+          <article className="rounded-2xl border border-line bg-surface p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Product 02</p>
+            <h3 className="mt-2 font-display text-xl font-semibold">Stories / Concepts</h3>
+            <p className="mt-2 text-sm text-muted">Ideas, scripts and pitches follow a separate intake and curation pipeline before any buyer or investor introduction.</p>
+            <p className="mt-4 text-2xl font-semibold tabular-nums">{!STORY_CONCEPT_ENABLED || conceptsQ.isPending || conceptsQ.isError ? "—" : concepts.length}</p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              {STORY_CONCEPT_ENABLED ? <Link to="/submit-concept" className="rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg">Submit Story / Concept</Link> : <span className="text-sm text-muted">Submission is not enabled in this environment.</span>}
+              <Link to="/workspace" className="self-center text-sm font-semibold text-accent hover:underline">Open product library →</Link>
+            </div>
+          </article>
         </div>
       </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="font-display text-lg font-semibold">Recent titles</h3>
-            <p className="text-sm text-muted">Only titles authorized for this Studio account are shown.</p>
+            <h3 className="font-display text-lg font-semibold">Finished Film pipeline</h3>
+            <p className="text-sm text-muted">Canonical film records authorized for this Studio account.</p>
           </div>
-          <Link to="/workspace" className="shrink-0 text-sm font-semibold text-accent hover:underline">View all →</Link>
+          <Link to="/workspace" className="shrink-0 text-sm font-semibold text-accent hover:underline">View library →</Link>
         </div>
-        {titlesQ.isPending ? <p className="rounded-xl border border-line bg-surface p-4 text-sm text-muted">Loading Studio titles…</p> : null}
+        {titlesQ.isPending ? <p className="rounded-xl border border-line bg-surface p-4 text-sm text-muted">Loading Finished Films…</p> : null}
         {titlesQ.isError ? (
           <div role="alert" className="rounded-xl border border-line bg-surface p-4 text-sm text-muted">
-            <p>Studio titles could not be loaded. No totals are shown until the data source responds.</p>
+            <p>Finished Film records could not be loaded. Counts are unavailable until the data source responds.</p>
             <button type="button" onClick={() => void titlesQ.refetch()} className="mt-2 font-semibold text-accent underline">Retry</button>
           </div>
         ) : null}
         {!titlesQ.isPending && !titlesQ.isError ? (
           <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
-            {recent.map((title) => (
+            {recentFilms.map((title) => (
               <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <Link to="/title/$id" params={{ id: title.id }} className="font-medium hover:text-accent">{title.name}</Link>
-                  <p className="text-xs text-muted">{title.contentType ?? "Title"} · {title.language}{title.year ? ` · ${title.year}` : ""}</p>
+                  <p className="text-xs text-muted">{title.contentType} · {title.language}{title.year ? ` · ${title.year}` : ""}</p>
                 </div>
                 <span className="rounded-full border border-line px-2.5 py-1 text-xs text-muted">{title.status.replaceAll("_", " ")}</span>
               </li>
             ))}
-            {!recent.length ? <li className="px-4 py-8 text-center text-sm text-muted">No Studio titles are available yet. Start with Submit Film or Submit Story.</li> : null}
+            {!recentFilms.length ? <li className="px-4 py-7 text-center text-sm text-muted">No Finished Film records are available for this Studio account yet.</li> : null}
           </ul>
         ) : null}
       </section>
+
+      {STORY_CONCEPT_ENABLED ? (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-display text-lg font-semibold">Story / Concept pipeline</h3>
+              <p className="text-sm text-muted">Separate curation status; no automatic publication to Loop.</p>
+            </div>
+            <Link to="/submit-concept" className="shrink-0 text-sm font-semibold text-accent hover:underline">New concept →</Link>
+          </div>
+          {conceptsQ.isPending ? <p className="rounded-xl border border-line bg-surface p-4 text-sm text-muted">Loading Stories / Concepts…</p> : null}
+          {conceptsQ.isError ? (
+            <div role="alert" className="rounded-xl border border-line bg-surface p-4 text-sm text-muted">
+              <p>Story / Concept records could not be loaded. No zero count is assumed.</p>
+              <button type="button" onClick={() => void conceptsQ.refetch()} className="mt-2 font-semibold text-accent underline">Retry</button>
+            </div>
+          ) : null}
+          {!conceptsQ.isPending && !conceptsQ.isError ? (
+            <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+              {recentConcepts.map((concept) => (
+                <li key={concept.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <Link to="/title/$id" params={{ id: concept.title_id }} className="font-medium hover:text-accent">{concept.titleName}</Link>
+                    <p className="text-xs text-muted">{CONCEPT_STATUS[concept.curation_status] ?? concept.curation_status}</p>
+                  </div>
+                  <span className="rounded-full border border-line px-2.5 py-1 text-xs text-muted">Story / Concept</span>
+                </li>
+              ))}
+              {!recentConcepts.length ? <li className="px-4 py-7 text-center text-sm text-muted">No Story / Concept submissions yet. Submit a concept to start this pipeline.</li> : null}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="grid gap-3 sm:grid-cols-2">
         <Link to="/studio-dit" className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4 transition hover:border-accent">
@@ -111,14 +179,5 @@ function Metric({ label, value, note }: { label: string; value: string; note: st
       <p className="mt-1 text-3xl font-semibold tabular-nums">{value}</p>
       <p className="mt-1 text-xs text-muted">{note}</p>
     </article>
-  );
-}
-
-function Action({ to, title, detail }: { to: "/submit-film" | "/submit-concept" | "/workspace" | "/deliveries"; title: string; detail: string }) {
-  return (
-    <Link to={to} className="rounded-xl border border-line bg-surface p-4 transition hover:border-accent">
-      <p className="font-semibold">{title}</p>
-      <p className="mt-1 text-sm text-muted">{detail}</p>
-    </Link>
   );
 }
