@@ -37,25 +37,25 @@ function Studio() {
               <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
             </section>
 
-            <section className="space-y-4">
-              <div>
-                <h3 className="font-display text-xl font-semibold">New submission</h3>
-                <p className="mt-1 text-sm text-muted">Choose a dedicated submission workflow. Every title remains subject to Bridge QC, Legal and Rights approvals.</p>
+            <section id="studio-titles" className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-display text-xl font-semibold">New submission</h3>
+                  <p className="mt-1 text-sm text-muted">Choose a dedicated submission workflow. Every title remains subject to Bridge QC, Legal and Rights approvals.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Link to="/submit-film" className="rounded-sm border border-line p-4 hover:border-accent">
+                    <strong>New Finished Film</strong>
+                    <p className="mt-1 text-sm text-muted">Submit a completed film for rights and buyer review</p>
+                  </Link>
+                  <Link to="/submit-concept" className="rounded-sm border border-line p-4 hover:border-accent">
+                    <strong>Story / Concept</strong>
+                    <p className="mt-1 text-sm text-muted">Submit a story or concept for separate curation</p>
+                  </Link>
+                </div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Link to="/submit-film" className="rounded-sm border border-line p-4 hover:border-accent">
-                  <strong>New Finished Film</strong>
-                  <p className="mt-1 text-sm text-muted">Submit a completed film for rights and buyer review</p>
-                </Link>
-                <Link to="/submit-concept" className="rounded-sm border border-line p-4 hover:border-accent">
-                  <strong>Story / Concept</strong>
-                  <p className="mt-1 text-sm text-muted">Submit a story or concept for separate curation</p>
-                </Link>
-              </div>
-            </section>
 
-            <section id="studio-titles" className="space-y-4">
-              <div>
+              <div className="border-t border-line pt-5">
                 <h3 className="font-display text-xl font-semibold">Finished films</h3>
                 <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
               </div>
