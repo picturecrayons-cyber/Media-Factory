@@ -17,7 +17,10 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 70;
+const EXPECTED_HISTORICAL_MIGRATIONS = 70;
+const EXPECTED_PENDING_MIGRATIONS = 1;
+const EXPECTED_MIGRATIONS = EXPECTED_HISTORICAL_MIGRATIONS + EXPECTED_PENDING_MIGRATIONS;
+const PENDING_PR_MIGRATION = "20261126031932_bridge_three_submission_workflows.sql";
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -54,7 +57,7 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
+if (names.length !== EXPECTED_MIGRATIONS || !names.includes(PENDING_PR_MIGRATION) || names.length - 1 !== EXPECTED_HISTORICAL_MIGRATIONS) {
   throw new Error(
     `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
   );
@@ -732,7 +735,7 @@ try {
   }
 
   console.log(
-    `[migration-replay] PASS: all ${names.length} Production-ledger migrations replayed in a fresh local Supabase stack.`,
+    `[migration-replay] PASS: ${EXPECTED_HISTORICAL_MIGRATIONS} recovered Production-ledger migrations plus ${EXPECTED_PENDING_MIGRATIONS} pending PR migration replayed in a fresh local Supabase stack.`,
   );
 } finally {
   client.release();
