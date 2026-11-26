@@ -17,6 +17,8 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Test Production OCI verification guards
+        run: node --test scripts/oci-production-master-verification.test.mjs
       # Generate TanStack's route tree before checking route type literals.
       - run: npm run build
       - run: node scripts/check-vercel-output.mjs
