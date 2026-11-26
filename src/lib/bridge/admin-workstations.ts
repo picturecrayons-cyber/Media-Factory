@@ -95,7 +95,12 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
               where item->>'grantId' = ${validGrant[0].id}::text
             )
           order by created_at desc limit 1`,
-        sql`select id from bridge_qc_cases where title_id = ${title.id} and status = 'PASSED' and asset_version_id is not null and reviewed_by is not null and reviewed_at is not null limit 1`,
+        sql`select q.id from bridge_qc_cases q
+          where q.title_id = ${title.id} and q.status = 'PASSED'
+            and q.asset_version_id is not null and q.reviewed_by is not null and q.reviewed_at is not null
+            and q.reviewer_findings->0->>'masterKey' = ${title.master_key}
+            and q.reviewer_findings->0->>'posterKey' = ${title.poster_key}
+          order by q.created_at desc limit 1`,
       ]);
       if (!legalApproval[0]) throw new Error("Rights approval blocked: independent Legal approval for the active rights grant is missing");
       if (!qcApproval[0]) throw new Error("Rights approval blocked: current asset-version QC approval is missing");
