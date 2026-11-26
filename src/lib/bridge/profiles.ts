@@ -336,6 +336,55 @@ export const completeOnboarding = createServerFn({ method: "POST" })
         }
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
         await claimLegacyCreatorIntake(tx, email, bridgeUserId);
+
+        // New external Bridge accounts receive the configured platform trial.
+        // This is a Bridge membership record, never a Loop subscription or title entitlement.
+        // Internal staff identities are excluded from customer membership.
+        if (!internalRole) {
+          const trialPlans = await tx<{ id: string; trial_days: number }>`
+            select id, trial_days
+            from bridge_membership_plans
+            where plan_key = 'bridge_standard'
+              and plan_status = 'active'
+              and account_types @> array[${data.accountType}]::text[]
+            order by version desc
+            limit 1
+          `;
+          const trialPlan = trialPlans[0];
+          if (!trialPlan || trialPlan.trial_days < 1) {
+            throw new Error("Bridge membership trial plan is not configured. Please contact support.");
+          }
+          const membershipRows = await tx<{ id: string }>`
+            insert into bridge_memberships (
+              user_id, organization_id, account_type, plan_id, status,
+              trial_started_at, trial_ends_at
+            )
+            select bp.user_id, bp.organization_id, bp.account_type, ${trialPlan.id}::uuid,
+              'trialing', now(), now() + (${trialPlan.trial_days} * interval '1 day')
+            from bridge_profiles bp
+            where bp.user_id = ${bridgeUserId}
+            on conflict (user_id) do nothing
+            returning id
+          `;
+          if (membershipRows[0]) {
+            await tx`
+              insert into bridge_membership_events (
+                membership_id, actor_user_id, event_type, to_status, note, metadata
+              ) values (
+                ${membershipRows[0].id}::uuid, null, 'trial_granted', 'trialing',
+                'Automatic trial created during verified Bridge onboarding',
+                ${JSON.stringify({ planId: trialPlan.id, trialDays: trialPlan.trial_days, source: "signup" })}
+              )
+            `;
+            await writeAudit({
+              actorUserId: bridgeUserId,
+              action: "membership.trial_started",
+              entityType: "bridge_membership",
+              entityId: membershipRows[0].id,
+              metadata: { planId: trialPlan.id, trialDays: trialPlan.trial_days, source: "signup" },
+            }, tx);
+          }
+        }
         const roleForTransaction: string | null = internalRole;
         return roleForTransaction;
       });
