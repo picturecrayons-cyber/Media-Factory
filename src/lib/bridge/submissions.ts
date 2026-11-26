@@ -11,7 +11,7 @@ import { assertNotDevUser } from "./guards";
 const submissionSchema = z.object({
   name: z.string().trim().min(1).max(160),
   synopsis: z.string().trim().min(1).max(4000),
-  contentType: z.enum(["FEATURE", "SERIES", "SHORT", "DOCUMENTARY", "OTHER"]),
+  contentType: z.enum(["FEATURE", "SERIES", "SHORT", "DOCUMENTARY", "VERTICAL_DRAMA", "OTHER"]),
   originalLanguage: z.string().trim().min(2).max(40),
   countryOfOrigin: z.string().trim().min(2).max(80),
   releaseYear: z.number().int().min(1895).max(2100),
