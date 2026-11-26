@@ -28,28 +28,23 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   }
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {titles.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <Link
-            to="/title/$id"
-            params={{ id: t.id }}
-            className="min-w-0 flex-1 rounded-md py-1 hover:text-accent"
-          >
-            <p className="font-medium">{t.name}</p>
-            <p className="text-sm text-muted">
-              {t.contentType ? `${t.contentType} · ` : ""}
-              {t.language}
-              {t.year ? ` · ${t.year}` : ""}
-            </p>
-          </Link>
-          <div className="flex shrink-0 items-center gap-3">
-            <StatusChip status={t.status} />
-            
+        <article key={t.id} className="flex min-h-40 flex-col justify-between rounded-2xl border border-line bg-surface p-4 transition hover:border-accent">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t.contentType || "Title"}</p>
+            <Link to="/title/$id" params={{ id: t.id }} className="block text-base font-semibold leading-snug hover:text-accent">
+              {t.name}
+            </Link>
+            <p className="text-sm text-muted">{t.language}{t.year ? ` · ${t.year}` : ""}</p>
           </div>
-        </li>
+          <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3">
+            <StatusChip status={t.status} />
+            <Link to="/title/$id" params={{ id: t.id }} className="text-sm font-semibold text-accent hover:underline">Open title →</Link>
+          </div>
+        </article>
       ))}
-    </ul>
+    </div>
   );
 }
 

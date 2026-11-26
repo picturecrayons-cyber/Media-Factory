@@ -154,7 +154,6 @@ async function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs = 
 function BuyerBody({ userId }: { userId: string }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
-  const [view, setView] = useState<"gallery" | "list">("gallery");
   const [query, setQuery] = useState("");
   const [galleryPage, setGalleryPage] = useState(0);
   // Buyer-sensitive responses must never share a React Query cache entry across accounts.
@@ -179,7 +178,7 @@ function BuyerBody({ userId }: { userId: string }) {
     queryKey: ["bridge-buyer-poster-artwork", userId, posterTitleIds],
     queryFn: ({ signal }) =>
       withTimeout(fetchBuyerPosterArtwork(posterTitleIds, signal), "Buyer artwork", 120_000),
-    enabled: tab !== "licenses" && view === "gallery" && posterTitleIds.length > 0,
+    enabled: tab !== "licenses" && posterTitleIds.length > 0,
     retry: 1,
   });
   const entQ = useQuery({
@@ -266,21 +265,13 @@ function BuyerBody({ userId }: { userId: string }) {
       {tab !== "licenses" && (
         <div className="flex flex-wrap items-center gap-3">
           <input value={query} onChange={(e) => { setQuery(e.target.value); setGalleryPage(0); }} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
-          <div className="inline-flex rounded-sm border border-line p-1" role="group" aria-label="Catalogue view">
-            <button type="button" onClick={() => setView("gallery")} aria-pressed={view === "gallery"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "gallery" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
-              Gallery
-            </button>
-            <button type="button" onClick={() => setView("list")} aria-pressed={view === "list"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "list" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
-              List
-            </button>
-          </div>
         </div>
       )}
       {!titles.length ? (
         <BuyerEmptyState />
       ) : tab === "licenses" ? (
         <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
-      ) : view === "gallery" ? (
+      ) : (
         <div className="space-y-4">
           <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
           {visible.length > BUYER_GALLERY_PAGE_SIZE ? (
@@ -305,8 +296,6 @@ function BuyerBody({ userId }: { userId: string }) {
             </div>
           ) : null}
         </div>
-      ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
       )}
       {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
         <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>
@@ -461,19 +450,20 @@ function BuyerPosterImage({ blob, title }: { blob: Blob | undefined; title: stri
 function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {titles.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+        <article key={t.id} className="flex min-h-44 flex-col justify-between rounded-2xl border border-line bg-surface p-4">
           <div>
-            <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">{t.name}</Link>
-            <p className="text-sm text-muted">{t.language}{t.licensingFeePaise > 0 ? ` · ${formatLicensingFeePaise(t.licensingFeePaise)}` : " · fee unset"}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t.language}</p>
+            <Link to="/title/$id" params={{ id: t.id }} className="mt-2 block font-semibold hover:text-accent">{t.name}</Link>
+            <p className="mt-1 text-sm text-muted">{t.licensingFeePaise > 0 ? formatLicensingFeePaise(t.licensingFeePaise) : "Fee unset"}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3">
             <StatusChip status={t.status as never} />
-            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
+            {entitled.has(t.id) ? <span className="text-sm font-semibold text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
           </div>
-        </li>
+        </article>
       ))}
-    </ul>
+    </div>
   );
 }
