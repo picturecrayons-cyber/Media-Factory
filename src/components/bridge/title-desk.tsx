@@ -17,7 +17,10 @@ export function isStudioTestFixtureTitle(title: { id: string; name: string }): b
   return STUDIO_TEST_FIXTURE_IDS.has(title.id);
 }
 
+type ProductCategory = "all" | "finished_film" | "story_concept";
+
 export function TitleList({ empty, query = "", excludeTestFixtures = false }: { empty: string; query?: string; excludeTestFixtures?: boolean }) {
+  const [category, setCategory] = useState<ProductCategory>("all");
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
     queryFn: () => listTitles(),
@@ -26,40 +29,59 @@ export function TitleList({ empty, query = "", excludeTestFixtures = false }: { 
     refetchOnWindowFocus: false,
     retry: 1,
   });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => (!excludeTestFixtures || !isStudioTestFixtureTitle(t)) && (!query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase())));
-  if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
+  const allTitles = (titlesQ.data?.titles ?? []).filter((t) => !excludeTestFixtures || !isStudioTestFixtureTitle(t));
+  const finishedFilms = allTitles.filter((t) => (t.submissionType ?? "finished_film") === "finished_film");
+  const storyConcepts = allTitles.filter((t) => t.submissionType === "story_concept");
+  const source = category === "finished_film" ? finishedFilms : category === "story_concept" ? storyConcepts : allTitles;
+  const titles = source.filter((t) => (!query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase())));
+  if (titlesQ.isPending) return <p className="text-sm text-muted">Loading Bridge products…</p>;
   if (titlesQ.isError) {
     return (
       <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
-        <p>Could not load titles.</p>
+        <p>Could not load Bridge products.</p>
         <Button type="button" onClick={() => void titlesQ.refetch()}>Retry</Button>
       </div>
     );
   }
-  if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
+  const tabs: { id: ProductCategory; label: string; count: number }[] = [
+    { id: "all", label: "All products", count: allTitles.length },
+    { id: "finished_film", label: "Finished Films", count: finishedFilms.length },
+    { id: "story_concept", label: "Stories / Concepts", count: storyConcepts.length },
+  ];
   return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
-      {titles.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <Link
-            to="/title/$id"
-            params={{ id: t.id }}
-            className="min-w-0 flex-1 rounded-md py-1 hover:text-accent"
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filter Bridge products">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            aria-pressed={category === tab.id}
+            onClick={() => setCategory(tab.id)}
+            className={`rounded-full border px-4 py-2 text-sm font-medium transition ${category === tab.id ? "border-fg bg-fg text-bg" : "border-line text-muted hover:border-line-strong hover:text-fg"}`}
           >
-            <p className="font-medium">{t.name}</p>
-            <p className="text-sm text-muted">
-              {t.contentType ? `${t.contentType} · ` : ""}
-              {t.language}
-              {t.year ? ` · ${t.year}` : ""}
-            </p>
-          </Link>
-          <div className="flex shrink-0 items-center gap-3">
-            <StatusChip status={t.status} />
-            
-          </div>
-        </li>
-      ))}
-    </ul>
+            {tab.label} <span className="ml-1 tabular-nums opacity-75">{tab.count}</span>
+          </button>
+        ))}
+      </div>
+      {!titles.length ? <p className="text-sm text-muted">{category === "finished_film" ? "No Finished Films are available in this workspace yet." : category === "story_concept" ? "No Stories / Concepts are available in this workspace yet." : empty}</p> : (
+        <ul className="divide-y divide-line rounded-sm border border-line">
+          {titles.map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <Link to="/title/$id" params={{ id: t.id }} className="min-w-0 flex-1 rounded-md py-1 hover:text-accent">
+                <p className="font-medium">{t.name}</p>
+                <p className="text-sm text-muted">
+                  {t.submissionType === "story_concept" ? "Story / Concept" : "Finished Film"}
+                  {t.contentType ? ` · ${t.contentType}` : ""}
+                  {t.language ? ` · ${t.language}` : ""}
+                  {t.year ? ` · ${t.year}` : ""}
+                </p>
+              </Link>
+              <div className="flex shrink-0 items-center gap-3"><StatusChip status={t.status} /></div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
