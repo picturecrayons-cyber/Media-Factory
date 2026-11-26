@@ -278,6 +278,17 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (actor.accountType === "investor" && !actor.internalRole) throw new Error("Not found");
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      const buyerAccess = await sql<{ allowed: boolean }>`
+        select exists (select 1 from bridge_buyer_title_access
+          where title_id=${title.id} and buyer_user_id=${actor.userId}
+            and revoked_at is null and (expires_at is null or expires_at > now())) as allowed
+      `;
+      if (!buyerAccess[0]?.allowed) throw new Error("Not found");
+      const { assertBuyerPublishable } = await import("./buyer-visibility");
+      await assertBuyerPublishable(title.id);
+    }
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
     const decision = downloadDecision({
       kind: asset.kind,
@@ -316,6 +327,26 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    const investor = actor.accountType === "investor" && !actor.internalRole;
+    if (buyer) {
+      const access = await sql<{ allowed: boolean }>`
+        select exists (select 1 from bridge_buyer_title_access
+          where title_id=${title.id} and buyer_user_id=${actor.userId}
+            and revoked_at is null and (expires_at is null or expires_at > now())) as allowed
+      `;
+      if (!access[0]?.allowed) throw new Error("Not found");
+      const { assertBuyerPublishable } = await import("./buyer-visibility");
+      await assertBuyerPublishable(title.id);
+    }
+    if (investor) {
+      const access = await sql<{ allowed: boolean }>`
+        select exists (select 1 from bridge_investor_title_access
+          where title_id=${title.id} and investor_user_id=${actor.userId}
+            and revoked_at is null and (expires_at is null or expires_at > now())) as allowed
+      `;
+      if (!access[0]?.allowed) throw new Error("Not found");
+      return { assets: [] };
+    }
     const rows = await sql<{
       id: string;
       kind: string;
@@ -356,6 +387,7 @@ export const listProductionAssets = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     if (actor.accountType === "buyer" && !actor.internalRole) throw new Error("Not found");
+    if (actor.accountType === "investor" && !actor.internalRole) throw new Error("Not found");
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
 
