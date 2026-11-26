@@ -106,6 +106,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       await writeAudit({ actorUserId: actor.userId, action: "qc.fail", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } });
       return { ok: true, status: "QC_REVIEW" };
     } else if (data.decision === "APPROVE") {
+      if (actor.internalRole !== "super_admin") throw new Error("Only Super Admin may approve the Rights Review gate");
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
       const validGrant = await sql<{ id: string }>`select id from bridge_rights_grants where title_id = ${title.id} and status = 'VALID' order by created_at desc limit 1`;
@@ -132,6 +133,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       if (!qcApproval[0]) throw new Error("Rights approval blocked: current asset-version QC approval is missing");
       next = "LICENSING_READY"; action = "rights.approve";
     } else {
+      if (actor.internalRole !== "super_admin") throw new Error("Only Super Admin may reject the Rights Review gate");
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
       await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${title.status}, ${actor.userId}, ${"Rights review rejected: " + data.notes!.trim()})`;
