@@ -85,7 +85,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
           <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-semibold text-muted transition hover:text-fg lg:inline">Open Crayons Loop ↗</a>
           <div className="ml-auto flex items-center gap-3">
             {actor.internalRole ? <span className="hidden rounded-full border border-line px-3 py-1 text-xs text-muted sm:inline">{actor.internalRole.replaceAll("_", " ")}</span> : null}
-            <UserButton />
+            <UserButton label={actor.organizationName || actor.displayName} />
           </div>
         </div>
         <nav aria-label="Mobile primary navigation" className="flex gap-1 overflow-x-auto border-t border-line px-4 py-2 md:hidden">
