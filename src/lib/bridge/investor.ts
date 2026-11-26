@@ -51,3 +51,22 @@ export const listInvestorInvestments = createServerFn({ method: "GET" })
       createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
     })) };
   });
+
+
+export const listInvestorTitleAccess = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole || actor.accountType !== "investor") throw new Error("Investor account required");
+    const sql = await getSql();
+    const rows = await sql<{ title_id: string; title_name: string; status: string; submission_type: string | null; granted_at: string | Date }>`
+      select a.title_id, t.name as title_name, t.status, t.submission_type, a.granted_at
+      from bridge_investor_title_access a
+      join bridge_titles t on t.id=a.title_id
+      where a.investor_user_id=${actor.userId} and a.revoked_at is null
+        and (a.expires_at is null or a.expires_at > now())
+      order by a.granted_at desc limit 200
+    `;
+    return { titles: rows.map(r => ({ titleId:r.title_id, titleName:r.title_name, status:r.status, submissionType:r.submission_type, grantedAt:r.granted_at instanceof Date ? r.granted_at.toISOString() : String(r.granted_at) })) };
+  });
