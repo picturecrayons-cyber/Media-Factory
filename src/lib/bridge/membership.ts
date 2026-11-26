@@ -54,6 +54,18 @@ export const getMembershipControlPlane = createServerFn({ method: "GET" })
         limit 500
       `,
     ]);
+    const eligibleProfiles = await sql<{
+      user_id: string; email: string; display_name: string; account_type: string;
+      organization_name: string | null;
+    }>`
+      select p.user_id, p.email, p.display_name, p.account_type, p.organization_name
+      from bridge_profiles p
+      left join bridge_memberships m on m.user_id = p.user_id
+      where p.account_type = any(array['independent_creator','studio','buyer','investor']::text[])
+        and m.id is null
+      order by p.created_at desc
+      limit 300
+    `;
     const counts = {
       total: memberships.length,
       trialing: memberships.filter((m) => m.effective_status === "trialing").length,
@@ -62,7 +74,7 @@ export const getMembershipControlPlane = createServerFn({ method: "GET" })
       suspended: memberships.filter((m) => m.effective_status === "suspended").length,
       expired: memberships.filter((m) => m.effective_status === "expired").length,
     };
-    return { actor: { userId: actor.userId }, plans, memberships, counts, billingEnabled: false as const };
+    return { actor: { userId: actor.userId }, plans, memberships, eligibleProfiles, counts, billingEnabled: false as const };
   });
 
 const createPlanSchema = z.object({
