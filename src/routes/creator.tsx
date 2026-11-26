@@ -93,10 +93,7 @@ function CreatorHome({ userId, organizationId }: { userId: string; organizationI
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2">
-        <details className="rounded-xl border border-line bg-surface p-4">
-          <summary className="cursor-pointer font-semibold">My story concepts</summary>
-          <div className="mt-3"><MyStoryConcepts /></div>
-        </details>
+        <MyStoryConcepts />
         <Link to="/account" className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4 transition hover:border-accent">
           <div><h3 className="font-semibold">Account & access</h3><p className="mt-1 text-sm text-muted">Profile and account settings</p></div>
           <span aria-hidden="true" className="text-lg text-muted">→</span>
