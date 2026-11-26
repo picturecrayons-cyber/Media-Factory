@@ -22,6 +22,7 @@ type TitleRow = {
   owner_user_id: string;
   owner_account_type: string;
   owner_organization_id?: string | null;
+  submission_type?: "finished_film" | "story_concept" | "production_shoot" | null;
   status: string;
   synopsis: string;
   language: string;
@@ -53,6 +54,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     ownerUserId: r.owner_user_id,
     ownerAccountType: r.owner_account_type as AccountType,
     ownerOrganizationId: r.owner_organization_id ?? null,
+    submissionType: r.submission_type ?? null,
     status: r.status as TitleStatus,
     synopsis: r.synopsis,
     language: r.language,
