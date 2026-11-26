@@ -3,7 +3,7 @@
 - Source: Supabase Production `supabase_migrations.schema_migrations`.
 - Project ref: `mlmgugivsyoxzdgwkbpu`.
 - Snapshot date: 2026-11-18.
-- Recorded remote migrations restored to active `supabase/migrations/`: **70**.
+- Recorded remote migrations restored to active `supabase/migrations/`: **70**. One additional proposed PR migration is included in the source-integrity manifest but is not yet applied to Production.
 - SQL bytes: **144632**.
 - Every active SQL file now preserves the exact stored statement text joined with LF, including all trailing spaces and newline characters. No trailing-whitespace normalization is performed. SHA-256 values are calculated from the same exact stored statement text.
 - The additive `bridge_master_language` migration (version `20261118123335`) was applied to canonical Production project `mlmgugivsyoxzdgwkbpu`. Read-back confirmed the column exists; all 42 existing title rows retain `master_language = NULL`. No `language` values, title rows, asset rows, or OCI objects were changed.
@@ -14,7 +14,7 @@
 - Production also contains a pre-ledger Delivery Desk table `public.bridge_delivery_jobs`, absent from the 70 recorded SQL statements. Read-only catalog checks confirmed its UUID primary key, cascading title FK, job type/status checks, indexes, RLS enabled, and authenticated-only `private.bridge_is_internal()` policy. It currently has zero rows. The replay script recreates only this empty table/security baseline before migration `20261114135437_bridge_delivery_job_ownership_20261114` adds requester fields and its index; no Production rows are copied.
 - Production also contains a pre-ledger Story/Concept baseline absent from the 70 recorded SQL statements: `bridge_titles.submission_type`, `public.bridge_story_concept_submissions`, and `public.bridge_buyer_interest`. Production read-back confirmed the Story/Concept table's two RLS policies (anonymous deny and authenticated owner-only), its schema/indexes/constraints, and a row count of three. The 13 November recorded migration `20261113090257_bridge_story_concept_nonrow_privileges_20261113` later removes TRUNCATE/REFERENCES/TRIGGER client privileges from that table. Replay recreates the schema, policy, and role-grant baseline locally before that recorded migration; no Production Story/Concept rows or buyer-interest rows are copied.
 
-## Remote version manifest
+## Migration source-integrity manifest (70 recovered Production migrations + 1 proposed PR migration)
 
 | Version | Name | SQL bytes | SHA-256 |
 |---|---|---:|---|
@@ -88,6 +88,7 @@
 | 20261115165233 | bridge_production_owner_helper_revoke_anon | 155 | `d4a980b33b895324231304f17fbaf912043d5659c6cf43e78421a00ed568a71e` |
 | 20261116090923 | bridge_title_owner_helper_search_path_hardening_20261116 | 824 | `486eba102805b78a28a4509466eecab3f2557cb4093dac20d619f51c6a946fba` |
 | 20261118123335 | bridge_master_language | 459 | `3a22cd57e41d7b0cbf0a40489c9b448981a9540bec672b0be34768213fc6b53c` |
+| 20261125150000 | bridge_qc_sealed_pointer_trigger_fix | 3083 | `ae1701d451ecbfd692bca56a81a15eafa3e12f096841e45d565372152f54ac46` |
 
 ## Previously committed files
 
