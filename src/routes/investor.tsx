@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listInvestorInvestments } from "@/lib/bridge/investor";
+import { listInvestorInvestments, listInvestorTitleAccess } from "@/lib/bridge/investor";
 
 export const Route = createFileRoute("/investor")({ component: Investor });
 
@@ -24,9 +24,11 @@ function InvestorHome({ userId }: { userId: string }) {
     queryFn: () => listInvestorInvestments(),
     retry: 1,
   });
+  const accessQ = useQuery({ queryKey: ["bridge-investor-title-access", userId], queryFn: () => listInvestorTitleAccess(), retry: 1 });
+  const assigned = accessQ.data?.titles ?? [];
   const rows = investmentsQ.data?.investments ?? [];
   const totalCapitalPaise = rows.reduce((sum, row) => sum + Number(row.investedAmountPaise ?? 0), 0);
-  const assignedTitles = new Set(rows.map((row) => row.titleId)).size;
+  const assignedTitles = new Set([...rows.map((row) => row.titleId), ...assigned.map((row) => row.titleId)]).size;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-16">
@@ -55,6 +57,10 @@ function InvestorHome({ userId }: { userId: string }) {
             <Metric label="Recorded capital" value={`₹${(totalCapitalPaise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`} />
           </section>
 
+          <section className="space-y-3">
+            <div><h3 className="font-display text-lg font-semibold">Titles assigned by Bridge</h3><p className="text-sm text-muted">Read-only title access granted by Super Admin. This is not an investment or financial commitment.</p></div>
+            {accessQ.isPending ? <p className="text-sm text-muted">Loading assigned titles…</p> : accessQ.isError ? <p role="alert" className="text-sm text-muted">Assigned titles could not be loaded.</p> : assigned.length ? <div className="grid gap-3 sm:grid-cols-2">{assigned.map((title:any)=><article key={title.titleId} className="rounded-xl border border-line bg-surface p-4"><p className="font-medium">{title.titleName}</p><p className="mt-1 text-xs text-muted">{title.submissionType === "story_concept" ? "Story / Concept" : "Finished Film"} · {title.status}</p><Link to="/title/$id" params={{id:title.titleId}} className="mt-3 inline-block text-sm font-semibold text-accent hover:underline">Open assigned title →</Link></article>)}</div> : <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">No titles have been assigned to this Investor account.</p>}
+          </section>
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
