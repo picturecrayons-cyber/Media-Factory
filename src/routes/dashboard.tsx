@@ -159,15 +159,13 @@ function DashboardBody() {
               <div><p className="font-semibold">{title.name}</p><p className="mt-2 text-xs text-muted">{ACTION_GUIDANCE[title.status]}</p></div>
               <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3"><span className="text-xs text-muted">{title.status.replaceAll("_", " ").toLowerCase()}</span><Link to="/title/$id" params={{ id: title.id }} className="text-sm font-semibold text-accent hover:underline">Review →</Link></div>
             </article>)}
-            {actionItems.length > 6 && (
+            {actionItems.length > 6 ? (
               <p className="self-center px-2 py-3 text-sm text-muted">
                 Showing 6 of {actionItems.length}.{" "}
-                <Link to="/workspace" className="font-semibold text-accent hover:underline">
-                  View all titles
-                </Link>
-              </li>
-            )}
-          </ul>
+                <Link to="/workspace" className="font-semibold text-accent hover:underline">View all titles</Link>
+              </p>
+            ) : null}
+          </div>
         ) : (
           <div className="px-4 py-6">
             <p className="font-medium">No title decision is waiting in these states.</p>
@@ -259,14 +257,14 @@ function DashboardBody() {
           <p role="alert" className="px-4 py-6 text-sm text-accent">
             Title records could not be loaded. Refresh to retry.
           </p>
-        ) : (
-          {titles.length ? <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
+        ) : titles.length ? (
+          <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
             {titles.slice(0, 6).map((title) => <article key={title.id} className="flex min-h-32 flex-col justify-between rounded-xl border border-line bg-surface p-4">
               <Link to="/title/$id" params={{ id: title.id }} className="font-semibold hover:text-accent">{title.name}</Link>
               <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3"><span className="text-xs text-muted">{title.status.replaceAll("_", " ").toLowerCase()}</span><span className="font-mono text-[10px] text-muted">{title.id.slice(0, 8)}</span></div>
             </article>)}
-          </div> : <p className="px-4 py-6 text-sm text-muted">No title records were returned by the canonical query.</p>}
-        )}
+          </div>
+        ) : <p className="px-4 py-6 text-sm text-muted">No title records were returned by the canonical query.</p>
       </section>
     </div>
   );
