@@ -2,7 +2,25 @@
 
 - Source: Supabase Production `supabase_migrations.schema_migrations`.
 - Project ref: `mlmgugivsyoxzdgwkbpu`.
-- Snapshot date: 2026-11-18.
+- Snapshot date: 2026-11-18 (historical 70-entry snapshot; not the current Production ledger).
+- Fresh read-only Production ledger check on 2026-11-26: **78 recorded migrations**. Eight later ledger entries are not yet represented by verified SQL source rows and SHA-256 hashes in this reconciliation manifest. The existing 70-row manifest must not be treated as complete or used to certify a current Production replay.
+
+## 2026-11-26 Production ledger delta — source reconciliation required
+
+The following eight versions are present in the live Production `supabase_migrations.schema_migrations` ledger, but their exact SQL source text and byte/hash evidence have not yet been reconciled into this manifest:
+
+| Version | Recorded name | Source status |
+|---|---|---|
+| 20261116114408 | secure_public_loop_catalog_production | SQL source/hash not yet reconciled |
+| 20261119203855 | bridge_story_concept_author_rights_declaration_20261120 | SQL source/hash not yet reconciled |
+| 20261121042907 | secure_production_asset_owner_helper | SQL source/hash not yet reconciled |
+| 20261122082934 | bridge_creator_document_vault_20261122 | SQL source/hash not yet reconciled |
+| 20261122083819 | bridge_title_owner_submissions_20261122 | SQL source/hash not yet reconciled |
+| 20261122164115 | grant_authenticated_watch_progress_read | SQL source/hash not yet reconciled |
+| 20261123015009 | bridge_owner_submission_production_rollout | SQL source/hash not yet reconciled |
+| 20261124222927 | bridge_qc_verified_asset_gate_20261125 | SQL source/hash not yet reconciled |
+
+**Release rule:** the replay guard now expects 78 manifest-backed historical Production migrations and treats the proposed 20261126071702 migration separately. It must remain failing closed until all 78 exact source files are recovered, hashed and validated against the live ledger. Do not manufacture placeholder hashes, bump counts without source evidence, run `db push`, or use `migration repair` to mask the mismatch.
 - Recorded remote migrations restored to active `supabase/migrations/`: **70**.
 - SQL bytes: **144632**.
 - Every active SQL file now preserves the exact stored statement text joined with LF, including all trailing spaces and newline characters. No trailing-whitespace normalization is performed. SHA-256 values are calculated from the same exact stored statement text.
