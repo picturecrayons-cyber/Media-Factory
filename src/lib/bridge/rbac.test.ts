@@ -156,13 +156,13 @@ describe("PRD authorization matrix", () => {
     assert.equal(permissionForTransition("IN_NEGOTIATION", "LICENSED"), null);
   });
 
-  it("restricts broad Admin Workstations payloads to verified Admin and Super Admin roles", () => {
+  it("allows verified operational roles into role-scoped workstations without broadening their permissions", () => {
     assert.equal(canAccessAdminWorkstations(admin()), true);
     assert.equal(canAccessAdminWorkstations(superAdmin()), true);
-    assert.equal(canAccessAdminWorkstations(qc), false);
-    assert.equal(canAccessAdminWorkstations(legal), false);
+    assert.equal(canAccessAdminWorkstations(qc), true);
+    assert.equal(canAccessAdminWorkstations(legal), true);
     assert.equal(canAccessAdminWorkstations(finance), false);
-    assert.equal(canAccessAdminWorkstations(viewer()), false);
+    assert.equal(canAccessAdminWorkstations(viewer()), true);
     assert.equal(canAccessAdminWorkstations(buyer()), false);
     assert.equal(canAccessAdminWorkstations(actor("unverified-admin", "independent_creator", "admin", false)), false);
   });

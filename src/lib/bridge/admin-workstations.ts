@@ -18,17 +18,43 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
     const actor = await actorFor(context.userId);
     if (!canAccessAdminWorkstations(actor)) throw new Error("Forbidden");
     const sql = await getSql();
-    const [titles, assets, assetVersions, qc, legal, rights, packages, publications, audit] = await Promise.all([
-      sql`select id, name, owner_user_id, owner_account_type, status, language, updated_at from bridge_titles order by updated_at desc limit 200`,
-      sql`select id, title_id, kind, s3_key, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
-      sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`,
-      sql`select id, title_id, asset_version_id, status, automated_findings, reviewer_findings, reviewed_by, reviewed_at, created_at from bridge_qc_cases order by created_at desc limit 200`,
-      sql`select id, title_id, status, classification, evidence, restrictions, reviewed_by, reviewed_at, created_at from bridge_legal_cases order by created_at desc limit 200`,
-      sql`select id, title_id, grant_type, territories, languages, media, window_start, window_end, exclusivity, status, created_by, created_at from bridge_rights_grants order by created_at desc limit 200`,
-      sql`select id, title_id, destination, package_version, rights_grant_id, qc_case_id, legal_case_id, readiness_state, authorized_by, authorized_at, created_at, commercial_model, distributor_exclusivity, revenue_share_percent from bridge_destination_packages order by created_at desc limit 200`,
-      sql`select id, bridge_title_id, loop_title_id, authorization_status, territories, languages, exploitation_models, window_start, window_end, approved_by, approved_at, revoked_at, updated_at from bridge_loop_publications order by updated_at desc limit 200`,
-      sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs order by created_at desc limit 200`,
-    ]);
+    const isAdmin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
+    let titles: any[] = [];
+    let assets: any[] = [];
+    let assetVersions: any[] = [];
+    let qc: any[] = [];
+    let legal: any[] = [];
+    let rights: any[] = [];
+    let packages: any[] = [];
+    let publications: any[] = [];
+    let audit: any[] = [];
+
+    if (isAdmin) {
+      [titles, assets, assetVersions, qc, legal, rights, packages, publications, audit] = await Promise.all([
+        sql`select id, name, owner_user_id, owner_account_type, status, language, updated_at from bridge_titles order by updated_at desc limit 200`,
+        sql`select id, title_id, kind, s3_key, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
+        sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`,
+        sql`select id, title_id, asset_version_id, status, automated_findings, reviewer_findings, reviewed_by, reviewed_at, created_at from bridge_qc_cases order by created_at desc limit 200`,
+        sql`select id, title_id, status, classification, evidence, restrictions, reviewed_by, reviewed_at, created_at from bridge_legal_cases order by created_at desc limit 200`,
+        sql`select id, title_id, grant_type, territories, languages, media, window_start, window_end, exclusivity, status, created_by, created_at from bridge_rights_grants order by created_at desc limit 200`,
+        sql`select id, title_id, destination, package_version, rights_grant_id, qc_case_id, legal_case_id, readiness_state, authorized_by, authorized_at, created_at, commercial_model, distributor_exclusivity, revenue_share_percent from bridge_destination_packages order by created_at desc limit 200`,
+        sql`select id, bridge_title_id, loop_title_id, authorization_status, territories, languages, exploitation_models, window_start, window_end, approved_by, approved_at, revoked_at, updated_at from bridge_loop_publications order by updated_at desc limit 200`,
+        sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs order by created_at desc limit 200`,
+      ]);
+    } else if (actor.internalRole === "qc_reviewer") {
+      titles = await sql`select id, name, status, language, updated_at from bridge_titles where status = 'QC_REVIEW' order by updated_at desc limit 100`;
+      assetVersions = await sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions where title_id in (select id from bridge_titles where status = 'QC_REVIEW') order by created_at desc limit 300`;
+      qc = await sql`select id, title_id, asset_version_id, status, automated_findings, reviewer_findings, reviewed_by, reviewed_at, created_at from bridge_qc_cases where title_id in (select id from bridge_titles where status = 'QC_REVIEW') order by created_at desc limit 100`;
+      audit = await sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs where entity_type = 'bridge_title' and entity_id in (select id from bridge_titles where status = 'QC_REVIEW') order by created_at desc limit 100`;
+    } else if (actor.internalRole === "legal_reviewer") {
+      titles = await sql`select id, name, status, language, updated_at from bridge_titles where status = 'RIGHTS_REVIEW' order by updated_at desc limit 100`;
+      legal = await sql`select id, title_id, status, classification, evidence, restrictions, reviewed_by, reviewed_at, created_at from bridge_legal_cases where title_id in (select id from bridge_titles where status = 'RIGHTS_REVIEW') order by created_at desc limit 100`;
+      rights = await sql`select id, title_id, grant_type, territories, languages, media, window_start, window_end, exclusivity, status, created_by, created_at from bridge_rights_grants where title_id in (select id from bridge_titles where status = 'RIGHTS_REVIEW') order by created_at desc limit 100`;
+      audit = await sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs where entity_type = 'bridge_title' and entity_id in (select id from bridge_titles where status = 'RIGHTS_REVIEW') order by created_at desc limit 100`;
+    } else if (actor.internalRole === "viewer") {
+      titles = await sql`select id, name, status, language, updated_at from bridge_titles order by updated_at desc limit 100`;
+      audit = await sql`select id, actor_user_id, action, entity_type, entity_id, created_at from bridge_audit_logs order by created_at desc limit 100`;
+    }
     return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
   });
 
@@ -36,6 +62,7 @@ const reviewInput = z.object({
   titleId: z.string().min(1),
   decision: z.enum(["ACCEPT", "PASS", "FAIL", "APPROVE", "REJECT"]),
   notes: z.string().max(4000).optional(),
+  assetVersionId: z.string().uuid().optional(),
 });
 
 export const reviewAdminTitle = createServerFn({ method: "POST" })
@@ -44,8 +71,12 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
     if (!actor.internalRole) throw new Error("Forbidden");
-    const sql = await getSql();
-    const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
+    if ((data.decision === "FAIL" || data.decision === "REJECT") && !data.notes?.trim()) {
+      throw new Error("A reviewer reason is required to reject or fail a review");
+    }
+    const db = await getSql();
+    return db.transaction(async (sql) => {
+    const rows = await sql<{ id: string; status: string; master_key: string | null; poster_key: string | null }>`select id, status, master_key, poster_key from bridge_titles where id = ${data.titleId} for update`;
     const title = rows[0];
     if (!title) throw new Error("Title not found");
     let next: string | null = null;
@@ -57,30 +88,68 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     } else if (data.decision === "PASS") {
       assertPermission(actor, "title.qc_review");
       if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
+      if (!data.assetVersionId) throw new Error("Select the exact asset version reviewed by QC");
+      const version = await sql<{ id: string; asset_group: string; s3_key: string; processing_state: string }>`select id, asset_group, s3_key, processing_state from bridge_asset_versions where id = ${data.assetVersionId} and title_id = ${title.id} limit 1`;
+      if (!version[0] || version[0].asset_group !== "VIDEO" || version[0].s3_key !== title.master_key || version[0].processing_state !== "PASSED") {
+        throw new Error("QC must reference the current verified master asset version");
+      }
+      if (!title.master_key || !title.poster_key) throw new Error("Current master and artwork pointers are required for QC");
+      const artwork = await sql<{ id: string }>`select id from bridge_asset_versions
+        where title_id = ${title.id} and asset_group = 'ARTWORK'
+          and s3_key = ${title.poster_key} and processing_state = 'PASSED'
+        order by created_at desc limit 1`;
+      if (!artwork[0]) throw new Error("Current artwork must have a verified asset version before QC can pass");
       next = "RIGHTS_REVIEW"; action = "qc.pass";
     } else if (data.decision === "FAIL") {
       assertPermission(actor, "title.qc_review");
       if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
       await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'FAILED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-      await writeAudit({ actorUserId: actor.userId, action: "qc.fail", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } });
+      await writeAudit({ actorUserId: actor.userId, action: "qc.fail", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } }, sql);
       return { ok: true, status: "QC_REVIEW" };
     } else if (data.decision === "APPROVE") {
+      if (actor.internalRole !== "super_admin") throw new Error("Only Super Admin may approve the Rights Review gate");
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
+      const validGrant = await sql<{ id: string }>`select id from bridge_rights_grants where title_id = ${title.id} and status = 'VALID' order by created_at desc limit 1`;
+      if (!validGrant[0]) throw new Error("Rights approval blocked: no VALID rights grant is recorded");
+      const [legalApproval, qcApproval] = await Promise.all([
+        sql`select id from bridge_legal_cases
+          where title_id = ${title.id} and status = 'APPROVED'
+            and reviewed_by is not null and reviewed_at is not null
+            and exists (
+              select 1 from jsonb_array_elements(
+                case when jsonb_typeof(evidence) = 'array' then evidence else '[]'::jsonb end
+              ) as item
+              where item->>'grantId' = ${validGrant[0].id}::text
+            )
+          order by created_at desc limit 1`,
+        sql`select q.id from bridge_qc_cases q
+          where q.title_id = ${title.id} and q.status = 'PASSED'
+            and q.asset_version_id is not null and q.reviewed_by is not null and q.reviewed_at is not null
+            and q.reviewer_findings->0->>'masterKey' = ${title.master_key}
+            and q.reviewer_findings->0->>'posterKey' = ${title.poster_key}
+          order by q.created_at desc limit 1`,
+      ]);
+      if (!legalApproval[0]) throw new Error("Rights approval blocked: independent Legal approval for the active rights grant is missing");
+      if (!qcApproval[0]) throw new Error("Rights approval blocked: current asset-version QC approval is missing");
       next = "LICENSING_READY"; action = "rights.approve";
     } else {
+      if (actor.internalRole !== "super_admin") throw new Error("Only Super Admin may reject the Rights Review gate");
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
-      await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'REJECTED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-      await writeAudit({ actorUserId: actor.userId, action: "rights.reject", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } });
+      await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${title.status}, ${actor.userId}, ${"Rights review rejected: " + data.notes!.trim()})`;
+      await writeAudit({ actorUserId: actor.userId, action: "rights.reject", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes!.trim() } }, sql);
       return { ok: true, status: "RIGHTS_REVIEW" };
     }
     await sql`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
     await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
-    if (data.decision === "PASS") await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'PASSED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-    if (data.decision === "APPROVE") await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'APPROVED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-    await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } });
+    if (data.decision === "PASS") await sql`insert into bridge_qc_cases (title_id, asset_version_id, status, reviewer_findings, reviewed_by, reviewed_at)
+      values (${title.id}, ${data.assetVersionId!}, 'PASSED',
+        ${JSON.stringify([{ note: data.notes ?? null, masterKey: title.master_key, posterKey: title.poster_key }])}::jsonb,
+        ${actor.userId}, now())`;
+    await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } }, sql);
     return { ok: true, status: next };
+    });
   });
 
 const gateInput = z.object({
