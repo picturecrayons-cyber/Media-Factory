@@ -89,6 +89,14 @@
 | 20261116090923 | bridge_title_owner_helper_search_path_hardening_20261116 | 824 | `486eba102805b78a28a4509466eecab3f2557cb4093dac20d619f51c6a946fba` |
 | 20261118123335 | bridge_master_language | 459 | `3a22cd57e41d7b0cbf0a40489c9b448981a9540bec672b0be34768213fc6b53c` |
 
+## Pending PR migration (not part of the Production ledger)
+
+This migration already exists in the Testing ledger as version `20261126031932`. It is kept separate from the 70 recovered Production-ledger rows above and is replayed after them in the disposable local CI database. The filename deliberately matches Testing's existing version so the same migration is not applied under a second version.
+
+| Version | Name | SQL bytes | SHA-256 |
+|---|---|---:|---|
+| 20261126031932 | bridge_three_submission_workflows | 3142 | `31d2c1dd3d1500b187bb4d910b414fe780028566ab4c14b88345eab77779fff4` |
+
 ## Previously committed files
 
 All 17 files previously under `supabase/migrations/` are preserved byte-for-byte under `supabase/migrations_archive_unreconciled_20261116/`.
