@@ -33,7 +33,7 @@ export function downloadDecision(opts: {
   if (opts.actorIsOwner || opts.actorIsInternal) {
     return { allow: true, reason: "Owner or internal reviewer" };
   }
-  if (opts.kind === "poster") return { allow: true, reason: "Poster is readable with the title" };
+  if (["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(opts.kind)) return { allow: true, reason: "Artwork is readable with the title" };
   if ((opts.kind === "screener" || opts.kind === "subtitle") && opts.hasLicenseEntitlement) {
     return { allow: true, reason: "Entitlement covers this non-master asset" };
   }
