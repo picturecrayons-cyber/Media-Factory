@@ -1,10 +1,14 @@
--- Owner submission lanes are limited to finished film and story/concept.
--- Studio production management is an internal workflow, not an owner submission.
 alter table public.bridge_titles
   drop constraint if exists bridge_titles_submission_type_check;
 alter table public.bridge_titles
   add constraint bridge_titles_submission_type_check
-  check (submission_type = any (array['finished_film'::text, 'story_concept'::text]));
+  check (submission_type = any (array['finished_film'::text, 'story_concept'::text, 'production_shoot'::text]));
+
+alter table public.bridge_owner_submission_events
+  drop constraint if exists bridge_owner_submission_events_submission_kind_check;
+alter table public.bridge_owner_submission_events
+  add constraint bridge_owner_submission_events_submission_kind_check
+  check (submission_kind = any (array['finished_film'::text, 'story_concept'::text, 'production_shoot'::text]));
 
 create table if not exists public.bridge_production_shoots (
   title_id text primary key references public.bridge_titles(id) on delete restrict,
@@ -35,9 +39,7 @@ create table if not exists public.bridge_production_shoots (
   constraint bridge_production_shoots_progress_check check (shoot_progress in ('NOT_STARTED','IN_PROGRESS','WRAPPED','ON_HOLD')),
   constraint bridge_production_shoots_handover_check check (media_handover_status in ('NOT_STARTED','IN_PROGRESS','PARTIAL','COMPLETE','QC_PENDING'))
 );
-
 create index if not exists bridge_production_shoots_stage_idx
   on public.bridge_production_shoots (development_stage, updated_at desc);
-
 alter table public.bridge_production_shoots enable row level security;
 revoke all on public.bridge_production_shoots from anon, authenticated;
