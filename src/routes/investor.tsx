@@ -10,53 +10,96 @@ function Investor() {
   return (
     <RequireBridge allow="investor">
       {(actor) => (
-        <BridgeShell actor={actor} title="Investor desk">
-          <InvestorBody userId={actor.userId} />
+        <BridgeShell actor={actor} title="Investor Home">
+          <InvestorHome userId={actor.userId} />
         </BridgeShell>
       )}
     </RequireBridge>
   );
 }
 
-function InvestorBody({ userId }: { userId: string }) {
+function InvestorHome({ userId }: { userId: string }) {
   const investmentsQ = useQuery({
     queryKey: ["bridge-investor-investments", userId],
     queryFn: () => listInvestorInvestments(),
+    retry: 1,
   });
   const rows = investmentsQ.data?.investments ?? [];
-  const totalCapital = rows.reduce((sum, row) => sum + Number(row.investedAmountPaise ?? 0), 0);
+  const totalCapitalPaise = rows.reduce((sum, row) => sum + Number(row.investedAmountPaise ?? 0), 0);
+  const assignedTitles = new Set(rows.map((row) => row.titleId)).size;
 
   return (
-    <div className="space-y-6">
-      {investmentsQ.isPending ? <p className="text-sm text-muted">Loading your assigned investment records…</p> : null}
-      {investmentsQ.isError ? (
-        <p role="alert" className="rounded-sm border border-line p-4 text-sm text-muted">
-          Your portfolio could not be loaded. Totals are hidden until the authenticated data source responds.
-        </p>
-      ) : null}
-      {!investmentsQ.isPending && !investmentsQ.isError ? <>
-      <section className="grid gap-3 sm:grid-cols-3">
-        <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Scope</p><p className="mt-2 text-sm">Assigned titles only. Read participation. No title edits.</p></article>
-        <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Opportunity</p><p className="mt-2 text-sm">Capital is recorded by Bridge. You see only titles assigned to this account.</p></article>
-        <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Recorded capital</p><p className="mt-2 text-2xl font-semibold">₹{Math.round(totalCapital / 100).toLocaleString("en-IN")}</p></article>
-      </section>
+    <div className="mx-auto max-w-6xl space-y-6 pb-16">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Crayons Bridge · Investor workspace</p>
+          <h2 className="mt-1 font-display text-2xl font-semibold sm:text-3xl">Your investment portfolio</h2>
+          <p className="mt-1 text-sm text-muted">View only the investment records assigned to your account.</p>
+        </div>
+        <Link to="/account" className="text-sm font-semibold text-accent hover:underline">Account & access →</Link>
+      </header>
 
-      <section className="rounded-3xl border border-line bg-surface p-6">
-        <div className="flex items-end justify-between gap-3">
-          <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Portfolio</p><h3 className="mt-1 font-display text-2xl font-semibold">Your investments</h3></div>
+      {investmentsQ.isPending ? <p role="status" className="text-sm text-muted">Loading your assigned investment records…</p> : null}
+      {investmentsQ.isError ? (
+        <div role="alert" className="rounded-xl border border-line bg-surface p-4 text-sm text-muted">
+          <p>Your portfolio could not be loaded. Totals are hidden until the authenticated data source responds.</p>
+          <button type="button" onClick={() => void investmentsQ.refetch()} className="mt-2 font-semibold text-accent underline">Retry</button>
         </div>
-        <div className="mt-5 overflow-x-auto">
-          <table className="w-full min-w-[700px] text-left text-sm">
-            <thead className="border-b border-line text-xs uppercase tracking-wider text-muted"><tr><th className="px-3 py-3">Title</th><th className="px-3 py-3">Reference</th><th className="px-3 py-3">Capital</th><th className="px-3 py-3">Participation</th><th className="px-3 py-3">Recorded</th></tr></thead>
-            <tbody className="divide-y divide-line">
-              {rows.map((row) => <tr key={row.id}><td className="px-3 py-3"><Link to="/title/$id" params={{ id: row.titleId }} className="font-medium hover:text-accent">{row.titleName}</Link></td><td className="px-3 py-3">{row.investmentReference ?? "—"}</td><td className="px-3 py-3">₹{Math.round(Number(row.investedAmountPaise ?? 0) / 100).toLocaleString("en-IN")}</td><td className="px-3 py-3">{Number(row.participationPercent ?? 0).toFixed(2)}%</td><td className="px-3 py-3">{new Date(row.createdAt).toLocaleDateString("en-IN")}</td></tr>)}
-              {!rows.length ? <tr><td colSpan={5} className="px-3 py-8 text-center text-muted">No investment records are assigned to this account yet.</td></tr> : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      </> : null}
+      ) : null}
+
+      {!investmentsQ.isPending && !investmentsQ.isError ? (
+        <>
+          <section aria-label="Portfolio overview" className="grid gap-3 sm:grid-cols-3">
+            <Metric label="Investment records" value={String(rows.length)} />
+            <Metric label="Assigned titles" value={String(assignedTitles)} />
+            <Metric label="Recorded capital" value={`₹${(totalCapitalPaise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`} />
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-display text-lg font-semibold">My investments</h3>
+                <p className="text-sm text-muted">Recorded participation details. No unassigned opportunities are displayed.</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+              <table className="w-full min-w-[680px] text-left text-sm">
+                <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
+                  <tr>
+                    <th className="px-4 py-3">Title</th>
+                    <th className="px-4 py-3">Reference</th>
+                    <th className="px-4 py-3">Capital</th>
+                    <th className="px-4 py-3">Participation</th>
+                    <th className="px-4 py-3">Recorded</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {rows.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-4 py-3"><Link to="/title/$id" params={{ id: row.titleId }} className="font-medium hover:text-accent">{row.titleName}</Link></td>
+                      <td className="px-4 py-3">{row.investmentReference ?? "—"}</td>
+                      <td className="px-4 py-3 tabular-nums">₹{(Number(row.investedAmountPaise ?? 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
+                      <td className="px-4 py-3 tabular-nums">{Number(row.participationPercent ?? 0).toFixed(2)}%</td>
+                      <td className="px-4 py-3">{new Date(row.createdAt).toLocaleDateString("en-IN")}</td>
+                    </tr>
+                  ))}
+                  {!rows.length ? <tr><td colSpan={5} className="px-4 py-8 text-center text-muted">No investment records are assigned to this account yet.</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      ) : null}
+      <p className="border-t border-line pt-4 text-xs text-muted">Investor access is read-only and limited to assigned investment records. Participation terms and financial records are not editable from this dashboard.</p>
     </div>
   );
 }
 
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <article className="rounded-xl border border-line bg-surface p-4">
+      <p className="text-sm text-muted">{label}</p>
+      <p className="mt-1 text-3xl font-semibold tabular-nums">{value}</p>
+    </article>
+  );
+}
