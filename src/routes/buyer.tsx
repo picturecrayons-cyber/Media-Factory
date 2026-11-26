@@ -154,7 +154,6 @@ async function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs = 
 function BuyerBody({ userId }: { userId: string }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
-  const [view, setView] = useState<"gallery" | "list">("gallery");
   const [query, setQuery] = useState("");
   const [galleryPage, setGalleryPage] = useState(0);
   // Buyer-sensitive responses must never share a React Query cache entry across accounts.
@@ -179,7 +178,7 @@ function BuyerBody({ userId }: { userId: string }) {
     queryKey: ["bridge-buyer-poster-artwork", userId, posterTitleIds],
     queryFn: ({ signal }) =>
       withTimeout(fetchBuyerPosterArtwork(posterTitleIds, signal), "Buyer artwork", 120_000),
-    enabled: tab !== "licenses" && view === "gallery" && posterTitleIds.length > 0,
+    enabled: tab !== "licenses" && posterTitleIds.length > 0,
     retry: 1,
   });
   const entQ = useQuery({
@@ -266,21 +265,13 @@ function BuyerBody({ userId }: { userId: string }) {
       {tab !== "licenses" && (
         <div className="flex flex-wrap items-center gap-3">
           <input value={query} onChange={(e) => { setQuery(e.target.value); setGalleryPage(0); }} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
-          <div className="inline-flex rounded-sm border border-line p-1" role="group" aria-label="Catalogue view">
-            <button type="button" onClick={() => setView("gallery")} aria-pressed={view === "gallery"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "gallery" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
-              Gallery
-            </button>
-            <button type="button" onClick={() => setView("list")} aria-pressed={view === "list"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "list" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
-              List
-            </button>
-          </div>
         </div>
       )}
       {!titles.length ? (
         <BuyerEmptyState />
       ) : tab === "licenses" ? (
         <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
-      ) : view === "gallery" ? (
+      ) : (
         <div className="space-y-4">
           <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
           {visible.length > BUYER_GALLERY_PAGE_SIZE ? (
@@ -305,8 +296,6 @@ function BuyerBody({ userId }: { userId: string }) {
             </div>
           ) : null}
         </div>
-      ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
       )}
       {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
         <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>
