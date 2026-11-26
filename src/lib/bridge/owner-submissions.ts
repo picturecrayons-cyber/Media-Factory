@@ -48,14 +48,32 @@ export const saveOwnerSubmission = createServerFn({ method: "POST" })
       if (data.submit) {
         await tx`insert into bridge_owner_submission_events (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason) values (${data.titleId},${data.submissionKind},case when ${existing?.submission_status === "NEEDS_CORRECTION"} then 'RESUBMITTED' else 'SUBMITTED' end,${existing?.submission_status ?? "DRAFT"},'SUBMITTED',${actor.userId},'Owner submitted canonical submission')`;
       }
+      await tx`update bridge_titles set name = case when ${data.details.name !== undefined || data.details.titleName !== undefined} then coalesce(nullif(${String(data.details.name ?? data.details.titleName ?? "")}, ''), name) else name end, synopsis = case when ${data.details.synopsis !== undefined} then coalesce(nullif(${String(data.details.synopsis ?? "")}, ''), synopsis) else synopsis end, language = case when ${data.details.language !== undefined} then coalesce(nullif(${String(data.details.language ?? "")}, ''), language) else language end, updated_at = now() where id = ${data.titleId}`;
       if (data.submissionKind === "story_concept") {
-        await tx`update bridge_story_concept_submissions set owner_submission_status = ${nextStatus}, updated_at = now() where title_id = ${data.titleId}`;
+        await tx`update bridge_story_concept_submissions set logline = coalesce(nullif(${String(data.details.logline ?? "")}, ''), logline), synopsis = coalesce(nullif(${String(data.details.synopsis ?? "")}, ''), synopsis), treatment_url = case when ${data.details.treatmentUrl !== undefined} then nullif(${String(data.details.treatmentUrl ?? "")}, '') else treatment_url end, screenplay_url = case when ${data.details.screenplayUrl !== undefined} then nullif(${String(data.details.screenplayUrl ?? "")}, '') else screenplay_url end, genre = case when ${Array.isArray(data.details.genre)} then ${JSON.stringify(data.details.genre)}::jsonb else to_jsonb(genre) end, estimated_budget_range = case when ${data.details.estimatedBudgetRange !== undefined} then nullif(${String(data.details.estimatedBudgetRange ?? "")}, '') else estimated_budget_range end, target_platforms = case when ${Array.isArray(data.details.targetPlatforms)} then ${JSON.stringify(data.details.targetPlatforms)}::jsonb else to_jsonb(target_platforms) end, owner_submission_status = ${nextStatus}, updated_at = now() where title_id = ${data.titleId}`;
       }
       await writeAudit({ actorUserId: actor.userId, action: data.submit ? "owner_submission.submitted" : "owner_submission.draft_saved", entityType: "bridge_title_owner_submission", entityId: data.titleId, metadata: { submissionKind: data.submissionKind, status: nextStatus } }, tx);
       return { titleId: data.titleId, submissionStatus: nextStatus };
     });
   });
 
+export const listMyEditableOwnerSubmissions = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole || !["studio", "independent_creator"].includes(actor.accountType)) throw new Error("Owner account required");
+    const sql = await getSql();
+    const rows = await sql<{ id: string; title_id: string; details: unknown; submission_status: string; submission_type: string; title_name: string; updated_at: string }>`
+      select s.id, s.title_id, s.details, s.submission_status, t.submission_type, t.name as title_name, s.updated_at
+      from bridge_title_owner_submissions s join bridge_titles t on t.id = s.title_id
+      where s.submission_status in ('DRAFT', 'NEEDS_CORRECTION')
+        and t.submission_type in ('finished_film', 'story_concept')
+        and (t.owner_user_id = ${actor.userId} or (actor.accountType = "studio" and t.owner_account_type = "studio" and t.owner_organization_id = ${actor.organizationId ?? null} and exists (select 1 from bridge_organization_memberships m where m.organization_id = t.owner_organization_id and m.user_id = ${actor.userId} and m.status = "active")))
+      order by s.updated_at desc limit 100
+    `;
+    return { submissions: rows.map(row => ({ ...row, details: row.details ?? {} })) };
+  });
 export const listOwnerSubmissionIntake = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
