@@ -102,6 +102,7 @@ function MembershipControlBody() {
   const activePlans = plans.filter((p: any) => p.plan_status === "active");
   const defaultPlanId = activePlans[0]?.id ?? "";
   const planId = selectedPlanId || defaultPlanId;
+  const selectedPlan = activePlans.find((plan: any) => plan.id === planId);
 
   function toggleAccountType(value: AccountKey, checked: boolean) {
     setAccountTypes((current) => checked
@@ -220,7 +221,7 @@ function MembershipControlBody() {
               ))}
             </div>
           </fieldset>
-          <p className="text-xs text-muted">Current policy: 30-day trial. Pricing cadence, GST and grace period remain unconfigured until approved.</p>
+          <p className="text-xs text-muted">Trial duration follows the selected plan. Pricing cadence, GST and grace period remain unconfigured until approved.</p>
           <Button type="submit" disabled={planMutation.isPending || accountTypes.length === 0}>
             {planMutation.isPending ? "Saving version…" : "Save new plan version"}
           </Button>
@@ -252,7 +253,7 @@ function MembershipControlBody() {
           </label>
           <div className="flex flex-wrap gap-2">
             <Button type="button" disabled={!selectedUserId || !planId || grantMutation.isPending} onClick={() => grantMutation.mutate({ userId: selectedUserId, planId, grantType: "trial", note: grantNote || undefined })}>
-              Grant 30-day trial
+              Grant {selectedPlan?.trial_days ?? "—"}-day trial
             </Button>
             <Button type="button" variant="outline" disabled={!selectedUserId || !planId || grantMutation.isPending} onClick={() => grantMutation.mutate({ userId: selectedUserId, planId, grantType: "complimentary", note: grantNote || undefined })}>
               Grant complimentary access
