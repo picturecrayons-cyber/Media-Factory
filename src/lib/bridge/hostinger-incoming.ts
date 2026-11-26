@@ -53,6 +53,56 @@ export function isValidHostingerBearer(
     timingSafeEqual(suppliedBytes, expectedBytes);
 }
 
+/**
+ * Hostinger's authenticated Test action sends a synthetic wrapper, not the
+ * real message.received shape: { data: { date, from, messageId, subject },
+ * event, id, timestamp }. Only this exact four-field envelope is treated as
+ * a no-op. It is never persisted as an inbound message.
+ *
+ * Real deliveries must continue through parseHostingerIncomingPayload(), which
+ * requires an explicit configured mailbox and message object.
+ */
+export function isHostingerSyntheticTestEnvelope(value: unknown): boolean {
+  const payload = asRecord(value);
+  if (!payload || payload.event !== "message.received") return false;
+
+  const hasExactKeys = (record: UnknownRecord, expected: string[]): boolean => {
+    const actual = Object.keys(record).sort();
+    const wanted = [...expected].sort();
+    return actual.length === wanted.length &&
+      actual.every((key, index) => key === wanted[index]);
+  };
+
+  if (!hasExactKeys(payload, ["data", "event", "id", "timestamp"])) return false;
+
+  const data = asRecord(payload.data);
+  if (!data || !hasExactKeys(data, ["date", "from", "messageId", "subject"])) return false;
+
+  const id = firstString(payload, ["id"]);
+  const timestampValue = firstString(payload, ["timestamp"]);
+  const dateValue = firstString(data, ["date"]);
+  const messageId = firstString(data, ["messageId"]);
+  const senderValue = firstString(data, ["from"]);
+  const subject = data.subject;
+
+  if (
+    !id || id.length > 256 ||
+    !timestampValue || !Number.isFinite(new Date(timestampValue).getTime()) ||
+    !dateValue || !Number.isFinite(new Date(dateValue).getTime()) ||
+    !messageId || messageId.length > 512 ||
+    !senderValue ||
+    typeof subject !== "string" || subject.length > 998
+  ) return false;
+
+  try {
+    normalizeSender(senderValue);
+  } catch {
+    return false;
+  }
+
+  return true;
+}
+
 export function parseHostingerIncomingPayload(
   value: unknown,
   expectedMailbox: string,
