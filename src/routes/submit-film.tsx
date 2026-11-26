@@ -54,7 +54,7 @@ function RightsReadySubmission() {
         data: {
           name,
           synopsis,
-          contentType: contentType === "Series" ? "SERIES" : contentType === "Short" ? "SHORT" : contentType === "Vertical drama" ? "OTHER" : "FEATURE",
+          contentType: contentType === "Series" ? "SERIES" : contentType === "Short" ? "SHORT" : contentType === "Vertical drama" ? "VERTICAL_DRAMA" : "FEATURE",
           originalLanguage,
           countryOfOrigin: country,
           releaseYear: Number(year),
