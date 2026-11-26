@@ -62,6 +62,17 @@ function StudioHome({ userId, organizationId }: { userId: string; organizationId
         <Link to="/account" className="text-sm font-semibold text-accent hover:underline">Account settings →</Link>
       </section>
 
+      <section aria-label="Primary Production and DIT workspace" className="rounded-2xl border-2 border-accent/40 bg-surface p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Primary Studio workspace</p>
+            <h3 className="mt-1 font-display text-2xl font-semibold">Production &amp; DIT</h3>
+            <p className="mt-2 max-w-2xl text-sm text-muted">Start with camera-card ingest, source-manifest registration, SHA-256 verification and independent Primary / Recovery Vault checks.</p>
+          </div>
+          <Link to="/studio-dit" className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-full bg-fg px-6 py-3 text-sm font-semibold text-bg">Open Production &amp; DIT →</Link>
+        </div>
+      </section>
+
       <section aria-label="Studio product overview" className="grid gap-3 sm:grid-cols-3">
         <Metric label="Finished Films" value={titlesQ.isPending || titlesQ.isError ? "—" : String(finishedFilms.length)} note="Completed-film product records" />
         <Metric label="Stories / Concepts" value={!STORY_CONCEPT_ENABLED || conceptsQ.isPending || conceptsQ.isError ? "—" : String(concepts.length)} note="Development-stage product records" />
@@ -159,10 +170,6 @@ function StudioHome({ userId, organizationId }: { userId: string; organizationId
       ) : null}
 
       <section className="grid gap-3 sm:grid-cols-2">
-        <Link to="/studio-dit" className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4 transition hover:border-accent">
-          <div><h3 className="font-semibold">Production & DIT</h3><p className="mt-1 text-sm text-muted">Open camera-card ingest and verification</p></div>
-          <span aria-hidden="true" className="text-lg text-muted">→</span>
-        </Link>
         <Link to="/account" className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4 transition hover:border-accent">
           <div><h3 className="font-semibold">Account & Members</h3><p className="mt-1 text-sm text-muted">View account profile and verified access</p></div>
           <span aria-hidden="true" className="text-lg text-muted">→</span>
