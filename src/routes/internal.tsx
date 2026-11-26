@@ -75,7 +75,7 @@ function InternalBody({
       ) : null}
 
       {/* 2. Master Distribution Desk */}
-      <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
+      {canPublish || canRevoke ? <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} /> : null}
 
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
