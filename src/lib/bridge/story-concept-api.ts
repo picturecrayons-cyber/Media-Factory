@@ -239,6 +239,7 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         concepts: rows.map((r) => ({
           ...mapConcept(r),
           titleName: r.title_name,
+          ownerSubmissionStatus: r.owner_submission_status ?? "DRAFT",
         })),
       };
     } catch (err) {
