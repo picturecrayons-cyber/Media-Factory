@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   isValidHostingerBearer,
+  isHostingerTestDeliveryEnvelope,
   parseHostingerIncomingPayload,
   readLimitedRequestBody,
 } from "./hostinger-incoming.ts";
@@ -27,6 +28,58 @@ describe("Hostinger incoming mail webhook", () => {
     assert.equal(isValidHostingerBearer("Bearer wrong-token", "secret-token"), false);
     assert.equal(isValidHostingerBearer("secret-token", "secret-token"), false);
     assert.equal(isValidHostingerBearer("Bearer secret-token", ""), false);
+  });
+
+  it("acknowledges only the exact metadata-only Hostinger Test envelope", () => {
+    const sample = {
+      event: "message.received",
+      id: "hostinger-test-delivery-001",
+      timestamp: "2026-11-16T12:11:08.002Z",
+      data: {
+        date: "2026-11-16T12:11:08.002Z",
+        from: "sender@example.com",
+        messageId: "<test-message@example.com>",
+        subject: "Hostinger webhook test",
+      },
+    };
+    assert.equal(isHostingerTestDeliveryEnvelope(sample), true);
+    // The test envelope is not a real mailbox message and cannot enter the ingest parser.
+    assert.throws(() => parseHostingerIncomingPayload(sample, mailbox), /Missing message metadata/);
+  });
+
+  it("rejects broadened, malformed, or mailbox-bearing test envelopes", () => {
+    const sample = {
+      event: "message.received",
+      id: "hostinger-test-delivery-001",
+      timestamp: "2026-11-16T12:11:08.002Z",
+      data: {
+        date: "2026-11-16T12:11:08.002Z",
+        from: "sender@example.com",
+        messageId: "<test-message@example.com>",
+        subject: "Hostinger webhook test",
+      },
+    };
+    assert.equal(isHostingerTestDeliveryEnvelope({ ...sample, extra: "no" }), false);
+    assert.equal(isHostingerTestDeliveryEnvelope({ ...sample, mailbox }), false);
+    assert.equal(isHostingerTestDeliveryEnvelope({ ...sample, timestamp: "invalid" }), false);
+    assert.equal(isHostingerTestDeliveryEnvelope({ ...sample, timestamp: "1" }), false);
+    assert.equal(isHostingerTestDeliveryEnvelope({ ...sample, timestamp: "2026-02-30T00:00:00Z" }), false);
+    assert.equal(isHostingerTestDeliveryEnvelope({
+      ...sample,
+      data: { ...sample.data, date: "2026-02-30T00:00:00Z" },
+    }), false);
+    assert.equal(isHostingerTestDeliveryEnvelope({
+      ...sample,
+      data: { ...sample.data, date: "1" },
+    }), false);
+    assert.equal(isHostingerTestDeliveryEnvelope({
+      ...sample,
+      data: { ...sample.data, from: "not-an-email" },
+    }), false);
+    assert.equal(isHostingerTestDeliveryEnvelope({
+      ...sample,
+      data: { ...sample.data, extra: "not allowed" },
+    }), false);
   });
 
   it("rejects message.received events that omit message metadata", () => {
