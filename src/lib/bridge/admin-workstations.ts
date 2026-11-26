@@ -18,7 +18,7 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
     const actor = await actorFor(context.userId);
     if (!canAccessAdminWorkstations(actor)) throw new Error("Forbidden");
     const sql = await getSql();
-    const [titles, assets, assetVersions, qc, legal, rights, packages, publications, audit] = await Promise.all([
+    const [titles, assets, assetVersions, qc, legal, rights, packages, publications, audit, eligibleAccounts, buyerAccess, investorAccess] = await Promise.all([
       sql`select id, name, owner_user_id, owner_account_type, status, language, updated_at from bridge_titles order by updated_at desc limit 200`,
       sql`select id, title_id, kind, s3_key, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
       sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`,
@@ -28,8 +28,11 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
       sql`select id, title_id, destination, package_version, rights_grant_id, qc_case_id, legal_case_id, readiness_state, authorized_by, authorized_at, created_at, commercial_model, distributor_exclusivity, revenue_share_percent from bridge_destination_packages order by created_at desc limit 200`,
       sql`select id, bridge_title_id, loop_title_id, authorization_status, territories, languages, exploitation_models, window_start, window_end, approved_by, approved_at, revoked_at, updated_at from bridge_loop_publications order by updated_at desc limit 200`,
       sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs order by created_at desc limit 200`,
+      sql`select user_id, email, display_name, account_type, organization_name from bridge_profiles where email_verified = true and internal_role is null and account_type in ('buyer','investor') order by account_type, display_name limit 500`,
+      sql`select a.title_id, a.buyer_user_id as user_id, p.display_name, p.email, a.granted_at, a.expires_at, a.revoked_at from bridge_buyer_title_access a join bridge_profiles p on p.user_id=a.buyer_user_id order by a.granted_at desc limit 1000`,
+      sql`select a.title_id, a.investor_user_id as user_id, p.display_name, p.email, a.granted_at, a.expires_at, a.revoked_at from bridge_investor_title_access a join bridge_profiles p on p.user_id=a.investor_user_id order by a.granted_at desc limit 1000`,
     ]);
-    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
+    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, audit, eligibleAccounts, buyerAccess, investorAccess }, (_, value) => typeof value === "bigint" ? value.toString() : value));
   });
 
 const reviewInput = z.object({
@@ -144,3 +147,61 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
     return {ok:true,gate:data.gate,decision:data.decision,publishable:result[0]?.ok===true};
   });
+
+
+const titleAssignmentInput = z.object({
+  titleId: z.string().min(8).max(160),
+  userId: z.string().min(8).max(160),
+  action: z.enum(["GRANT", "REVOKE"]),
+  expiresAt: z.string().datetime().nullable().optional(),
+});
+
+async function assignTitleAccess(userId: string, data: z.infer<typeof titleAssignmentInput>, accountType: "buyer" | "investor") {
+  const actor = await actorFor(userId);
+  if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
+  const sql = await getSql();
+  const profiles = await sql<{ user_id: string }>`
+    select user_id from bridge_profiles
+    where user_id = ${data.userId} and account_type = ${accountType}
+      and email_verified = true and internal_role is null
+    limit 1
+  `;
+  if (!profiles[0]) throw new Error(`A verified ${accountType} account is required`);
+  const titles = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
+  if (!titles[0]) throw new Error("Canonical title not found");
+  const table = accountType === "buyer" ? "bridge_buyer_title_access" : "bridge_investor_title_access";
+  const userColumn = accountType === "buyer" ? "buyer_user_id" : "investor_user_id";
+  if (data.action === "GRANT") {
+    await sql.unsafe(
+      `insert into public.${table} (title_id, ${userColumn}, granted_by, granted_at, expires_at, revoked_at)
+       values ($1, $2, $3, now(), $4, null)
+       on conflict (title_id, ${userColumn}) do update
+       set granted_by=excluded.granted_by, granted_at=now(), expires_at=excluded.expires_at, revoked_at=null`,
+      [data.titleId, data.userId, actor.userId, data.expiresAt ?? null],
+    );
+  } else {
+    await sql.unsafe(
+      `update public.${table} set revoked_at=now()
+       where title_id=$1 and ${userColumn}=$2 and revoked_at is null`,
+      [data.titleId, data.userId],
+    );
+  }
+  await writeAudit({
+    actorUserId: actor.userId,
+    action: `title_access.${accountType}.${data.action.toLowerCase()}`,
+    entityType: "bridge_title",
+    entityId: data.titleId,
+    metadata: { accountUserId: data.userId, accountType, expiresAt: data.action === "GRANT" ? data.expiresAt ?? null : undefined },
+  });
+  return { ok: true, action: data.action, accountType };
+}
+
+export const setBuyerTitleAccess = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(titleAssignmentInput)
+  .handler(async ({ context, data }) => assignTitleAccess(context.userId, data, "buyer"));
+
+export const setInvestorTitleAccess = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(titleAssignmentInput)
+  .handler(async ({ context, data }) => assignTitleAccess(context.userId, data, "investor"));
