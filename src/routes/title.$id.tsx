@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
+import { getStoryConceptForTitle } from "@/lib/bridge/story-concept-api";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   abortAssetMultipart,
@@ -94,6 +95,63 @@ function TitlePage() {
   );
 }
 
+function StoryConceptWorkspace({ titleId, titleName }: { titleId: string; titleName: string }) {
+  const conceptQ = useQuery({
+    queryKey: ["bridge-story-concept", titleId],
+    queryFn: () => getStoryConceptForTitle({ data: { titleId } }),
+    retry: 1,
+  });
+  const concept = conceptQ.data?.concept;
+  const statusLabel: Record<string, string> = {
+    PENDING: "Pending curation",
+    UNDER_REVIEW: "Under review",
+    APPROVED: "Approved",
+    REJECTED: "Not approved",
+    INTRODUCED_TO_BUYERS: "Introduced to buyers",
+  };
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-5">
+      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Bridge product 02 · Story / Concept</p>
+        <h1 className="mt-2 font-display text-2xl font-semibold sm:text-3xl">{titleName}</h1>
+        <p className="mt-2 text-sm text-muted">Development-stage product record. This is separate from the Finished Film QC, rights, licensing and delivery workflow.</p>
+        <Link to="/workspace" className="mt-4 inline-flex text-sm font-semibold text-accent hover:underline">← Back to product library</Link>
+      </section>
+
+      {conceptQ.isPending ? <p role="status" className="rounded-xl border border-line bg-surface p-5 text-sm text-muted">Loading Story / Concept details…</p> : null}
+      {conceptQ.isError ? <p role="alert" className="rounded-xl border border-line bg-surface p-5 text-sm text-muted">Story / Concept details could not be loaded: {conceptQ.error instanceof Error ? conceptQ.error.message : "Unknown error"}</p> : null}
+      {!conceptQ.isPending && !conceptQ.isError && !concept ? <p className="rounded-xl border border-line bg-surface p-5 text-sm text-muted">No concept details are attached to this canonical record.</p> : null}
+      {concept ? (
+        <>
+          <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-display text-xl font-semibold">Curation status</h2>
+              <span className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">{statusLabel[concept.curation_status] ?? concept.curation_status}</span>
+            </div>
+            {concept.logline ? <div className="mt-5"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Logline</p><p className="mt-2 text-sm leading-6">{concept.logline}</p></div> : null}
+            {concept.synopsis ? <div className="mt-5"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Synopsis</p><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted">{concept.synopsis}</p></div> : null}
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Genre</p><p className="mt-1 text-sm">{concept.genre.length ? concept.genre.join(" · ") : "Not specified"}</p></div>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Estimated budget</p><p className="mt-1 text-sm">{concept.estimated_budget_range || "Not specified"}</p></div>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Target platforms / outcome</p><p className="mt-1 text-sm">{concept.target_platforms.length ? concept.target_platforms.join(" · ") : "Not specified"}</p></div>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Submitted</p><p className="mt-1 text-sm">{new Date(concept.created_at).toLocaleDateString("en-IN")}</p></div>
+            </div>
+          </section>
+          <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+            <h2 className="font-display text-lg font-semibold">Development materials</h2>
+            <div className="mt-3 flex flex-wrap gap-4 text-sm">
+              {concept.treatment_url ? <a href={concept.treatment_url} target="_blank" rel="noreferrer" className="font-semibold text-accent underline">Open treatment</a> : <span className="text-muted">Treatment not attached</span>}
+              {concept.screenplay_url ? <a href={concept.screenplay_url} target="_blank" rel="noreferrer" className="font-semibold text-accent underline">Open screenplay</a> : <span className="text-muted">Screenplay not attached</span>}
+            </div>
+            <p className="mt-4 text-xs text-muted">No payment is collected by this intake. Buyer / investor introduction remains subject to separate curation and commercial approval.</p>
+          </section>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [chosenTab, setChosenTab] = useState<WorkspaceTab | null>(null);
   const buyerView = actor.accountType === "buyer" && !actor.internalRole;
@@ -137,6 +195,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   if (titleQ.isError)
     return <p role="alert">Title workspace unavailable: {titleQ.error.message}</p>;
   if (!title) return <p className="text-sm text-muted">Title not found.</p>;
+  if (title.submissionType === "story_concept") {
+    return <StoryConceptWorkspace titleId={title.id} titleName={title.name} />;
+  }
 
   const qcReady =
     reviewQ.data?.qc?.status === "PASSED" &&
