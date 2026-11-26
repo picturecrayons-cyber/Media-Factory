@@ -228,7 +228,6 @@ function BuyerBody({ userId }: { userId: string }) {
     onError: (err) => toast(err instanceof Error ? err.message : "Payment did not complete"),
   });
 
-  const licensed = visible.filter((t) => entitled.has(t.id));
   const artworkByTitle = postersQ.data ?? new Map<string, Blob>();
   if (titlesQ.isPending || entQ.isPending) {
     return <p role="status" aria-live="polite">Loading your Buyer catalogue and licenses…</p>;

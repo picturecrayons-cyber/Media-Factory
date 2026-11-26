@@ -264,7 +264,7 @@ function DashboardBody() {
               <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3"><span className="text-xs text-muted">{title.status.replaceAll("_", " ").toLowerCase()}</span><span className="font-mono text-[10px] text-muted">{title.id.slice(0, 8)}</span></div>
             </article>)}
           </div>
-        ) : <p className="px-4 py-6 text-sm text-muted">No title records were returned by the canonical query.</p>
+        ) : <p className="px-4 py-6 text-sm text-muted">No title records were returned by the canonical query.</p>}
       </section>
     </div>
   );
