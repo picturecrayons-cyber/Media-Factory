@@ -34,7 +34,7 @@ function Workspace() {
             <h3 className="font-display text-lg font-semibold">Bridge product library</h3>
             <p className="mt-1 text-sm text-muted">Finished Films and Stories / Concepts are separate product pipelines. Each opens its canonical Bridge record.</p>
           </div>
-          <TitleList empty="No products are available for this workspace." query={search} />
+          <TitleList empty="No products are available for this workspace." query={search} excludeTestFixtures={actor.accountType === "studio" && !actor.internalRole} />
         </section>
       </div>
     </BridgeShell>;
