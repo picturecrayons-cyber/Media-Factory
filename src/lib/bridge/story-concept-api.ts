@@ -210,12 +210,21 @@ export const getStoryConceptForTitle = createServerFn({ method: "GET" })
     `;
     const row = rows[0];
     if (!row) return { concept: null };
-    const allowed = canReadTitle(actor, {
+    let allowed = canReadTitle(actor, {
       ownerUserId: row.owner_user_id,
       ownerAccountType: row.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
       ownerOrganizationId: row.owner_organization_id,
       status: row.title_status as TitleStatus,
     });
+    const investorView = actor.accountType === "investor" && !actor.internalRole;
+    if (investorView) {
+      const access = await sql<{ allowed: boolean }>`
+        select exists (select 1 from bridge_investor_title_access
+          where title_id=${data.titleId} and investor_user_id=${actor.userId}
+            and revoked_at is null and (expires_at is null or expires_at > now())) as allowed
+      `;
+      allowed = access[0]?.allowed === true;
+    }
     if (!allowed) throw new Error("Forbidden");
     if (
       !actor.internalRole &&
@@ -236,6 +245,7 @@ export const getStoryConceptForTitle = createServerFn({ method: "GET" })
     return {
       concept: {
         ...mapConcept(row),
+        ...(investorView ? { admin_notes: null } : {}),
         titleName: row.title_name,
       },
     };
