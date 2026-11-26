@@ -11,6 +11,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   byteSize: number;
   contentType: string | null;
   checksum: string | null;
+  sha256: string;
   sourceKey: string;
   sealedKey: string;
 }): Promise<boolean> {
@@ -39,6 +40,7 @@ async function persistVerifiedAssetScoped(
     byteSize: number;
     contentType: string | null;
     checksum: string | null;
+    sha256: string;
     sourceKey: string;
     sealedKey: string;
   },
@@ -64,8 +66,8 @@ async function persistVerifiedAssetScoped(
               )` : "";
   const rows = await sql.query<{ entity_id: string }>(`
     with verified as (
-      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6
-      where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $7
+      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6, sha256 = $10, checksum_sha256 = $10
+      where a.id = $3 and a.created_by = $4 and a.s3_key = $7
         and a.title_id = $8
         and exists (
           select 1
@@ -76,6 +78,36 @@ async function persistVerifiedAssetScoped(
               $5
               or t.owner_user_id = $4
               ${studioPredicate}
+            )
+            -- Do not let an older asset confirmation replace a newer title
+            -- master/poster pointer. Only reconcile the raw source or the
+            -- exact sealed key derived from that same source.
+            and (
+              (a.kind in ('poster', 'poster_vertical')
+                and (
+                  t.poster_key is null or t.poster_key = $7 or t.poster_key = $6
+                  -- Allow a newer upload to replace a pointer owned by an older
+                  -- asset. An older retry cannot move the pointer backwards.
+                  or exists (
+                    select 1 from bridge_assets previous
+                    where previous.title_id = t.id
+                      and previous.kind in ('poster', 'poster_vertical')
+                      and previous.s3_key = t.poster_key
+                      and (a.created_at, a.id) > (previous.created_at, previous.id)
+                  )
+                ))
+              or (a.kind = 'master'
+                and (
+                  t.master_key is null or t.master_key = $7 or t.master_key = $6
+                  or exists (
+                    select 1 from bridge_assets previous
+                    where previous.title_id = t.id
+                      and previous.kind = 'master'
+                      and previous.s3_key = t.master_key
+                      and (a.created_at, a.id) > (previous.created_at, previous.id)
+                  )
+                ))
+              or a.kind not in ('master', 'poster', 'poster_vertical')
             )
         )
       returning a.id, a.title_id, a.kind, a.s3_key
@@ -92,7 +124,8 @@ async function persistVerifiedAssetScoped(
         'titleId', v.title_id,
         'kind', v.kind,
         'byteSize', $1,
-        'checksum', $9::text
+        'checksum', $9::text,
+        'sha256', $10::text
       )
     from verified v join title_set t on t.id = v.title_id
     returning entity_id
@@ -106,6 +139,7 @@ async function persistVerifiedAssetScoped(
     opts.sourceKey,
     opts.titleId,
     opts.checksum,
+    opts.sha256,
   ]);
   return Boolean(rows[0]);
 }

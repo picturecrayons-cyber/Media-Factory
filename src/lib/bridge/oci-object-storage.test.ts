@@ -36,11 +36,15 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
         OCI_NAMESPACE: "test-namespace",
         OCI_BUCKET_NAME: "test-bucket",
       });
-      globalThis.fetch = async () =>
-        new Response(null, {
-          status: 200,
-          headers: { "content-length": "1", etag: '"test-etag"' },
-        });
+      globalThis.fetch = async (_input, init) => {
+        if ((init?.method || "GET") === "HEAD") {
+          return new Response(null, {
+            status: 200,
+            headers: { "content-length": "1", "content-type": "application/octet-stream", etag: '"test-etag"' },
+          });
+        }
+        return new Response("x", { status: 200, headers: { "content-length": "1" } });
+      };
 
       await assert.doesNotReject(verifyObject("asset-key"));
     }
@@ -81,6 +85,9 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
             assert.equal(JSON.parse(String(init?.body)).sourceObjectIfMatch, "source-etag");
             return new Response(null, { status: 202, headers: { "opc-work-request-id": "copy/id" } });
           }
+          if (method === "GET" && url.pathname.startsWith("/n/")) {
+            return new Response("hello world!", { status: 200, headers: { "content-length": "12" } });
+          }
           if (method === "GET") {
             assert.equal(url.pathname, "/workRequests/copy%2Fid");
             const headers = new Headers(init?.headers);
@@ -98,7 +105,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
         };
         if (outcome === "SUCCEEDED" || outcome === "COMPLETED") {
           assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag")).byteSize, 12);
-          assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
+          assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD", "GET"]);
         } else {
           const message = outcome === "HTTP_ERROR" ? /lookup failed \(403\)/ : new RegExp(`copy ${outcome.toLowerCase()}`);
           await assert.rejects(sealVerifiedObject("source-key", "sealed-key", "source-etag"), message);
@@ -127,8 +134,10 @@ test("OCI object verification rejects an unexpected content type", async () => {
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   const originalFetch = globalThis.fetch;
   Object.assign(process.env, values);
-  globalThis.fetch = async () => new Response(null, { status: 200,
-    headers: { "content-length": "12", "content-type": "image/png", etag: '"test-etag"' } });
+  globalThis.fetch = async (_input, init) => (init?.method || "GET") === "HEAD"
+    ? new Response(null, { status: 200,
+        headers: { "content-length": "12", "content-type": "image/png", etag: '"test-etag"' } })
+    : new Response("image-bytes!", { status: 200, headers: { "content-length": "12" } });
   try {
     await assert.rejects(verifyObject("asset-key", "video/mp4"), /content type mismatch/);
     assert.equal((await verifyObject("asset-key", "image/png")).contentType, "image/png");
@@ -162,6 +171,9 @@ test("OCI copy work-request handles transient 404 propagation delay and recovers
       const method = init?.method || "GET";
       if (method === "POST") {
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-transient-1" } });
+      }
+      if (method === "GET" && url.pathname.startsWith("/n/")) {
+        return new Response("x".repeat(42), { status: 200, headers: { "content-length": "42" } });
       }
       if (method === "GET") {
         getAttempts += 1;
@@ -208,9 +220,13 @@ test("OCI copy work-request fails closed on persistent 404 after propagation gra
 
   try {
     globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
       const method = init?.method || "GET";
       if (method === "POST") {
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-persistent-404" } });
+      }
+      if (method === "GET" && url.pathname.startsWith("/n/")) {
+        return new Response("x".repeat(42), { status: 200, headers: { "content-length": "42" } });
       }
       if (method === "GET") {
         return new Response(null, { status: 404 });
@@ -345,6 +361,9 @@ test("OCI Recovery copy uses a distinct destination bucket and verifies the Reco
         assert.equal(body.sourceObjectIfMatch, "source-etag");
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "recovery-copy/1" } });
       }
+      if (method === "GET" && url.pathname.startsWith("/n/")) {
+        return new Response("hello world!", { status: 200, headers: { "content-length": "12" } });
+      }
       if (method === "GET") {
         assert.equal(url.pathname, "/workRequests/recovery-copy%2F1");
         return Response.json({ status: "COMPLETED" });
@@ -356,7 +375,53 @@ test("OCI Recovery copy uses a distinct destination bucket and verifies the Reco
     const result = await sealVerifiedObject("source-key", "recovery-key", "source-etag", undefined, "recovery-vault");
     assert.equal(result.byteSize, 12);
     assert.equal(result.etag, "recovery-etag");
-    assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
+    assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD", "GET"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI verifyObject returns SHA-256 calculated from the source object body", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "primary-vault",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    const calls: string[] = [];
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const method = init?.method || "GET";
+      calls.push(method);
+      if (method === "HEAD") {
+        return new Response(null, { status: 200, headers: {
+          "content-length": "12", "content-type": "video/mp4", etag: '"source-etag"',
+        }});
+      }
+      if (method === "GET") {
+        assert.equal(url.pathname, "/n/test-namespace/b/primary-vault/o/source-key");
+        return new Response("hello world!", { status: 200, headers: { "content-length": "12" } });
+      }
+      throw new Error(`Unexpected OCI method: ${method}`);
+    };
+    const { createHash } = await import("node:crypto");
+    const expected = createHash("sha256").update("hello world!").digest("hex");
+    const result = await verifyObject("source-key", "video/mp4");
+    assert.equal(result.sha256, expected);
+    assert.equal(result.etag, "source-etag");
+    assert.deepEqual(calls, ["HEAD", "GET"]);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
@@ -420,7 +485,11 @@ test("OCI SHA-256 read-back rejects a byte-for-byte mismatch", async () => {
   const originalFetch = globalThis.fetch;
   Object.assign(process.env, values);
   try {
-    globalThis.fetch = async () => new Response("different", { status: 200, headers: { "content-length": "9" } });
+    globalThis.fetch = async (input, init) => {
+      assert.equal(init?.method, "GET");
+      assert.equal(new URL(String(input)).pathname, "/n/test-namespace/b/primary-vault/o/object-key");
+      return new Response("different", { status: 200, headers: { "content-length": "9" } });
+    };
     const { createHash } = await import("node:crypto");
     const sha256 = createHash("sha256").update("expected").digest("hex");
     const { verifyObjectSha256 } = await import("./oci-object-storage.server.ts");

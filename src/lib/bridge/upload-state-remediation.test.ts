@@ -107,6 +107,7 @@ test("atomic state transition: migration queue and title master/poster only adva
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0022_bridge_asset_sha256.sql"), "utf8"));
 
     await db.exec(`
       create table if not exists loop_media_migration_queue (
@@ -144,6 +145,7 @@ test("atomic state transition: migration queue and title master/poster only adva
       byteSize: 52428800,
       contentType: "video/mp4",
       checksum: "sealed-etag-abc",
+      sha256: "1".repeat(64),
       sourceKey: "bridge/owner-1/title-pass-test/screener/raw.mp4",
       sealedKey,
     });
@@ -198,6 +200,7 @@ test("atomic state transition: migration queue and title master/poster only adva
       byteSize: 52428800,
       contentType: "video/mp4",
       checksum: "sealed-etag-abc",
+      sha256: "1".repeat(64),
       sourceKey: "bridge/owner-1/title-pass-test/screener/raw.mp4",
       sealedKey,
     });
@@ -208,9 +211,15 @@ test("atomic state transition: migration queue and title master/poster only adva
 });
 
 
-test("duplicate upload confirmations derive the same sealed key from the asset row ID", () => {
+test("upload confirmation derives deterministic sealed keys and re-verifies sealed objects in place", () => {
   const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
-  assert.ok(assets.includes('const sealedKey = `${asset.s3_key}.verified/${asset.id}`;'));
+
+  // Raw uploads are sealed at a deterministic key derived from the asset row ID.
+  assert.match(assets, /const alreadySealed = asset\.s3_key\.includes\("\.verified\/"\)/);
+  assert.match(assets, /const sealedKey = alreadySealed \? asset\.s3_key : `\$\{asset\.s3_key\}\.verified\/\$\{asset\.id\}`/);
+
+  // Already-sealed retries verify the existing object directly instead of copying it again.
+  assert.match(assets, /const sealed = alreadySealed\s*\? object\s*:\s*await sealVerifiedObject\(asset\.s3_key, sealedKey, object\.etag\)/);
   assert.doesNotMatch(assets, /randomUUID/);
 });
 

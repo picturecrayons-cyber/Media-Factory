@@ -256,6 +256,40 @@ export async function signDownload(opts: { key: string; expiresIn?: number; buck
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
+async function readObjectSha256(key: string, expectedByteSize: number, bucket?: string) {
+  const cfg = config();
+  const targetBucket = bucket?.trim() || cfg.bucket;
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
+  const checksumTimeoutMs = Math.min(15 * 60_000, Math.max(120_000, Math.ceil(expectedByteSize / (2 * 1024 * 1024)) * 1000 + 60_000));
+  const res = await signedFetch({ cfg, method: "GET", path, timeoutMs: checksumTimeoutMs });
+  if (!res.ok || !res.body) throw new Error(`OCI object download for checksum failed (${res.status})`);
+  const declaredSize = Number(res.headers.get("content-length") || 0);
+  if (declaredSize !== expectedByteSize) {
+    await res.body.cancel();
+    throw new Error(`OCI object size mismatch: expected ${expectedByteSize}, received ${declaredSize}`);
+  }
+  const hash = createHash("sha256");
+  const reader = res.body.getReader();
+  let byteSize = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteSize += value.byteLength;
+      if (byteSize > expectedByteSize) {
+        await reader.cancel();
+        throw new Error("OCI object exceeded expected byte size during checksum");
+      }
+      hash.update(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (byteSize !== expectedByteSize) throw new Error("OCI object byte length changed during checksum");
+  return hash.digest("hex");
+}
+
 export async function verifyObject(key: string, expectedContentType?: string | null, bucket?: string) {
   const cfg = config();
   const targetBucket = bucket?.trim() || cfg.bucket;
@@ -269,10 +303,12 @@ export async function verifyObject(key: string, expectedContentType?: string | n
     throw new Error(`OCI object content type mismatch: expected ${expectedContentType}, received ${contentType || "missing"}`);
   }
   if (!Number.isSafeInteger(contentLength) || contentLength < 0) throw new Error("Uploaded object has an invalid size");
+  const sha256 = await readObjectSha256(key, contentLength, targetBucket);
   return {
     byteSize: contentLength,
     contentType,
     etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
+    sha256,
   };
 }
 
@@ -376,39 +412,17 @@ export async function verifyObjectSha256(
   if (!Number.isSafeInteger(expectedByteSize) || expectedByteSize < 0) {
     throw new Error("Expected byte size must be a non-negative safe integer");
   }
-  const cfg = config();
-  const targetBucket = bucket?.trim() || cfg.bucket;
-  const namespace = await resolveNamespace(cfg);
-  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
-  const res = await signedFetch({ cfg, method: "GET", path });
-  if (!res.ok || !res.body) throw new Error(`OCI object download for checksum failed (${res.status})`);
-  const declaredSize = Number(res.headers.get("content-length") || 0);
-  if (declaredSize !== expectedByteSize) {
-    await res.body.cancel();
-    throw new Error(`OCI object size mismatch: expected ${expectedByteSize}, received ${declaredSize}`);
-  }
-  const hash = createHash("sha256");
-  const reader = res.body.getReader();
-  let byteSize = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      byteSize += value.byteLength;
-      if (byteSize > expectedByteSize) {
-        await reader.cancel();
-        throw new Error("OCI object exceeded expected byte size during checksum");
-      }
-      hash.update(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const sha256 = hash.digest("hex");
-  if (byteSize !== expectedByteSize || sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
+  const sha256 = await readObjectSha256(key, expectedByteSize, bucket);
+  if (sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
     throw new Error(`OCI object SHA-256 mismatch for ${key}`);
   }
-  return { key, bucket: targetBucket, byteSize, sha256, etag: res.headers.get("etag")?.replaceAll('"', "") ?? null, verified: true as const };
+  return {
+    key,
+    bucket: bucket?.trim() || config().bucket,
+    byteSize: expectedByteSize,
+    sha256,
+    verified: true as const,
+  };
 }
 
 export async function deleteObject(key: string, bucket?: string) {
