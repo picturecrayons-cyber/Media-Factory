@@ -52,11 +52,11 @@ export function SignInButtons() {
   );
 }
 
-export function UserButton() {
+export function UserButton({ label: labelOverride }: { label?: string }) {
   const user = useCurrentUser();
   const [signingOut, setSigningOut] = useState(false);
   if (!user) return null;
-  const label = user.displayName ?? user.primaryEmail ?? "Account";
+  const label = labelOverride ?? user.displayName ?? user.primaryEmail ?? "Account";
   return (
     <div className="flex items-center gap-2">
       {user.profileImageUrl ? (
@@ -65,7 +65,7 @@ export function UserButton() {
           alt=""
           className="h-8 w-8 rounded-full object-cover"
         />
-      ) : (
+      ) : labelOverride ? null : (
         <span className="grid h-8 w-8 place-items-center rounded-full bg-black/10 text-sm font-medium dark:bg-white/20">
           {label.charAt(0).toUpperCase()}
         </span>
