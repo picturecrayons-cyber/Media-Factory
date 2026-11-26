@@ -16,6 +16,8 @@ export const Route = createFileRoute("/admin/memberships")({
   component: MembershipControlPage,
 });
 
+type AccountKey = "independent_creator" | "studio" | "buyer" | "investor";
+
 const ACCOUNT_LABELS: Record<string, string> = {
   independent_creator: "Creator",
   studio: "Studio",
@@ -56,7 +58,7 @@ function MembershipControlBody({ actor }: { actor: any }) {
   const [priceRupees, setPriceRupees] = useState("");
   const [gstPercent, setGstPercent] = useState("");
   const [graceDays, setGraceDays] = useState("");
-  const [accountTypes, setAccountTypes] = useState(["independent_creator", "studio", "buyer", "investor"]);
+  const [accountTypes, setAccountTypes] = useState<AccountKey[]>(["independent_creator", "studio", "buyer", "investor"]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [grantNote, setGrantNote] = useState("");
@@ -69,7 +71,7 @@ function MembershipControlBody({ actor }: { actor: any }) {
   };
   const planMutation = useMutation({
     mutationFn: (data: {
-      displayName: string; accountTypes: typeof accountTypes; trialDays: number;
+      displayName: string; accountTypes: AccountKey[]; trialDays: number;
       billingInterval: "unconfigured" | "monthly" | "annual";
       priceAmountPaise: number | null; gstBasisPoints: number | null; gracePeriodDays: number | null;
     }) => createMembershipPlanVersion({ data }),
@@ -101,7 +103,7 @@ function MembershipControlBody({ actor }: { actor: any }) {
   const defaultPlanId = activePlans[0]?.id ?? "";
   const planId = selectedPlanId || defaultPlanId;
 
-  function toggleAccountType(value: string, checked: boolean) {
+  function toggleAccountType(value: AccountKey, checked: boolean) {
     setAccountTypes((current) => checked
       ? [...current, value]
       : current.filter((item) => item !== value));
@@ -212,7 +214,7 @@ function MembershipControlBody({ actor }: { actor: any }) {
             <div className="mt-2 flex flex-wrap gap-3">
               {Object.entries(ACCOUNT_LABELS).map(([value, label]) => (
                 <label key={value} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={accountTypes.includes(value)} onChange={(e) => toggleAccountType(value, e.target.checked)} />
+                  <input type="checkbox" checked={accountTypes.includes(value)} onChange={(e) => toggleAccountType(value as AccountKey, e.target.checked)} />
                   {label}
                 </label>
               ))}
