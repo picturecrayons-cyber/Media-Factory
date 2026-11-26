@@ -24,6 +24,8 @@ function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [accountType, setAccountType] = useState<AccountChoice>(initialChoice);
 
   const [error, setError] = useState<string | null>(null);
@@ -167,7 +169,13 @@ function Signup() {
               role="alert"
               className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400"
             >
-              {error}
+              <p>{error}</p>
+              {error.toLowerCase().includes("already exists") || error.toLowerCase().includes("already associated") ? (
+                <div className="mt-2 flex flex-wrap gap-3 text-sm font-semibold">
+                  <Link to="/login" className="underline underline-offset-4">Sign in</Link>
+                  <Link to="/forgot-password" className="underline underline-offset-4">Reset password</Link>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -296,30 +304,40 @@ function Signup() {
 
           <label className="block text-sm font-medium text-fg">
             Password
-            <input
-              required
-              autoComplete="new-password"
-              type="password"
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
-              className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5 text-sm text-fg placeholder:text-faint transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            />
+            <div className="relative mt-1.5">
+              <input
+                required
+                autoComplete="new-password"
+                type={showPassword ? "text" : "password"}
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 8 characters"
+                className="h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5 pr-20 text-sm text-fg placeholder:text-faint transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+              <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)} className="absolute inset-y-0 right-3 text-xs font-semibold text-accent hover:underline">
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
           </label>
 
           <label className="block text-sm font-medium text-fg">
             Confirm password
-            <input
-              required
-              autoComplete="new-password"
-              type="password"
-              minLength={8}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Re-enter password"
-              className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5 text-sm text-fg placeholder:text-faint transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            />
+            <div className="relative mt-1.5">
+              <input
+                required
+                autoComplete="new-password"
+                type={showConfirmPassword ? "text" : "password"}
+                minLength={8}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter password"
+                className="h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5 pr-20 text-sm text-fg placeholder:text-faint transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+              <button type="button" aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"} aria-pressed={showConfirmPassword} onClick={() => setShowConfirmPassword((value) => !value)} className="absolute inset-y-0 right-3 text-xs font-semibold text-accent hover:underline">
+                {showConfirmPassword ? "Hide" : "Show"}
+              </button>
+            </div>
           </label>
 
           {error ? (

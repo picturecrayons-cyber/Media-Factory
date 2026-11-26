@@ -1,5 +1,6 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { SignedOut } from "@/lib/auth/gates";
@@ -43,6 +44,7 @@ const WORKFLOW_STEPS = [
 ];
 
 function Home() {
+  const [showRolePicker, setShowRolePicker] = useState(false);
   const { user, isPending } = useCurrentUserState();
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
@@ -74,11 +76,9 @@ function Home() {
 
           <div className="flex items-center gap-3 text-sm">
             <SignedOut>
-              <Link to="/signup">
-                <Button size="sm" className="rounded-full px-4 py-1.5 text-xs font-semibold shadow-xs">
-                  Create account
-                </Button>
-              </Link>
+              <Button size="sm" className="rounded-full px-4 py-1.5 text-xs font-semibold shadow-xs" onClick={() => setShowRolePicker(true)}>
+                Get started
+              </Button>
             </SignedOut>
           </div>
         </div>
@@ -99,11 +99,9 @@ function Home() {
               </p>
 
               <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
-                <Link to="/signup">
-                  <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
-                    Create account
-                  </Button>
-                </Link>
+                <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs" onClick={() => setShowRolePicker(true)}>
+                  Get started
+                </Button>
                 <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link>
               </div>
             </div>
@@ -265,11 +263,9 @@ function Home() {
                 Ready to move your content forward?
               </h2>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                <Link to="/signup">
-                  <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
-                    Create account
-                  </Button>
-                </Link>
+                <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs" onClick={() => setShowRolePicker(true)}>
+                  Choose your workspace
+                </Button>
                 <Link to="/login">
                   <Button
                     variant="outline"
@@ -308,6 +304,60 @@ function Home() {
           </nav>
         </div>
       </footer>
+
+      {showRolePicker ? (
+        <div className="fixed inset-0 z-[100] grid place-items-center p-4" onKeyDown={(event) => {
+          if (event.key === "Escape") setShowRolePicker(false);
+        }}>
+          <button
+            type="button"
+            aria-label="Close workspace selection"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowRolePicker(false)}
+          />
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="workspace-picker-title"
+            className="relative z-10 w-full max-w-2xl rounded-3xl border border-line bg-white p-6 shadow-2xl sm:p-8"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Crayons Bridge</p>
+                <h2 id="workspace-picker-title" className="mt-2 font-display text-2xl font-semibold text-fg sm:text-3xl">Choose your workspace</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted">Select how you work with content. We’ll take you to the right secure access flow.</p>
+              </div>
+              <button type="button" onClick={() => setShowRolePicker(false)} className="rounded-full border border-line px-3 py-1.5 text-sm text-muted hover:text-fg" aria-label="Close">✕</button>
+            </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <Link to="/signup" search={{ role: "creator" }} onClick={() => setShowRolePicker(false)} className="rounded-2xl border border-line p-5 transition hover:border-accent hover:bg-surface">
+                <span className="text-base font-semibold text-fg">Creator / Filmmaker</span>
+                <span className="mt-1 block text-sm text-muted">Submit and manage your own titles and media</span>
+                <span className="mt-4 block text-xs font-semibold text-accent">Continue as Creator →</span>
+              </Link>
+              <Link to="/signup" search={{ role: "studio" }} onClick={() => setShowRolePicker(false)} className="rounded-2xl border border-line p-5 transition hover:border-accent hover:bg-surface">
+                <span className="text-base font-semibold text-fg">Studio / Production</span>
+                <span className="mt-1 block text-sm text-muted">Manage a company catalogue, team and production workflow</span>
+                <span className="mt-4 block text-xs font-semibold text-accent">Continue as Studio →</span>
+              </Link>
+              <Link to="/signup" search={{ role: "buyer" }} onClick={() => setShowRolePicker(false)} className="rounded-2xl border border-line p-5 transition hover:border-accent hover:bg-surface">
+                <span className="text-base font-semibold text-fg">Buyer / Platform</span>
+                <span className="mt-1 block text-sm text-muted">Review cleared titles and manage licensing</span>
+                <span className="mt-4 block text-xs font-semibold text-accent">Continue as Buyer →</span>
+              </Link>
+              <Link to="/contact" onClick={() => setShowRolePicker(false)} className="rounded-2xl border border-line p-5 transition hover:border-accent hover:bg-surface">
+                <span className="text-base font-semibold text-fg">Investor</span>
+                <span className="mt-1 block text-sm text-muted">Request reviewed access to approved participation records</span>
+                <span className="mt-4 block text-xs font-semibold text-accent">Request Investor Access →</span>
+              </Link>
+            </div>
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
+              <p className="text-sm text-muted">Already have an account?</p>
+              <Link to="/login" className="text-sm font-semibold text-accent hover:underline" onClick={() => setShowRolePicker(false)}>Sign in</Link>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

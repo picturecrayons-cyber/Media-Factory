@@ -79,8 +79,8 @@ async function claimLegacyCreatorIntake(sql: Sql, email: string, bridgeUserId: s
 }
 
 async function persistSupabaseIdentityLink(sql: Sql, bridgeUserId: string, authUserId: string) {
-  const identities = await sql<{ email: string; display_name: string; auth_email: string }>`
-    select bp.email, bp.display_name, au.email as auth_email
+  const identities = await sql<{ email: string }>`
+    select bp.email
     from bridge_profiles bp
     join auth.users au on au.id = ${authUserId}::uuid
     where bp.user_id = ${bridgeUserId}
@@ -88,8 +88,7 @@ async function persistSupabaseIdentityLink(sql: Sql, bridgeUserId: string, authU
       and lower(trim(bp.email)) = lower(trim(au.email))
     limit 1
   `;
-  const identity = identities[0];
-  if (!identity?.auth_email) {
+  if (!identities[0]?.email) {
     throw new Error("A verified matching Supabase email is required to bind this Bridge profile");
   }
 
@@ -103,30 +102,6 @@ async function persistSupabaseIdentityLink(sql: Sql, bridgeUserId: string, authU
     throw new Error("Authenticated identity is already bound to another Bridge profile");
   }
 
-  // Supabase Auth users are not necessarily present in the legacy Better Auth
-  // public.user table. Mirror only the verified Bridge identity needed by the
-  // identity-link FK; never take over an email already owned by another ID.
-  const bridgeUsers = await sql<{ id: string }>`
-    select id from public."user" where id = ${bridgeUserId} limit 1
-  `;
-  if (!bridgeUsers[0]) {
-    const emailOwners = await sql<{ id: string }>`
-      select id from public."user" where lower(email) = lower(${identity.auth_email}) limit 1
-    `;
-    if (emailOwners[0] && emailOwners[0].id !== bridgeUserId) {
-      throw new Error("Verified email is already attached to a different legacy Bridge identity");
-    }
-    await sql`
-      insert into public."user" (id, name, email, "emailVerified")
-      values (${bridgeUserId}, ${identity.display_name}, ${identity.auth_email}, true)
-      on conflict (id) do update set
-        name = excluded.name,
-        email = excluded.email,
-        "emailVerified" = true,
-        "updatedAt" = now()
-    `;
-  }
-
   await sql`
     insert into bridge_loop_identity_links (
       bridge_user_id, auth_user_id, verification_method, verified_at, verified_by
@@ -135,6 +110,7 @@ async function persistSupabaseIdentityLink(sql: Sql, bridgeUserId: string, authU
     )
     on conflict (auth_user_id) do nothing
   `;
+
   const links = await sql<{ bridge_user_id: string }>`
     select bridge_user_id
     from bridge_loop_identity_links

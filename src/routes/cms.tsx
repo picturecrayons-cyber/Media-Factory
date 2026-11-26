@@ -51,7 +51,7 @@ function CmsBody({ actor }: { actor: any }) {
         <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="font-display text-3xl font-semibold sm:text-4xl">
-              Ingest, license and publish from Bridge.
+              Manage Bridge intake, licensing and the authorization handoff to Loop.
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
               Uses existing Bridge title, asset, rights and Loop publication services. This surface
@@ -72,7 +72,7 @@ function CmsBody({ actor }: { actor: any }) {
             search={{ tab: item }}
             className={`rounded-full px-4 py-2 text-xs font-semibold ${tab === item ? "bg-fg text-bg" : "border border-line text-muted hover:text-fg"}`}
           >
-            {item.toUpperCase()}
+            {item === "publishing" ? "BRIDGE → LOOP AUTHORIZATION" : item.toUpperCase()}
           </Link>
         ))}
       </nav>
