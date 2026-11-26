@@ -42,7 +42,7 @@ export function StoryConceptForm() {
   const [screenplayUrl, setScreenplayUrl] = useState("");
 
   const mut = useMutation({
-    mutationFn: () =>
+    mutationFn: (submit: boolean) =>
       createStoryConceptSubmission({
         data: {
           titleName,
@@ -54,10 +54,11 @@ export function StoryConceptForm() {
           estimatedBudgetRange: estimatedBudgetRange || undefined,
           treatmentUrl: treatmentUrl || undefined,
           screenplayUrl: screenplayUrl || undefined,
+          submit,
         },
       }),
-    onSuccess: (res) => {
-      toast("Story / Concept submitted for review");
+    onSuccess: (res, submit) => {
+      toast(submit ? "Story / Concept submitted for intake" : "Story / Concept draft saved");
       void navigate({ to: "/title/$id", params: { id: res.titleId } });
     },
     onError: (err) =>
@@ -78,7 +79,7 @@ export function StoryConceptForm() {
       toast("Synopsis must be at least 40 characters");
       return;
     }
-    mut.mutate();
+    mut.mutate(false);
   }
 
   return (
@@ -205,9 +206,12 @@ export function StoryConceptForm() {
         certified.
       </div>
 
-      <div className="sm:col-span-2">
-        <Button type="submit" disabled={mut.isPending} className="w-full rounded-full sm:w-auto sm:px-8">
-          {mut.isPending ? "Submitting…" : "Submit to Network"}
+      <div className="flex flex-wrap gap-2 sm:col-span-2">
+        <Button type="button" variant="outline" disabled={mut.isPending} onClick={() => mut.mutate(false)} className="rounded-full sm:px-8">
+          {mut.isPending && mut.variables === false ? "Saving…" : "Save Draft"}
+        </Button>
+        <Button type="button" disabled={mut.isPending} onClick={() => mut.mutate(true)} className="rounded-full sm:px-8">
+          {mut.isPending && mut.variables === true ? "Submitting…" : "Submit to Network"}
         </Button>
       </div>
     </form>
