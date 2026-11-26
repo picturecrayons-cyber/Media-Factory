@@ -373,6 +373,22 @@ export const listTitles = createServerFn({ method: "GET" })
     }) };
   });
 
+export const listQcSubmissionCandidates = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.read_catalog");
+    const sql = await getSql();
+    const candidates = await sql<{ id: string; name: string; status: string }>`
+      select t.id, t.name, t.status from bridge_titles t
+      where t.status = 'PREPARING' and t.master_key is not null and t.poster_key is not null
+        and exists (select 1 from bridge_assets a where a.title_id=t.id and a.kind='master' and coalesce(a.byte_size,0)>0 and (t.master_key=a.s3_key or t.master_key=a.s3_key || '.verified/' || a.id))
+        and exists (select 1 from bridge_assets a where a.title_id=t.id and a.kind in ('poster','poster_vertical') and coalesce(a.byte_size,0)>0 and (t.poster_key=a.s3_key or t.poster_key=a.s3_key || '.verified/' || a.id))
+      order by t.updated_at desc limit 100
+    `;
+    return { candidates };
+  });
 export const getTitle = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ id: z.string().min(8) }))
