@@ -114,10 +114,14 @@ export function canAccessDashboard(actor: Actor): boolean {
   return actor.emailVerified && actor.internalRole === "super_admin";
 }
 
-/** Broad internal workstation datasets are restricted to verified Admin roles. */
+/** Workstation entry is role-gated; the server returns only each role's permitted queue. */
 export function canAccessAdminWorkstations(actor: Actor): boolean {
   return actor.emailVerified &&
-    (actor.internalRole === "admin" || actor.internalRole === "super_admin") &&
+    (actor.internalRole === "admin" ||
+      actor.internalRole === "super_admin" ||
+      actor.internalRole === "qc_reviewer" ||
+      actor.internalRole === "legal_reviewer" ||
+      actor.internalRole === "viewer") &&
     hasPermission(actor, "title.read_catalog");
 }
 
