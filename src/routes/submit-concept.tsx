@@ -8,9 +8,10 @@ export const Route = createFileRoute("/submit-concept")({ component: SubmitConce
 
 function SubmitConcept() {
   return (
-    <RequireBridge allow="studio">
+    <RequireBridge allow="workspace">
       {(actor) => (
         <BridgeShell actor={actor} title="Story / Concept submission">
+          {!actor.internalRole && ["studio", "independent_creator"].includes(actor.accountType) ? (
           <main className="mx-auto max-w-3xl space-y-6">
             <header className="space-y-2">
               <Link to="/studio" className="text-sm text-accent hover:underline">← Studio Home</Link>
@@ -29,6 +30,13 @@ function SubmitConcept() {
               </section>
             )}
           </main>
+          ) : (
+            <main className="mx-auto max-w-3xl rounded-2xl border border-line bg-surface p-6">
+              <h1 className="font-display text-2xl font-semibold">Creator / Studio access required</h1>
+              <p className="mt-2 text-sm text-muted">Story / Concept is a Bridge product for verified Creator and Studio accounts.</p>
+              <Link to="/workspace" className="mt-4 inline-flex text-sm font-semibold text-accent hover:underline">Return to product library →</Link>
+            </main>
+          )}
         </BridgeShell>
       )}
     </RequireBridge>
