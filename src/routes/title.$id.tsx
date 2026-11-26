@@ -278,6 +278,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           }
           titleId={id}
           assets={assets}
+          currentMasterKey={title.masterKey}
+          currentPosterKey={title.posterKey}
           onAssetsChanged={() => assetsQ.refetch()}
         />
       ) : activeTab === "Production" && !buyerView ? (
@@ -461,17 +463,23 @@ function notifyUpload(message: string) {
 function FilesPanel({
   titleId,
   assets,
+  currentMasterKey,
+  currentPosterKey,
   onAssetsChanged,
   canUpload,
 }: {
   canUpload: boolean;
   titleId: string;
+  currentMasterKey: string | null;
+  currentPosterKey: string | null;
   assets: Array<{
     id: string;
     kind: string;
+    key: string | null;
     contentType: string | null;
     byteSize: number | null;
     verified: boolean;
+    createdAt?: string;
   }>;
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
@@ -970,7 +978,7 @@ function FilesPanel({
           Still processing: {assets.filter((asset) => !asset.verified).map((asset) => displayKind(asset.kind)).join(", ")}. For a large film, choose the same file to continue. Do not upload it again from the start.
         </p>
       ) : null}
-      <AssetPreviewGallery assets={assets} />
+      <AssetPreviewGallery assets={assets} currentMasterKey={currentMasterKey} currentPosterKey={currentPosterKey} />
     </section>
   );
 }
