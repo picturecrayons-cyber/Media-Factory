@@ -66,6 +66,19 @@ export const getMembershipControlPlane = createServerFn({ method: "GET" })
       order by p.created_at desc
       limit 300
     `;
+    const payments = await sql<{
+      id: string; user_id: string; email: string; provider: string;
+      provider_payment_id: string | null; amount_paise: string | number;
+      currency: string; status: string; receipt_reference: string | null; created_at: string;
+    }>`
+      select pay.id, pay.user_id, bp.email, pay.provider, pay.provider_payment_id,
+        pay.amount_paise::text as amount_paise, pay.currency, pay.status,
+        pay.receipt_reference, pay.created_at
+      from bridge_membership_payments pay
+      join bridge_profiles bp on bp.user_id = pay.user_id
+      order by pay.created_at desc
+      limit 100
+    `;
     const counts = {
       total: memberships.length,
       trialing: memberships.filter((m) => m.effective_status === "trialing").length,
@@ -74,7 +87,7 @@ export const getMembershipControlPlane = createServerFn({ method: "GET" })
       suspended: memberships.filter((m) => m.effective_status === "suspended").length,
       expired: memberships.filter((m) => m.effective_status === "expired").length,
     };
-    return { actor: { userId: actor.userId }, plans, memberships, eligibleProfiles, counts, billingEnabled: false as const };
+    return { actor: { userId: actor.userId }, plans, memberships, eligibleProfiles, payments, counts, billingEnabled: false as const };
   });
 
 const createPlanSchema = z.object({
