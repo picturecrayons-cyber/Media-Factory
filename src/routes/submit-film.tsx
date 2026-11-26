@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { RequireBridge } from "@/components/bridge/gate";
 import { useState, type FormEvent } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -7,14 +8,24 @@ import { BRIDGE_LOOP_LANES, type BridgeLoopLane } from "@/lib/bridge/loop-lanes"
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute("/submit-film")({ component: RightsReadySubmission });
+export const Route = createFileRoute("/submit-film")({ component: SubmitFinishedFilm });
+
+function SubmitFinishedFilm() {
+  return (
+    <RequireBridge allow="workspace">
+      {(actor) => !actor.internalRole && ["independent_creator", "studio"].includes(actor.accountType)
+        ? <RightsReadySubmissionForm />
+        : <main className="mx-auto max-w-xl rounded-2xl border border-line bg-surface p-6"><h1 className="font-display text-xl font-semibold">Creator / Studio access required</h1><p className="mt-2 text-sm text-muted">Finished Film submissions are available to verified Creator and Studio accounts. Super Admin manages the canonical review and buyer / investor mapping after submission.</p></main>}
+    </RequireBridge>
+  );
+}
 
 const LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English"];
 const TERRITORIES = ["IN", "GCC", "US", "CA", "GB", "AU", "Worldwide"];
 const EXPLOITATION = ["OTT / Streaming", "SVOD", "TVOD", "AVOD", "FAST", "Broadcast / TV", "Theatrical", "Educational", "Airline / Ancillary", "Festival / Screening"];
 const BUYERS = ["OTT platform", "Broadcaster", "Distributor", "Aggregator", "International buyer", "Educational buyer", "Festival / screening", "Crayons Loop", "Open to qualified buyers"];
 
-function RightsReadySubmission() {
+function RightsReadySubmissionForm() {
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
   const [name, setName] = useState("");
