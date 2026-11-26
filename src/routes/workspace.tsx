@@ -20,11 +20,22 @@ function Workspace() {
               <h2 className="font-display text-xl font-semibold">Title library</h2>
               <p className="mt-1 text-sm text-muted">Search and open the canonical Bridge record for every title.</p>
             </div>
-            {canCreate?<div className="flex flex-wrap gap-2"><Link to="/submit-film" className="rounded-full bg-fg px-5 py-2 text-sm font-semibold text-bg">New Finished Film</Link>{actor.accountType === "studio" && !actor.internalRole ? <Link to="/submit-concept" className="rounded-full border border-line px-5 py-2 text-sm font-semibold">Story / Concept</Link> : null}</div>:null}
+            {canCreate && !actor.internalRole && ["studio", "independent_creator"].includes(actor.accountType) ? (
+              <div className="flex flex-wrap gap-2">
+                <Link to="/submit-film" className="rounded-full bg-fg px-5 py-2 text-sm font-semibold text-bg">New Finished Film</Link>
+                <Link to="/submit-concept" className="rounded-full border border-line px-5 py-2 text-sm font-semibold">New Story / Concept</Link>
+              </div>
+            ) : null}
           </div>
-          <input aria-label="Search titles" value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search titles…" className="mt-5 h-10 w-full rounded-xl border border-line-strong bg-elevated px-3 text-sm sm:max-w-md" />
+          <input aria-label="Search Bridge products" value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search films and stories…" className="mt-5 h-10 w-full rounded-xl border border-line-strong bg-elevated px-3 text-sm sm:max-w-md" />
         </section>
-        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><TitleList empty="No titles available for this workspace." query={search} /></section>
+        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <div className="mb-4">
+            <h3 className="font-display text-lg font-semibold">Bridge product library</h3>
+            <p className="mt-1 text-sm text-muted">Finished Films and Stories / Concepts are separate product pipelines. Each opens its canonical Bridge record.</p>
+          </div>
+          <TitleList empty="No products are available for this workspace." query={search} />
+        </section>
       </div>
     </BridgeShell>;
   }}</RequireBridge>;
