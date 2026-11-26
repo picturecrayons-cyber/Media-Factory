@@ -79,7 +79,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
         <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
-          canAct={hasPermission(actor, "title.qc_review")} actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
+          canAct={hasPermission(actor, "title.qc_review")} assetVersions={data.assetVersions} actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
       ) : activeTab === "Rights" ? (
         <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
           canAct={hasPermission(actor, "title.rights_review")} actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
@@ -159,8 +159,9 @@ function SectionHeader({ title, description }: { title: string; description: str
 function ActionButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return <Button size="sm" disabled={disabled} onClick={onClick}>{label}</Button>;
 }
-function ReviewQueue({ title, description, titles, canAct, actions, mutation }: { title: string; description: string; titles: any[]; canAct: boolean; actions: [string, string][]; mutation: any }) {
+function ReviewQueue({ title, description, titles, canAct, actions, mutation, assetVersions = [] }: { title: string; description: string; titles: any[]; canAct: boolean; actions: [string, string][]; mutation: any; assetVersions?: any[] }) {
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [selectedVersions, setSelectedVersions] = useState<Record<string, string>>({});
   return <section className="space-y-3">
     <SectionHeader title={title} description={description} />
     {titles.length ? titles.map((t) => {
@@ -172,13 +173,18 @@ function ReviewQueue({ title, description, titles, canAct, actions, mutation }: 
           <Link to="/title/$id" params={{ id: t.id }} className="text-xs text-accent hover:underline">View title, assets & history →</Link>
         </div>
         {canAct ? <>
+          {actions.some(([decision]) => decision === "PASS") ? <label className="block space-y-1 text-xs text-muted">QC asset version reviewed (required)
+            <select value={selectedVersions[t.id] ?? ""} onChange={(event) => setSelectedVersions((current) => ({ ...current, [t.id]: event.target.value }))} className="w-full rounded-xl border border-line bg-elevated p-3 text-sm text-fg">
+              <option value="">Select asset version…</option>{assetVersions.filter((version: any) => version.title_id === t.id).map((version: any) => <option key={version.id} value={version.id}>{version.asset_type} · v{version.version} · {version.processing_state}</option>)}
+            </select>
+          </label> : null}
           {needsReason ? <label className="block space-y-1 text-xs text-muted">
             Reviewer reason (required for Fail / Reject)
             <textarea value={reason} onChange={(event) => setReasons((current) => ({ ...current, [t.id]: event.target.value }))} maxLength={4000} rows={2} className="w-full rounded-xl border border-line bg-elevated p-3 text-sm text-fg" placeholder="Record the evidence gap or reason for this decision" />
           </label> : null}
           <div className="flex flex-wrap gap-2">{actions.map(([decision, label]) => <ActionButton key={decision} label={label}
-            disabled={mutation.isPending || ((decision === "FAIL" || decision === "REJECT") && !reason.trim())}
-            onClick={() => mutation.mutate({ data: { titleId: t.id, decision, notes: reason.trim() || undefined } })} />)}</div>
+            disabled={mutation.isPending || ((decision === "FAIL" || decision === "REJECT") && !reason.trim()) || (decision === "PASS" && !selectedVersions[t.id])}
+            onClick={() => mutation.mutate({ data: { titleId: t.id, decision, notes: reason.trim() || undefined, assetVersionId: selectedVersions[t.id] } })} />)}</div>
         </> : <span className="text-xs text-muted">Review reserved to the designated reviewer or Super Admin</span>}
       </div>;
     }) : <Empty text="Queue is clear." />}
