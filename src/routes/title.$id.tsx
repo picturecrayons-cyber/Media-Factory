@@ -2,7 +2,7 @@ import { canOperateOnTitle } from "@/lib/bridge/rbac";
 import { getTitleWorkflow } from "@/lib/bridge/workflow";
 import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
