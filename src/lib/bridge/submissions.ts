@@ -70,13 +70,13 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       insert into bridge_titles (
         id, slug, name, original_title, owner_user_id, owner_account_type, owner_organization_id, status,
         synopsis, long_synopsis, language, original_language, year, runtime_minutes,
-        content_type, country_of_origin, release_date
+        content_type, country_of_origin, release_date, submission_type
       ) values (
         ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType},
         ${actor.accountType === "studio" ? actor.organizationId ?? null : null}, 'DRAFT',
         ${data.synopsis}, ${data.synopsis}, ${data.originalLanguage}, ${data.originalLanguage},
         ${data.releaseYear}, ${data.runtimeMinutes}, ${data.contentType}, ${data.countryOfOrigin},
-        make_date(${data.releaseYear}, 1, 1)
+        make_date(${data.releaseYear}, 1, 1), 'finished_film'
       )
     `;
 
