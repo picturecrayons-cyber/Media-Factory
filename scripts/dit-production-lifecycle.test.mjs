@@ -39,3 +39,15 @@ test("new production and DIT evidence tables are server-only", () => {
     assert.match(migration, new RegExp("revoke all privileges on table public\\." + table + " from public, anon, authenticated", "i"));
   }
 });
+
+
+test("Buyer and Investor title assignments enforce the product-lane boundary", async () => {
+  const titles = await readFile(new URL("../src/lib/bridge/titles.ts", import.meta.url), "utf8");
+  const admin = await readFile(new URL("../src/lib/bridge/admin-workstations.ts", import.meta.url), "utf8");
+  const investor = await readFile(new URL("../src/lib/bridge/investor.ts", import.meta.url), "utf8");
+  assert.match(titles, /t\.submission_type is distinct from 'story_concept'[\s\S]*?bridge_title_buyer_visibility/);
+  assert.match(titles, /if \(title\.submissionType === "story_concept"\) throw new Error\("Not found"\)/);
+  assert.match(admin, /accountType === "buyer" && title\.submission_type === "story_concept"/);
+  assert.match(admin, /accountType === "investor" && title\.submission_type !== "story_concept"/);
+  assert.match(investor, /t\.submission_type = 'story_concept'/);
+});
