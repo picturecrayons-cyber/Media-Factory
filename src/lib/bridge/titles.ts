@@ -378,6 +378,7 @@ export const listQcSubmissionCandidates = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Forbidden");
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
     const candidates = await sql<{ id: string; name: string; status: string }>`
