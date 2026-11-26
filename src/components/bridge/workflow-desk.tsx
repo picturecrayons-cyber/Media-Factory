@@ -128,13 +128,13 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   return (
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl">Title operations</h2>
-      <nav className="flex flex-wrap gap-2" aria-label="Operational workflow">
+      <nav className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Operational workflow">
         {stages.map((s) => (
           <button
             type="button"
             key={s}
             aria-pressed={stage === s}
-            className={`rounded-full border border-line px-4 py-2 text-sm ${stage === s ? "bg-fg text-bg" : ""}`}
+            className={`flex min-h-11 w-full items-center justify-center rounded-xl border border-line px-3 py-2 text-sm font-medium transition-colors ${stage === s ? "bg-fg text-bg" : "bg-elevated hover:border-accent"}`}
             onClick={() => setStage(s)}
           >
             {s}
@@ -416,7 +416,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               {publication.isError ? (
                 <p role="alert">Publication unavailable: {publication.error.message}</p>
               ) : publication.isPending ? (
-                <p>Loading publication…</p>
+                <p role="status" aria-live="polite" className="text-sm text-muted">Checking Loop publication status…</p>
               ) : (
                 <p>
                   Loop authorization: {pub?.authorizationStatus ?? "Not authorized"}.{" "}
