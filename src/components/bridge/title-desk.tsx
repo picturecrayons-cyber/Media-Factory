@@ -7,7 +7,17 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+const STUDIO_TEST_FIXTURE_IDS = new Set([
+  "86c01f36770066c716df7a6c0148e133",
+  "3b9b45ab1af35bd1f9251aebb50b9e24",
+  "test-fixture-paid-film-20261124",
+]);
+
+export function isStudioTestFixtureTitle(title: { id: string; name: string }): boolean {
+  return STUDIO_TEST_FIXTURE_IDS.has(title.id);
+}
+
+export function TitleList({ empty, query = "", excludeTestFixtures = false }: { empty: string; query?: string; excludeTestFixtures?: boolean }) {
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
     queryFn: () => listTitles(),
@@ -16,7 +26,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
     refetchOnWindowFocus: false,
     retry: 1,
   });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const titles = (titlesQ.data?.titles ?? []).filter((t) => (!excludeTestFixtures || !isStudioTestFixtureTitle(t)) && (!query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase())));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
