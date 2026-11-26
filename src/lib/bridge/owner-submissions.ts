@@ -48,6 +48,9 @@ export const saveOwnerSubmission = createServerFn({ method: "POST" })
       if (data.submit) {
         await tx`insert into bridge_owner_submission_events (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason) values (${data.titleId},${data.submissionKind},case when ${existing?.submission_status === "NEEDS_CORRECTION"} then 'RESUBMITTED' else 'SUBMITTED' end,${existing?.submission_status ?? "DRAFT"},'SUBMITTED',${actor.userId},'Owner submitted canonical submission')`;
       }
+      if (data.submissionKind === "story_concept") {
+        await tx`update bridge_story_concept_submissions set owner_submission_status = ${nextStatus}, updated_at = now() where title_id = ${data.titleId}`;
+      }
       await writeAudit({ actorUserId: actor.userId, action: data.submit ? "owner_submission.submitted" : "owner_submission.draft_saved", entityType: "bridge_title_owner_submission", entityId: data.titleId, metadata: { submissionKind: data.submissionKind, status: nextStatus } }, tx);
       return { titleId: data.titleId, submissionStatus: nextStatus };
     });
@@ -100,6 +103,9 @@ export const decideOwnerSubmission = createServerFn({ method: "POST" })
       if (!current || current.submission_status !== "SUBMITTED") throw new Error("Only submitted items can be decided");
       const next = data.action === "ACCEPTED_INTAKE" ? "ACCEPTED_INTAKE" : data.action === "REQUEST_CHANGES" ? "NEEDS_CORRECTION" : "REJECTED";
       await tx`update bridge_title_owner_submissions set submission_status=${next}, updated_by=${actor.userId}, updated_at=now() where id=${current.id}`;
+      if (current.submission_type === "story_concept") {
+        await tx`update bridge_story_concept_submissions set owner_submission_status = ${next}, updated_at = now() where title_id = ${data.titleId}`;
+      }
       await tx`insert into bridge_owner_submission_events (title_id,submission_kind,action,from_status,to_status,actor_user_id,reason) values (${data.titleId},${current.submission_type},${data.action},'SUBMITTED',${next},${actor.userId},${data.reason})`;
       await writeAudit({ actorUserId: actor.userId, action: "owner_submission." + data.action.toLowerCase(), entityType: "bridge_title_owner_submission", entityId: data.titleId, metadata: { from: "SUBMITTED", to: next, reason: data.reason } }, tx);
       return { titleId: data.titleId, submissionStatus: next };
