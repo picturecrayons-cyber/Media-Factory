@@ -13,9 +13,9 @@ function StudioDit() {
           <div className="mx-auto max-w-5xl space-y-5 pb-16">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Studio operations</p>
-                <h2 className="mt-1 font-display text-2xl font-semibold">DIT ingest desk</h2>
-                <p className="mt-1 text-sm text-muted">Camera-card registration, checksum evidence and independent two-copy verification.</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Primary Studio workspace</p>
+                <h2 className="mt-1 font-display text-2xl font-semibold">Production &amp; DIT</h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted">Register original camera cards, verify source manifests and confirm independent Primary and Recovery Vault copies before DIT sign-off.</p>
               </div>
               <Link to="/studio" className="text-sm font-semibold text-accent hover:underline">← Studio Home</Link>
             </div>
