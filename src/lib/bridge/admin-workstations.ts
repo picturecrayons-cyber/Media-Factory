@@ -36,6 +36,7 @@ const reviewInput = z.object({
   titleId: z.string().min(1),
   decision: z.enum(["ACCEPT", "PASS", "FAIL", "APPROVE", "REJECT"]),
   notes: z.string().max(4000).optional(),
+  assetVersionId: z.string().uuid().optional(),
 });
 
 export const reviewAdminTitle = createServerFn({ method: "POST" })
@@ -60,6 +61,9 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     } else if (data.decision === "PASS") {
       assertPermission(actor, "title.qc_review");
       if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
+      if (!data.assetVersionId) throw new Error("Select the exact asset version reviewed by QC");
+      const version = await sql`select id from bridge_asset_versions where id = ${data.assetVersionId} and title_id = ${title.id} limit 1`;
+      if (!version[0]) throw new Error("Selected asset version does not belong to this title");
       next = "RIGHTS_REVIEW"; action = "qc.pass";
     } else if (data.decision === "FAIL") {
       assertPermission(actor, "title.qc_review");
@@ -82,13 +86,13 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     } else {
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
-      await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'REJECTED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-      await writeAudit({ actorUserId: actor.userId, action: "rights.reject", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } });
+      await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${title.status}, ${actor.userId}, ${"Rights review rejected: " + data.notes!.trim()})`;
+      await writeAudit({ actorUserId: actor.userId, action: "rights.reject", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes!.trim() } });
       return { ok: true, status: "RIGHTS_REVIEW" };
     }
     await sql`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
     await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
-    if (data.decision === "PASS") await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'PASSED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
+    if (data.decision === "PASS") await sql`insert into bridge_qc_cases (title_id, asset_version_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, ${data.assetVersionId!}, 'PASSED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
     await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } });
     return { ok: true, status: next };
   });
