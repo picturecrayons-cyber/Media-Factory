@@ -397,9 +397,10 @@ export const getTitle = createServerFn({ method: "GET" })
     const buyerView = actor.accountType === "buyer" && !actor.internalRole;
     const investorView = actor.accountType === "investor" && !actor.internalRole;
     if (buyerView) {
-      // A published status alone is not enough: re-check every publication gate
-      // on direct listing access, not only when the catalogue is queried.
-      await assertBuyerPublishable(title.id);
+      // Story / Concept records are private curation material: Super Admin assignment
+      // grants read-only visibility, never publication or commercial rights. Finished
+      // Films still require every publication gate before a Buyer can open them.
+      if (title.submissionType !== "story_concept") await assertBuyerPublishable(title.id);
       const buyerAccess = await sql<{ allowed: boolean }>`
         select exists (
           select 1 from bridge_buyer_title_access
