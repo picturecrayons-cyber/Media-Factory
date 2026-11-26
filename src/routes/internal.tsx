@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
+import { OwnerSubmissionIntake } from "@/components/bridge/owner-submission-intake";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            canIntake={actor.internalRole === "super_admin"}
           />
         </BridgeShell>
       )}
@@ -44,10 +46,12 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  canIntake,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  canIntake: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -57,6 +61,8 @@ function InternalBody({
 
   return (
     <div className="grid gap-12">
+      {canIntake ? <OwnerSubmissionIntake /> : null}
+
       {/* 1. Master Distribution Desk */}
       <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
 
