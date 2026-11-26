@@ -336,6 +336,15 @@ export const linkDitFinishedFilmOutput = createServerFn({ method: "POST" })
           and title_id is null
       `;
       await tx`
+        update bridge_production_projects
+        set status = case
+            when status in ('PRE_PRODUCTION', 'IN_PRODUCTION', 'WRAP') then 'POST_PRODUCTION'
+            else status
+          end,
+          updated_by = ${actor.userId}, updated_at = now()
+        where id = ${project.id}::uuid and organization_id = ${actor.organizationId}
+      `;
+      await tx`
         insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
         values (${actor.userId}, 'dit.finished_film_output_linked', 'bridge_production_project',
           ${project.id}, ${JSON.stringify({ titleId: title.id, titleName: title.name })})
@@ -374,6 +383,12 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
       `;
       const shootDay = shootDays[0];
       if (!shootDay) throw new Error("Could not register the production shoot day");
+      await tx`
+        update bridge_production_projects
+        set status = case when status = 'PRE_PRODUCTION' then 'IN_PRODUCTION' else status end,
+          updated_by = ${actor.userId}, updated_at = now()
+        where id = ${project.id}::uuid and organization_id = ${actor.organizationId}
+      `;
       await tx`
         insert into bridge_dit_ingest_sessions (
           id, title_id, production_project_id, shoot_day_id, organization_id, created_by,

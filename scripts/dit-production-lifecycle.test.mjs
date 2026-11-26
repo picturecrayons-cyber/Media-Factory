@@ -14,6 +14,8 @@ test("DIT sessions are production-project and shoot-day linked without requiring
   assert.match(migration, /project_day_pair_check/i);
   assert.match(api, /productionProjectId: z\.string\(\)\.uuid\(\)/);
   assert.match(api, /insert into bridge_production_shoot_days/i);
+  assert.match(api, /status = case when status = 'PRE_PRODUCTION' then 'IN_PRODUCTION' else status end/i);
+  assert.match(api, /then 'POST_PRODUCTION'/i);
   assert.match(api, /values \(\s*\$\{id\}::uuid, null, \$\{project\.id\}/);
   assert.match(desk, /Production project/);
   assert.doesNotMatch(desk, /Select a finished film/);
