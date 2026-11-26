@@ -52,11 +52,11 @@ function CreatorHome({ userId, organizationId }: { userId: string; organizationI
       </section>
 
       <section className="space-y-3">
-        <h3 className="font-display text-lg font-semibold">Quick actions</h3>
+        <h3 className="font-display text-lg font-semibold">Your Bridge products and workspace</h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Action to="/submit-film" title="Submit Film" detail="Submit a completed film" />
-          <Action to="/submit-concept" title="Submit Story" detail="Submit a story or concept" />
-          <Action to="/workspace" title="My Titles" detail="Open title records" />
+          <Action to="/submit-film" title="Finished Films" detail="Submit and manage completed film records" />
+          <Action to="/submit-concept" title="Stories / Concepts" detail="Submit and manage development-stage projects" />
+          <Action to="/workspace" title="Product Library" detail="Open canonical Film and Story records" />
           <Action to="/deliveries" title="Deliveries" detail="Track authorized deliveries" />
         </div>
       </section>
@@ -64,7 +64,7 @@ function CreatorHome({ userId, organizationId }: { userId: string; organizationI
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="font-display text-lg font-semibold">Recent titles</h3>
+            <h3 className="font-display text-lg font-semibold">Recent product records</h3>
             <p className="text-sm text-muted">Records returned by your authenticated Creator account.</p>
           </div>
           <Link to="/workspace" className="shrink-0 text-sm font-semibold text-accent hover:underline">View all →</Link>
@@ -82,7 +82,7 @@ function CreatorHome({ userId, organizationId }: { userId: string; organizationI
               <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <Link to="/title/$id" params={{ id: title.id }} className="font-medium hover:text-accent">{title.name}</Link>
-                  <p className="text-xs text-muted">{title.contentType ?? "Title"} · {title.language}{title.year ? ` · ${title.year}` : ""}</p>
+                  <p className="text-xs text-muted">{title.submissionType === "story_concept" ? "Story / Concept" : "Finished Film"} · {title.contentType ?? "Title"} · {title.language}{title.year ? ` · ${title.year}` : ""}</p>
                 </div>
                 <StatusChip status={title.status} />
               </li>
