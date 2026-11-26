@@ -125,7 +125,7 @@ function AdminBody({ actor }: { actor: any }) {
 
         <section className="grid gap-3 lg:grid-cols-2">
           <details className="min-w-0 rounded-2xl border border-line bg-surface p-4">
-            <summary className="cursor-pointer list-none font-semibold">Users & organizations <span className="ml-1 text-sm font-normal text-muted">({profiles.length})</span></summary>
+            <summary className="cursor-pointer list-none font-semibold">Users & organizations <span className="ml-1 text-sm font-normal text-muted">({profilesQ.isPending || profilesQ.isError ? "—" : profiles.length})</span></summary>
             <p className="mt-2 text-sm text-muted">Read-only Bridge profile view. Role changes remain controlled by the invitation and onboarding flow.</p>
             {profilesQ.isError ? <div role="alert" className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted"><span>Profiles could not be loaded.</span><Button type="button" variant="outline" onClick={() => void profilesQ.refetch()}>Retry profiles</Button></div> : null}
             <div className="mt-3 max-h-80 overflow-auto">
