@@ -27,12 +27,17 @@ const LABELS: Record<VendorJobType, string> = {
 
 function Deliveries() {
   return (
-    <RequireBridge>
-      {(actor) => (
-        <BridgeShell actor={actor} title="Deliveries">
+    <RequireBridge allow="internal">
+      {(actor) => actor.internalRole === "admin" || actor.internalRole === "super_admin" ? (
+        <BridgeShell actor={actor} title="Deliveries & Vendor Jobs">
           <VendorJobs actor={actor} />
           <DeliveryList />
         </BridgeShell>
+      ) : (
+        <main className="mx-auto max-w-xl rounded-2xl border border-line bg-surface p-6">
+          <h1 className="font-display text-xl font-semibold">Internal operations access required</h1>
+          <p className="mt-2 text-sm text-muted">Deliveries and Vendor Jobs are managed by authorized Bridge operations staff. Creators and Studios can track their title workflow from the canonical Title Workspace.</p>
+        </main>
       )}
     </RequireBridge>
   );
@@ -40,7 +45,7 @@ function Deliveries() {
 
 function VendorJobs({ actor }: { actor: Actor }) {
   const queryClient = useQueryClient();
-  const canRequest = hasPermission(actor, "title.deliver") || hasPermission(actor, "title.create");
+  const canRequest = actor.internalRole === "admin" || actor.internalRole === "super_admin";
   const canManage = hasPermission(actor, "title.deliver");
   const canApprove = hasPermission(actor, "loop.publish");
   const [type, setType] = useState<VendorJobType>("human_qc");
@@ -112,7 +117,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
           </button>
         </div>
       ) : (
-        <p className="mt-3 text-sm text-muted">You can view delivery jobs. New requests require an authorized Creator, Studio or delivery operator account.</p>
+        <p className="mt-3 text-sm text-muted">You can view delivery jobs. New vendor requests are restricted to authorized Bridge operations staff.</p>
       )}
       {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
       {jobsQuery.isError ? <p className="mt-3 text-sm text-red-600" role="alert">Delivery records could not be loaded.</p> : null}
