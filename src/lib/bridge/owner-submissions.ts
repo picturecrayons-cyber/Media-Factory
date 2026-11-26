@@ -9,7 +9,6 @@ import { canMutateTitle } from "./rbac";
 import { writeAudit } from "./audit";
 
 const kindSchema = z.enum(["finished_film", "story_concept", "production_shoot"]);
-const statusSchema = z.enum(["DRAFT", "SUBMITTED", "NEEDS_CORRECTION", "ACCEPTED_INTAKE", "REJECTED"]);
 const payloadSchema = z.object({
   titleId: z.string().min(8),
   submissionKind: kindSchema,
@@ -61,7 +60,11 @@ export const listOwnerSubmissionIntake = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
     const sql = await getSql();
-    const rows = await sql`
+    const rows = await sql<{
+      id: string; title_id: string; owner_user_id: string; owner_organization_id: string | null;
+      details: unknown; submission_status: string; submitted_at: string | null; updated_at: string;
+      title_name: string; submission_type: string; owner_name: string | null; owner_email: string | null;
+    }>`
       select s.id, s.title_id, s.owner_user_id, s.owner_organization_id, s.details,
              s.submission_status, s.submitted_at, s.updated_at, t.name as title_name,
              t.submission_type, p.display_name as owner_name, p.email as owner_email
@@ -72,7 +75,7 @@ export const listOwnerSubmissionIntake = createServerFn({ method: "GET" })
       order by s.submitted_at desc nulls last, s.updated_at desc
       limit 300
     `;
-    return { submissions: rows };
+    return { submissions: rows.map(row => ({ ...row, details: JSON.stringify(row.details ?? {}) })) };
   });
 
 export const decideOwnerSubmission = createServerFn({ method: "POST" })
