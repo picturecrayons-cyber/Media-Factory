@@ -57,7 +57,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
 
-    if (!["independent_creator", "studio"].includes(actor.accountType)) {
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
       throw new Error("Only creator and studio accounts can submit titles");
     }
     assertPermission(actor, "title.create");
@@ -65,73 +65,122 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
     const id = randomBytes(16).toString("hex");
     const slug = `${data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "title"}-${id.slice(0, 6)}`;
     const sql = await getSql();
+    const details = {
+      submissionKind: "finished_film",
+      title: data.name,
+      synopsis: data.synopsis,
+      contentType: data.contentType,
+      originalLanguage: data.originalLanguage,
+      countryOfOrigin: data.countryOfOrigin,
+      releaseYear: data.releaseYear,
+      runtimeMinutes: data.runtimeMinutes,
+      rightsLanguages: data.rightsLanguages,
+      territories: data.territories,
+      exploitation: data.exploitation,
+      windowStart: data.windowStart,
+      windowEnd: data.windowEnd,
+      exclusivity: data.exclusivity,
+      authorityType: data.authorityType,
+      authorizationEvidenceType: data.authorizationEvidenceType,
+      authorizationConfirmed: data.authorizationConfirmed,
+      buyerChannels: data.buyerChannels,
+      screenerMode: data.screenerMode,
+      screenerUrl: data.screenerUrl ?? null,
+    };
 
-    await sql`
-      insert into bridge_titles (
-        id, slug, name, original_title, owner_user_id, owner_account_type, status,
-        synopsis, long_synopsis, language, original_language, year, runtime_minutes,
-        content_type, country_of_origin, release_date
-      ) values (
-        ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType}, 'DRAFT',
-        ${data.synopsis}, ${data.synopsis}, ${data.originalLanguage}, ${data.originalLanguage},
-        ${data.releaseYear}, ${data.runtimeMinutes}, ${data.contentType}, ${data.countryOfOrigin},
-        make_date(${data.releaseYear}, 1, 1)
-      )
-    `;
+    const rightsRows = await sql.transaction(async (tx) => {
+      await tx`
+        insert into bridge_titles (
+          id, slug, name, original_title, owner_user_id, owner_account_type,
+          owner_organization_id, submission_type, status, synopsis, long_synopsis,
+          language, original_language, year, runtime_minutes, content_type,
+          country_of_origin, release_date
+        ) values (
+          ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType},
+          ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
+          'finished_film', 'DRAFT', ${data.synopsis}, ${data.synopsis},
+          ${data.originalLanguage}, ${data.originalLanguage}, ${data.releaseYear},
+          ${data.runtimeMinutes}, ${data.contentType}, ${data.countryOfOrigin},
+          make_date(${data.releaseYear}, 1, 1)
+        )
+      `;
 
-    const rightsRows = await sql<{ id: string }>`
-      insert into bridge_rights_grants (
-        title_id, grant_type, territories, languages, media, window_start, window_end,
-        exclusivity, evidence, status, created_by
-      ) values (
-        ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories)}::jsonb,
-        ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(data.exploitation)}::jsonb,
-        ${data.windowStart}, ${data.windowEnd}, ${data.exclusivity},
-        ${JSON.stringify([{ type: data.authorizationEvidenceType, status: "PENDING_REVIEW" }])}::jsonb,
-        'DRAFT', ${actor.userId}
-      )
-      returning id::text
-    `;
+      const rights = await tx<{ id: string }>`
+        insert into bridge_rights_grants (
+          title_id, grant_type, territories, languages, media, window_start, window_end,
+          exclusivity, evidence, status, created_by
+        ) values (
+          ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories)}::jsonb,
+          ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(data.exploitation)}::jsonb,
+          ${data.windowStart}, ${data.windowEnd}, ${data.exclusivity},
+          ${JSON.stringify([{ type: data.authorizationEvidenceType, status: "PENDING_REVIEW" }])}::jsonb,
+          'DRAFT', ${actor.userId}
+        )
+        returning id::text
+      `;
 
-    await sql`
-      insert into bridge_legal_cases (title_id, status, evidence)
-      values (
-        ${id}, 'PENDING',
-        ${JSON.stringify([{
-          authorityType: data.authorityType,
-          evidenceType: data.authorizationEvidenceType,
-          authorizationConfirmed: data.authorizationConfirmed,
-          status: "PENDING_EVIDENCE_REVIEW"
-        }])}::jsonb
-      )
-    `;
+      await tx`
+        insert into bridge_legal_cases (title_id, status, evidence)
+        values (
+          ${id}, 'PENDING',
+          ${JSON.stringify([{
+            authorityType: data.authorityType,
+            evidenceType: data.authorizationEvidenceType,
+            authorizationConfirmed: data.authorizationConfirmed,
+            status: "PENDING_EVIDENCE_REVIEW"
+          }])}::jsonb
+        )
+      `;
 
-    await sql`
-      insert into bridge_title_submission_intake (
-        title_id, authority_type, authorization_evidence_type, authorization_confirmed,
-        buyer_channels, screener_mode, screener_url
-      ) values (
-        ${id}, ${data.authorityType}, ${data.authorizationEvidenceType}, ${data.authorizationConfirmed},
-        ${JSON.stringify(data.buyerChannels)}::jsonb, ${data.screenerMode}, ${data.screenerUrl ?? null}
-      )
-    `;
+      await tx`
+        insert into bridge_title_submission_intake (
+          title_id, authority_type, authorization_evidence_type, authorization_confirmed,
+          buyer_channels, screener_mode, screener_url
+        ) values (
+          ${id}, ${data.authorityType}, ${data.authorizationEvidenceType}, ${data.authorizationConfirmed},
+          ${JSON.stringify(data.buyerChannels)}::jsonb, ${data.screenerMode}, ${data.screenerUrl ?? null}
+        )
+      `;
 
-    await sql`
-      insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
-      values (${id}, null, 'DRAFT', ${actor.userId}, 'rights-ready public submission')
-    `;
+      await tx`
+        insert into bridge_title_owner_submissions (
+          id, title_id, owner_user_id, owner_organization_id, details,
+          submission_status, submitted_at, submitted_by, updated_by
+        ) values (
+          ${randomBytes(16).toString("hex")}, ${id}, ${actor.userId},
+          ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
+          ${JSON.stringify(details)}::jsonb, 'SUBMITTED', now(), ${actor.userId}, ${actor.userId}
+        )
+      `;
 
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "title.rights_ready_submission.create",
-      entityType: "bridge_title",
-      entityId: id,
-      metadata: {
-        rightsGrantId: rightsRows[0]?.id ?? null,
-        screenerMode: data.screenerMode,
-        buyerChannels: data.buyerChannels,
-      },
+      await tx`
+        insert into bridge_owner_submission_events (
+          title_id, submission_kind, action, from_status, to_status, actor_user_id, reason
+        ) values (
+          ${id}, 'finished_film', 'SUBMITTED', 'DRAFT', 'SUBMITTED',
+          ${actor.userId}, 'Owner submitted rights-ready Finished Film package'
+        )
+      `;
+
+      await tx`
+        insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
+        values (${id}, null, 'DRAFT', ${actor.userId}, 'rights-ready public submission')
+      `;
+
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.rights_ready_submission.create",
+        entityType: "bridge_title",
+        entityId: id,
+        metadata: {
+          rightsGrantId: rights[0]?.id ?? null,
+          screenerMode: data.screenerMode,
+          buyerChannels: data.buyerChannels,
+          ownerSubmissionStatus: "SUBMITTED",
+        },
+      }, tx);
+      return rights;
     });
 
-    return { titleId: id, status: "DRAFT" as const };
+    return { titleId: id, status: "DRAFT" as const, submissionStatus: "SUBMITTED" as const, rightsGrantId: rightsRows[0]?.id ?? null };
   });
