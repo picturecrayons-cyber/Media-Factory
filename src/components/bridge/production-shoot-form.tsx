@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,17 @@ export function ProductionShootForm({ titleId }: { titleId: string }) {
     queryKey: ["bridge-production-workspace", titleId],
     queryFn: () => getProductionWorkspace({ data: { titleId } }),
   });
+  useEffect(() => {
+    const current = query.data?.production;
+    if (!current) return;
+    setShootProgress(current.shoot_progress);
+    setMediaHandoverStatus(current.media_handover_status);
+    setDevelopmentStage(current.development_stage);
+    setPlannedStartDate(current.planned_start_date ?? "");
+    setPlannedEndDate(current.planned_end_date ?? "");
+    setShootDays(current.shoot_days == null ? "" : String(current.shoot_days));
+    setPrimaryLocation(current.primary_location ?? "");
+  }, [query.data?.production]);
   const mutation = useMutation({
     mutationFn: () => submitProductionUpdate({
       data: {
