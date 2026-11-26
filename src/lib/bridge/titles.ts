@@ -210,12 +210,16 @@ export const createTitle = createServerFn({ method: "POST" })
       publicSubmission: z.boolean().optional(),
       screenerAccess: z.enum(["BRIDGE_PRIVATE_SCREENER", "SCREENER_PENDING"]).optional(),
       intendedDestinations: z.array(z.string().min(2).max(80)).min(1).max(20).optional(),
+      ownerSubmissionDetails: z.record(z.string(), z.unknown()).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
+    if (data.ownerSubmissionDetails && (actor.internalRole || !["studio", "independent_creator"].includes(actor.accountType))) {
+      throw new Error("Owner account required for a Finished Film submission");
+    }
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
     const sql = await getSql();
@@ -277,6 +281,19 @@ export const createTitle = createServerFn({ method: "POST" })
           ])}::jsonb, ${actor.accountType === "studio" ? actor.organizationId ?? null : null}
         )
       `;
+
+      if (data.ownerSubmissionDetails) {
+        await tx`
+          insert into bridge_title_owner_submissions (
+            id, title_id, owner_user_id, owner_organization_id, details,
+            submission_status, updated_by
+          ) values (
+            ${randomBytes(16).toString("hex")}, ${id}, ${actor.userId},
+            ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
+            ${JSON.stringify(data.ownerSubmissionDetails)}::jsonb, 'DRAFT', ${actor.userId}
+          )
+        `;
+      }
 
       if (rightsPackage) {
         const evidence = JSON.stringify([{
