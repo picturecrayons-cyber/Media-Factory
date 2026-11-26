@@ -290,24 +290,26 @@ export const createDitProductionProject = createServerFn({ method: "POST" })
     }
     const sql = await getSql();
     const id = randomUUID();
-    const rows = await sql<{ id: string; name: string }>`
-      insert into bridge_production_projects (
-        id, organization_id, name, project_code, production_type, status,
-        planned_start_date, planned_end_date, primary_location, created_by, updated_by
-      ) values (
-        ${id}::uuid, ${actor.organizationId}, ${data.name}, ${data.projectCode || null},
-        ${data.productionType}, 'PRE_PRODUCTION',
-        ${data.plannedStartDate || null}, ${data.plannedEndDate || null},
-        ${data.primaryLocation || null}, ${actor.userId}, ${actor.userId}
-      )
-      returning id, name
-    `;
-    await sql`
-      insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
-      values (${actor.userId}, 'dit.production_project_created', 'bridge_production_project',
-        ${id}, ${JSON.stringify({ name: data.name, productionType: data.productionType })})
-    `;
-    return rows[0];
+    return sql.transaction(async (tx) => {
+      const rows = await tx<{ id: string; name: string }>`
+        insert into bridge_production_projects (
+          id, organization_id, name, project_code, production_type, status,
+          planned_start_date, planned_end_date, primary_location, created_by, updated_by
+        ) values (
+          ${id}::uuid, ${actor.organizationId}, ${data.name}, ${data.projectCode || null},
+          ${data.productionType}, 'PRE_PRODUCTION',
+          ${data.plannedStartDate || null}, ${data.plannedEndDate || null},
+          ${data.primaryLocation || null}, ${actor.userId}, ${actor.userId}
+        )
+        returning id, name
+      `;
+      await tx`
+        insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+        values (${actor.userId}, 'dit.production_project_created', 'bridge_production_project',
+          ${id}, ${JSON.stringify({ name: data.name, productionType: data.productionType })})
+      `;
+      return rows[0];
+    });
   });
 
 export const linkDitFinishedFilmOutput = createServerFn({ method: "POST" })
