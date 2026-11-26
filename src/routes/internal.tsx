@@ -75,27 +75,12 @@ function InternalBody({
           </span>
         </div>
 
-        <ul className="divide-y divide-line rounded-2xl border border-line bg-surface">
-          {titles.length ? (
-            titles.map((t) => (
-              <li key={t.id}>
-                <Link
-                  to="/title/$id"
-                  params={{ id: t.id }}
-                  className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-elevated/50 transition-colors"
-                >
-                  <div>
-                    <span className="font-medium text-fg">{t.name}</span>
-                    <span className="ml-2 text-xs text-muted font-mono">{t.id}</span>
-                  </div>
-                  <StatusChip status={t.status} />
-                </Link>
-              </li>
-            ))
-          ) : (
-            <li className="px-5 py-8 text-center text-sm text-muted">No titles in the pipeline.</li>
-          )}
-        </ul>
+        {titles.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {titles.map((t) => <article key={t.id} className="flex min-h-36 flex-col justify-between rounded-xl border border-line bg-surface p-4">
+            <div><Link to="/title/$id" params={{ id: t.id }} className="font-semibold text-fg hover:text-accent">{t.name}</Link><p className="mt-2 break-all font-mono text-[10px] text-muted">{t.id}</p></div>
+            <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3"><StatusChip status={t.status} /><Link to="/title/$id" params={{ id: t.id }} className="text-sm font-semibold text-accent hover:underline">Open →</Link></div>
+          </article>)}
+        </div> : <p className="rounded-xl border border-dashed border-line p-8 text-center text-sm text-muted">No titles in the pipeline.</p>}
       </section>
 
       {/* 4. Immutable Audit Trail */}

@@ -76,18 +76,12 @@ function CreatorHome({ userId, organizationId }: { userId: string; organizationI
           </div>
         ) : null}
         {!titlesQ.isPending && !titlesQ.isError ? (
-          <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
-            {recent.map((title) => (
-              <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <Link to="/title/$id" params={{ id: title.id }} className="font-medium hover:text-accent">{title.name}</Link>
-                  <p className="text-xs text-muted">{title.submissionType === "story_concept" ? "Story / Concept" : "Finished Film"} · {title.contentType ?? "Title"} · {title.language}{title.year ? ` · ${title.year}` : ""}</p>
-                </div>
-                <StatusChip status={title.status} />
-              </li>
-            ))}
-            {!recent.length ? <li className="px-4 py-8 text-center text-sm text-muted">No title records yet. Start with Submit Film or Submit Story.</li> : null}
-          </ul>
+          {recent.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {recent.map((title) => <article key={title.id} className="flex min-h-36 flex-col justify-between rounded-xl border border-line bg-surface p-4">
+              <div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">{title.submissionType === "story_concept" ? "Story / Concept" : "Finished Film"}</p><Link to="/title/$id" params={{ id: title.id }} className="mt-2 block font-semibold hover:text-accent">{title.name}</Link><p className="mt-1 text-xs text-muted">{title.contentType ?? "Title"} · {title.language}{title.year ? ` · ${title.year}` : ""}</p></div>
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3"><StatusChip status={title.status} /><Link to="/title/$id" params={{ id: title.id }} className="text-sm font-semibold text-accent hover:underline">Open →</Link></div>
+            </article>)}
+          </div> : <p className="rounded-xl border border-dashed border-line p-8 text-center text-sm text-muted">No title records yet. Start with Submit Film or Submit Story.</p>}
         ) : null}
       </section>
 

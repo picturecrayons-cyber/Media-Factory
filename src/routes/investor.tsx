@@ -68,31 +68,13 @@ function InvestorHome({ userId }: { userId: string }) {
                 <p className="text-sm text-muted">Recorded participation details. No unassigned opportunities are displayed.</p>
               </div>
             </div>
-            <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-              <table className="w-full min-w-[680px] text-left text-sm">
-                <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
-                  <tr>
-                    <th className="px-4 py-3">Title</th>
-                    <th className="px-4 py-3">Reference</th>
-                    <th className="px-4 py-3">Capital</th>
-                    <th className="px-4 py-3">Participation</th>
-                    <th className="px-4 py-3">Recorded</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {rows.map((row) => (
-                    <tr key={row.id}>
-                      <td className="px-4 py-3"><Link to="/title/$id" params={{ id: row.titleId }} className="font-medium hover:text-accent">{row.titleName}</Link></td>
-                      <td className="px-4 py-3">{row.investmentReference ?? "—"}</td>
-                      <td className="px-4 py-3 tabular-nums">₹{(Number(row.investedAmountPaise ?? 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
-                      <td className="px-4 py-3 tabular-nums">{Number(row.participationPercent ?? 0).toFixed(2)}%</td>
-                      <td className="px-4 py-3">{new Date(row.createdAt).toLocaleDateString("en-IN")}</td>
-                    </tr>
-                  ))}
-                  {!rows.length ? <tr><td colSpan={5} className="px-4 py-8 text-center text-muted">No investment records are assigned to this account yet.</td></tr> : null}
-                </tbody>
-              </table>
-            </div>
+            {rows.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {rows.map((row) => <article key={row.id} className="space-y-3 rounded-xl border border-line bg-surface p-4">
+                <div><Link to="/title/$id" params={{ id: row.titleId }} className="font-semibold hover:text-accent">{row.titleName}</Link><p className="mt-1 text-xs text-muted">Investment record · {row.investmentReference ?? "No reference"}</p></div>
+                <div className="grid grid-cols-2 gap-3 border-y border-line py-3 text-sm"><div><p className="text-xs text-muted">Capital</p><p className="mt-1 font-semibold tabular-nums">₹{(Number(row.investedAmountPaise ?? 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</p></div><div><p className="text-xs text-muted">Participation</p><p className="mt-1 font-semibold tabular-nums">{Number(row.participationPercent ?? 0).toFixed(2)}%</p></div></div>
+                <p className="text-xs text-muted">Recorded {new Date(row.createdAt).toLocaleDateString("en-IN")}</p>
+              </article>)}
+            </div> : <p className="rounded-xl border border-dashed border-line p-7 text-center text-sm text-muted">No investment records are assigned to this account yet.</p>}
           </section>
         </>
       ) : null}
