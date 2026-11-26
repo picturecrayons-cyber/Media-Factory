@@ -38,14 +38,14 @@ function MembershipControlPage() {
     <RequireBridge allow="super_admin">
       {(actor) => (
         <BridgeShell actor={actor} title="Membership & commercial controls">
-          <MembershipControlBody actor={actor} />
+          <MembershipControlBody />
         </BridgeShell>
       )}
     </RequireBridge>
   );
 }
 
-function MembershipControlBody({ actor }: { actor: any }) {
+function MembershipControlBody() {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["bridge-membership-control-plane"],
