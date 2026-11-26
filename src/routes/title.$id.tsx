@@ -164,23 +164,23 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const assetsQ = useQuery({
     queryKey: ["bridge-assets", id, actor.userId],
     queryFn: () => listTitleAssets({ data: { titleId: id } }),
-    enabled: !buyerView,
+    enabled: !buyerView && Boolean(titleQ.data?.title) && titleQ.data?.title?.submissionType !== "story_concept",
   });
   const productionAssetsQ = useQuery({
     queryKey: ["bridge-production-assets", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => listProductionAssets({ data: { titleId: id } }),
-    enabled: !buyerView,
+    enabled: !buyerView && Boolean(titleQ.data?.title) && titleQ.data?.title?.submissionType !== "story_concept",
   });
   const pubQ = useQuery({
     queryKey: ["loop-pub", id, actor.userId],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }),
-    enabled: !buyerView,
+    enabled: !buyerView && Boolean(titleQ.data?.title) && titleQ.data?.title?.submissionType !== "story_concept",
   });
 
   const reviewQ = useQuery({
     queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
-    enabled: !buyerView,
+    enabled: !buyerView && Boolean(titleQ.data?.title) && titleQ.data?.title?.submissionType !== "story_concept",
   });
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
