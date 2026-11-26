@@ -6,7 +6,7 @@ import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
-import { canAccessTitleWorkspace } from "@/lib/bridge/rbac";
+import { canEnterBuyerDeskRoute, canAccessTitleWorkspace } from "@/lib/bridge/rbac";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
@@ -106,13 +106,17 @@ export function RequireBridge({
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
   }
 
+  // Buyer Desk is a narrowly scoped exception for verified Super Admins.
+  // It does not widen access for other internal roles or creator/studio accounts.
+  if (allow === "buyer" && !canEnterBuyerDeskRoute(profile)) return <Navigate to={sessionQ.data?.home ?? "/"} />;
+
   // Role-specific workspaces use account-type checks. The shared title workspace
   // has already applied its own explicit Creator/Studio and internal catalog-read
   // permission gate above; do not reject authorised internal staff by account type.
   // Internal surfaces remain protected by the explicit "internal"/"super_admin" checks.
   if (allow === "super_admin" && profile.internalRole !== "super_admin") return <Navigate to={sessionQ.data?.home ?? "/"} />;
   if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;
-  if (allow && allow !== "internal" && allow !== "super_admin" && allow !== "workspace" && (profile.internalRole || profile.accountType !== (
+  if (allow && allow !== "buyer" && allow !== "internal" && allow !== "super_admin" && allow !== "workspace" && (profile.internalRole || profile.accountType !== (
     allow === "creator" ? "independent_creator" : allow
   ))) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
