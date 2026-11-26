@@ -109,19 +109,20 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       if (actor.internalRole !== "super_admin") throw new Error("Only Super Admin may approve the Rights Review gate");
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
-      const validGrant = await sql<{ id: string }>`select id from bridge_rights_grants where title_id = ${title.id} and status = 'VALID' order by created_at desc limit 1`;
-      if (!validGrant[0]) throw new Error("Rights approval blocked: no VALID rights grant is recorded");
+      const candidateGrant = await sql<{ id: string; status: string }>`select id,status from bridge_rights_grants
+        where title_id = ${title.id} and status in ('DRAFT','VALID')
+        order by created_at desc limit 1`;
+      if (!candidateGrant[0]) throw new Error("Rights approval blocked: no active rights grant is recorded");
       const [legalApproval, qcApproval] = await Promise.all([
         sql`select id from bridge_legal_cases
           where title_id = ${title.id} and status = 'APPROVED'
             and reviewed_by is not null and reviewed_at is not null
-            and exists (
+            and (rights_grant_id = ${candidateGrant[0].id}::uuid or exists (
               select 1 from jsonb_array_elements(
                 case when jsonb_typeof(evidence) = 'array' then evidence else '[]'::jsonb end
-              ) as item
-              where item->>'grantId' = ${validGrant[0].id}::text
-            )
-          order by created_at desc limit 1`,
+              ) as item where item->>'grantId' = ${candidateGrant[0].id}::text
+            ))
+          order by reviewed_at desc limit 1`,
         sql`select q.id from bridge_qc_cases q
           where q.title_id = ${title.id} and q.status = 'PASSED'
             and q.asset_version_id is not null and q.reviewed_by is not null and q.reviewed_at is not null
@@ -129,8 +130,11 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
             and q.reviewer_findings->0->>'posterKey' = ${title.poster_key}
           order by q.created_at desc limit 1`,
       ]);
-      if (!legalApproval[0]) throw new Error("Rights approval blocked: independent Legal approval for the active rights grant is missing");
+      if (!legalApproval[0]) throw new Error("Rights approval blocked: independent Legal approval for this rights grant is missing");
       if (!qcApproval[0]) throw new Error("Rights approval blocked: current asset-version QC approval is missing");
+      if (candidateGrant[0].status === "DRAFT") {
+        await sql`update bridge_rights_grants set status='VALID' where id=${candidateGrant[0].id}::uuid and status='DRAFT'`;
+      }
       next = "LICENSING_READY"; action = "rights.approve";
     } else {
       if (actor.internalRole !== "super_admin") throw new Error("Only Super Admin may reject the Rights Review gate");
