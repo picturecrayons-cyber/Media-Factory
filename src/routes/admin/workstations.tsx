@@ -160,7 +160,29 @@ function ActionButton({ label, onClick, disabled }: { label: string; onClick: ()
   return <Button size="sm" disabled={disabled} onClick={onClick}>{label}</Button>;
 }
 function ReviewQueue({ title, description, titles, canAct, actions, mutation }: { title: string; description: string; titles: any[]; canAct: boolean; actions: [string, string][]; mutation: any }) {
-  return <section className="space-y-3"><SectionHeader title={title} description={description} />{titles.length ? titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span>{canAct ? <div className="flex gap-2">{actions.map(([decision, label]) => <ActionButton key={decision} label={label} disabled={mutation.isPending} onClick={() => mutation.mutate({ data: { titleId: t.id, decision } })} />)}</div> : <span className="text-xs text-muted">Review reserved to designated {title.startsWith("QC") ? "QC Reviewer" : "Legal Reviewer"} or Super Admin</span>}</div>) : <Empty text="Queue is clear." />}</section>;
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  return <section className="space-y-3">
+    <SectionHeader title={title} description={description} />
+    {titles.length ? titles.map((t) => {
+      const needsReason = actions.some(([decision]) => decision === "FAIL" || decision === "REJECT");
+      const reason = reasons[t.id] ?? "";
+      return <div key={t.id} className="rounded-2xl border border-line bg-surface p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="font-medium">{t.name}</span>
+          <Link to="/title/$id" params={{ id: t.id }} className="text-xs text-accent hover:underline">View title, assets & history →</Link>
+        </div>
+        {canAct ? <>
+          {needsReason ? <label className="block space-y-1 text-xs text-muted">
+            Reviewer reason (required for Fail / Reject)
+            <textarea value={reason} onChange={(event) => setReasons((current) => ({ ...current, [t.id]: event.target.value }))} maxLength={4000} rows={2} className="w-full rounded-xl border border-line bg-elevated p-3 text-sm text-fg" placeholder="Record the evidence gap or reason for this decision" />
+          </label> : null}
+          <div className="flex flex-wrap gap-2">{actions.map(([decision, label]) => <ActionButton key={decision} label={label}
+            disabled={mutation.isPending || ((decision === "FAIL" || decision === "REJECT") && !reason.trim())}
+            onClick={() => mutation.mutate({ data: { titleId: t.id, decision, notes: reason.trim() || undefined } })} />)}</div>
+        </> : <span className="text-xs text-muted">Review reserved to the designated reviewer or Super Admin</span>}
+      </div>;
+    }) : <Empty text="Queue is clear." />}
+  </section>;
 }
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
