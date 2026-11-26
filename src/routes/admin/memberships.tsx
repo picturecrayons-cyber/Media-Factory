@@ -214,7 +214,7 @@ function MembershipControlBody() {
             <div className="mt-2 flex flex-wrap gap-3">
               {Object.entries(ACCOUNT_LABELS).map(([value, label]) => (
                 <label key={value} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={accountTypes.includes(value)} onChange={(e) => toggleAccountType(value as AccountKey, e.target.checked)} />
+                  <input type="checkbox" checked={accountTypes.includes(value as AccountKey)} onChange={(e) => toggleAccountType(value as AccountKey, e.target.checked)} />
                   {label}
                 </label>
               ))}
