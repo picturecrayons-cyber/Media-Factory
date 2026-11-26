@@ -1,15 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
-import { Button } from "@/components/ui/button";
+import { TitleList } from "@/components/bridge/title-desk";
 import { hasPermission } from "@/lib/bridge/rbac";
 
 export const Route = createFileRoute("/workspace")({ component: Workspace });
 
 function Workspace() {
-  const [showCreate,setShowCreate]=useState(false);
   const [query,setQuery]=useState("");
   const search=useMemo(()=>query.trim(),[query]);
   return <RequireBridge allow="workspace">{(actor)=>{
@@ -22,11 +20,10 @@ function Workspace() {
               <h2 className="font-display text-xl font-semibold">Title library</h2>
               <p className="mt-1 text-sm text-muted">Search and open the canonical Bridge record for every title.</p>
             </div>
-            {canCreate?<Button onClick={()=>setShowCreate(!showCreate)} className="rounded-full px-5">{showCreate?"Cancel":"New Title"}</Button>:null}
+            {canCreate?<div className="flex flex-wrap gap-2"><Link to="/submit-film" className="rounded-full bg-fg px-5 py-2 text-sm font-semibold text-bg">New Finished Film</Link><Link to="/submit-concept" className="rounded-full border border-line px-5 py-2 text-sm font-semibold">Story / Concept</Link></div>:null}
           </div>
           <input aria-label="Search titles" value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search titles…" className="mt-5 h-10 w-full rounded-xl border border-line-strong bg-elevated px-3 text-sm sm:max-w-md" />
         </section>
-        {showCreate&&canCreate?<section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><h3 className="font-display text-xl font-semibold">New Title</h3><p className="mt-1 mb-4 text-sm text-muted">Start with the essentials. You can complete metadata inside the Title Workspace.</p><CreateTitleForm concise /></section>:null}
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><TitleList empty="No titles available for this workspace." query={search} /></section>
       </div>
     </BridgeShell>;
