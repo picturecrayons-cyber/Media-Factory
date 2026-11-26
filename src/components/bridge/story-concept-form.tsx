@@ -40,6 +40,10 @@ export function StoryConceptForm() {
   const [estimatedBudgetRange, setEstimatedBudgetRange] = useState("");
   const [treatmentUrl, setTreatmentUrl] = useState("");
   const [screenplayUrl, setScreenplayUrl] = useState("");
+  const [rightsHolderName, setRightsHolderName] = useState("");
+  const [rightsBasis, setRightsBasis] = useState("ORIGINAL_AUTHOR");
+  const [thirdPartyMaterialsIncluded, setThirdPartyMaterialsIncluded] = useState(false);
+  const [rightsDeclarationAccepted, setRightsDeclarationAccepted] = useState(false);
 
   const mut = useMutation({
     mutationFn: () =>
@@ -54,6 +58,10 @@ export function StoryConceptForm() {
           estimatedBudgetRange: estimatedBudgetRange || undefined,
           treatmentUrl: treatmentUrl || undefined,
           screenplayUrl: screenplayUrl || undefined,
+          rightsHolderName,
+          rightsBasis: rightsBasis as "ORIGINAL_AUTHOR" | "ASSIGNED" | "LICENSED" | "PUBLIC_DOMAIN" | "OTHER",
+          thirdPartyMaterialsIncluded,
+          rightsDeclarationAccepted,
         },
       }),
     onSuccess: (res) => {
@@ -76,6 +84,10 @@ export function StoryConceptForm() {
     }
     if (synopsis.trim().length < 40) {
       toast("Synopsis must be at least 40 characters");
+      return;
+    }
+    if (!rightsHolderName.trim() || !rightsDeclarationAccepted) {
+      toast("Complete and accept the rights declaration before submitting");
       return;
     }
     mut.mutate();
@@ -199,10 +211,37 @@ export function StoryConceptForm() {
         />
       </label>
 
+      <section className="space-y-3 rounded-xl border border-line bg-elevated p-4 sm:col-span-2">
+        <div>
+          <h3 className="text-sm font-semibold">Author & rights declaration</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted">This declaration records the submitter’s claim. It is not legal verification, a rights grant, or publication approval.</p>
+        </div>
+        <label className="block text-sm">
+          Rights holder name
+          <input required value={rightsHolderName} onChange={(e) => setRightsHolderName(e.target.value)} maxLength={160} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-surface px-3" placeholder="Name of author or rights holder" />
+        </label>
+        <label className="block text-sm">
+          Basis of rights
+          <select value={rightsBasis} onChange={(e) => setRightsBasis(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-surface px-3">
+            <option value="ORIGINAL_AUTHOR">Original author / creator</option>
+            <option value="ASSIGNED">Rights formally assigned</option>
+            <option value="LICENSED">Rights licensed</option>
+            <option value="PUBLIC_DOMAIN">Public domain</option>
+            <option value="OTHER">Other / needs explanation</option>
+          </select>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={thirdPartyMaterialsIncluded} onChange={(e) => setThirdPartyMaterialsIncluded(e.target.checked)} className="mt-1" />
+          <span>Third-party material is included (for example, adapted work, music, archive, artwork, or underlying IP).</span>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input required type="checkbox" checked={rightsDeclarationAccepted} onChange={(e) => setRightsDeclarationAccepted(e.target.checked)} className="mt-1" />
+          <span>I confirm that the information above is accurate and I am authorized to submit this concept for review.</span>
+        </label>
+      </section>
+
       <div className="rounded-xl border border-line bg-elevated p-4 text-xs leading-relaxed text-muted sm:col-span-2">
-        Submitting places this concept in the admin curation queue. It does not publish to
-        Loop or the public buyer catalog. Payment gate remains locked until the fee is
-        certified.
+        Submitting places this concept in the admin editorial/legal review queues. It does not publish to Loop or the public buyer catalog. Payment and buyer introduction remain locked pending review.
       </div>
 
       <div className="sm:col-span-2">
