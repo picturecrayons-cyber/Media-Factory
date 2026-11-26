@@ -3,7 +3,7 @@
 - Source: Supabase Production `supabase_migrations.schema_migrations`.
 - Project ref: `mlmgugivsyoxzdgwkbpu`.
 - Snapshot date: 2026-11-20 (historical 72-entry snapshot; not the current Production ledger).
-- Fresh read-only Production ledger check on 2026-11-26: **78 recorded migrations**. Eight later ledger entries are not yet represented by verified SQL source rows and SHA-256 hashes in this reconciliation manifest. The existing 72-row manifest must not be treated as complete or used to certify a current Production replay.
+- Fresh read-only Production ledger check on 2026-11-26: **78 recorded migrations**. Six later ledger entries are not yet represented by verified SQL source rows and SHA-256 hashes in this reconciliation manifest. The existing 72-row manifest must not be treated as complete or used to certify a current Production replay.
 
 ## 2026-11-26 Production ledger delta — source reconciliation required
 
@@ -18,7 +18,7 @@ The following six versions are present in the live Production `supabase_migratio
 | 20261123015009 | bridge_owner_submission_production_rollout | SQL source/hash not yet reconciled |
 | 20261124222927 | bridge_qc_verified_asset_gate_20261125 | SQL source/hash not yet reconciled |
 
-**Release rule:** the replay guard now expects 78 manifest-backed historical Production migrations and treats the proposed 20261126071702 migration separately. It must remain failing closed until all 78 exact source files are recovered, hashed and validated against the live ledger. Do not manufacture placeholder hashes, bump counts without source evidence, run `db push`, or use `migration repair` to mask the mismatch.
+**Release rule:** the read-only Production ledger currently contains 78 entries. The repository has 72 manifest-backed historical source files; the six versions listed above are absent from the checked-out migration source and have no verified byte counts or SHA-256 hashes. The replay must remain failing closed until those six exact SQL sources are recovered from an authoritative source, byte-for-byte verified against the live ledger, and added to the manifest. The proposed `20261126071702` migration remains a separate release candidate and is not part of the 78-entry Production history. Do not manufacture placeholder hashes, bump counts without source evidence, run `db push`, or use `migration repair` to mask the mismatch. Do not manufacture placeholder hashes, bump counts without source evidence, run `db push`, or use `migration repair` to mask the mismatch.
 - Recorded remote migrations restored to active `supabase/migrations/` in this historical snapshot: **72**.
 - SQL bytes in this historical 72-file snapshot: **150028**.
 - Every active SQL file now preserves the exact stored statement text joined with LF, including all trailing spaces and newline characters. No trailing-whitespace normalization is performed. SHA-256 values are calculated from the same exact stored statement text.

@@ -18,6 +18,14 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
 const EXPECTED_MIGRATIONS = 78;
+const UNRECONCILED_PRODUCTION_MIGRATIONS = [
+  "20261121042907_secure_production_asset_owner_helper.sql",
+  "20261122082934_bridge_creator_document_vault_20261122.sql",
+  "20261122083819_bridge_title_owner_submissions_20261122.sql",
+  "20261122164115_grant_authenticated_watch_progress_read.sql",
+  "20261123015009_bridge_owner_submission_production_rollout.sql",
+  "20261124222927_bridge_qc_verified_asset_gate_20261125.sql",
+];
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -82,8 +90,13 @@ for (const line of manifest.split(String.fromCharCode(10))) {
   manifestRows.set(`${version}_${migrationName}.sql`, { bytes, sha256 });
 }
 if (manifestRows.size !== EXPECTED_MIGRATIONS) {
+  const missingKnownSources = UNRECONCILED_PRODUCTION_MIGRATIONS.filter(
+    (name) => !manifestRows.has(name),
+  );
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
+    `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}. ` +
+      `Known Production-ledger SQL sources still missing from the manifest: ${missingKnownSources.join(", ") || "none"}. ` +
+      "Recover and hash exact source bytes; never synthesize manifest entries.",
   );
 }
 
