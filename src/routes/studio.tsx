@@ -29,18 +29,18 @@ function Studio() {
                 <p className="mt-1 text-sm text-muted">Open each service in its own dedicated workspace.</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <Link to="/studio/service/$service" params={{ service: "dit" }} className="group rounded-2xl border border-line bg-surface p-5 transition hover:-translate-y-0.5 hover:border-accent">
+                <a href="/studio/service/dit" className="group rounded-2xl border border-line bg-surface p-5 transition hover:-translate-y-0.5 hover:border-accent">
                   <span className="text-xs font-semibold uppercase tracking-wider text-accent">Available now</span><h4 className="mt-3 font-display text-xl font-semibold">Studio DIT Agent</h4><p className="mt-2 text-sm text-muted">Camera-card ingest, manifest matching, SHA-256 checks and Primary / Recovery verification.</p><span className="mt-5 inline-flex text-sm font-semibold">Open DIT workspace →</span>
-                </Link>
+                </a>
                 {[
                   ["productions", "Productions", "Project tracking, production milestones and handover."],
                   ["schedule", "Schedule", "A shared production calendar for teams and milestones."],
                   ["statements", "Statements", "Verified licensing statements and settlement reporting."],
                   ["insights", "Insights", "Verified portfolio, title readiness and performance analytics."],
                 ].map(([service, name, description]) => (
-                  <Link key={service} to="/studio/service/$service" params={{ service }} className="rounded-2xl border border-line bg-surface p-5 transition hover:-translate-y-0.5 hover:border-accent">
+                  <a key={service} href={`/studio/service/${service}`} className="rounded-2xl border border-line bg-surface p-5 transition hover:-translate-y-0.5 hover:border-accent">
                     <span className="text-xs font-semibold uppercase tracking-wider text-muted">Coming soon</span><h4 className="mt-3 font-display text-xl font-semibold">{name}</h4><p className="mt-2 text-sm text-muted">{description}</p><span className="mt-5 inline-flex text-sm font-semibold">View service →</span>
-                  </Link>
+                  </a>
                 ))}
                 <Link to="/account" className="rounded-2xl border border-line bg-surface p-5 transition hover:border-accent"><span className="text-xs font-semibold uppercase tracking-wider text-muted">Profile</span><h4 className="mt-3 font-display text-xl font-semibold">Studio Account</h4><p className="mt-2 text-sm text-muted">Organization identity and verification details.</p><span className="mt-5 inline-flex text-sm font-semibold">Open account →</span></Link>
               </div>
