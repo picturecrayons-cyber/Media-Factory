@@ -9,7 +9,8 @@ import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
-import { assertPermission } from "./rbac";
+import { assertPermission, canReadTitle } from "./rbac";
+import type { TitleStatus } from "./types";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import {
@@ -183,6 +184,61 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     } catch (err) {
       migrationHint(err);
     }
+  });
+
+export const getStoryConceptForTitle = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(1).max(80) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    const rows = await sql<ConceptRow & {
+      title_name: string;
+      owner_user_id: string;
+      owner_account_type: string;
+      owner_organization_id: string | null;
+      title_status: string;
+    }>`
+      select c.*, t.name as title_name, t.owner_user_id,
+        t.owner_account_type, t.owner_organization_id, t.status as title_status
+      from bridge_story_concept_submissions c
+      join bridge_titles t on t.id = c.title_id
+      where c.title_id = ${data.titleId}
+        and t.submission_type = 'story_concept'
+      limit 1
+    `;
+    const row = rows[0];
+    if (!row) return { concept: null };
+    const allowed = canReadTitle(actor, {
+      ownerUserId: row.owner_user_id,
+      ownerAccountType: row.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
+      ownerOrganizationId: row.owner_organization_id,
+      status: row.title_status as TitleStatus,
+    });
+    if (!allowed) throw new Error("Forbidden");
+    if (
+      !actor.internalRole &&
+      actor.accountType === "studio" &&
+      row.owner_user_id !== actor.userId &&
+      row.owner_organization_id === actor.organizationId
+    ) {
+      const membership = await sql<{ active: boolean }>`
+        select exists (
+          select 1 from bridge_organization_memberships
+          where organization_id = ${row.owner_organization_id}
+            and user_id = ${actor.userId}
+            and status = 'active'
+        ) as active
+      `;
+      if (!membership[0]?.active) throw new Error("Forbidden");
+    }
+    return {
+      concept: {
+        ...mapConcept(row),
+        titleName: row.title_name,
+      },
+    };
   });
 
 export const listMyStoryConcepts = createServerFn({ method: "GET" })
