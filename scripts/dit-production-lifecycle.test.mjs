@@ -10,7 +10,7 @@ test("DIT sessions are production-project and shoot-day linked without requiring
   assert.match(migration, /alter column title_id drop not null/i);
   assert.match(migration, /add column if not exists production_project_id uuid/i);
   assert.match(migration, /add column if not exists shoot_day_id uuid/i);
-  assert.match(migration, /foreign key \\(shoot_day_id, production_project_id\\)/i);
+  assert.match(migration, /foreign key \(shoot_day_id, production_project_id\)/i);
   assert.match(migration, /project_day_pair_check/i);
   assert.match(api, /productionProjectId: z\.string\(\)\.uuid\(\)/);
   assert.match(api, /insert into bridge_production_shoot_days/i);
