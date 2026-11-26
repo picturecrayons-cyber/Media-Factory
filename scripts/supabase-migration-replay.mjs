@@ -17,7 +17,7 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 70;
+const EXPECTED_MIGRATIONS = 78;
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -89,7 +89,7 @@ if (manifestRows.size !== EXPECTED_MIGRATIONS) {
 
 // Keep the canonical Production history separate from the not-yet-released
 // migration. The reconciliation manifest is the source of truth for the
-// 70 historical Production-ledger files; the one explicit candidate is
+// 78 historical Production-ledger files; the one explicit candidate is
 // replayed only after that history has passed, never counted as Production history.
 const CANDIDATE_MIGRATION =
   "20261126071702_bridge_complete_internal_workflows_20261126.sql";
@@ -464,7 +464,7 @@ try {
     console.log(`[migration-replay] applied ${name}`);
   }
 
-  // Apply the one proposed release migration only after all 70 canonical
+  // Apply the one proposed release migration only after all 78 canonical
   // Production-ledger files have replayed and passed their source-integrity checks.
   // This validates forward compatibility without rewriting or inflating history.
   const candidateSql = await readFile(
@@ -521,7 +521,7 @@ try {
     );
   }
   console.log(
-    `[migration-replay] candidate migration PASS: ${CANDIDATE_MIGRATION}; canonical 70-file Production history remains unchanged`,
+    `[migration-replay] candidate migration PASS: ${CANDIDATE_MIGRATION}; canonical 78-file Production history remains unchanged`,
   );
 
   // Production's current Bridge Data API security baseline is not fully
