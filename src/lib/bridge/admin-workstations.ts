@@ -44,6 +44,9 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
     if (!actor.internalRole) throw new Error("Forbidden");
+    if ((data.decision === "FAIL" || data.decision === "REJECT") && !data.notes?.trim()) {
+      throw new Error("A reviewer reason is required to reject or fail a review");
+    }
     const sql = await getSql();
     const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
     const title = rows[0];
