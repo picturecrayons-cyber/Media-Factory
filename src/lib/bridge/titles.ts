@@ -32,6 +32,7 @@ type TitleRow = {
   poster_key: string | null;
   master_key: string | null;
   content_type: string;
+  submission_type?: "finished_film" | "story_concept" | null;
   country_of_origin: string | null;
   release_date: string | Date | null;
   credits: Array<{ role: string; name: string }>;
@@ -63,6 +64,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     posterKey: r.poster_key,
     masterKey: r.master_key,
     contentType: r.content_type,
+    submissionType: r.submission_type ?? "finished_film",
     countryOfOrigin: r.country_of_origin,
     releaseDate: r.release_date ? asIso(r.release_date) : null,
     credits: r.credits,
@@ -262,7 +264,7 @@ export const createTitle = createServerFn({ method: "POST" })
         insert into bridge_titles (
           id, slug, name, name_ml, owner_user_id, owner_account_type, status,
           synopsis, language, year, runtime_minutes, licensing_fee_paise,
-          content_type, country_of_origin, release_date, credits, owner_organization_id
+          content_type, country_of_origin, release_date, credits, owner_organization_id, submission_type
         ) values (
           ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
           ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
@@ -272,7 +274,7 @@ export const createTitle = createServerFn({ method: "POST" })
             ...(data.director ? [{ role: "Director", name: data.director }] : []),
             ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
             ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
-          ])}::jsonb, ${actor.accountType === "studio" ? actor.organizationId ?? null : null}
+          ])}::jsonb, ${actor.accountType === "studio" ? actor.organizationId ?? null : null}, ${"finished_film"}
         )
       `;
 
