@@ -18,6 +18,12 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
 const EXPECTED_MIGRATIONS = 70;
+// New application-owned migrations are replayed after the recovered Production
+// ledger, but must not be mistaken for entries in its historical SHA manifest.
+const ADDITIVE_MIGRATIONS = new Set([
+  "20261127090000_bridge_membership_control_plane.sql",
+  "20261127091500_bridge_membership_immutable_records.sql",
+]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -54,10 +60,16 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
+const historicalNames = names.filter((name) => !ADDITIVE_MIGRATIONS.has(name));
+const additiveNames = names.filter((name) => ADDITIVE_MIGRATIONS.has(name));
+if (historicalNames.length !== EXPECTED_MIGRATIONS) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
+    `Expected ${EXPECTED_MIGRATIONS} recovered Production migrations; found ${historicalNames.length}`,
   );
+}
+if (additiveNames.length !== ADDITIVE_MIGRATIONS.size ||
+    [...ADDITIVE_MIGRATIONS].some((name) => !additiveNames.includes(name))) {
+  throw new Error("Expected the complete allowlisted set of additive application migrations");
 }
 if (new Set(names).size !== names.length) {
   throw new Error("Duplicate migration filenames detected");
@@ -92,7 +104,7 @@ if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   );
 }
 
-for (const name of names) {
+for (const name of historicalNames) {
   const contents = await readFile(join(MIGRATIONS_DIR, name));
   const expected = manifestRows.get(name);
   if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
