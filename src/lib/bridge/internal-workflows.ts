@@ -197,3 +197,14 @@ export const listIndependentLegalCases = createServerFn({ method: "GET" })
     `;
     return JSON.parse(JSON.stringify(rows));
   });
+
+
+export const listTitlesForClassification = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const actor = await verifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin classification authority required");
+    const sql = await getSql();
+    return sql`select id,name,status,record_classification,updated_at
+      from bridge_titles order by updated_at desc limit 300`;
+  });
