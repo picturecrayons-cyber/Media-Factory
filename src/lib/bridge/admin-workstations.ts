@@ -81,7 +81,9 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
           where title_id = ${title.id} and status = 'APPROVED'
             and reviewed_by is not null and reviewed_at is not null
             and exists (
-              select 1 from jsonb_array_elements(evidence) as item
+              select 1 from jsonb_array_elements(
+                case when jsonb_typeof(evidence) = 'array' then evidence else '[]'::jsonb end
+              ) as item
               where item->>'grantId' = ${validGrant[0].id}::text
             )
           order by created_at desc limit 1`,
