@@ -70,6 +70,14 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     } else if (data.decision === "APPROVE") {
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
+      const [validGrant, legalApproval, qcApproval] = await Promise.all([
+        sql`select id from bridge_rights_grants where title_id = ${title.id} and status = 'VALID' limit 1`,
+        sql`select id from bridge_legal_cases where title_id = ${title.id} and status = 'APPROVED' and reviewed_by is not null and reviewed_at is not null limit 1`,
+        sql`select id from bridge_qc_cases where title_id = ${title.id} and status = 'PASSED' and asset_version_id is not null and reviewed_by is not null and reviewed_at is not null limit 1`,
+      ]);
+      if (!validGrant[0]) throw new Error("Rights approval blocked: no VALID rights grant is recorded");
+      if (!legalApproval[0]) throw new Error("Rights approval blocked: independent Legal approval is missing");
+      if (!qcApproval[0]) throw new Error("Rights approval blocked: current asset-version QC approval is missing");
       next = "LICENSING_READY"; action = "rights.approve";
     } else {
       assertPermission(actor, "title.rights_review");
@@ -81,7 +89,6 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     await sql`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
     await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
     if (data.decision === "PASS") await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'PASSED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-    if (data.decision === "APPROVE") await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'APPROVED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
     await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } });
     return { ok: true, status: next };
   });
