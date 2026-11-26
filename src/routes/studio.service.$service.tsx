@@ -3,7 +3,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 
-export const Route = createFileRoute("/studio/service/$service" as any)({
+export const Route = createFileRoute("/studio/service/$service")({
   component: StudioServicePage,
 });
 
