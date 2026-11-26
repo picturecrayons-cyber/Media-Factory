@@ -280,7 +280,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           assets={assets}
           currentMasterKey={title.masterKey}
           currentPosterKey={title.posterKey}
-          onAssetsChanged={() => assetsQ.refetch()}
+          onAssetsChanged={async () => {
+            await Promise.all([assetsQ.refetch(), titleQ.refetch()]);
+          }}
         />
       ) : activeTab === "Production" && !buyerView ? (
         <ProductionAssetsPanel
