@@ -351,6 +351,11 @@ export const listTitles = createServerFn({ method: "GET" })
           where t.merged_into_title_id is null
             and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
+            and exists (
+              select 1 from bridge_buyer_title_access ba
+              where ba.title_id=t.id and ba.buyer_user_id=${actor.userId}
+                and ba.revoked_at is null and (ba.expires_at is null or ba.expires_at > now())
+            )
           order by t.updated_at desc limit 200
         `;
       } else {
@@ -358,6 +363,11 @@ export const listTitles = createServerFn({ method: "GET" })
           select t.* from bridge_titles t
           where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
+            and exists (
+              select 1 from bridge_buyer_title_access ba
+              where ba.title_id=t.id and ba.buyer_user_id=${actor.userId}
+                and ba.revoked_at is null and (ba.expires_at is null or ba.expires_at > now())
+            )
           order by t.updated_at desc limit 200
         `;
       }
@@ -389,6 +399,14 @@ export const getTitle = createServerFn({ method: "GET" })
       // A published status alone is not enough: re-check every publication gate
       // on direct listing access, not only when the catalogue is queried.
       await assertBuyerPublishable(title.id);
+      const buyerAccess = await sql<{ allowed: boolean }>`
+        select exists (
+          select 1 from bridge_buyer_title_access
+          where title_id=${title.id} and buyer_user_id=${actor.userId}
+            and revoked_at is null and (expires_at is null or expires_at > now())
+        ) as allowed
+      `;
+      if (!buyerAccess[0]?.allowed) throw new Error("Not found");
     } else if (actor.accountType === "investor" && !actor.internalRole) {
       const assigned = await sql<{ id: string }>
         `select id from bridge_title_investors where title_id = ${title.id} and investor_user_id = ${actor.userId} limit 1`;
