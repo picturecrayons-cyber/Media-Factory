@@ -49,7 +49,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       throw new Error("A reviewer reason is required to reject or fail a review");
     }
     const sql = await getSql();
-    const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
+    const rows = await sql<{ id: string; status: string; master_key: string | null; poster_key: string | null }>`select id, status, master_key, poster_key from bridge_titles where id = ${data.titleId} limit 1`;
     const title = rows[0];
     if (!title) throw new Error("Title not found");
     let next: string | null = null;
@@ -62,8 +62,16 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       assertPermission(actor, "title.qc_review");
       if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
       if (!data.assetVersionId) throw new Error("Select the exact asset version reviewed by QC");
-      const version = await sql`select id from bridge_asset_versions where id = ${data.assetVersionId} and title_id = ${title.id} limit 1`;
-      if (!version[0]) throw new Error("Selected asset version does not belong to this title");
+      const version = await sql<{ id: string; asset_group: string; s3_key: string; processing_state: string }>`select id, asset_group, s3_key, processing_state from bridge_asset_versions where id = ${data.assetVersionId} and title_id = ${title.id} limit 1`;
+      if (!version[0] || version[0].asset_group !== "VIDEO" || version[0].s3_key !== title.master_key || version[0].processing_state !== "PASSED") {
+        throw new Error("QC must reference the current verified master asset version");
+      }
+      if (!title.master_key || !title.poster_key) throw new Error("Current master and artwork pointers are required for QC");
+      const artwork = await sql<{ id: string }>`select id from bridge_asset_versions
+        where title_id = ${title.id} and asset_group = 'ARTWORK'
+          and s3_key = ${title.poster_key} and processing_state = 'PASSED'
+        order by created_at desc limit 1`;
+      if (!artwork[0]) throw new Error("Current artwork must have a verified asset version before QC can pass");
       next = "RIGHTS_REVIEW"; action = "qc.pass";
     } else if (data.decision === "FAIL") {
       assertPermission(actor, "title.qc_review");
@@ -101,7 +109,10 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     }
     await sql`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
     await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
-    if (data.decision === "PASS") await sql`insert into bridge_qc_cases (title_id, asset_version_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, ${data.assetVersionId!}, 'PASSED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
+    if (data.decision === "PASS") await sql`insert into bridge_qc_cases (title_id, asset_version_id, status, reviewer_findings, reviewed_by, reviewed_at)
+      values (${title.id}, ${data.assetVersionId!}, 'PASSED',
+        ${JSON.stringify([{ note: data.notes ?? null, masterKey: title.master_key, posterKey: title.poster_key }])}::jsonb,
+        ${actor.userId}, now())`;
     await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } });
     return { ok: true, status: next };
   });
