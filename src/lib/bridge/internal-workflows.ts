@@ -100,15 +100,17 @@ export const createInternalTask = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await verifiedActor(context.userId);
     if (!["admin","super_admin"].includes(actor.internalRole ?? "")) throw new Error("Admin role required to create tasks");
-    const sql = await getSql();
+    const db = await getSql();
+    return db.transaction(async (sql) => {
     const [task] = await sql<{ id: string }>`
       insert into bridge_internal_tasks(title_id,task_type,assigned_role,status,priority,summary,details,due_at,created_by)
       values (${data.titleId ?? null},${data.taskType},${data.assignedRole},'OPEN',${data.priority},
         ${data.summary},${JSON.stringify(data.details)}::jsonb,${data.dueAt ?? null},${actor.userId})
       returning id
     `;
-    await writeAudit({ actorUserId: actor.userId, action: "internal_task.create", entityType: "bridge_internal_task", entityId: task.id, metadata: { taskType: data.taskType, assignedRole: data.assignedRole } });
+    await writeAudit({ actorUserId: actor.userId, action: "internal_task.create", entityType: "bridge_internal_task", entityId: task.id, metadata: { taskType: data.taskType, assignedRole: data.assignedRole } }, sql);
     return { taskId: task.id };
+    });
   });
 
 export const listInternalTasks = createServerFn({ method: "GET" })
@@ -137,7 +139,8 @@ export const updateInternalTask = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await verifiedActor(context.userId);
     if (!actor.internalRole) throw new Error("Internal role required");
-    const sql = await getSql();
+    const db = await getSql();
+    return db.transaction(async (sql) => {
     const [task] = await sql<{ id: string; assigned_role: string; assigned_user_id: string | null; status: string }>`
       select id,assigned_role,assigned_user_id,status from bridge_internal_tasks where id=${data.taskId} for update
     `;
@@ -151,8 +154,9 @@ export const updateInternalTask = createServerFn({ method: "POST" })
           completed_at=case when ${data.status}='DONE' then now() when ${data.status} in ('OPEN','IN_PROGRESS','BLOCKED') then null else completed_at end
       where id=${data.taskId}
     `;
-    await writeAudit({ actorUserId: actor.userId, action: "internal_task." + data.status.toLowerCase(), entityType: "bridge_internal_task", entityId: data.taskId, metadata: { note: data.note ?? null, from: task.status, to: data.status } });
+    await writeAudit({ actorUserId: actor.userId, action: "internal_task." + data.status.toLowerCase(), entityType: "bridge_internal_task", entityId: data.taskId, metadata: { note: data.note ?? null, from: task.status, to: data.status } }, sql);
     return { ok: true, status: data.status };
+    });
   });
 
 const classifyInput = z.object({
@@ -167,14 +171,16 @@ export const classifyBridgeTitleRecord = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await verifiedActor(context.userId);
     if (actor.internalRole !== "super_admin") throw new Error("Super Admin classification authority required");
-    const sql = await getSql();
+    const db = await getSql();
+    return db.transaction(async (sql) => {
     const [previous] = await sql<{ record_classification: string }>`
       select record_classification from bridge_titles where id=${data.titleId} for update
     `;
     if (!previous) throw new Error("Title not found");
     await sql`update bridge_titles set record_classification=${data.classification},updated_at=now() where id=${data.titleId}`;
-    await writeAudit({ actorUserId: actor.userId, action: "title.classification.set", entityType: "bridge_title", entityId: data.titleId, metadata: { from: previous.record_classification, to: data.classification, reason: data.reason } });
+    await writeAudit({ actorUserId: actor.userId, action: "title.classification.set", entityType: "bridge_title", entityId: data.titleId, metadata: { from: previous.record_classification, to: data.classification, reason: data.reason } }, sql);
     return { ok: true, classification: data.classification };
+    });
   });
 
 
