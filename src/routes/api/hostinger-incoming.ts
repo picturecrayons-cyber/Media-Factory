@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   isValidHostingerBearer,
+  isHostingerTestDeliveryPayload,
   parseHostingerIncomingPayload,
   readLimitedRequestBody,
   type HostingerIncomingMailRecord,
@@ -100,6 +101,13 @@ export const Route = createFileRoute("/api/hostinger-incoming")({
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
         }
 
+        // The Hostinger dashboard Test action sends a strict metadata-only
+        // envelope without mailbox/message fields. Acknowledge it only after
+        // Bearer authentication and never persist it as an inbound email.
+        if (isHostingerTestDeliveryPayload(payload)) {
+          return Response.json({ ok: true, test: true, stored: false });
+        }
+
         let message: HostingerIncomingMailRecord;
         try {
           const expectedMailbox = bridgeEnv.hostingerIncomingMailbox();
@@ -123,8 +131,7 @@ export const Route = createFileRoute("/api/hostinger-incoming")({
         const payloadHash = createHash("sha256").update(raw, "utf8").digest("hex");
 
         try {
-          // Import the database lazily: metadata-free Hostinger test pings are
-          // acknowledged above and do not need a Postgres connection.
+          // Import the database only after a real mailbox/message event validates.
           const { getSql } = await import("@/lib/db");
           const sql = await getSql();
           const inserted = await sql<{ id: string }>`

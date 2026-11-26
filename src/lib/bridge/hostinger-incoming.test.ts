@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   isValidHostingerBearer,
+  isHostingerTestDeliveryPayload,
   parseHostingerIncomingPayload,
   readLimitedRequestBody,
 } from "./hostinger-incoming.ts";
@@ -27,6 +28,38 @@ describe("Hostinger incoming mail webhook", () => {
     assert.equal(isValidHostingerBearer("Bearer wrong-token", "secret-token"), false);
     assert.equal(isValidHostingerBearer("secret-token", "secret-token"), false);
     assert.equal(isValidHostingerBearer("Bearer secret-token", ""), false);
+  });
+
+  it("accepts only Hostinger's exact metadata-only dashboard Test envelope without treating it as mail", () => {
+    const payload = {
+      event: "message.received",
+      id: "evt_test_123",
+      timestamp: "2026-11-16T10:25:07.521Z",
+      data: {
+        date: "2026-11-16T10:24:59.000Z",
+        from: "Producer <producer@example.com>",
+        messageId: "msg_test_123",
+        subject: "Hostinger webhook test",
+      },
+    };
+
+    assert.equal(isHostingerTestDeliveryPayload(payload), true);
+    assert.equal(isHostingerTestDeliveryPayload({
+      ...payload,
+      mailbox,
+    }), false);
+    assert.equal(isHostingerTestDeliveryPayload({
+      ...payload,
+      data: { ...payload.data, body: "not a test envelope" },
+    }), false);
+    assert.equal(isHostingerTestDeliveryPayload({
+      ...payload,
+      data: { ...payload.data, from: "not-an-email" },
+    }), false);
+    assert.equal(isHostingerTestDeliveryPayload({
+      ...payload,
+      event: "message.deleted",
+    }), false);
   });
 
   it("rejects message.received events that omit message metadata", () => {
@@ -61,6 +94,26 @@ describe("Hostinger incoming mail webhook", () => {
   });
 
   it("rejects unsupported events, mailbox mismatches, and invalid senders", () => {
+  it("rejects sender values with junk around an otherwise valid bracketed address", () => {
+    assert.throws(() => parseHostingerIncomingPayload({
+      event: "message.received",
+      mailbox,
+      message: { from: "garbage <producer@example.com> trailing junk" },
+    }, mailbox), /Invalid sender/);
+
+    assert.throws(() => parseHostingerIncomingPayload({
+      event: "message.received",
+      mailbox,
+      message: { from: "garbage producer@example.com" },
+    }, mailbox), /Invalid sender/);
+
+    assert.equal(parseHostingerIncomingPayload({
+      event: "message.received",
+      mailbox,
+      message: { from: "Producer <producer@example.com>" },
+    }, mailbox).sender, "Producer <producer@example.com>");
+  });
+
     assert.throws(() => parseHostingerIncomingPayload({
       event: "message.deleted",
       mailbox,
