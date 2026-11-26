@@ -8,7 +8,7 @@ import { assertNotDevUser } from "./guards";
 import { canMutateTitle } from "./rbac";
 import { writeAudit } from "./audit";
 
-const kindSchema = z.enum(["finished_film", "story_concept", "production_shoot"]);
+const kindSchema = z.enum(["finished_film", "story_concept"]);
 const payloadSchema = z.object({
   titleId: z.string().min(8),
   submissionKind: kindSchema,
