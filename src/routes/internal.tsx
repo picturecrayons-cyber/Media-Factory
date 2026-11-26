@@ -17,7 +17,7 @@ import {
   type ExploitationModel,
 } from "@/lib/bridge/loop-publication";
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
-import { hasPermission } from "@/lib/bridge/rbac";
+import { canAccessAdminWorkstations, hasPermission } from "@/lib/bridge/rbac";
 
 export const Route = createFileRoute("/internal")({ component: Internal });
 
@@ -33,6 +33,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            canWorkstations={canAccessAdminWorkstations(actor)}
           />
         </BridgeShell>
       )}
@@ -44,10 +45,12 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  canWorkstations,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  canWorkstations: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -57,8 +60,22 @@ function InternalBody({
 
   return (
     <div className="grid gap-12">
-      {/* 1. Master Distribution Desk */}
-      <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
+      {/* 1. Operational Review Workstations */}
+      {canWorkstations ? (
+        <section className="rounded-2xl border border-line bg-surface p-5 space-y-3">
+          <div>
+            <h2 className="font-display text-2xl font-semibold text-fg">Operational Review Workstations</h2>
+            <p className="text-xs text-muted">Receive and review submissions, inspect title evidence, and open QC, Rights, Legal, delivery and audit queues. Each action remains permission-checked by its server workflow.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/admin/workstations" className="inline-flex items-center rounded-full bg-fg px-4 py-2 text-xs font-semibold text-bg hover:opacity-90">Open review & approval desk →</Link>
+            <Link to="/admin/workstations" className="inline-flex items-center rounded-full border border-line px-4 py-2 text-xs font-semibold text-fg hover:bg-elevated">QC · Rights · Deliveries · Audit</Link>
+          </div>
+        </section>
+      ) : null}
+
+      {/* 2. Master Distribution Desk */}
+      {canPublish || canRevoke ? <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} /> : null}
 
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}

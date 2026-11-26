@@ -2,9 +2,25 @@
 
 - Source: Supabase Production `supabase_migrations.schema_migrations`.
 - Project ref: `mlmgugivsyoxzdgwkbpu`.
-- Snapshot date: 2026-11-18.
-- Recorded remote migrations restored to active `supabase/migrations/`: **70**.
-- SQL bytes: **144632**.
+- Snapshot date: 2026-11-20 (historical 72-entry snapshot; not the current Production ledger).
+- Fresh read-only Production ledger check on 2026-11-26: **78 recorded migrations**. Eight later ledger entries are not yet represented by verified SQL source rows and SHA-256 hashes in this reconciliation manifest. The existing 72-row manifest must not be treated as complete or used to certify a current Production replay.
+
+## 2026-11-26 Production ledger delta — source reconciliation required
+
+The following six versions are present in the live Production `supabase_migrations.schema_migrations` ledger, but their exact SQL source text and byte/hash evidence have not yet been reconciled into this manifest:
+
+| Version | Recorded name | Source status |
+|---|---|---|
+| 20261121042907 | secure_production_asset_owner_helper | SQL source/hash not yet reconciled |
+| 20261122082934 | bridge_creator_document_vault_20261122 | SQL source/hash not yet reconciled |
+| 20261122083819 | bridge_title_owner_submissions_20261122 | SQL source/hash not yet reconciled |
+| 20261122164115 | grant_authenticated_watch_progress_read | SQL source/hash not yet reconciled |
+| 20261123015009 | bridge_owner_submission_production_rollout | SQL source/hash not yet reconciled |
+| 20261124222927 | bridge_qc_verified_asset_gate_20261125 | SQL source/hash not yet reconciled |
+
+**Release rule:** the replay guard now expects 78 manifest-backed historical Production migrations and treats the proposed 20261126071702 migration separately. It must remain failing closed until all 78 exact source files are recovered, hashed and validated against the live ledger. Do not manufacture placeholder hashes, bump counts without source evidence, run `db push`, or use `migration repair` to mask the mismatch.
+- Recorded remote migrations restored to active `supabase/migrations/` in this historical snapshot: **72**.
+- SQL bytes in this historical 72-file snapshot: **150028**.
 - Every active SQL file now preserves the exact stored statement text joined with LF, including all trailing spaces and newline characters. No trailing-whitespace normalization is performed. SHA-256 values are calculated from the same exact stored statement text.
 - The additive `bridge_master_language` migration (version `20261118123335`) was applied to canonical Production project `mlmgugivsyoxzdgwkbpu`. Read-back confirmed the column exists; all 42 existing title rows retain `master_language = NULL`. No `language` values, title rows, asset rows, or OCI objects were changed.
 - The local replay temporarily removes the active migrations directory while `supabase start` bootstraps managed services, then restores it for the script's controlled one-by-one replay. The script asserts that the local Supabase migration ledger is still empty before applying the 70 files itself.
@@ -87,7 +103,9 @@
 | 20261115164711 | bridge_production_owner_rls_helper | 1690 | `c304e0569da1b2909b1373f0b6920bbae1fc8c9a45da54be0d01e008e62ffa0a` |
 | 20261115165233 | bridge_production_owner_helper_revoke_anon | 155 | `d4a980b33b895324231304f17fbaf912043d5659c6cf43e78421a00ed568a71e` |
 | 20261116090923 | bridge_title_owner_helper_search_path_hardening_20261116 | 824 | `486eba102805b78a28a4509466eecab3f2557cb4093dac20d619f51c6a946fba` |
+| 20261116114408 | secure_public_loop_catalog_production | 2285 | `0f4748d0f134e2b3fc442fb2c10a50600a99e61b1a7012d30aaba91b94bc1c27` |
 | 20261118123335 | bridge_master_language | 459 | `3a22cd57e41d7b0cbf0a40489c9b448981a9540bec672b0be34768213fc6b53c` |
+| 20261119203855 | bridge_story_concept_author_rights_declaration_20261120 | 3111 | `b58f7dfc507353841ae1a51fc8d4a1b785f6db8c3b65350103aa2860a1cb0ad0` |
 
 ## Previously committed files
 
