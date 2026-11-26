@@ -11,6 +11,14 @@ const STATUS_LABEL: Record<string, string> = {
   INTRODUCED_TO_BUYERS: "Introduced",
 };
 
+const OWNER_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Draft",
+  SUBMITTED: "Submitted for intake",
+  NEEDS_CORRECTION: "Returned for correction",
+  ACCEPTED_INTAKE: "Accepted into curation",
+  REJECTED: "Not accepted",
+};
+
 function listLogline(value: string | null | undefined) {
   const text = value?.trim() ?? "";
   if (!text.includes(" ") || !/[a-zA-Z]{3,}/.test(text)) return "";
@@ -47,7 +55,8 @@ export function MyStoryConcepts() {
                 <div>
                   <p className="font-medium">{(c as { titleName?: string }).titleName ?? "Concept"}</p>
                   <p className="text-sm text-muted">
-                    {STATUS_LABEL[c.curation_status] ?? c.curation_status}
+                    Owner submission: {OWNER_STATUS_LABEL[(c as { ownerSubmissionStatus?: string }).ownerSubmissionStatus ?? "DRAFT"] ?? (c as { ownerSubmissionStatus?: string }).ownerSubmissionStatus}
+                    {" · "}Curation: {STATUS_LABEL[c.curation_status] ?? c.curation_status}
                     {logline ? ` · ${logline}` : ""}
                   </p>
                 </div>
