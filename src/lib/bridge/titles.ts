@@ -354,14 +354,9 @@ export const listTitles = createServerFn({ method: "GET" })
               where ba.title_id=t.id and ba.buyer_user_id=${actor.userId}
                 and ba.revoked_at is null and (ba.expires_at is null or ba.expires_at > now())
             )
-            and (
-              t.submission_type = 'story_concept'
-              or (
-                t.submission_type is distinct from 'story_concept'
-                and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-                and public.bridge_title_buyer_visibility(t.id)
-              )
-            )
+            and t.submission_type is distinct from 'story_concept'
+            and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+            and public.bridge_title_buyer_visibility(t.id)
           order by t.updated_at desc limit 200
         `;
       } else {
@@ -372,14 +367,9 @@ export const listTitles = createServerFn({ method: "GET" })
               where ba.title_id=t.id and ba.buyer_user_id=${actor.userId}
                 and ba.revoked_at is null and (ba.expires_at is null or ba.expires_at > now())
             )
-            and (
-              t.submission_type = 'story_concept'
-              or (
-                t.submission_type is distinct from 'story_concept'
-                and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-                and public.bridge_title_buyer_visibility(t.id)
-              )
-            )
+            and t.submission_type is distinct from 'story_concept'
+            and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+            and public.bridge_title_buyer_visibility(t.id)
           order by t.updated_at desc limit 200
         `;
       }
@@ -409,10 +399,10 @@ export const getTitle = createServerFn({ method: "GET" })
     const buyerView = actor.accountType === "buyer" && !actor.internalRole;
     const investorView = actor.accountType === "investor" && !actor.internalRole;
     if (buyerView) {
-      // Story / Concept records are private curation material: Super Admin assignment
-      // grants read-only visibility, never publication or commercial rights. Finished
-      // Films still require every publication gate before a Buyer can open them.
-      if (title.submissionType !== "story_concept") await assertBuyerPublishable(title.id);
+      // Buyer accounts are strictly for Finished Films. Story / Concept material
+      // is assigned to Investor accounts and must never be exposed in Buyer views.
+      if (title.submissionType === "story_concept") throw new Error("Not found");
+      await assertBuyerPublishable(title.id);
       const buyerAccess = await sql<{ allowed: boolean }>`
         select exists (
           select 1 from bridge_buyer_title_access
