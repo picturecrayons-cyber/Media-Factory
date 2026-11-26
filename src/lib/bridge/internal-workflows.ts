@@ -176,3 +176,24 @@ export const classifyBridgeTitleRecord = createServerFn({ method: "POST" })
     await writeAudit({ actorUserId: actor.userId, action: "title.classification.set", entityType: "bridge_title", entityId: data.titleId, metadata: { from: previous.record_classification, to: data.classification, reason: data.reason } });
     return { ok: true, classification: data.classification };
   });
+
+
+export const listIndependentLegalCases = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const actor = await verifiedActor(context.userId);
+    if (actor.internalRole !== "legal_reviewer") throw new Error("Independent Legal Reviewer role required");
+    const sql = await getSql();
+    const rows = await sql`
+      select l.id as legal_case_id,l.title_id,t.name as title_name,l.status as legal_status,
+        l.classification,l.evidence,l.restrictions,l.rights_grant_id,
+        g.status as grant_status,g.grant_type,g.territories,g.languages,g.window_start,g.window_end,g.created_by as grant_created_by
+      from bridge_legal_cases l
+      join bridge_titles t on t.id=l.title_id
+      left join bridge_rights_grants g on g.id=l.rights_grant_id
+      where t.status='RIGHTS_REVIEW'
+        and l.status in ('PENDING','IN_REVIEW','ACTION_REQUIRED')
+      order by l.created_at asc limit 200
+    `;
+    return JSON.parse(JSON.stringify(rows));
+  });
