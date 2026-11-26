@@ -395,6 +395,7 @@ export const getTitle = createServerFn({ method: "GET" })
     if (!title) throw new Error("Not found");
     const sql = await getSql();
     const buyerView = actor.accountType === "buyer" && !actor.internalRole;
+    const investorView = actor.accountType === "investor" && !actor.internalRole;
     if (buyerView) {
       // A published status alone is not enough: re-check every publication gate
       // on direct listing access, not only when the catalogue is queried.
@@ -407,7 +408,7 @@ export const getTitle = createServerFn({ method: "GET" })
         ) as allowed
       `;
       if (!buyerAccess[0]?.allowed) throw new Error("Not found");
-    } else if (actor.accountType === "investor" && !actor.internalRole) {
+    } else if (investorView) {
       const assigned = await sql<{ allowed: boolean }>`
         select (
           exists (select 1 from bridge_investor_title_access
@@ -423,7 +424,7 @@ export const getTitle = createServerFn({ method: "GET" })
     }
     // Buyer listings are not an operational workspace. Do not return internal
     // lifecycle notes, actor IDs, or storage object keys to a buyer session.
-    const events = buyerView ? [] : await sql<{
+    const events = buyerView || investorView ? [] : await sql<{
       from_status: string | null;
       to_status: string;
       actor_user_id: string;
@@ -436,7 +437,9 @@ export const getTitle = createServerFn({ method: "GET" })
     return {
       title: buyerView
         ? { ...title, ownerUserId: "", ownerOrganizationId: null, posterKey: null, masterKey: null }
-        : title,
+        : investorView
+          ? { ...title, ownerUserId: "", ownerOrganizationId: null, masterKey: null }
+          : title,
       events: events.map((e) => ({
         from: e.from_status,
         to: e.to_status,
