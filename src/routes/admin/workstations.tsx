@@ -67,7 +67,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
       </section>
 
       <nav className="flex gap-2 overflow-x-auto border-b border-line pb-2">
-        {TABS.map((tab) => (
+        {TABS.filter((tab) => tab !== "Distribution" || actor.internalRole === "super_admin").map((tab) => (
           <button key={tab} type="button" onClick={() => setActiveTab(tab)}
             className={"whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition " + (activeTab === tab ? "bg-fg text-bg" : "border border-line bg-surface text-muted hover:text-fg")}>
             {tab}
