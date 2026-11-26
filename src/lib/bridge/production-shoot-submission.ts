@@ -60,6 +60,9 @@ export const createProductionShootSubmission = createServerFn({ method: "POST" }
       primaryLocation: data.primaryLocation || null,
       producerName: data.producerName || null,
       directorName: data.directorName || null,
+      crew: data.crew,
+      shootProgress: data.shootProgress,
+      mediaHandoverStatus: data.mediaHandoverStatus,
       productionNotes: data.productionNotes || null,
     };
 
@@ -80,12 +83,14 @@ export const createProductionShootSubmission = createServerFn({ method: "POST" }
         insert into bridge_production_shoots (
           title_id, production_no, production_title, production_format, development_stage,
           planned_start_date, planned_end_date, shoot_days, primary_location,
-          producer_name, director_name, production_notes, created_by, updated_by
+          producer_name, director_name, crew, shoot_progress, media_handover_status,
+          production_notes, created_by, updated_by
         ) values (
           ${titleId}, ${data.productionNo}, ${data.productionTitle}, ${data.productionFormat},
           ${data.developmentStage}, ${data.plannedStartDate || null}, ${data.plannedEndDate || null},
           ${data.shootDays ?? null}, ${data.primaryLocation || null}, ${data.producerName || null},
-          ${data.directorName || null}, ${data.productionNotes || null}, ${actor.userId}, ${actor.userId}
+          ${data.directorName || null}, ${JSON.stringify(data.crew)}::jsonb, ${data.shootProgress},
+          ${data.mediaHandoverStatus}, ${data.productionNotes || null}, ${actor.userId}, ${actor.userId}
         )
       `;
 
