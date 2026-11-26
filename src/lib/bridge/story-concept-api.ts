@@ -111,7 +111,10 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     }
 
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
+    if (!["independent_creator", "studio"].includes(actor.accountType) || actor.internalRole) {
+      throw new Error("Only verified Creator and Studio accounts can submit Story / Concepts.");
+    }
+    assertPermission(actor, "title.create");
 
     const titleId = randomBytes(16).toString("hex");
     const slug = slugify(data.titleName, titleId);
@@ -185,6 +188,10 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (!["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Only Creator and Studio accounts can view their Story / Concept submissions.");
+    }
+    assertPermission(actor, "title.read_own");
     const sql = await getSql();
 
     try {
@@ -192,12 +199,21 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
-           or (
-             t.owner_account_type = 'studio'
-             and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
-           )
+        where t.submission_type = 'story_concept'
+          and (
+            t.owner_user_id = ${actor.userId}
+            or (
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id = ${actor.organizationId ?? null}
+              and exists (
+                select 1
+                from bridge_organization_memberships membership
+                where membership.organization_id = t.owner_organization_id
+                  and membership.user_id = ${actor.userId}
+                  and membership.status = 'active'
+              )
+            )
+          )
         order by c.created_at desc
         limit 100
       `;
