@@ -66,8 +66,11 @@ function Studio() {
 
             <section id="studio-members" className="space-y-3">
               <div>
-                <h3 className="font-display text-xl font-semibold">Members & Roles</h3>
-                <p className="mt-1 text-sm text-muted">Read-only roster for verified Studio owners and administrators. Role changes and invitations remain disabled until separately approved.</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-display text-xl font-semibold">Members & Roles</h3>
+                  <span className="rounded-full border border-line px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">Role management — Coming soon</span>
+                </div>
+                <p className="mt-1 text-sm text-muted">The verified member roster is read-only. Invitations, access changes and owner transfers are not enabled from this workspace.</p>
               </div>
               <StudioMemberDesk />
             </section>
