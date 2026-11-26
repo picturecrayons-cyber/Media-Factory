@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { resolveCanonicalSupabaseUrl } from "../supabase-url.ts";
 
 function trimKey(value: string | undefined): string | undefined {
@@ -30,10 +31,22 @@ export class UnauthorizedError extends Error {
 
 export type VerifiedUser = {
   id: string;
+  aal: string | null;
   email: string | null;
   email_confirmed_at: string | null;
   user_metadata?: Record<string, unknown>;
 };
+
+function readJwtAssuranceLevel(token: string): string | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { aal?: unknown };
+    return typeof claims.aal === "string" ? claims.aal : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser | null> {
   if (!bearerToken) return null;
@@ -62,6 +75,7 @@ export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser
     if (!user.id) return null;
     return {
       id: user.id,
+      aal: readJwtAssuranceLevel(bearerToken),
       email: user.email ?? null,
       email_confirmed_at: user.email_confirmed_at ?? null,
       user_metadata: user.user_metadata,

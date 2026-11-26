@@ -195,14 +195,14 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       return { home: workspaceHome(existing), profile: existing };
     }
 
-    // Investor access is granted only after a reviewed access request. Enforce
-    // this at the authenticated server endpoint, not only in the signup UI.
+    const email = context.userEmail;
+    if (!email) throw new Error("Account email is required from Supabase session");
     if (data.accountType === "investor") {
       throw new Error("Investor access requires a reviewed access request.");
     }
-
-    const email = context.userEmail;
-    if (!email) throw new Error("Account email is required from Supabase session");
+    if (data.accountType === "platform_admin") {
+      throw new Error("Platform Admin access is provisioned only by an authorized platform administrator.");
+    }
     const verified = true;
 
     // Email uniqueness is a safety boundary, not an ownership signal. If this
@@ -392,7 +392,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     const bridgeUserId = verificationProfileId(actor);
     const email = actor!.email;
     if (!email) throw new Error("No email on account");
@@ -446,7 +446,7 @@ export const listAdminProfiles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") {
       throw new Error("Admin access required");
     }
@@ -485,7 +485,7 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ email: z.string().email(), role: z.enum(INTERNAL_ROLES) }))
   .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "users.invite_internal");
     if (!canGrantInternalRole(actor, data.role)) {
       throw new Error("Role grant is not permitted");

@@ -60,7 +60,7 @@ export const submitLoopLicense = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(loopLicenseInput)
   .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     return (await getSql()).transaction((tx) => saveLoopLicense(tx, actor, data));
   });
 
@@ -136,7 +136,7 @@ export const reviewTitleWorkflow = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(reviewInput)
   .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     return (await getSql()).transaction((tx) => reviewWorkflow(tx, actor, data));
   });
 
@@ -144,7 +144,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     const title = await loadTitle(data.titleId);
     if (
       !title ||
@@ -198,7 +198,7 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     const title = await loadTitle(data.titleId);
     if (!title || !canOperateOnTitle(actor, title, "title.read_own", "finance.read"))
       throw new Error("Forbidden");
@@ -352,7 +352,7 @@ export const recordSettlementEvidence = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "finance.record_settlement");
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");

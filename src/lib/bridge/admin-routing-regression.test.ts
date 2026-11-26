@@ -54,6 +54,13 @@ test("the server rejects direct Investor onboarding without a reviewed access pa
   assert.match(profiles, /data\.accountType === "investor"[\s\S]{0,120}Investor access requires a reviewed access request/);
 });
 
+test("Platform Admin cannot be self-selected through public onboarding", () => {
+  const profiles = read("./profiles.ts");
+  const onboarding = read("../../routes/onboarding.tsx");
+  assert.match(profiles, /data\.accountType === "platform_admin"[\s\S]{0,180}Platform Admin access is provisioned only/);
+  assert.doesNotMatch(onboarding, /platform_admin/);
+});
+
 test("investor CTA requests reviewed access instead of silently signing up as Creator", () => {
   const home = read("../../routes/index.tsx");
   assert.match(home, /to="\/contact"/);

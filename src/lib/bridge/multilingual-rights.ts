@@ -73,7 +73,7 @@ export const listLanguageRights = createServerFn({ method: "GET" })
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
@@ -92,7 +92,7 @@ export const createLanguageRight = createServerFn({ method: "POST" })
   .validator(languageRightInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "title.rights_review");
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
@@ -162,7 +162,7 @@ export const createLicensePackage = createServerFn({ method: "POST" })
   }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "title.license");
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
@@ -219,7 +219,7 @@ export const listLicensePackages = createServerFn({ method: "GET" })
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     if (!canReadTitle(actor, title)) {
@@ -262,7 +262,7 @@ export const authorizeLanguagePackage = createServerFn({ method: "POST" })
   .validator(z.object({ packageId: z.string().uuid() }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "title.deliver");
     const sql = await getSql();
     const packages = await sql<{
@@ -329,7 +329,7 @@ export const approveLanguageRight = createServerFn({ method: "POST" })
   .validator(z.object({ rightId: z.string().uuid(), evidenceNote: z.string().trim().min(8).max(1000) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "title.rights_review");
     const sql = await getSql();
     const rows = await sql<{ id: string; title_id: string; status: string; created_by: string }>`

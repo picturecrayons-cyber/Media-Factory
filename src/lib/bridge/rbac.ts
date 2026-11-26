@@ -76,6 +76,9 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
   investor: [
     "entitlement.read_own",
   ],
+  // Platform Admin is a privileged identity class; permissions come only from
+  // the separately verified internal_role, never from account_type alone.
+  platform_admin: [],
 };
 
 export type Actor = {
@@ -108,6 +111,12 @@ export function permissionsFor(actor: Actor): Set<Permission> {
   const staff = actor.internalRole ? INTERNAL_PERMISSIONS[actor.internalRole] : undefined;
   if (staff) return new Set<Permission>(staff);
   return new Set<Permission>(ACCOUNT_PERMISSIONS[actor.accountType] ?? []);
+}
+
+export function assertSuperAdminMfa(actor: Actor, aal?: string | null): void {
+  if (actor.internalRole === "super_admin" && aal !== "aal2") {
+    throw new Error("MFA_REQUIRED");
+  }
 }
 
 export function canAccessDashboard(actor: Actor): boolean {

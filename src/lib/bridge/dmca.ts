@@ -34,7 +34,7 @@ export const registerDmcaAccount = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .inputValidator(dmcaRegistrationSchema)
   .handler(async ({ data, context }) => {
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
 
     // The DMCA account is created for the authenticated Bridge identity.
     // Do not trust a browser-supplied email for the external registration.

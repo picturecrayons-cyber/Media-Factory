@@ -3,7 +3,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import type { AccountType, InternalRole, Permission } from "./types";
 import type { Actor } from "./rbac";
-import { assertPermission, canAccessDashboard, workspaceHome } from "./rbac";
+import { assertPermission, assertSuperAdminMfa, canAccessDashboard, workspaceHome } from "./rbac";
 import { PRODUCT_NAME, LEGAL_OWNER, PRODUCTION_DOMAIN } from "./canonical";
 import { integrationStatus } from "./env";
 import { assertNotDevUser } from "./guards";
@@ -43,7 +43,8 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   const sql = await getSql();
 
   // Profile resolution must not depend on optional Studio organization schema.
-  // In particular, the production super-admin profile is an independent_creator.
+  // Platform Admin identity is represented by account_type=platform_admin and
+  // internal_role=super_admin; privileged access is still role-authorized.
   const rows = await sql<BridgeProfileRow>`
     select bp.user_id, bp.email, bp.display_name, bp.account_type, bp.organization_name,
       null::text as organization_id, bp.internal_role, bp.email_verified
@@ -124,9 +125,10 @@ export async function requireActor(userId: string): Promise<BridgeActor> {
   return actor;
 }
 
-export async function requireVerifiedActor(userId: string): Promise<BridgeActor> {
+export async function requireVerifiedActor(userId: string, aal?: string | null): Promise<BridgeActor> {
   const actor = await requireActor(userId);
   if (!actor.emailVerified) throw new Error("Email verification required");
+  assertSuperAdminMfa(actor, aal);
   return actor;
 }
 
@@ -167,7 +169,7 @@ export const getDashboardSession = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     if (!canAccessDashboard(actor)) throw new Error("Super admin access required");
     return { profile: actor };
   });

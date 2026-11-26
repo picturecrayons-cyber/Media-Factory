@@ -10,6 +10,7 @@ import { canAccessTitleWorkspace } from "@/lib/bridge/rbac";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
+import { SuperAdminMfaGate } from "./super-admin-mfa-gate";
 
 function Frame({ children }: { children: ReactNode }) {
   return (
@@ -106,13 +107,12 @@ export function RequireBridge({
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
   }
 
-  // Role-specific workspaces use account-type checks. The shared title workspace
-  // has already applied its own explicit Creator/Studio and internal catalog-read
-  // permission gate above; do not reject authorised internal staff by account type.
-  // Internal surfaces remain protected by the explicit "internal"/"super_admin" checks.
+  // Super Admin is the platform authority and may open role dashboards; server
+  // operations still enforce permissions and AAL2 independently.
   if (allow === "super_admin" && profile.internalRole !== "super_admin") return <Navigate to={sessionQ.data?.home ?? "/"} />;
   if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;
-  if (allow && allow !== "internal" && allow !== "super_admin" && allow !== "workspace" && (profile.internalRole || profile.accountType !== (
+  const isPlatformSuperAdmin = profile.internalRole === "super_admin";
+  if (allow && allow !== "internal" && allow !== "super_admin" && allow !== "workspace" && !isPlatformSuperAdmin && (profile.internalRole || profile.accountType !== (
     allow === "creator" ? "independent_creator" : allow
   ))) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
@@ -147,5 +147,6 @@ export function RequireBridge({
     );
   }
 
-  return <>{children(profile)}</>;
+  const content = children(profile);
+  return isPlatformSuperAdmin ? <SuperAdminMfaGate>{content}</SuperAdminMfaGate> : <>{content}</>;
 }

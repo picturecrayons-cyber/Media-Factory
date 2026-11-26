@@ -208,7 +208,7 @@ export const previewDuplicateTitleMerge = createServerFn({ method: "POST" })
   .validator(z.object({ canonicalTitleId: z.string().min(8), retiringTitleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "title.read_catalog");
     if (data.canonicalTitleId === data.retiringTitleId) throw new Error("A title cannot merge into itself.");
     const sql = await getSql();
@@ -249,7 +249,7 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
   }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "title.approve");
     if (data.canonicalTitleId === data.retiringTitleId) throw new Error("A title cannot merge into itself.");
 
@@ -354,7 +354,7 @@ export const rollbackDuplicateTitleMerge = createServerFn({ method: "POST" })
   .validator(z.object({ mergeId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "title.approve");
     const sql = await getSql();
 

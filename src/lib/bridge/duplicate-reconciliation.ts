@@ -71,9 +71,9 @@ function iso(value: string | Date | null) {
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
-async function actorFor(userId: string) {
+async function actorFor(userId: string, aal?: string | null) {
   assertNotDevUser(userId);
-  const actor = await requireVerifiedActor(userId);
+  const actor = await requireVerifiedActor(userId, aal);
   if (!actor.internalRole) throw new Error("Forbidden");
   assertPermission(actor, "title.read_catalog");
   return actor;
@@ -82,7 +82,7 @@ async function actorFor(userId: string) {
 export const listDuplicateReviews = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const actor = await actorFor(context.userId);
+    const actor = await actorFor(context.userId, context.aal);
     const sql = await getSql();
     const rows = await sql<ReviewRow>`
       select r.*, c.name as candidate_name, k.name as canonical_name
@@ -159,7 +159,7 @@ export const openDuplicateReview = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(openInput)
   .handler(async ({ context, data }) => {
-    const actor = await actorFor(context.userId);
+    const actor = await actorFor(context.userId, context.aal);
     assertPermission(actor, "title.approve");
     if (data.candidateTitleId === data.canonicalTitleId) throw new Error("Candidate and canonical IDs must differ.");
 
@@ -223,7 +223,7 @@ export const decideDuplicateReview = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(decisionInput)
   .handler(async ({ context, data }) => {
-    const actor = await actorFor(context.userId);
+    const actor = await actorFor(context.userId, context.aal);
     assertPermission(actor, "title.license");
     const sql = await getSql();
 

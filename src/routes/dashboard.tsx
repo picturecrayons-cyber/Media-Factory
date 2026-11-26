@@ -62,6 +62,21 @@ const ACTION_GUIDANCE: Record<string, string> = {
   LICENSING_READY: "Licensing decision is pending",
 };
 
+function PlatformModule({ title, description, href, to }: { title: string; description: string; href?: string; to?: string }) {
+  const className = "group rounded-sm border border-line p-4 transition-colors hover:border-accent";
+  const content = (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="font-semibold">{title}</h4>
+        <span aria-hidden="true" className="text-accent">→</span>
+      </div>
+      <p className="mt-2 text-sm text-muted">{description}</p>
+    </>
+  );
+  if (href) return <a href={href} target="_blank" rel="noreferrer" className={className}>{content}</a>;
+  return <Link to={to as any} className={className}>{content}</Link>;
+}
+
 function DashboardBody() {
   const dashboardQ = useQuery({
     queryKey: ["bridge-dashboard-session"],
@@ -107,11 +122,11 @@ function DashboardBody() {
       <section className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-            Crayons Bridge · Super Admin
+            StreamVista Platform · Super Admin
           </p>
-          <h2 className="font-display text-3xl font-semibold">Founder control centre</h2>
+          <h2 className="font-display text-3xl font-semibold">Platform Control Centre</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            One place to see what needs attention, understand the business and open the right workspace.
+            Central access to Bridge, LOOP, ingest operations and platform administration.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -127,6 +142,21 @@ function DashboardBody() {
           >
             Open operations
           </Link>
+        </div>
+      </section>
+
+      <section aria-labelledby="platform-modules-title" className="space-y-3">
+        <div>
+          <h3 id="platform-modules-title" className="font-display text-xl font-semibold">Platform Control</h3>
+          <p className="mt-1 text-sm text-muted">Cross-product administration. Each destination retains its own server-side authorization.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <PlatformModule title="Bridge Admin" description="Titles, canonical media ingest, storage, QC, rights and licensing." href="https://bridge.crayonspictures.in/admin" />
+          <PlatformModule title="LOOP Admin" description="Consumer catalogue, streaming operations, viewer accounts and subscriptions." href="https://crayonsloop.in/admin" />
+          <PlatformModule title="Bridge Operations & Ingest" description="Open operational workstations and canonical ingest workflows." to="/admin/workstations" />
+          <PlatformModule title="People & Access" description="Internal users, invitations and staff role management." to="/internal" />
+          <PlatformModule title="Buyer Desk & Licensing" description="Buyer activity, offers and licensing workflows." to="/buyer" />
+          <PlatformModule title="CMS & Direct Ingest" description="Manage Bridge site content and the canonical Super Admin direct-ingest workflow." to="/cms" />
         </div>
       </section>
 
