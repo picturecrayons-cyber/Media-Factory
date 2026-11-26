@@ -65,6 +65,7 @@ export const listInvestorTitleAccess = createServerFn({ method: "GET" })
       from bridge_investor_title_access a
       join bridge_titles t on t.id=a.title_id
       where a.investor_user_id=${actor.userId} and a.revoked_at is null
+        and t.submission_type = 'story_concept'
         and (a.expires_at is null or a.expires_at > now())
       order by a.granted_at desc limit 200
     `;
