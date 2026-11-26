@@ -34,28 +34,26 @@ export function MyStoryConcepts() {
   return (
     <section>
       <h2 className="mb-3 text-lg font-semibold">Story concepts</h2>
-      <ul className="divide-y divide-line rounded-sm border border-line">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {concepts.map((c) => {
           const logline = listLogline(c.logline);
           return (
-            <li key={c.id}>
-              <Link
-                to="/title/$id"
-                params={{ id: c.title_id }}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
-              >
-                <div>
-                  <p className="font-medium">{(c as { titleName?: string }).titleName ?? "Concept"}</p>
-                  <p className="text-sm text-muted">
-                    {STATUS_LABEL[c.curation_status] ?? c.curation_status}
-                    {logline ? ` · ${logline}` : ""}
-                  </p>
-                </div>
-              </Link>
-            </li>
+            <article key={c.id} className="flex min-h-36 flex-col justify-between rounded-2xl border border-line bg-surface p-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted">Story / Concept</p>
+                <Link to="/title/$id" params={{ id: c.title_id }} className="mt-2 block font-semibold hover:text-accent">
+                  {(c as { titleName?: string }).titleName ?? "Concept"}
+                </Link>
+                {logline ? <p className="mt-2 text-sm text-muted">{logline}</p> : null}
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3">
+                <span className="text-xs text-muted">{STATUS_LABEL[c.curation_status] ?? c.curation_status}</span>
+                <Link to="/title/$id" params={{ id: c.title_id }} className="text-sm font-semibold text-accent">Open →</Link>
+              </div>
+            </article>
           );
         })}
-      </ul>
+      </div>
     </section>
   );
 }
