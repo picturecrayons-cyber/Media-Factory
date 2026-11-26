@@ -37,7 +37,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const publication = useQuery({
     queryKey: ["loop-pub", title.id],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: title.id } }),
-    enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
+    enabled: Boolean(actor.internalRole),
   });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   // Studio and creator accounts only prepare and submit their own titles.
@@ -143,7 +143,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             type="button"
             key={s}
             aria-pressed={activeStage === s}
-            className={`rounded-full border border-line px-4 py-2 text-sm ${stage === s ? "bg-fg text-bg" : ""}`}
+            className={`rounded-full border border-line px-4 py-2 text-sm ${activeStage === s ? "bg-fg text-bg" : ""}`}
             onClick={() => setStage(s)}
           >
             {s}
