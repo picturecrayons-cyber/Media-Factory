@@ -58,6 +58,8 @@ export type BridgeTitle = {
   posterKey: string | null;
   masterKey: string | null;
   contentType: string;
+  /** First-class Bridge product discriminator; legacy rows default to finished_film. */
+  submissionType?: "finished_film" | "story_concept";
   countryOfOrigin: string | null;
   releaseDate: string | null;
   credits: Array<{ role: string; name: string }>;
