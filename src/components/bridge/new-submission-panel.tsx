@@ -2,11 +2,10 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { StoryConceptForm } from "@/components/bridge/story-concept-form";
-import { ProductionShootForm } from "@/components/bridge/production-shoot-form";
 import { Button } from "@/components/ui/button";
 import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
 
-type SubmissionPath = "none" | "finished_film" | "story_concept" | "production_shoot";
+type SubmissionPath = "none" | "finished_film" | "story_concept";
 
 export function NewSubmissionPanel() {
   const [path, setPath] = useState<SubmissionPath>("none");
@@ -34,7 +33,7 @@ export function NewSubmissionPanel() {
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <button
           type="button"
           onClick={() => setPath("finished_film")}
@@ -69,15 +68,7 @@ export function NewSubmissionPanel() {
             </p>
           </div>
         )}
-        <button type="button" onClick={() => setPath("production_shoot")} className="rounded-xl border border-line p-4 text-left hover:border-line-strong">
-          <p className="font-medium">Production Shoot</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted">Production No. · Production Title · schedule · production stage · media handover.</p>
-        </button>
       </div>
-
-      {path === "production_shoot" && (
-        <div className="mt-6 border-t border-line pt-6"><ProductionShootForm /></div>
-      )}
 
       {path === "finished_film" && (
         <div className="mt-6 border-t border-line pt-6">
