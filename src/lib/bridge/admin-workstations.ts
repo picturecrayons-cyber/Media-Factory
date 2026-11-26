@@ -169,22 +169,24 @@ async function assignTitleAccess(userId: string, data: z.infer<typeof titleAssig
   if (!profiles[0]) throw new Error(`A verified ${accountType} account is required`);
   const titles = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
   if (!titles[0]) throw new Error("Canonical title not found");
-  const table = accountType === "buyer" ? "bridge_buyer_title_access" : "bridge_investor_title_access";
-  const userColumn = accountType === "buyer" ? "buyer_user_id" : "investor_user_id";
-  if (data.action === "GRANT") {
-    await sql.unsafe(
-      `insert into public.${table} (title_id, ${userColumn}, granted_by, granted_at, expires_at, revoked_at)
-       values ($1, $2, $3, now(), $4, null)
-       on conflict (title_id, ${userColumn}) do update
-       set granted_by=excluded.granted_by, granted_at=now(), expires_at=excluded.expires_at, revoked_at=null`,
-      [data.titleId, data.userId, actor.userId, data.expiresAt ?? null],
-    );
+  if (accountType === "buyer") {
+    if (data.action === "GRANT") {
+      await sql`insert into bridge_buyer_title_access (title_id, buyer_user_id, granted_by, granted_at, expires_at, revoked_at)
+        values (${data.titleId}, ${data.userId}, ${actor.userId}, now(), ${data.expiresAt ?? null}, null)
+        on conflict (title_id, buyer_user_id) do update
+        set granted_by=excluded.granted_by, granted_at=now(), expires_at=excluded.expires_at, revoked_at=null`;
+    } else {
+      await sql`update bridge_buyer_title_access set revoked_at=now()
+        where title_id=${data.titleId} and buyer_user_id=${data.userId} and revoked_at is null`;
+    }
+  } else if (data.action === "GRANT") {
+    await sql`insert into bridge_investor_title_access (title_id, investor_user_id, granted_by, granted_at, expires_at, revoked_at)
+      values (${data.titleId}, ${data.userId}, ${actor.userId}, now(), ${data.expiresAt ?? null}, null)
+      on conflict (title_id, investor_user_id) do update
+      set granted_by=excluded.granted_by, granted_at=now(), expires_at=excluded.expires_at, revoked_at=null`;
   } else {
-    await sql.unsafe(
-      `update public.${table} set revoked_at=now()
-       where title_id=$1 and ${userColumn}=$2 and revoked_at is null`,
-      [data.titleId, data.userId],
-    );
+    await sql`update bridge_investor_title_access set revoked_at=now()
+      where title_id=${data.titleId} and investor_user_id=${data.userId} and revoked_at is null`;
   }
   await writeAudit({
     actorUserId: actor.userId,
