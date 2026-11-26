@@ -7,12 +7,12 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { hasPermission } from "@/lib/bridge/rbac";
 import type { BridgeActor } from "@/lib/bridge/session";
-import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
+import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate, setBuyerTitleAccess, setInvestorTitleAccess } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Distribution", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -41,6 +41,8 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
   const [activeTab, setActiveTab] = useState<Tab>("Titles");
+  const buyerAccessMutation = useMutation({ mutationFn: setBuyerTitleAccess, onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }) });
+  const investorAccessMutation = useMutation({ mutationFn: setInvestorTitleAccess, onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }) });
 
   const data = query.data;
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading Admin…</div>;
@@ -89,6 +91,8 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
       ) : activeTab === "Buyers" ? (
         <BuyerRelease titles={data.titles} canApprove={hasPermission(actor, "title.approve")}
           onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
+      ) : activeTab === "Distribution" ? (
+        actor.internalRole === "super_admin" ? <DistributionDesk data={data} buyerMutation={buyerAccessMutation} investorMutation={investorAccessMutation} /> : <Empty text="Title-to-account mapping is restricted to Super Admin." />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
           <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
@@ -143,6 +147,53 @@ function DuplicateReviewSection() {
       <div className="grid gap-2 text-xs sm:grid-cols-3"><span>Rights: {r.rightsConflictStatus ?? "UNRESOLVED"}</span><span>Territory: {r.territoryConflictStatus ?? "UNRESOLVED"}</span><span>Window: {r.windowConflictStatus ?? "UNRESOLVED"}</span><span>Assets: {r.assetReferenceStatus ?? "UNRESOLVED"}</span><span>Delivery: {r.deliveryReferenceStatus ?? "UNRESOLVED"}</span><span>Buyer mappings: {r.buyerMappingStatus ?? "UNRESOLVED"}</span></div>
       {!r.persisted ? <Button size="sm" disabled={openMutation.isPending} onClick={() => openMutation.mutate({ data: { candidateTitleId: r.candidateTitleId, canonicalTitleId: r.canonicalTitleId } })}>Open review</Button> : <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={decideMutation.isPending} onClick={() => decideMutation.mutate({ data: { reviewId: r.id, decision: "HOLD", identityConfidence: r.identityConfidence, rightsConflictStatus: r.rightsConflictStatus ?? "UNKNOWN", territoryConflictStatus: r.territoryConflictStatus ?? "UNKNOWN", windowConflictStatus: r.windowConflictStatus ?? "UNKNOWN", assetReferenceStatus: r.assetReferenceStatus ?? "UNKNOWN", deliveryReferenceStatus: r.deliveryReferenceStatus ?? "UNKNOWN", buyerMappingStatus: r.buyerMappingStatus ?? "UNKNOWN" } })}>Hold</Button><Button size="sm" variant="outline" disabled={decideMutation.isPending} onClick={() => decideMutation.mutate({ data: { reviewId: r.id, decision: "NO_MERGE", identityConfidence: r.identityConfidence, rightsConflictStatus: r.rightsConflictStatus ?? "UNKNOWN", territoryConflictStatus: r.territoryConflictStatus ?? "UNKNOWN", windowConflictStatus: r.windowConflictStatus ?? "UNKNOWN", assetReferenceStatus: r.assetReferenceStatus ?? "UNKNOWN", deliveryReferenceStatus: r.deliveryReferenceStatus ?? "UNKNOWN", buyerMappingStatus: r.buyerMappingStatus ?? "UNKNOWN" } })}>No merge</Button><Button size="sm" disabled={decideMutation.isPending || r.identityConfidence !== "CONFIRMED"} onClick={() => decideMutation.mutate({ data: { reviewId: r.id, decision: "APPROVE", identityConfidence: "CONFIRMED", rightsConflictStatus: r.rightsConflictStatus ?? "CLEAR", territoryConflictStatus: r.territoryConflictStatus ?? "CLEAR", windowConflictStatus: r.windowConflictStatus ?? "CLEAR", assetReferenceStatus: r.assetReferenceStatus ?? "CLEAR", deliveryReferenceStatus: r.deliveryReferenceStatus ?? "CLEAR", buyerMappingStatus: r.buyerMappingStatus ?? "CLEAR" } })}>Approve reconciliation</Button></div>}
     </div>)}</div>}
+  </section>;
+}
+
+
+
+function DistributionDesk({ data, buyerMutation, investorMutation }: { data: any; buyerMutation: any; investorMutation: any }) {
+  const [buyerByTitle, setBuyerByTitle] = useState<Record<string, string>>({});
+  const [investorByTitle, setInvestorByTitle] = useState<Record<string, string>>({});
+  const titles = data.titles ?? [];
+  const buyers = (data.eligibleAccounts ?? []).filter((a: any) => a.account_type === "buyer");
+  const investors = (data.eligibleAccounts ?? []).filter((a: any) => a.account_type === "investor");
+  const active = (row: any) => !row.revoked_at && (!row.expires_at || new Date(row.expires_at).getTime() > Date.now());
+  const label = (a: any) => a.display_name || a.email || a.user_id;
+  const grant = (mutation: any, titleId: string, userId: string) => mutation.mutate({ data: { titleId, userId, action: "GRANT" } });
+  const revoke = (mutation: any, titleId: string, userId: string) => mutation.mutate({ data: { titleId, userId, action: "REVOKE" } });
+  return <section className="space-y-4">
+    <SectionHeader title="Buyer & Investor assignment" description="Super Admin maps each canonical title to verified accounts. Buyer visibility remains blocked until every publication gate passes. Investor access is separate from investment and revenue participation records." />
+    {titles.length ? titles.map((title: any) => {
+      const buyerRows = (data.buyerAccess ?? []).filter((r: any) => r.title_id === title.id);
+      const investorRows = (data.investorAccess ?? []).filter((r: any) => r.title_id === title.id);
+      return <article key={title.id} className="space-y-4 rounded-2xl border border-line bg-surface p-4">
+        <div><p className="font-semibold">{title.name}</p><p className="text-xs text-muted">{title.id} · {STATUS_LABELS[title.status] ?? title.status} · {title.submission_type ?? "Title"}</p></div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold">Buyer access</h4>
+            <div className="flex flex-wrap gap-2">
+              <select aria-label={`Buyer account for ${title.name}`} value={buyerByTitle[title.id] ?? ""} onChange={e => setBuyerByTitle(s => ({...s,[title.id]:e.target.value}))} className="min-w-0 flex-1 rounded-lg border border-line bg-elevated px-3 py-2 text-sm">
+                <option value="">Select verified Buyer</option>{buyers.map((a:any)=><option key={a.user_id} value={a.user_id}>{label(a)} · {a.email}</option>)}
+              </select>
+              <Button size="sm" disabled={!buyerByTitle[title.id] || buyerMutation.isPending} onClick={()=>grant(buyerMutation,title.id,buyerByTitle[title.id])}>Grant</Button>
+            </div>
+            {buyerRows.filter(active).length ? buyerRows.filter(active).map((r:any)=><div key={r.user_id} className="flex items-center justify-between gap-2 rounded-lg bg-elevated p-2 text-xs"><span>{r.display_name || r.email} · Active</span><Button size="sm" variant="outline" disabled={buyerMutation.isPending} onClick={()=>revoke(buyerMutation,title.id,r.user_id)}>Revoke</Button></div>) : <p className="text-xs text-muted">No active Buyer assignments.</p>}
+          </div>
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold">Investor access</h4>
+            <div className="flex flex-wrap gap-2">
+              <select aria-label={`Investor account for ${title.name}`} value={investorByTitle[title.id] ?? ""} onChange={e => setInvestorByTitle(s => ({...s,[title.id]:e.target.value}))} className="min-w-0 flex-1 rounded-lg border border-line bg-elevated px-3 py-2 text-sm">
+                <option value="">Select verified Investor</option>{investors.map((a:any)=><option key={a.user_id} value={a.user_id}>{label(a)} · {a.email}</option>)}
+              </select>
+              <Button size="sm" disabled={!investorByTitle[title.id] || investorMutation.isPending} onClick={()=>grant(investorMutation,title.id,investorByTitle[title.id])}>Grant</Button>
+            </div>
+            {investorRows.filter(active).length ? investorRows.filter(active).map((r:any)=><div key={r.user_id} className="flex items-center justify-between gap-2 rounded-lg bg-elevated p-2 text-xs"><span>{r.display_name || r.email} · Active</span><Button size="sm" variant="outline" disabled={investorMutation.isPending} onClick={()=>revoke(investorMutation,title.id,r.user_id)}>Revoke</Button></div>) : <p className="text-xs text-muted">No active Investor assignments.</p>}
+          </div>
+        </div>
+      </article>;
+    }) : <Empty text="No canonical titles are available for assignment." />}
+    {buyerMutation.isError || investorMutation.isError ? <p role="alert" className="rounded-lg border border-line p-3 text-sm">Assignment failed: {String(buyerMutation.error ?? investorMutation.error)}</p> : null}
   </section>;
 }
 
