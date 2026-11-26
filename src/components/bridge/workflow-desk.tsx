@@ -45,8 +45,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const visibleStages = stages.filter((candidate) => {
     if (candidate === "Prepare") return true;
     if (candidate === "Business") return Boolean(actor.internalRole) && (hasPermission(actor, "title.license") || hasPermission(actor, "title.rights_review"));
-    if (candidate === "Distribution") return Boolean(actor.internalRole) && (hasPermission(actor, "title.license") || hasPermission(actor, "title.deliver"));
-    return canFinance;
+    if (candidate === "Distribution") return Boolean(actor.internalRole) && (hasPermission(actor, "loop.publish") || hasPermission(actor, "loop.revoke") || hasPermission(actor, "title.deliver"));
+    return Boolean(actor.internalRole) && hasPermission(actor, "finance.read");
   });
   const activeStage = visibleStages.includes(stage) ? stage : "Prepare";
   const revenue = useQuery({
