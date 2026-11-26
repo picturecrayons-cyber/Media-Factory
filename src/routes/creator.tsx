@@ -6,6 +6,7 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { OwnerSubmissionCorrections } from "@/components/bridge/owner-submission-corrections";
 import { listTitles } from "@/lib/bridge/titles";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
@@ -172,6 +173,7 @@ function CreatorDashboard({
             not itself approve QC, ownership, licensing or publication.
           </p>
           <NewSubmissionPanel />
+          <OwnerSubmissionCorrections />
         </div>
         <div className="space-y-3 rounded-2xl border border-line bg-surface p-5">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted">Separate submission path</p>
