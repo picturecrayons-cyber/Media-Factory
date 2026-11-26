@@ -58,6 +58,12 @@ function NavLink({ item }: { item: NavItem }) {
   );
 }
 
+function organizationDisplayLabel(actor: BridgeActor): string {
+  const label = actor.organizationName?.trim() || actor.displayName;
+  // Correct the known duplicated leading "C" in this legacy display value only.
+  return label.replace(/^C(?=Crayons Bridge$)/i, "");
+}
+
 export function BrandMark({ className }: { className?: string }) {
   return (
     <Link
@@ -74,6 +80,8 @@ export function BrandMark({ className }: { className?: string }) {
 }
 
 export function BridgeShell({ actor, title, children }: { actor: BridgeActor; title: string; children: ReactNode }) {
+  const organizationLabel = organizationDisplayLabel(actor);
+
   return (
     <div className="min-h-screen bg-bg text-fg">
       <header className="sticky top-0 z-50 border-b border-line bg-surface/88 backdrop-blur-xl">
@@ -85,7 +93,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
           <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-semibold text-muted transition hover:text-fg lg:inline">Open Crayons Loop ↗</a>
           <div className="ml-auto flex items-center gap-3">
             {actor.internalRole ? <span className="hidden rounded-full border border-line px-3 py-1 text-xs text-muted sm:inline">{actor.internalRole.replaceAll("_", " ")}</span> : null}
-            <UserButton label={actor.organizationName || actor.displayName} />
+            <UserButton label={organizationLabel} />
           </div>
         </div>
         <nav aria-label="Mobile primary navigation" className="flex gap-1 overflow-x-auto border-t border-line px-4 py-2 md:hidden">
@@ -98,7 +106,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">Crayons Bridge</p>
             <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
           </div>
-          <p className="text-xs text-muted">{actor.organizationName || actor.displayName}</p>
+          <p className="text-xs text-muted">{organizationLabel}</p>
         </div>
         {children}
       </main>
