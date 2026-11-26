@@ -71,6 +71,21 @@ create index if not exists bridge_dit_ingest_sessions_project_created_idx
   on public.bridge_dit_ingest_sessions(production_project_id, created_at desc);
 create index if not exists bridge_dit_ingest_sessions_shoot_day_idx
   on public.bridge_dit_ingest_sessions(shoot_day_id, production_project_id);
+create index if not exists bridge_dit_ingest_sessions_created_by_idx
+  on public.bridge_dit_ingest_sessions(created_by);
+create index if not exists bridge_dit_ingest_sessions_signed_off_by_idx
+  on public.bridge_dit_ingest_sessions(signed_off_by)
+  where signed_off_by is not null;
+create index if not exists bridge_production_projects_created_by_idx
+  on public.bridge_production_projects(created_by);
+create index if not exists bridge_production_projects_updated_by_idx
+  on public.bridge_production_projects(updated_by);
+create index if not exists bridge_production_shoot_days_created_by_idx
+  on public.bridge_production_shoot_days(created_by);
+create index if not exists bridge_production_shoot_days_updated_by_idx
+  on public.bridge_production_shoot_days(updated_by);
+create index if not exists bridge_production_title_links_created_by_idx
+  on public.bridge_production_title_links(created_by);
 
 alter table public.bridge_production_projects enable row level security;
 alter table public.bridge_production_projects force row level security;
