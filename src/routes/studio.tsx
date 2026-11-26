@@ -3,22 +3,16 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
-import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
-const studioModules = [
-  ["Organization", "Studio profile and organization workspace.", "Organization data is shown only when the verified organization mapping is available."],
-  ["Members & Roles", "Manage approved studio members and access roles.", "Membership management is not enabled in this dashboard yet."],
-  ["Productions", "Track projects, production stages and title ownership.", "Production project tracking is not connected yet."],
-  ["QC & Rights", "Follow quality-control and rights-review progress.", "Use the status shown on each title; separate review approvals remain authoritative."],
-  ["Deliveries", "Track approved delivery packages.", "Open the current Deliveries workspace for available records."],
-  ["Schedule", "Coordinate production and delivery milestones.", "A shared studio schedule is not connected yet."],
-  ["Statements", "Review verified licensing and settlement records.", "Financial statements are not connected yet."],
-  ["Insights", "Review verified studio portfolio activity.", "Studio analytics are not connected yet."],
-  ["Help", "Get help with studio onboarding and production workflows.", "Use the existing Bridge support channel."],
+const comingSoonModules = [
+  ["Productions", "Project-level production tracking and milestone management."],
+  ["Schedule", "Shared production and delivery calendar."],
+  ["Statements", "Studio licensing statements and settlement reporting."],
+  ["Insights", "Verified portfolio and performance analytics."],
 ] as const;
 
 function Studio() {
@@ -45,10 +39,19 @@ function Studio() {
 
             <section className="space-y-4">
               <div>
-                <h3 className="font-display text-xl font-semibold">Add a studio title</h3>
-                <p className="mt-1 text-sm text-muted">Finished films and story concepts remain separate. A title upload does not bypass QC, rights or licensing approvals.</p>
+                <h3 className="font-display text-xl font-semibold">New submission</h3>
+                <p className="mt-1 text-sm text-muted">Choose a dedicated submission workflow. Every title remains subject to Bridge QC, Legal and Rights approvals.</p>
               </div>
-              <NewSubmissionPanel />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Link to="/submit-film" className="rounded-sm border border-line p-4 hover:border-accent">
+                  <strong>New Finished Film</strong>
+                  <p className="mt-1 text-sm text-muted">Submit a completed film for rights and buyer review</p>
+                </Link>
+                <Link to="/submit-concept" className="rounded-sm border border-line p-4 hover:border-accent">
+                  <strong>Story / Concept</strong>
+                  <p className="mt-1 text-sm text-muted">Submit a story or concept for separate curation</p>
+                </Link>
+              </div>
             </section>
 
             <section id="studio-titles" className="space-y-4">
@@ -63,8 +66,11 @@ function Studio() {
 
             <section id="studio-members" className="space-y-3">
               <div>
-                <h3 className="font-display text-xl font-semibold">Members & Roles</h3>
-                <p className="mt-1 text-sm text-muted">Read-only roster for verified Studio owners and administrators. Role changes and invitations remain disabled until separately approved.</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-display text-xl font-semibold">Members & Roles</h3>
+                  <span className="rounded-full border border-line px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">Role management — Coming soon</span>
+                </div>
+                <p className="mt-1 text-sm text-muted">The verified member roster is read-only. Invitations, access changes and owner transfers are not enabled from this workspace.</p>
               </div>
               <StudioMemberDesk />
             </section>
@@ -79,15 +85,17 @@ function Studio() {
 
             <section id="studio-operations" className="space-y-3">
               <div>
-                <h3 className="font-display text-xl font-semibold">Studio operations</h3>
-                <p className="mt-1 text-sm text-muted">The modules below define the intended Studio dashboard. Unimplemented data sources are explicitly marked; no synthetic members, productions or financial values are displayed.</p>
+                <h3 className="font-display text-xl font-semibold">Coming soon</h3>
+                <p className="mt-1 text-sm text-muted">These modules are not connected yet. They are shown for visibility only and are not presented as active services.</p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {studioModules.map(([name, description, status]) => (
-                  <article key={name} className="rounded-sm border border-line p-4">
-                    <h4 className="font-semibold">{name}</h4>
-                    <p className="mt-1 text-sm">{description}</p>
-                    <p className="mt-3 text-xs text-muted">{status}</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {comingSoonModules.map(([name, description]) => (
+                  <article key={name} className="rounded-sm border border-dashed border-line p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="font-semibold">{name}</h4>
+                      <span className="rounded-full border border-line px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">Coming soon</span>
+                    </div>
+                    <p className="mt-2 text-sm text-muted">{description}</p>
                   </article>
                 ))}
               </div>
