@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
-import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
+import { assertPermission, canReadTitle, canOperateOnTitle, hasPermission, type Actor } from "./rbac";
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
@@ -21,6 +21,8 @@ export async function saveLoopLicense(
   data: z.infer<typeof loopLicenseInput>,
 ) {
   data = loopLicenseInput.parse(data);
+  // Only explicitly authorised internal licensing roles may create rights drafts.
+  assertPermission(actor, "title.license");
   const [title] = await tx<{
     owner_user_id: string;
     owner_account_type: string;
@@ -153,7 +155,8 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     )
       throw new Error("Not found");
     const sql = await getSql();
-    const grants = await sql<{
+    const canReadRights = hasPermission(actor, "title.license") || hasPermission(actor, "title.rights_review");
+    const grants = canReadRights ? await sql<{
       id: string;
       status: string;
       territories: string[];
@@ -166,7 +169,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
       }>;
-    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc` : [];
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
@@ -176,10 +179,10 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         posterKey: string | null;
       }>;
     }>`select status,reviewed_at,reviewer_findings from bridge_qc_cases where title_id=${data.titleId} order by created_at desc limit 1`;
-    const legal = await sql<{
+    const legal = canReadRights ? await sql<{
       status: string;
       reviewed_at: string | Date;
-    }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+    }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1` : [];
     return {
       grants: grants.map((g) => ({
         ...g,
