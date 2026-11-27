@@ -72,3 +72,43 @@ create index if not exists bridge_production_project_crew_org_project_idx
 alter table public.bridge_production_project_crew enable row level security;
 revoke all privileges on table public.bridge_production_project_crew from public, anon, authenticated;
 grant all privileges on table public.bridge_production_project_crew to service_role;
+
+-- Database-level guard: only completed projects may link to a same-Studio Finished Film.
+create or replace function public.bridge_validate_production_finished_film_link()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  project_org uuid;
+begin
+  select organization_id into project_org
+  from public.bridge_production_projects
+  where id = new.production_project_id and status = 'COMPLETED';
+
+  if project_org is null then
+    raise exception 'Finished Film handoff requires a completed Production project';
+  end if;
+
+  if not exists (
+    select 1 from public.bridge_titles t
+    where t.id = new.title_id
+      and t.owner_account_type = 'studio'
+      and t.owner_organization_id = project_org
+      and t.submission_type = 'finished_film'
+      and t.merged_into_title_id is null
+      and t.record_classification is distinct from 'TEST'
+      and coalesce(t.external_ids->>'test_only', 'false') <> 'true'
+  ) then
+    raise exception 'Finished Film must belong to the same Studio and be a canonical Finished Film submission';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.bridge_validate_production_finished_film_link() from public, anon, authenticated;
+drop trigger if exists bridge_validate_production_finished_film_link on public.bridge_production_title_links;
+create trigger bridge_validate_production_finished_film_link
+before insert or update on public.bridge_production_title_links
+for each row execute function public.bridge_validate_production_finished_film_link();
