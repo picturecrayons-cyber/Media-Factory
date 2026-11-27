@@ -57,8 +57,9 @@ export function StoryConceptForm() {
         },
       }),
     onSuccess: (res) => {
-      toast("Story / Concept submitted for review");
-      void navigate({ to: "/title/$id", params: { id: res.titleId } });
+      toast("Story / Concept submitted for internal curation");
+      // Concepts have their own curation workspace; never route them into the finished-film asset/QC desk.
+      void navigate({ to: "/studio", hash: "studio-titles" });
     },
     onError: (err) =>
       toast(err instanceof Error ? err.message : "Could not submit concept"),
