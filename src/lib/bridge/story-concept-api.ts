@@ -346,7 +346,7 @@ export const getMyStoryConceptWorkspace = createServerFn({ method: "GET" })
       (actor.accountType === "studio" && row.owner_account_type === "studio" &&
        Boolean(actor.organizationId) && actor.organizationId === row.owner_organization_id);
     if (actor.internalRole) {
-      assertPermission(actor, "title.read_catalog");
+      requireCurationStaff(actor);
     } else if (!ownsTitle || !["independent_creator", "studio"].includes(actor.accountType)) {
       throw new Error("Forbidden");
     }
