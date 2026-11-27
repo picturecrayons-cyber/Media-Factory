@@ -155,12 +155,7 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   // TEST fixtures remain in the database for controlled verification, but never
   // appear in customer-facing Creator or Studio title lists. Older schemas that
   // predate record_classification return no value and retain their normal rows.
-  return rows.filter((row) =>
-    row.record_classification !== "TEST" &&
-    row.submission_type !== "story_concept" &&
-    row.external_ids?.test_only !== true &&
-    row.external_ids?.test_only !== "true"
-  );
+  return rows.filter(isFinishedFilmCatalogueRecord);
 }
 
 function slugify(name: string, id: string): string {
