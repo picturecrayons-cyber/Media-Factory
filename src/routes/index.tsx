@@ -142,6 +142,110 @@ function Home() {
           </div>
         </section>
 
+        <section id="products" className="border-b border-line bg-white py-14 sm:py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <div className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">StreamVista product suite</p>
+              <h2 className="mt-3 font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
+                Products that connect production, rights and audiences.
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-muted sm:text-base">
+                A connected media workflow, from production and verified media assets to rights-led
+                licensing, secure delivery and streaming.
+              </p>
+            </div>
+
+            <div className="mt-9 grid gap-5 lg:grid-cols-3">
+              <article className="flex flex-col rounded-3xl border border-line bg-surface p-7 sm:p-8">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Rights & distribution platform</p>
+                <h3 className="mt-4 font-display text-2xl font-semibold text-fg">Crayons Bridge</h3>
+                <p className="mt-3 flex-1 text-sm leading-7 text-muted">
+                  The B2B workspace for film and media owners to submit titles, organize assets and
+                  ownership evidence, complete review workflows, manage licensing and authorize delivery.
+                </p>
+                <Link to="/signup" className="mt-7 inline-flex items-center text-sm font-semibold text-accent hover:underline">
+                  Create a Bridge account →
+                </Link>
+              </article>
+
+              <article className="flex flex-col rounded-3xl border border-line bg-surface p-7 sm:p-8">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Production & media operations</p>
+                <h3 className="mt-4 font-display text-2xl font-semibold text-fg">Production & DIT</h3>
+                <p className="mt-3 flex-1 text-sm leading-7 text-muted">
+                  Production coordination and digital-imaging workflows for camera-card ingest,
+                  media verification, asset handover and production records.
+                </p>
+                <Link to="/studio-dit" className="mt-7 inline-flex items-center text-sm font-semibold text-accent hover:underline">
+                  Open Production & DIT →
+                </Link>
+              </article>
+
+              <article className="flex flex-col rounded-3xl border border-line bg-surface p-7 sm:p-8">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Consumer streaming</p>
+                <h3 className="mt-4 font-display text-2xl font-semibold text-fg">Crayons Loop</h3>
+                <p className="mt-3 flex-1 text-sm leading-7 text-muted">
+                  The audience-facing streaming experience. Titles reach viewers through Loop only
+                  after the required Bridge rights, review and publication authorizations.
+                </p>
+                <a href="https://crayonsloop.in/" className="mt-7 inline-flex items-center text-sm font-semibold text-accent hover:underline" target="_blank" rel="noreferrer">
+                  Visit Crayons Loop →
+                </a>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section id="services" className="border-b border-line bg-surface/50 py-14 sm:py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <div className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Services</p>
+              <h2 className="mt-3 font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
+                Practical services across the media lifecycle.
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-muted sm:text-base">
+                Support for creators, studios and rights-holders as projects move from preparation
+                to commercially authorized distribution.
+              </p>
+            </div>
+
+            <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <article className="rounded-2xl border border-line bg-elevated p-6">
+                <h3 className="font-display text-lg font-semibold text-fg">Film onboarding</h3>
+                <p className="mt-2 text-sm leading-6 text-muted">
+                  Title metadata, credits, master and artwork intake, and submission preparation.
+                </p>
+              </article>
+              <article className="rounded-2xl border border-line bg-elevated p-6">
+                <h3 className="font-display text-lg font-semibold text-fg">Media QC & DIT</h3>
+                <p className="mt-2 text-sm leading-6 text-muted">
+                  Technical review, media integrity checks, asset verification and production handover.
+                </p>
+              </article>
+              <article className="rounded-2xl border border-line bg-elevated p-6">
+                <h3 className="font-display text-lg font-semibold text-fg">Rights & licensing</h3>
+                <p className="mt-2 text-sm leading-6 text-muted">
+                  Ownership evidence, rights availability, licensing terms and approval workflows.
+                </p>
+              </article>
+              <article className="rounded-2xl border border-line bg-elevated p-6">
+                <h3 className="font-display text-lg font-semibold text-fg">Distribution & delivery</h3>
+                <p className="mt-2 text-sm leading-6 text-muted">
+                  Buyer coordination, authorized media delivery and distribution status tracking.
+                </p>
+              </article>
+            </div>
+
+            <div className="mt-7 flex flex-wrap items-center gap-4">
+              <Link to="/contact" className="inline-flex items-center text-sm font-semibold text-accent hover:underline">
+                Discuss a project or service →
+              </Link>
+              <Link to="/signup" className="inline-flex items-center text-sm font-semibold text-muted hover:text-fg">
+                Join Crayons Bridge →
+              </Link>
+            </div>
+          </div>
+        </section>
+
         <section id="creators" className="border-b border-line bg-surface py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
