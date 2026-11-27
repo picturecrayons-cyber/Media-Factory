@@ -277,6 +277,9 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
     const production = data.productionProjectId && data.shootDayId
       ? await requireProductionShootDay(sql, data.productionProjectId, data.shootDayId, actor.organizationId!)
       : null;
+    if (production && production.shoot_date !== data.shootDate) {
+      throw new Error("Shoot date must match the selected Production Shoot Day");
+    }
     const files = normalizeDitFiles(data.manifest.files);
     const digest = ditManifestDigest(files);
     const totals = ditManifestTotals(files);
