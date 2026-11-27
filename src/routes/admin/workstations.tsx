@@ -271,8 +271,8 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
           <SectionHeader title="Master title catalog" description={`${titles.length} recorded titles · All production stages remain visible here until separately authorized for a destination.`} />
         </div>
         <div className="flex gap-2" role="group" aria-label="Catalog view">
-          <Button size="sm" variant={view === "gallery" ? "default" : "outline"} onClick={() => setView("gallery")} aria-pressed={view === "gallery"}>Gallery view</Button>
-          <Button size="sm" variant={view === "list" ? "default" : "outline"} onClick={() => setView("list")} aria-pressed={view === "list"}>List view</Button>
+          <Button size="sm" variant={view === "gallery" ? "primary" : "outline"} onClick={() => setView("gallery")} aria-pressed={view === "gallery"}>Gallery view</Button>
+          <Button size="sm" variant={view === "list" ? "primary" : "outline"} onClick={() => setView("list")} aria-pressed={view === "list"}>List view</Button>
         </div>
       </div>
       {!titles.length ? <Empty text="No titles in the Bridge master catalog." /> : view === "gallery" ? (
