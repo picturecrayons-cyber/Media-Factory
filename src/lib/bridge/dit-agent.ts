@@ -148,8 +148,8 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireDitOperator(context.userId);
     const sql = await getSql();
-    const titles = await sql<{ id: string; name: string; status: string; year: number | null }>`
-      select id, name, status, year
+    const titles = await sql<{ id: string; name: string; status: string; year: number | null; record_classification?: string | null }>`
+      select *
       from bridge_titles
       where owner_account_type = 'studio'
         and (
@@ -195,7 +195,7 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
       : [];
     return {
       organizationId: actor.organizationId,
-      titles,
+      titles: titles.filter((title) => title.record_classification !== "TEST").map(({ id, name, status, year }) => ({ id, name, status, year })),
       sessions: sessions.map((session) => ({
         ...session,
         sourceFileCount: Number(session.source_file_count),
