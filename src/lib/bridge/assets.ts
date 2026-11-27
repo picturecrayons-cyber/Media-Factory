@@ -284,7 +284,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       await assertBuyerTitleAccess(title.id, actor.userId);
       await assertBuyerPublishable(title.id);
     }
-    if (!canReadTitle(actor, title)) throw new Error("Not found");
+    if (!buyerView && !canReadTitle(actor, title)) throw new Error("Not found");
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
     const decision = downloadDecision({
       kind: asset.kind,
@@ -326,7 +326,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       await assertBuyerTitleAccess(title.id, actor.userId);
       await assertBuyerPublishable(title.id);
     }
-    if (!canReadTitle(actor, title)) throw new Error("Not found");
+    if (!buyer && !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
     const screenerEntitled = buyer ? await hasLicenseEntitlement(actor.userId, title.id) : true;
     const rows = await sql<{
