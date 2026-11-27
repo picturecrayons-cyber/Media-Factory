@@ -128,6 +128,7 @@ function InternalBody({
 
 const DISTRIBUTION_TABS = [
   "Ready for Distribution",
+  "Needs Attention",
   "Destinations",
   "Authorizations",
   "Deliveries",
@@ -246,6 +247,10 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
     switch (activeTab) {
       case "Ready for Distribution":
         return t.ready && (!t.publication || pubStatus === "pending" || pubStatus === "draft");
+      case "Needs Attention":
+        // Keep titles with missing approvals/assets visible to operators instead of
+        // hiding them from the distribution desk until they become publishable.
+        return !t.ready;
       case "Destinations":
         return true; // shows destination overview
       case "Authorizations":
