@@ -408,7 +408,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   </section>
                 );
               })}
-              {!grants.length ? <p>No license draft recorded.</p> : null}
+              {!grants.length ? (
+                <p role="status" className="rounded-lg border border-dashed border-line p-3 text-sm text-muted">
+                  No license draft has been saved. Enter the actual agreement and ownership evidence references, validity dates and revenue share above, then save. Saving creates a draft only; it does not approve Legal rights or publish the title.
+                </p>
+              ) : null}
             </div>
           ) : null}
           {stage === "Distribution" ? (
