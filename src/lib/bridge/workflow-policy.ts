@@ -62,7 +62,7 @@ export function licenseDraftPrefillFromGrant(
     Boolean(start && end) &&
     Number.isFinite(start?.getTime()) &&
     Number.isFinite(end?.getTime()) &&
-    Number(end) > Number(start);
+    Number(end) > Number(start) && Number(end) > Date.now();
 
   const reference = (value: string | null | undefined) => {
     const normalized = value?.trim() ?? "";
