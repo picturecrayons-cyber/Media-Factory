@@ -54,11 +54,6 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
-  throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
-  );
-}
 if (new Set(names).size !== names.length) {
   throw new Error("Duplicate migration filenames detected");
 }
@@ -92,7 +87,30 @@ if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   );
 }
 
-for (const name of names) {
+// The manifest seals the recovered Production ledger. New migrations proposed
+// by the current PR are replayed after that sealed baseline, but are not
+// misrepresented as already-applied Production migrations.
+const baselineNames = names.filter((name) => manifestRows.has(name));
+const candidateNames = names.filter((name) => !manifestRows.has(name));
+const latestBaselineVersion = [...manifestRows.keys()]
+  .map((name) => name.slice(0, 14))
+  .sort()
+  .at(-1);
+if (baselineNames.length !== EXPECTED_MIGRATIONS) {
+  throw new Error(
+    `Expected ${EXPECTED_MIGRATIONS} sealed baseline migrations; found ${baselineNames.length}`,
+  );
+}
+if (
+  candidateNames.length > 1 ||
+  candidateNames.some((name) => !latestBaselineVersion || name.slice(0, 14) <= latestBaselineVersion)
+) {
+  throw new Error(
+    `Unexpected unsealed migration candidates: ${candidateNames.join(", ") || "none"}`,
+  );
+}
+
+for (const name of baselineNames) {
   const contents = await readFile(join(MIGRATIONS_DIR, name));
   const expected = manifestRows.get(name);
   if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
@@ -732,7 +750,7 @@ try {
   }
 
   console.log(
-    `[migration-replay] PASS: all ${names.length} Production-ledger migrations replayed in a fresh local Supabase stack.`,
+    `[migration-replay] PASS: all ${baselineNames.length} sealed Production-ledger migrations and ${candidateNames.length} pending candidate migrations replayed in a fresh local Supabase stack.`,
   );
 } finally {
   client.release();
