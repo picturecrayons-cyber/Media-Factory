@@ -64,21 +64,11 @@ export interface BuyerInterest {
   created_at: string;
 }
 
-export interface CreateStoryConceptPayload {
-  logline?: string | null;
-  synopsis?: string | null;
-  treatment_url?: string | null;
-  screenplay_url?: string | null;
-  genre?: string[];
-  estimated_budget_range?: string | null;
-  target_platforms?: string[];
-}
-
-/** Allowed admin curation transitions. */
+/** Allowed admin curation transitions. Network introduction requires a separate access-grant workflow. */
 export const CURATION_TRANSITIONS: Record<CurationStatus, CurationStatus[]> = {
   PENDING: ["UNDER_REVIEW", "APPROVED", "REJECTED"],
   UNDER_REVIEW: ["APPROVED", "REJECTED", "PENDING"],
-  APPROVED: ["INTRODUCED_TO_BUYERS", "UNDER_REVIEW"],
+  APPROVED: ["UNDER_REVIEW"],
   REJECTED: ["UNDER_REVIEW", "PENDING"],
   INTRODUCED_TO_BUYERS: [],
 };
