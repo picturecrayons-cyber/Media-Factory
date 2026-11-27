@@ -20,7 +20,7 @@ function required(name) {
 function normalizePrivateKey(value) {
   let key = value.trim();
   if (key.startsWith('"') && key.endsWith('"')) {
-    try { const parsed = JSON.parse(key); if (typeof parsed === "string") key = parsed; } catch {}
+    try { const parsed = JSON.parse(key); if (typeof parsed === "string") key = parsed; } catch { /* Keep the original value when it is not JSON-encoded. */ }
   }
   return key.replaceAll("\\r\\n", "\n").replaceAll("\\n", "\n").replace(/^\\uFEFF/, "").replace(/^\uFEFF/, "");
 }
