@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
+import { PageFrame, PagePanel, SectionHeader } from "@/components/bridge/page-primitives";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
@@ -56,10 +57,10 @@ function CreatorDashboard({
     .slice(0, 5);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-7 px-1 pb-16">
+    <PageFrame>
       <header
         id="overview"
-        className="relative overflow-hidden rounded-2xl border border-line bg-surface p-6 sm:p-8"
+        className="relative overflow-hidden rounded-[14px] border border-line bg-surface p-6 sm:p-8"
       >
         <div
           aria-hidden="true"
@@ -70,9 +71,9 @@ function CreatorDashboard({
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
               Crayons Bridge · Creator Desk
             </p>
-            <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h2 className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
               Your films. Your rights. Your workspace.
-            </h1>
+            </h2>
             <p className="mt-3 text-sm leading-relaxed text-muted sm:text-base">
               Manage your own submissions from first details and secure assets through review,
               rights clearance and authorized delivery.
@@ -117,10 +118,7 @@ function CreatorDashboard({
       </nav>
 
       <section className="space-y-4" aria-label="Creator title overview">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-2xl font-semibold">Overview</h2>
-          <span className="text-xs text-muted">Authenticated account scope · up to 200 returned records</span>
-        </div>
+        <SectionHeader title="Overview" actions={<span className="text-xs text-muted">Authenticated account scope · up to 200 returned records</span>} />
         {titlesQ.isPending ? (
           <p className="text-sm text-muted">Loading your title records…</p>
         ) : null}
@@ -158,9 +156,9 @@ function CreatorDashboard({
             + Add a title
           </a>
         </div>
-        <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+        <PagePanel className="p-4 sm:p-5">
           <TitleList empty="No titles are available for this account yet. Start a submission to add your first title." />
-        </div>
+        </PagePanel>
       </section>
 
       <section id="add-title" className="scroll-mt-20 grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
@@ -173,7 +171,7 @@ function CreatorDashboard({
           </p>
           <NewSubmissionPanel />
         </div>
-        <div className="space-y-3 rounded-2xl border border-line bg-surface p-5">
+        <div className="space-y-3 rounded-[14px] border border-line bg-surface p-5">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted">Separate submission path</p>
           <h3 className="font-display text-xl font-semibold">Story & Concept</h3>
           <p className="text-sm leading-relaxed text-muted">
@@ -202,7 +200,7 @@ function CreatorDashboard({
         />
       </section>
 
-      <section id="assets" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <section id="assets" className="scroll-mt-20 rounded-[14px] border border-line bg-surface p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-accent">Secure media</p>
@@ -266,7 +264,7 @@ function CreatorDashboard({
         )}
       </section>
 
-      <section id="statements" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <section id="statements" className="scroll-mt-20 rounded-[14px] border border-line bg-surface p-5 sm:p-6">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted">Creator finance</p>
         <h2 className="mt-1 font-display text-2xl font-semibold">Statements</h2>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">
@@ -283,7 +281,7 @@ function CreatorDashboard({
         <p>Creator access is limited to your own authorized records. QC, Legal and publishing approvals remain separate.</p>
         <Link to="/account" className="font-semibold hover:text-fg">Manage account →</Link>
       </footer>
-    </div>
+    </PageFrame>
   );
 }
 
@@ -313,7 +311,7 @@ function InfoPanel({
   href: string;
 }) {
   return (
-    <article id={id} className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+    <article id={id} className="scroll-mt-20 rounded-[14px] border border-line bg-surface p-5 sm:p-6">
       <p className="text-xs font-semibold uppercase tracking-widest text-accent">{eyebrow}</p>
       <h2 className="mt-2 font-display text-xl font-semibold">{title}</h2>
       <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
