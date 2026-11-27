@@ -255,6 +255,8 @@ export const recordStoryConceptInterest = createServerFn({ method: "POST" })
           and (m.expires_at is null or m.expires_at > now())
           and c.curation_status = 'APPROVED'
           and t.submission_type = 'story_concept'
+          and t.record_classification is distinct from 'TEST'
+          and coalesce(t.external_ids->>'test_only', 'false') <> 'true'
         limit 1
       `;
       if (!grant[0]) throw new Error("No active introduction exists for this concept");
@@ -364,6 +366,17 @@ export const reviewStoryConceptReadiness = createServerFn({ method: "POST" })
            and m.grantee_account_type = e.account_type
            and m.grant_status = 'ACTIVE' and m.revoked_at is null
            and (m.expires_at is null or m.expires_at > now())
+          join bridge_profiles bp
+            on bp.user_id = e.actor_user_id
+           and bp.organization_id = e.organization_id
+           and bp.account_type = e.account_type
+           and bp.email_verified = true
+          join bridge_organization_memberships om
+            on om.user_id = e.actor_user_id
+           and om.organization_id = e.organization_id
+           and om.status = 'active'
+          join bridge_organizations o
+            on o.id = e.organization_id and lower(o.status) = 'active'
           where e.concept_submission_id = ${data.conceptSubmissionId}::uuid
           order by e.organization_id, e.account_type, e.created_at desc
         )
