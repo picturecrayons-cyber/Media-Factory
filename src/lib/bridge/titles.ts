@@ -482,6 +482,7 @@ export const getTitle = createServerFn({ method: "GET" })
       title: buyerView
         ? { ...title, ownerUserId: "", ownerOrganizationId: null, posterKey: null, masterKey: null }
         : title,
+      submissionType: submissionKind[0]?.submission_type ?? null,
       events: events.map((e) => ({
         from: e.from_status,
         to: e.to_status,
