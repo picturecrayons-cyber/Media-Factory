@@ -3,10 +3,9 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
+import { loadTitle } from "./titles";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
-import { assertPermission, canReadTitle } from "./rbac";
-import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 
 const jobType = z.enum(["dubbing", "loudness_check", "imf_request", "dcp_request", "human_qc", "localization"]);
@@ -28,15 +27,18 @@ async function actorFor(userId: string) {
   return requireVerifiedActor(userId);
 }
 
+function requireSuperAdmin(actor: Awaited<ReturnType<typeof actorFor>>) {
+  if (!actor.emailVerified || actor.internalRole !== "super_admin") {
+    throw new Error("Only the verified Bridge Super Admin may access Vendor Jobs");
+  }
+}
+
 export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await actorFor(context.userId);
+    requireSuperAdmin(actor);
     const sql = await getSql();
-    const internal = Boolean(actor.internalRole && (actor.internalRole === "admin" || actor.internalRole === "super_admin"));
-    if (!internal && !actor.organizationId && !["independent_creator", "studio"].includes(actor.accountType)) {
-      throw new Error("Delivery workspace access required");
-    }
     const rows = internal
       ? await sql<{
           id: string; title_id: string; job_type: string; status: string; assigned_vendor: string | null;
@@ -97,15 +99,9 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
   }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
+    requireSuperAdmin(actor);
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Title not found");
-    const canManage = Boolean(actor.internalRole && hasDeliveryPermission(actor));
-    if (!canManage && (!canReadTitle(actor, title) || actor.internalRole)) {
-      throw new Error("You can request delivery services only for titles you are authorized to access");
-    }
-    if (!canManage && !["independent_creator", "studio"].includes(actor.accountType)) {
-      throw new Error("Delivery requests are not enabled for this account type");
-    }
     const id = randomUUID();
     const sql = await getSql();
     await sql`
@@ -119,16 +115,12 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
     return { id, status: "requested" as const };
   });
 
-function hasDeliveryPermission(actor: Awaited<ReturnType<typeof actorFor>>) {
-  try { assertPermission(actor, "title.deliver"); return true; } catch { return false; }
-}
-
 export const assignBridgeDeliveryJob = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ jobId: z.string().uuid(), vendor: z.string().trim().min(2).max(160) }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    assertPermission(actor, "title.deliver");
+    requireSuperAdmin(actor);
     const sql = await getSql();
     const rows = await sql<{ id: string }>`
       update bridge_delivery_jobs set status='in_progress', assigned_vendor=${data.vendor}, updated_at=now()
@@ -144,7 +136,7 @@ export const completeBridgeDeliveryJob = createServerFn({ method: "POST" })
   .validator(z.object({ jobId: z.string().uuid(), receiptUrl: z.string().url().max(2048) }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    assertPermission(actor, "title.deliver");
+    requireSuperAdmin(actor);
     const url = new URL(data.receiptUrl);
     if (url.protocol !== "https:") throw new Error("Delivery receipt must use HTTPS");
     const sql = await getSql();
@@ -162,7 +154,7 @@ export const approveBridgeDeliveryJob = createServerFn({ method: "POST" })
   .validator(z.object({ jobId: z.string().uuid(), note: z.string().trim().min(8).max(1000) }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    assertPermission(actor, "loop.publish");
+    requireSuperAdmin(actor);
     const sql = await getSql();
     const rows = await sql<{ id: string; title_id: string }>`
       update bridge_delivery_jobs set status='approved', admin_sign_off=true, updated_at=now()
