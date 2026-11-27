@@ -81,6 +81,17 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       if (projects[0].status !== "COMPLETED") {
         throw new Error("Finished Film handoff is allowed only after Production is COMPLETED");
       }
+      const existing = await tx<{ id: string; status: string }>`
+        select t.id, t.status
+        from bridge_production_title_links l
+        join bridge_titles t on t.id = l.title_id
+        where l.production_project_id = ${data.productionProjectId}::uuid
+          and l.link_type = 'FINISHED_FILM_OUTPUT'
+        limit 1
+      `;
+      if (existing[0]) {
+        return { titleId: existing[0].id, status: existing[0].status, alreadySubmitted: true as const };
+      }
     }
 
     await tx`
@@ -160,6 +171,6 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       },
     }, tx);
 
-    return { titleId: id, status: "DRAFT" as const };
+    return { titleId: id, status: "DRAFT" as const, alreadySubmitted: false as const };
     });
   });
