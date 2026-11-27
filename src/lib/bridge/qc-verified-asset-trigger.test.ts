@@ -47,7 +47,7 @@ test("QC rejects legacy exact-key rows even when byte_size is positive", async (
       db.exec("update public.bridge_titles set status='QC_REVIEW' where id='legacy-title'"),
       /QC_BLOCKED_VERIFIED_ASSETS_REQUIRED/,
     );
-    assert.equal((await db.query("select status from public.bridge_titles where id='legacy-title'")).rows[0].status, "PREPARING");
+    assert.equal((await db.query<{ status: string }>("select status from public.bridge_titles where id='legacy-title'")).rows[0].status, "PREPARING");
   } finally {
     await db.close();
   }
@@ -72,7 +72,7 @@ test("QC accepts sealed master and poster only with matching persisted verificat
           '{"titleId":"verified-title","kind":"poster","byteSize":1024,"checksum":"etag-poster"}');
     `);
     await db.exec("update public.bridge_titles set status='QC_REVIEW' where id='verified-title'");
-    assert.equal((await db.query("select status from public.bridge_titles where id='verified-title'")).rows[0].status, "QC_REVIEW");
+    assert.equal((await db.query<{ status: string }>("select status from public.bridge_titles where id='verified-title'")).rows[0].status, "QC_REVIEW");
   } finally {
     await db.close();
   }
