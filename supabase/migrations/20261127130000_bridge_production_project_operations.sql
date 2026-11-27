@@ -2,9 +2,14 @@
 -- Additive schema change. Apply to Testing first; do not run against Production.
 -- Existing DIT project/shoot-day linkage and OCI verification tables are reused.
 
-alter table public.bridge_production_projects
-  add constraint bridge_production_projects_id_organization_key
-  unique (id, organization_id);
+do $
+begin
+  if not exists (select 1 from pg_constraint where conname = 'bridge_production_projects_id_organization_key') then
+    alter table public.bridge_production_projects
+      add constraint bridge_production_projects_id_organization_key
+      unique (id, organization_id);
+  end if;
+end $;
 
 alter table public.bridge_production_schedule_events
   add column if not exists project_id uuid;
