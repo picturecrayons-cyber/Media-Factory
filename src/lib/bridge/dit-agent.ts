@@ -25,7 +25,9 @@ const manifestInput = z.object({
 });
 const copyType = z.enum(["PRIMARY", "RECOVERY"]);
 const createInput = z.object({
-  titleId: z.string().min(8).max(160),
+  titleId: z.string().min(8).max(160).optional(),
+  productionProjectId: z.string().uuid().optional(),
+  shootDayId: z.string().uuid().optional(),
   cameraUnit: z.enum(["A", "B", "C"]),
   cameraLabel: z.string().trim().min(1).max(160),
   cardLabel: z.string().trim().min(1).max(120),
@@ -33,6 +35,12 @@ const createInput = z.object({
   sourceVolume: z.string().trim().min(1).max(160),
   sourceRoot: z.string().trim().min(1).max(1000),
   manifest: manifestInput,
+}).superRefine((value, ctx) => {
+  const finishedFilmTarget = Boolean(value.titleId) && !value.productionProjectId && !value.shootDayId;
+  const productionTarget = !value.titleId && Boolean(value.productionProjectId) && Boolean(value.shootDayId);
+  if (!finishedFilmTarget && !productionTarget) {
+    ctx.addIssue({ code: "custom", path: ["productionProjectId"], message: "Select either one Finished Film or a Production Project and Shoot Day" });
+  }
 });
 const copyInput = z.object({
   sessionId: z.string().uuid(),
@@ -59,7 +67,9 @@ const signoffInput = z.object({
 type DitRoleRow = { membership_role: string };
 type SessionRow = {
   id: string;
-  title_id: string;
+  title_id: string | null;
+  production_project_id?: string | null;
+  shoot_day_id?: string | null;
   organization_id: string;
   camera_unit: string;
   camera_label: string;
@@ -74,6 +84,8 @@ type SessionRow = {
   signoff_note: string | null;
   created_at: string | Date;
   signed_off_at: string | Date | null;
+  project_name?: string | null;
+  shoot_day_date?: string | null;
 };
 
 async function requireDitOperator(userId: string) {
@@ -94,6 +106,26 @@ async function requireDitOperator(userId: string) {
     throw new Error("An active Studio owner, admin, producer or DIT membership is required");
   }
   return actor;
+}
+
+async function requireProductionShootDay(
+  sql: Awaited<ReturnType<typeof getSql>>,
+  projectId: string,
+  shootDayId: string,
+  organizationId: string,
+) {
+  const rows = await sql<{ id: string; name: string; status: string; shoot_date: string }>`
+    select p.id, p.name, p.status, d.shoot_date::text as shoot_date
+    from bridge_production_projects p
+    join bridge_production_shoot_days d on d.project_id = p.id
+    where p.id = ${projectId}::uuid
+      and d.id = ${shootDayId}::uuid
+      and p.organization_id = ${organizationId}
+      and p.status in ('PRE_PRODUCTION', 'IN_PRODUCTION', 'WRAP')
+    limit 1
+  `;
+  if (!rows[0]) throw new Error("Active Production Project and its Shoot Day were not found in this Studio");
+  return rows[0];
 }
 
 async function requireStudioTitle(sql: Awaited<ReturnType<typeof getSql>>, titleId: string, organizationId: string) {
@@ -169,12 +201,28 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
       order by updated_at desc
       limit 200
     `;
+    const projects = await sql<{ id: string; name: string; status: string }>`
+      select id, name, status from bridge_production_projects
+      where organization_id = ${actor.organizationId}
+      order by updated_at desc limit 200
+    `;
+    const shootDays = await sql<{ id: string; project_id: string; shoot_date: string; day_label: string | null }>`
+      select d.id, d.project_id, d.shoot_date::text as shoot_date, d.day_label
+      from bridge_production_shoot_days d
+      join bridge_production_projects p on p.id = d.project_id
+      where p.organization_id = ${actor.organizationId}
+      order by d.shoot_date desc limit 500
+    `;
     const sessions = await sql<SessionRow>`
-      select s.id, s.title_id, s.organization_id, s.camera_unit, s.camera_label, s.card_label,
+      select s.id, s.title_id, s.production_project_id, s.shoot_day_id,
+        p.name as project_name, d.shoot_date::text as shoot_day_date,
+        s.organization_id, s.camera_unit, s.camera_label, s.card_label,
         s.shoot_date::text as shoot_date, s.source_volume, s.source_root,
         s.source_manifest_sha256, s.source_file_count, s.source_total_bytes, s.status,
         s.signoff_note, s.created_at, s.signed_off_at
       from bridge_dit_ingest_sessions s
+      left join bridge_production_projects p on p.id = s.production_project_id
+      left join bridge_production_shoot_days d on d.id = s.shoot_day_id
       where s.organization_id = ${actor.organizationId}
       order by s.created_at desc
       limit 50
@@ -223,7 +271,12 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireDitOperator(context.userId);
     const sql = await getSql();
-    const title = await requireStudioTitle(sql, data.titleId, actor.organizationId!);
+    const title = data.titleId
+      ? await requireStudioTitle(sql, data.titleId, actor.organizationId!)
+      : null;
+    const production = data.productionProjectId && data.shootDayId
+      ? await requireProductionShootDay(sql, data.productionProjectId, data.shootDayId, actor.organizationId!)
+      : null;
     const files = normalizeDitFiles(data.manifest.files);
     const digest = ditManifestDigest(files);
     const totals = ditManifestTotals(files);
@@ -232,11 +285,12 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
     await sql.transaction(async (tx) => {
       await tx`
         insert into bridge_dit_ingest_sessions (
-          id, title_id, organization_id, created_by, camera_unit, camera_label, card_label,
-          shoot_date, source_volume, source_root, source_manifest_sha256, source_file_count,
-          source_total_bytes, status
+          id, title_id, production_project_id, shoot_day_id, organization_id, created_by,
+          camera_unit, camera_label, card_label, shoot_date, source_volume, source_root,
+          source_manifest_sha256, source_file_count, source_total_bytes, status
         ) values (
-          ${id}::uuid, ${title.id}, ${actor.organizationId}, ${actor.userId},
+          ${id}::uuid, ${title?.id ?? null}, ${production?.id ?? null}::uuid,
+          ${data.shootDayId ?? null}::uuid, ${actor.organizationId}, ${actor.userId},
           ${data.cameraUnit}, ${data.cameraLabel}, ${data.cardLabel}, ${data.shootDate},
           ${data.sourceVolume}, ${data.sourceRoot}, ${digest}, ${totals.fileCount},
           ${totals.totalBytes}, 'SOURCE_VERIFIED'
@@ -249,10 +303,12 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
           as f(relative_path text, byte_size bigint, sha256 text)
       `;
       await audit(tx, actor.userId, "dit.source_manifest_registered", id, {
-        titleId: title.id, fileCount: totals.fileCount, totalBytes: totals.totalBytes, manifestSha256: digest,
+        titleId: title?.id ?? null, productionProjectId: production?.id ?? null,
+        shootDayId: data.shootDayId ?? null, fileCount: totals.fileCount,
+        totalBytes: totals.totalBytes, manifestSha256: digest,
       });
     });
-    return { sessionId: id, titleName: title.name, fileCount: totals.fileCount, totalBytes: totals.totalBytes, manifestSha256: digest };
+    return { sessionId: id, titleName: title?.name ?? null, projectName: production?.name ?? null, fileCount: totals.fileCount, totalBytes: totals.totalBytes, manifestSha256: digest };
   });
 
 /** Issue a short-lived OCI upload URL for one manifest file in the Primary Vault. */
