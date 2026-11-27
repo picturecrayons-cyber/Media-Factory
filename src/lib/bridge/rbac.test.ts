@@ -42,10 +42,10 @@ describe("PRD authorization matrix", () => {
     }
   });
 
-  it("buyer sees buyer-visible catalog but cannot create, upload, QC, license, or administer", () => {
+  it("buyer role alone cannot read titles; resource grants are required by server checks", () => {
     const b = buyer();
     assert.equal(canReadTitle(b, { ownerUserId: "creator-a", status: "DRAFT" }), false);
-    assert.equal(canReadTitle(b, { ownerUserId: "creator-a", status: "LIVE_FOR_BUYERS" }), true);
+    assert.equal(canReadTitle(b, { ownerUserId: "creator-a", status: "LIVE_FOR_BUYERS" }), false);
     for (const permission of [
       "title.create",
       "asset.sign_upload",
