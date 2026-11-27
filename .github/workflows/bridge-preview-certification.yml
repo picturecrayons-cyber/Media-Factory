@@ -47,6 +47,20 @@ jobs:
       - name: Unit and regression tests
         run: npm test
 
+      - name: Start app environment dev server
+        run: |
+          npm run dev > /tmp/bridge-dev.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/__app-env > /tmp/bridge-app-env.json; then
+              break
+            fi
+            sleep 2
+          done
+          if [ ! -s /tmp/bridge-app-env.json ]; then
+            cat /tmp/bridge-dev.log
+            exit 1
+          fi
+
       - name: Authentication invariants
         run: npm run check:auth
 
