@@ -22,6 +22,7 @@ type TitleRow = {
   owner_user_id: string;
   owner_account_type: string;
   owner_organization_id?: string | null;
+  record_classification?: string | null;
   status: string;
   synopsis: string;
   language: string;
@@ -94,17 +95,32 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
   const orgId = organizationId || null;
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
-  if (!orgId) {
-    return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
-  }
-  return mergeColumnAvailable
-    ? sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.merged_into_title_id is null
-          and (
-            t.owner_user_id = ${userId}
+  const rows = !orgId
+    ? mergeColumnAvailable
+      ? await sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
+      : await sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`
+    : mergeColumnAvailable
+      ? await sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.merged_into_title_id is null
+            and (
+              t.owner_user_id = ${userId}
+              or (
+                t.owner_account_type = 'studio'
+                and t.owner_organization_id = ${orgId}
+                and exists (
+                  select 1 from bridge_organization_memberships m
+                  where m.organization_id = ${orgId}
+                    and m.user_id = ${userId}
+                    and m.status = 'active'
+                )
+              )
+            )
+          order by t.updated_at desc limit 200
+        `
+      : await sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.owner_user_id = ${userId}
             or (
               t.owner_account_type = 'studio'
               and t.owner_organization_id = ${orgId}
@@ -115,24 +131,13 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
                   and m.status = 'active'
               )
             )
-          )
-        order by t.updated_at desc limit 200
-      `
-    : sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
-          or (
-            t.owner_account_type = 'studio'
-            and t.owner_organization_id = ${orgId}
-            and exists (
-              select 1 from bridge_organization_memberships m
-              where m.organization_id = ${orgId}
-                and m.user_id = ${userId}
-                and m.status = 'active'
-            )
-          )
-        order by t.updated_at desc limit 200
-      `;
+          order by t.updated_at desc limit 200
+        `;
+
+  // TEST fixtures remain in the database for controlled verification, but never
+  // appear in customer-facing Creator or Studio title lists. Older schemas that
+  // predate record_classification return no value and retain their normal rows.
+  return rows.filter((row) => row.record_classification !== "TEST");
 }
 
 function slugify(name: string, id: string): string {
