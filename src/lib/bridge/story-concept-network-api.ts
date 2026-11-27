@@ -293,13 +293,14 @@ export const getStoryConceptNetworkReadiness = createServerFn({ method: "GET" })
     const sql = await getSql();
     const interest = await sql<{
       account_type: string;
+      organization_id: string;
       organization_name: string;
       interest_level: string;
       notes: string | null;
       created_at: string;
       actor_user_id: string;
     }>`
-      select e.account_type, o.legal_name as organization_name, e.interest_level,
+      select e.account_type, e.organization_id, o.legal_name as organization_name, e.interest_level,
              e.notes, e.created_at, e.actor_user_id
       from bridge_story_concept_interest_events e
       join bridge_organizations o on o.id = e.organization_id
