@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getTitleWorkflow,
@@ -15,11 +15,16 @@ import {
   suspendLoopPublication,
 } from "@/lib/bridge/loop-publication";
 import { hasPermission, canOperateOnTitle } from "@/lib/bridge/rbac";
-import { publicationIsActive } from "@/lib/bridge/workflow-policy";
+import { licenseDraftPrefillFromGrant, publicationIsActive } from "@/lib/bridge/workflow-policy";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { BridgeTitle } from "@/lib/bridge/types";
 
 const stages = ["Prepare", "Business", "Distribution", "Revenue"] as const;
+function toLocalDateTimeInput(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
 export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
   const [stage, setStage] = useState<(typeof stages)[number]>("Prepare");
   const [settlementRef, setSettlementRef] = useState("");
@@ -68,6 +73,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [ownership, setOwnership] = useState("");
   const [ownerShare, setOwnerShare] = useState("");
   const [selectedGrantByAgreement, setSelectedGrantByAgreement] = useState<Record<string, string>>({});
+  const defaultsApplied = useRef(false);
   function downloadStatement() {
     const safe = (v: string) =>
       '"' + (/^[=+@-]/.test(v) ? "'" : "") + v.replaceAll('"', '""') + '"';
@@ -95,6 +101,17 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     URL.revokeObjectURL(url);
   }
   const grants = workflow.data?.grants ?? [];
+  useEffect(() => {
+    if (!workflow.data || defaultsApplied.current) return;
+    defaultsApplied.current = true;
+    const defaults = licenseDraftPrefillFromGrant(grants[0], title.language);
+    setStart(defaults.windowStart ? toLocalDateTimeInput(defaults.windowStart) : "");
+    setEnd(defaults.windowEnd ? toLocalDateTimeInput(defaults.windowEnd) : "");
+    setExclusive(defaults.exclusive);
+    setAgreement(defaults.agreementReference);
+    setOwnership(defaults.ownershipReference);
+    setOwnerShare(defaults.rightsOwnerSharePct);
+  }, [workflow.data, title.language]);
   const grantsByAgreement = grants.reduce<Record<string, typeof grants>>((groups, grant) => {
     const reference = grant.evidence[0]?.agreementReference ?? "Not recorded";
     (groups[reference] ??= []).push(grant);
@@ -217,6 +234,12 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
                 <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
                 {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
+                  <>
+                  <p className="mt-2 text-xs text-muted" role="status">
+                    {grants.length
+                      ? "Available defaults were loaded from this title's latest saved license record. Missing or invalid evidence and revenue terms remain blank."
+                      : "Worldwide and title language are system defaults. Dates, agreement evidence, ownership evidence and revenue shares remain blank until recorded."}
+                  </p>
                   <form
                     className="mt-3 grid gap-3 sm:grid-cols-2"
                     onSubmit={(e) => {
@@ -256,9 +279,10 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       disabled={action.isPending || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
                       className="rounded-lg border border-line px-4 py-2 text-sm sm:col-span-2"
                     >
-                      {action.isPending ? "Saving…" : "Save draft"}
+                      {action.isPending ? "Saving…" : "Save license draft"}
                     </button>
                   </form>
+                  </>
                 ) : null}
               </details>
               {input("Legal review note", note, setNote)}
