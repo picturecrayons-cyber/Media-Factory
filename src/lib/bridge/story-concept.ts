@@ -43,6 +43,7 @@ export interface StoryConceptSubmission {
   title_id: string;
   logline: string | null;
   synopsis: string | null;
+  development_stage: "NOT_STARTED" | "IN_DEVELOPMENT" | null;
   treatment_url: string | null;
   screenplay_url: string | null;
   genre: string[];
@@ -67,6 +68,7 @@ export interface BuyerInterest {
 export interface CreateStoryConceptPayload {
   logline?: string | null;
   synopsis?: string | null;
+  development_stage?: "NOT_STARTED" | "IN_DEVELOPMENT";
   treatment_url?: string | null;
   screenplay_url?: string | null;
   genre?: string[];
