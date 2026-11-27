@@ -258,7 +258,7 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
   .validator(
     z.object({
       id: z.string().uuid(),
-      status: z.enum(["PENDING", "UNDER_REVIEW", "APPROVED", "REJECTED", "INTRODUCED_TO_BUYERS"]),
+      status: z.enum(["PENDING", "UNDER_REVIEW", "APPROVED", "REJECTED"]),
       adminNotes: z.string().max(2000).optional(),
     }),
   )
