@@ -201,7 +201,10 @@ function WorkflowReviewCard({ title, stage, grants, canAct, mutation }: {
   const [grantId, setGrantId] = useState(grants[0]?.id ?? "");
   const [agreementReference, setAgreementReference] = useState("");
   const [ownershipReference, setOwnershipReference] = useState("");
-  const valid = note.trim().length >= 8 && (stage === "QC" || (Boolean(grants.find((grant) => grant.id === grantId)) && agreementReference.trim().length > 0 && ownershipReference.trim().length > 0));
+  const hasGrant = stage === "QC" || Boolean(grants.find((grant) => grant.id === grantId));
+  const noteValid = note.trim().length >= 8;
+  const canApprove = noteValid && hasGrant && (stage === "QC" || (agreementReference.trim().length > 0 && ownershipReference.trim().length > 0));
+  const canReject = noteValid && hasGrant;
   const submit = (decision: "APPROVE" | "REJECT") => mutation.mutate({
     data: {
       titleId: title.id,
@@ -256,10 +259,10 @@ function WorkflowReviewCard({ title, stage, grants, canAct, mutation }: {
       ) : null}
       {canAct ? (
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" disabled={mutation.isPending || !valid} onClick={() => submit("APPROVE")}>
+          <Button size="sm" disabled={mutation.isPending || !canApprove} onClick={() => submit("APPROVE")}>
             {stage === "QC" ? "Pass QC → Rights" : "Approve rights → Licensing"}
           </Button>
-          <Button size="sm" variant="outline" disabled={mutation.isPending || !valid} onClick={() => submit("REJECT")}>
+          <Button size="sm" variant="outline" disabled={mutation.isPending || !canReject} onClick={() => submit("REJECT")}>
             {stage === "QC" ? "Return for QC corrections" : "Reject rights"}
           </Button>
         </div>
