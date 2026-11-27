@@ -23,7 +23,7 @@ Filmmaker | Producer | Product Strategist
 ### Jananam 1947: Pranayam Thudarunnu (2024)
 - Credited roles: Director, Writer and Producer.
 - The film was associated with two 54th Kerala State Film Awards:
-  - Best Playback Singer (Male): Vidyadharan, for “Kanave Mizhiyil Unare”.
+  - Best Playback Singer (Male): Vidyadharan, for “Pathiranennorthoru Kanavil”.
   - Best Dubbing Artist (Female): Sumangala, for dubbing Leela Samson.
 - These are individual awards for the singer and dubbing artist, not personal awards received by Abijith Asokan.
 
@@ -62,5 +62,6 @@ Filmography & Awards: [Add the published portfolio URL]
 - Jananam 1947 film listing: https://www.rottentomatoes.com/m/jananam_1947_pranayam_thudarunnu
 - Jananam 1947 film credits: https://letterboxd.com/film/jananam-1947-pranayam-thudarunnu/
 - 54th Kerala State Film Awards: https://en.wikipedia.org/wiki/54th_Kerala_State_Film_Awards
+- Official Kerala Government 54th Kerala State Film Awards announcement: https://kerala.gov.in/assets/ckupload/SFA%202023_Declaration_16.08.2024-_1723797704.pdf
 
 **Verification caveat:** This document records researched credits and award associations. It does not claim that Abijith Asokan personally received the awards listed above. Confirm primary production credits and official award certificates before using any award as a personal honour.
