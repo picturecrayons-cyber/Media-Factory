@@ -141,11 +141,6 @@ export async function verifyDistributionPreflight(
       rightsRequest.territories.length !== 1 || rightsRequest.territories[0] !== "WORLDWIDE" ||
       rightsRequest.exploitationModels.length !== 1 || rightsRequest.exploitationModels[0] !== "TVOD")
     reasons.push("Loop requires WORLDWIDE TVOD with explicit start and end dates.");
- || !rightsRequest.windowStart || !rightsRequest.windowEnd ||
-      rightsRequest.territories.length!==1 || rightsRequest.territories[0]!=="WORLDWIDE" ||
-      rightsRequest.exploitationModels.length!==1 || rightsRequest.exploitationModels[0]!=="TVOD")
-    reasons.push("Loop requires WORLDWIDE TVOD with explicit start and end dates.");
-
 
   // 1. QC & Master verification
   if (!title.master_key) {
