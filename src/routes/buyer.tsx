@@ -252,7 +252,7 @@ function BuyerBody({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-5">
-      <StoryConceptNetworkPanel accountType="buyer" />
+      <StoryConceptNetworkPanel accountType="buyer" userId={userId} />
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
         <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
