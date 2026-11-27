@@ -42,9 +42,13 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   // Only the single verified Super Admin receives owner-side Business and Distribution controls.
   const canManageRights = actor.emailVerified && actor.internalRole === "super_admin";
+  const canReviewRights = actor.emailVerified && actor.internalRole === "legal_reviewer";
+  const canViewRights = canManageRights || canReviewRights;
   const visibleStages = canManageRights
     ? stages
-    : stages.filter((s) => s === "Prepare" || (s === "Revenue" && canFinance));
+    : canReviewRights
+      ? stages.filter((s) => s === "Prepare" || s === "Business")
+      : stages.filter((s) => s === "Prepare" || (s === "Revenue" && canFinance));
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
     queryFn: () => getTitleRevenue({ data: { titleId: title.id } }),
@@ -268,7 +272,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 ) : null}
               </details>
               ) : null}
-              {canManageRights ? (
+              {canReviewRights ? (
                 <>
                   {input("Legal review note", note, setNote)}
                   <p className="text-xs text-muted" aria-live="polite">
@@ -277,9 +281,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       : "Review note meets the minimum length."}
                   </p>
                 </>
-              ) : (
-                <p className="text-xs text-muted">Rights and licensing are managed by the verified Bridge Super Admin. Your rights and license status is read-only.</p>
-              )}
+              ) : !canViewRights ? (
+                <p className="text-xs text-muted">Rights and licensing are managed by the Bridge Super Admin and reviewed independently by Legal. Your rights and license status is read-only.</p>
+              ) : null}
               {Object.entries(grantsByAgreement).map(([reference, agreementGrants]) => {
                 const selectedId = selectedGrantByAgreement[reference] ?? agreementGrants[0]?.id ?? "";
                 const selectedGrant = agreementGrants.find((grant) => grant.id === selectedId) ?? agreementGrants[0];
@@ -384,7 +388,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         </div>
                         {selectedGrant.status === "DRAFT" &&
                         title.status === "RIGHTS_REVIEW" &&
-                        canManageRights ? (
+                        canReviewRights && selectedGrant.created_by !== actor.userId ? (
                           <div className="flex flex-wrap gap-2 border-t border-line pt-3">
                             {button(
                               "Approve rights / license",
