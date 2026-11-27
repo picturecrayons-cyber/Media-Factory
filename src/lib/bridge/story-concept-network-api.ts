@@ -373,6 +373,15 @@ export const reviewStoryConceptReadiness = createServerFn({ method: "POST" })
         limit 1
       `;
       if (!concept[0]) throw new Error("Concept must be approved by curation before readiness review");
+      const existingReadiness = await tx<{ readiness_status: string }>`
+        select readiness_status
+        from bridge_story_concept_readiness_reviews
+        where concept_submission_id = ${data.conceptSubmissionId}::uuid
+        for update
+      `;
+      if (existingReadiness[0]?.readiness_status === "HANDED_OFF") {
+        throw new Error("Production handoff is final; readiness cannot be reopened");
+      }
       const counts = await tx<{
         qualifying_interest_count: number;
         buyer_interest_count: number;
