@@ -7,9 +7,9 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", queryKey = ["bridge-titles"] }: { empty: string; query?: string; queryKey?: readonly unknown[] }) {
   const titlesQ = useQuery({
-    queryKey: ["bridge-titles"],
+    queryKey,
     queryFn: () => listTitles(),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
