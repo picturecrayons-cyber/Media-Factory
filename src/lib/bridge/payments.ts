@@ -9,7 +9,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle } from "./rbac";
 import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
-import { assertBuyerPublishable } from "./buyer-visibility";
+import { assertBuyerPublishable, assertBuyerTitleAccess } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
 
 
@@ -179,6 +179,7 @@ export async function grantFromCapturedPayment(opts: {
   // Re-check buyer visibility immediately before granting a new title entitlement.
   // A retry after our own capture can finish an interrupted idempotent grant.
   if (payment.status !== "captured") {
+    await assertBuyerTitleAccess(payment.title_id, payment.user_id);
     await assertBuyerPublishable(payment.title_id);
   }
 
@@ -276,7 +277,10 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
-    if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
+    if (!title) throw new Error("Not found");
+    const buyerView = actor.accountType === "buyer" && !actor.internalRole;
+    if (buyerView) await assertBuyerTitleAccess(title.id, actor.userId);
+    else if (!canReadTitle(actor, title)) throw new Error("Not found");
     await assertBuyerPublishable(title.id);
     const sql = await getSql();
     if (title.status !== "LIVE_FOR_BUYERS" && title.status !== "IN_NEGOTIATION" && title.status !== "LICENSED" && title.status !== "DELIVERED") {

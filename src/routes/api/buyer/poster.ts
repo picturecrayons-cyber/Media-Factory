@@ -70,6 +70,14 @@ export const Route = createFileRoute("/api/buyer/poster")({
               and to_jsonb(t)->>'merged_into_title_id' is null
               and t.status in ('LIVE_FOR_BUYERS', 'IN_NEGOTIATION', 'LICENSED', 'DELIVERED')
               and public.bridge_title_buyer_visibility(t.id)
+              and coalesce(to_jsonb(t)->>'submission_type', '') <> 'story_concept'
+              and exists (
+                select 1 from bridge_buyer_title_access buyer_access
+                where buyer_access.title_id = t.id
+                  and buyer_access.buyer_user_id = ${actor.userId}
+                  and buyer_access.revoked_at is null
+                  and (buyer_access.expires_at is null or buyer_access.expires_at > now())
+              )
               and exists (
                 select 1
                 from bridge_qc_cases q

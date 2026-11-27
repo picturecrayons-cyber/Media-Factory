@@ -9,6 +9,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { assertBuyerPublishable, assertBuyerTitleAccess } from "./buyer-visibility";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
@@ -277,7 +278,13 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title) throw new Error("Not found");
+    const buyerView = actor.accountType === "buyer" && !actor.internalRole;
+    if (buyerView) {
+      await assertBuyerTitleAccess(title.id, actor.userId);
+      await assertBuyerPublishable(title.id);
+    }
+    if (!buyerView && !canReadTitle(actor, title)) throw new Error("Not found");
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
     const decision = downloadDecision({
       kind: asset.kind,
@@ -313,9 +320,15 @@ export const listTitleAssets = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const sql = await getSql();
+    if (!title) throw new Error("Not found");
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    if (buyer) {
+      await assertBuyerTitleAccess(title.id, actor.userId);
+      await assertBuyerPublishable(title.id);
+    }
+    if (!buyer && !canReadTitle(actor, title)) throw new Error("Not found");
+    const sql = await getSql();
+    const screenerEntitled = buyer ? await hasLicenseEntitlement(actor.userId, title.id) : true;
     const rows = await sql<{
       id: string;
       kind: string;
@@ -329,7 +342,10 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .filter((r) => !buyer || (
+          !["master", "technical", "censor_certificate"].includes(r.kind) &&
+          (r.kind !== "screener" || screenerEntitled)
+        ))
         .map((r) => ({
           id: r.id,
           kind: r.kind,

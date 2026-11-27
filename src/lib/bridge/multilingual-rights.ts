@@ -7,7 +7,7 @@ import { assertPermission, canReadTitle } from "./rbac";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
-import { assertBuyerPublishable } from "./buyer-visibility";
+import { assertBuyerPublishable, assertBuyerTitleAccess } from "./buyer-visibility";
 
 const languageRightInput = z.object({
   titleId: z.string().min(8),
@@ -75,7 +75,14 @@ export const listLanguageRights = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title) throw new Error("Not found");
+    const buyerView = actor.accountType === "buyer" && !actor.internalRole;
+    if (buyerView) {
+      await assertBuyerTitleAccess(title.id, actor.userId);
+      await assertBuyerPublishable(title.id);
+    } else if (!canReadTitle(actor, title)) {
+      throw new Error("Not found");
+    }
     const sql = await getSql();
     const rows = await sql<LanguageRightRow>`
       select id, title_id, language, right_type, territories, media, window_start, window_end,
@@ -222,9 +229,12 @@ export const listLicensePackages = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
-    if (!canReadTitle(actor, title)) {
-      if (actor.accountType !== "buyer") throw new Error("Not found");
+    const buyerView = actor.accountType === "buyer" && !actor.internalRole;
+    if (buyerView) {
+      await assertBuyerTitleAccess(title.id, actor.userId);
       await assertBuyerPublishable(title.id);
+    } else if (!canReadTitle(actor, title)) {
+      throw new Error("Not found");
     }
     const sql = await getSql();
     const rows = await sql<{
