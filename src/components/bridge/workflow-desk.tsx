@@ -40,9 +40,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
-  // Business, rights and licensing are reserved for the verified Super Admin.
+  // Only the single verified Super Admin receives owner-side Business and Distribution controls.
   const canManageRights = actor.emailVerified && actor.internalRole === "super_admin";
-  const visibleStages = canManageRights ? stages : stages.filter((s) => s !== "Business");
+  const visibleStages = canManageRights
+    ? stages
+    : stages.filter((s) => s === "Prepare" || (s === "Revenue" && canFinance));
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
     queryFn: () => getTitleRevenue({ data: { titleId: title.id } }),
@@ -536,7 +538,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     </table>
                   </div>
 
-                  {hasPermission(actor, "finance.record_settlement") ? (
+                  {canManageRights && hasPermission(actor, "finance.record_settlement") ? (
                     <form
                       className="grid gap-3 sm:grid-cols-2"
                       onSubmit={(e) => {
