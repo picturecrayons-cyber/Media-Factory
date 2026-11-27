@@ -42,6 +42,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   // Business, rights and licensing are reserved for the verified Super Admin.
   const canManageRights = actor.emailVerified && actor.internalRole === "super_admin";
+  const visibleStages = canManageRights ? stages : stages.filter((s) => s !== "Business");
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
     queryFn: () => getTitleRevenue({ data: { titleId: title.id } }),
@@ -131,7 +132,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl">Title operations</h2>
       <nav className="flex flex-wrap gap-2" aria-label="Operational workflow">
-        {stages.map((s) => (
+        {visibleStages.map((s) => (
           <button
             type="button"
             key={s}
