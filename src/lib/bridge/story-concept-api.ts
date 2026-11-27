@@ -118,7 +118,8 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     const sql = await getSql();
 
     try {
-      await sql`
+      const concept = await sql.transaction(async (tx) => {
+      await tx`
         insert into bridge_titles (
           id, slug, name, owner_user_id, owner_account_type, status,
           synopsis, language, content_type, owner_organization_id, submission_type
@@ -137,12 +138,12 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
         )
       `;
 
-      await sql`
+      await tx`
         insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
         values (${titleId}, null, ${"DRAFT"}, ${actor.userId}, ${"story concept submission received"})
       `;
 
-      const conceptRows = await sql<ConceptRow>`
+      const conceptRows = await tx<ConceptRow>`
         insert into bridge_story_concept_submissions (
           title_id, logline, synopsis, treatment_url, screenplay_url,
           genre, estimated_budget_range, target_platforms, curation_status
@@ -169,12 +170,12 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
         entityType: "bridge_story_concept_submission",
         entityId: concept.id,
         metadata: { titleId },
+      }, tx);
+
+      return mapConcept(concept);
       });
 
-      return {
-        titleId,
-        concept: mapConcept(concept),
-      };
+      return { titleId, concept };
     } catch (err) {
       migrationHint(err);
     }
