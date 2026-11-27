@@ -357,6 +357,8 @@ export const recordSettlementEvidence = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
+    if (!actor.emailVerified || actor.internalRole !== "super_admin")
+      throw new Error("Only the verified Super Admin may record settlement evidence");
     assertPermission(actor, "finance.record_settlement");
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
