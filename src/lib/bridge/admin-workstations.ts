@@ -48,7 +48,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
     const title = rows[0];
     if (!title) throw new Error("Title not found");
-    if (data.decision === "PASS" || data.decision === "APPROVE") {
+    if ((data.decision as string) === "PASS" || (data.decision as string) === "APPROVE") {
       throw new Error("Legacy approval is disabled. Open the title workspace and use the evidence-linked QC or Legal review action.");
     }
     let next: string | null = null;
@@ -57,7 +57,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       assertPermission(actor, "title.advance_upload");
       if (title.status !== "PREPARING") throw new Error("Submission is not awaiting acceptance");
       next = "QC_REVIEW"; action = "submission.accept";
-    } else if (data.decision === "PASS") {
+    } else if ((data.decision as string) === "PASS") {
       assertPermission(actor, "title.qc_review");
       if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
       next = "RIGHTS_REVIEW"; action = "qc.pass";
@@ -67,7 +67,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'FAILED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
       await writeAudit({ actorUserId: actor.userId, action: "qc.fail", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } });
       return { ok: true, status: "QC_REVIEW" };
-    } else if (data.decision === "APPROVE") {
+    } else if ((data.decision as string) === "APPROVE") {
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
       next = "LICENSING_READY"; action = "rights.approve";
@@ -80,8 +80,8 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     }
     await sql`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
     await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
-    if (data.decision === "PASS") await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'PASSED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-    if (data.decision === "APPROVE") await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'APPROVED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
+    if ((data.decision as string) === "PASS") await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'PASSED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
+    if ((data.decision as string) === "APPROVE") await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'APPROVED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
     await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } });
     return { ok: true, status: next };
   });
@@ -104,7 +104,7 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
     if (!rows[0]) throw new Error("Title not found");
 
-    const value = data.decision === "PASS"
+    const value = (data.decision as string) === "PASS"
       ? ({OTT:"READY",PACKAGING:"COMPLETE",CURATION:"APPROVED",DELIVERY:"READY"} as const)[data.gate]
       : data.decision === "REVOKE" && data.gate === "DELIVERY" ? "REVOKED"
       : "HOLD";
