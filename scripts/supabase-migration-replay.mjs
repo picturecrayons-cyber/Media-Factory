@@ -17,9 +17,10 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 71;
+const EXPECTED_MIGRATIONS = 72;
 const EXPECTED_REMOTE_MIGRATIONS = 70;
 const LOCAL_ADDITIVE_MIGRATIONS = new Set([
+  "20261127110000_bridge_production_projects_schema_reconciliation.sql",
   "20261127120000_story_concept_network_interest_readiness_handoff.sql",
 ]);
 const FIXTURE_MIGRATION =
