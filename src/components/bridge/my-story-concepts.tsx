@@ -17,16 +17,16 @@ function listLogline(value: string | null | undefined) {
   return text.length > 80 ? `${text.slice(0, 80)}…` : text;
 }
 
-export function MyStoryConcepts() {
+export function MyStoryConcepts({ queryKey = ["my-story-concepts"] }: { queryKey?: readonly unknown[] }) {
   const query = useQuery({
-    queryKey: ["my-story-concepts"],
+    queryKey,
     queryFn: () => listMyStoryConcepts(),
     enabled: STORY_CONCEPT_ENABLED,
   });
 
   if (!STORY_CONCEPT_ENABLED) return null;
   if (query.isLoading) return <p className="text-sm text-muted">Loading concepts…</p>;
-  if (query.isError) return null;
+  if (query.isError) return <div role="alert" className="text-sm text-muted">Concepts could not be loaded. <button type="button" className="font-semibold text-accent underline" onClick={() => void query.refetch()}>Retry</button></div>;
 
   const concepts = query.data?.concepts ?? [];
   if (!concepts.length) return null;
