@@ -22,6 +22,67 @@ export const loopLicenseInput = z
       ctx.addIssue({ code: "custom", message: "Revenue shares must total 100%" });
   });
 
+export type LicenseDraftPrefillSource = {
+  territories?: string[] | null;
+  languages?: string[] | null;
+  window_start?: string | Date | null;
+  window_end?: string | Date | null;
+  exclusivity?: string | null;
+  evidence?: Array<{
+    agreementReference?: string | null;
+    ownershipReference?: string | null;
+    commercialTerms?: {
+      rightsOwnerSharePct?: number | null;
+      distributorSharePct?: number | null;
+    } | null;
+  }> | null;
+};
+
+/**
+ * Copy only values already persisted on this title's latest license record.
+ * References are not documentary verification; missing/invalid values stay blank.
+ */
+export function licenseDraftPrefillFromGrant(
+  grant: LicenseDraftPrefillSource | null | undefined,
+  titleLanguage: string,
+) {
+  const evidence = grant?.evidence?.[0];
+  const terms = evidence?.commercialTerms;
+  const ownerShare = terms?.rightsOwnerSharePct;
+  const distributorShare = terms?.distributorSharePct;
+  const validSplit =
+    Number.isInteger(ownerShare) &&
+    Number.isInteger(distributorShare) &&
+    Number(ownerShare) >= 0 &&
+    Number(distributorShare) >= 0 &&
+    Number(ownerShare) + Number(distributorShare) === 100;
+  const start = grant?.window_start ? new Date(grant.window_start) : null;
+  const end = grant?.window_end ? new Date(grant.window_end) : null;
+  const validWindow =
+    start !== null &&
+    end !== null &&
+    Number.isFinite(start.getTime()) &&
+    Number.isFinite(end.getTime()) &&
+    end.getTime() > start.getTime() &&
+    end.getTime() > Date.now();
+
+  const reference = (value: string | null | undefined) => {
+    const normalized = value?.trim() ?? "";
+    return normalized.length >= 8 ? normalized : "";
+  };
+
+  return {
+    territories: grant?.territories?.includes("WORLDWIDE") ? ["WORLDWIDE"] : ["WORLDWIDE"],
+    languages: grant?.languages?.length ? [...grant.languages] : [titleLanguage],
+    windowStart: validWindow ? start!.toISOString() : "",
+    windowEnd: validWindow ? end!.toISOString() : "",
+    exclusive: grant?.exclusivity === "EXCLUSIVE",
+    agreementReference: reference(evidence?.agreementReference),
+    ownershipReference: reference(evidence?.ownershipReference),
+    rightsOwnerSharePct: validSplit ? String(ownerShare) : "",
+  };
+}
+
 export function publicationIsActive(
   status: string | undefined,
   start: string | null,
