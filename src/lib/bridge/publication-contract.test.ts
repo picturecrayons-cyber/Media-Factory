@@ -18,6 +18,7 @@ function harness(
     curation_status: "APPROVED",
     delivery_status: "READY",
   },
+  internalRole: "super_admin" | "admin" | "legal_reviewer" = "super_admin",
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
