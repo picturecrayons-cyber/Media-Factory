@@ -235,13 +235,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
     onError: (err) => toast.error(err instanceof Error ? err.message : "Window extension failed"),
   });
 
-  const allTitles = q.data?.titles ?? [];
-  if (q.isPending) return <p>Loading distribution readiness…</p>;
-  if (q.isError)
-    return <p role="alert">Distribution readiness is unavailable. Refresh to retry.</p>;
-
-  // Filter based on active tab
-  const filteredTitles = useMemo(() => allTitles.filter((t) => {
+  const allTitles = q.data?.titles;
+  // Keep the hook unconditional; use the same empty collection while data is unavailable.
+  const filteredTitles = useMemo(() => (allTitles ?? []).filter((t) => {
     const pubStatus = t.publication?.authorizationStatus?.toLowerCase();
     switch (activeTab) {
       case "Ready for Distribution":
@@ -266,6 +262,10 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
         return true;
     }
   }), [activeTab, allTitles]);
+
+  if (q.isPending) return <p>Loading distribution readiness…</p>;
+  if (q.isError)
+    return <p role="alert">Distribution readiness is unavailable. Refresh to retry.</p>;
 
   return (
     <section className="space-y-6">
