@@ -7,7 +7,6 @@ import {
   createProductionScheduleEvent,
   createProductionShootDay,
   getProductionWorkspace,
-  linkProductionFinishedFilm,
   updateProductionLifecycle,
 } from "@/lib/bridge/production-management";
 
@@ -41,7 +40,6 @@ export function ProductionManagementDesk({ userId, organizationId }: { userId: s
   const [crewName, setCrewName] = useState("");
   const [crewRole, setCrewRole] = useState("");
   const [crewDepartment, setCrewDepartment] = useState("");
-  const [handoffTitleId, setHandoffTitleId] = useState("");
 
   const refresh = async () => client.invalidateQueries({ queryKey });
   const createProject = useMutation({
@@ -78,15 +76,9 @@ export function ProductionManagementDesk({ userId, organizationId }: { userId: s
     } }),
     onSuccess: async () => { setCrewName(""); setCrewRole(""); setCrewDepartment(""); await refresh(); },
   });
-  const handoff = useMutation({
-    mutationFn: () => linkProductionFinishedFilm({ data: { projectId: selectedProject.id, titleId: handoffTitleId } }),
-    onSuccess: refresh,
-  });
-
   const shootDays = useMemo(() => (workspace.data?.shootDays ?? []).filter((d) => d.project_id === selectedProject?.id), [workspace.data?.shootDays, selectedProject?.id]);
   const events = useMemo(() => (workspace.data?.events ?? []).filter((e) => e.project_id === selectedProject?.id), [workspace.data?.events, selectedProject?.id]);
   const crew = useMemo(() => (workspace.data?.crew ?? []).filter((c) => c.project_id === selectedProject?.id), [workspace.data?.crew, selectedProject?.id]);
-  const linkedTitles = useMemo(() => new Set((workspace.data?.finishedFilms ?? []).map((title) => title.id)), [workspace.data?.finishedFilms]);
 
   return (
     <div className="space-y-5">
@@ -142,9 +134,9 @@ export function ProductionManagementDesk({ userId, organizationId }: { userId: s
             </div>
 
             {selectedProject.status === "COMPLETED" ? <div className="mt-4 rounded-xl border border-line p-3">
-              <h5 className="font-semibold">Finished Film handoff</h5><p className="mt-1 text-sm text-muted">Only a COMPLETED Production project can be linked to a separate Finished Film submission. This action does not approve QC, Rights, Legal or publishing.</p>
-              <div className="mt-2 flex flex-wrap gap-2"><select aria-label="Finished Film submission" className="h-10 min-w-64 rounded-lg border border-line bg-bg px-3" value={handoffTitleId} onChange={(e) => setHandoffTitleId(e.target.value)}><option value="">Select existing Finished Film submission</option>{(workspace.data?.finishedFilms ?? []).filter((t) => linkedTitles.has(t.id)).map((t) => <option key={t.id} value={t.id}>{t.name} · {t.status}</option>)}</select><Button size="sm" disabled={!handoffTitleId || handoff.isPending} onClick={() => handoff.mutate()}>Link Finished Film</Button></div>
-              {handoff.error ? <p role="alert" className="mt-2 text-sm text-red-600">{handoff.error.message}</p> : null}
+              <h5 className="font-semibold">Finished Film handoff</h5>
+              <p className="mt-1 text-sm text-muted">This completed Production project can now start a separate Finished Film submission. Bridge will create the canonical DRAFT title and link it to this Production record. QC, Rights, Legal, Licensing and publication remain separate approval steps.</p>
+              <a className="mt-3 inline-flex rounded-full border border-line px-4 py-2 text-sm font-semibold hover:border-accent" href={`/submit-film?productionProjectId=${selectedProject.id}`}>Start Finished Film submission</a>
             </div> : <p className="mt-4 text-xs text-muted">Finished Film handoff stays unavailable until this Production project reaches COMPLETED.</p>}
           </> : null}
         </>}
