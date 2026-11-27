@@ -47,9 +47,13 @@ function AdminBody({ actor }: { actor: any }) {
   const qcQueue = titles.filter((title) => title.status === "PREPARING" || title.status === "QC_REVIEW").length;
   const rightsQueue = titles.filter((title) => title.status === "RIGHTS_REVIEW").length;
   const buyerReady = titles.filter((title) => ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED"].includes(title.status)).length;
-  const live = distribution.filter((title) => title.publication?.published).length;
+  const live = distribution.filter((title) => title.publication?.authorizationStatus === "LIVE" && title.publication?.listed === true && title.publication?.published === true).length;
   const attention = titles.filter((title) => ["PREPARING", "QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(title.status)).slice(0, 5);
   const loading = titlesQ.isPending;
+  const titleMetric = (value: number) => titlesQ.isPending ? "Loading…" : titlesQ.isError ? "Unavailable" : String(value);
+  const distributionMetric = distQ.isPending ? "Loading…" : distQ.isError ? "Unavailable" : String(live);
+  const profileMetric = profilesQ.isPending ? "Loading…" : profilesQ.isError ? "Unavailable" : String(profiles.length);
+  const organizationMetric = profilesQ.isPending ? "Loading…" : profilesQ.isError ? "Unavailable" : String(organizations.size);
 
   return (
     <BridgeShell actor={actor} title="Admin dashboard">
@@ -68,21 +72,21 @@ function AdminBody({ actor }: { actor: any }) {
         </section>
 
         <section aria-label="Title overview" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="All titles" value={loading ? "—" : String(titles.length)} detail="Canonical catalog" />
-          <Metric label="QC / intake" value={loading ? "—" : String(qcQueue)} detail="Awaiting review" />
-          <Metric label="Rights review" value={loading ? "—" : String(rightsQueue)} detail="Clearance queue" />
-          <Metric label="Buyer-ready" value={loading ? "—" : String(buyerReady)} detail="Licensing stages" />
+          <Metric label="All titles" value={titleMetric(titles.length)} detail="Canonical catalog" />
+          <Metric label="QC / intake" value={titleMetric(qcQueue)} detail="Awaiting review" />
+          <Metric label="Rights review" value={titleMetric(rightsQueue)} detail="Clearance queue" />
+          <Metric label="Buyer-ready" value={titleMetric(buyerReady)} detail="Licensing stages" />
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="font-semibold">Workspace snapshot</h3>
-            <span className="text-xs text-muted">Live records</span>
+            <span className="text-xs text-muted">Live records · unavailable is not zero</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <CompactMetric label="Loop publications" value={distQ.isPending ? "—" : String(live)} />
-            <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "—" : String(profiles.length)} />
-            <CompactMetric label="Organizations" value={profilesQ.isPending ? "—" : String(organizations.size)} />
+            <CompactMetric label="Loop publications" value={distributionMetric} />
+            <CompactMetric label="Bridge profiles" value={profileMetric} />
+            <CompactMetric label="Organizations" value={organizationMetric} />
           </div>
         </section>
 
