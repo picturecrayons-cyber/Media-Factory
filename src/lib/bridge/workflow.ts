@@ -70,6 +70,17 @@ const reviewInput = z.object({
   decision: z.enum(["APPROVE", "REJECT"]),
   note: z.string().trim().min(8).max(2000),
   grantId: z.string().uuid().optional(),
+  agreementReference: z.string().trim().min(1).max(1000).optional(),
+  ownershipReference: z.string().trim().min(1).max(1000).optional(),
+}).superRefine((data, ctx) => {
+  if (data.stage === "LEGAL" && data.decision === "APPROVE") {
+    if (!data.agreementReference) {
+      ctx.addIssue({ code: "custom", path: ["agreementReference"], message: "Signed distribution / OTT agreement reference is required" });
+    }
+    if (!data.ownershipReference) {
+      ctx.addIssue({ code: "custom", path: ["ownershipReference"], message: "Signed chain-of-title / authority reference is required" });
+    }
+  }
 });
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
@@ -111,7 +122,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       throw new Error("License has expired");
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
-      ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
+      ${JSON.stringify([{ grantId: data.grantId, note: data.note, agreementReference: data.agreementReference ?? null, ownershipReference: data.ownershipReference ?? null, reviewerConfirmedEvidence: data.decision === "APPROVE" }])}::jsonb,${actor.userId},now())`;
     await tx`update bridge_rights_grants set status=${data.decision === "APPROVE" ? "VALID" : "REVOKED"} where id=${data.grantId}`;
   }
   const next =
