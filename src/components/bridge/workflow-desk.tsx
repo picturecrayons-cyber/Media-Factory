@@ -40,6 +40,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
+  // Business, rights and licensing are reserved for the verified Super Admin.
+  const canManageRights = actor.emailVerified && actor.internalRole === "super_admin";
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
     queryFn: () => getTitleRevenue({ data: { titleId: title.id } }),
@@ -213,6 +215,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           ) : null}
           {stage === "Business" ? (
             <div className="space-y-4">
+              {canManageRights ? (
               <details className="rounded-xl border border-line p-3">
                 <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
                 <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
@@ -261,12 +264,19 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   </form>
                 ) : null}
               </details>
-              {input("Legal review note", note, setNote)}
-              <p className="text-xs text-muted" aria-live="polite">
-                {note.trim().length < 8
-                  ? `Enter at least 8 characters (${note.trim().length}/8).`
-                  : "Review note meets the minimum length."}
-              </p>
+              ) : null}
+              {canManageRights ? (
+                <>
+                  {input("Legal review note", note, setNote)}
+                  <p className="text-xs text-muted" aria-live="polite">
+                    {note.trim().length < 8
+                      ? `Enter at least 8 characters (${note.trim().length}/8).`
+                      : "Review note meets the minimum length."}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-muted">Rights and licensing are managed by the verified Bridge Super Admin. Your rights and license status is read-only.</p>
+              )}
               {Object.entries(grantsByAgreement).map(([reference, agreementGrants]) => {
                 const selectedId = selectedGrantByAgreement[reference] ?? agreementGrants[0]?.id ?? "";
                 const selectedGrant = agreementGrants.find((grant) => grant.id === selectedId) ?? agreementGrants[0];
@@ -371,7 +381,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         </div>
                         {selectedGrant.status === "DRAFT" &&
                         title.status === "RIGHTS_REVIEW" &&
-                        hasPermission(actor, "title.rights_review") ? (
+                        canManageRights ? (
                           <div className="flex flex-wrap gap-2 border-t border-line pt-3">
                             {button(
                               "Approve rights / license",
