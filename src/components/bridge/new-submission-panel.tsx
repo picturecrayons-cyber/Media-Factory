@@ -1,6 +1,5 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { StoryConceptForm } from "@/components/bridge/story-concept-form";
 import { Button } from "@/components/ui/button";
 import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
@@ -43,7 +42,7 @@ export function NewSubmissionPanel() {
         >
           <p className="font-medium">Finished Film</p>
           <p className="mt-1 text-xs leading-relaxed text-muted">
-            Free path. Record → QC → Rights → License → Deliver.
+            One canonical title record → QC → Rights → License → Deliver.
           </p>
         </button>
 
@@ -57,7 +56,7 @@ export function NewSubmissionPanel() {
           >
             <p className="font-medium">Story / Concept</p>
             <p className="mt-1 text-xs leading-relaxed text-muted">
-              Network submission. Admin curation → buyers & investors.
+              Separate network submission. Admin curation → buyers & investors.
             </p>
           </button>
         ) : (
@@ -72,16 +71,17 @@ export function NewSubmissionPanel() {
 
       {path === "finished_film" && (
         <div className="mt-6 border-t border-line pt-6">
-          <h2 className="text-sm font-semibold">Add finished title</h2>
-          <div className="mt-3">
-            <CreateTitleForm concise />
-          </div>
-          <p className="mt-3 text-xs text-muted">
-            Prefer the full rights-ready form?{" "}
-            <Link to="/submit-film" className="underline underline-offset-2">
-              Open detailed submission
-            </Link>
+          <h2 className="text-sm font-semibold">Finished Film submission</h2>
+          <p className="mt-2 text-sm text-muted">
+            Use the same authenticated submission form linked from Titles → New Finished Film.
+            It creates the single canonical Bridge title record; this panel does not create a second draft.
           </p>
+          <Link
+            to="/submit-film"
+            className="mt-4 inline-flex rounded-full bg-fg px-5 py-2 text-sm font-semibold text-bg"
+          >
+            Open Finished Film form
+          </Link>
         </div>
       )}
 

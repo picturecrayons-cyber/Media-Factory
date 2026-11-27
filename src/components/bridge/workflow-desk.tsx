@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getTitleWorkflow,
@@ -15,11 +15,16 @@ import {
   suspendLoopPublication,
 } from "@/lib/bridge/loop-publication";
 import { hasPermission, canOperateOnTitle } from "@/lib/bridge/rbac";
-import { publicationIsActive } from "@/lib/bridge/workflow-policy";
+import { licenseDraftPrefillFromGrant, publicationIsActive } from "@/lib/bridge/workflow-policy";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { BridgeTitle } from "@/lib/bridge/types";
 
 const stages = ["Prepare", "Business", "Distribution", "Revenue"] as const;
+function toLocalDateTimeInput(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
 export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
   const [stage, setStage] = useState<(typeof stages)[number]>("Prepare");
   const [settlementRef, setSettlementRef] = useState("");
@@ -67,7 +72,10 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
   const [ownerShare, setOwnerShare] = useState("");
+  const [licenseTerritories, setLicenseTerritories] = useState(["WORLDWIDE"]);
+  const [licenseLanguages, setLicenseLanguages] = useState([title.language]);
   const [selectedGrantByAgreement, setSelectedGrantByAgreement] = useState<Record<string, string>>({});
+  const defaultsApplied = useRef<string | null>(null);
   function downloadStatement() {
     const safe = (v: string) =>
       '"' + (/^[=+@-]/.test(v) ? "'" : "") + v.replaceAll('"', '""') + '"';
@@ -95,6 +103,19 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     URL.revokeObjectURL(url);
   }
   const grants = workflow.data?.grants ?? [];
+  useEffect(() => {
+    if (!workflow.data || defaultsApplied.current === title.id) return;
+    defaultsApplied.current = title.id;
+    const defaults = licenseDraftPrefillFromGrant(grants[0], title.language);
+    setLicenseTerritories(defaults.territories);
+    setLicenseLanguages(defaults.languages);
+    setStart(defaults.windowStart ? toLocalDateTimeInput(defaults.windowStart) : "");
+    setEnd(defaults.windowEnd ? toLocalDateTimeInput(defaults.windowEnd) : "");
+    setExclusive(defaults.exclusive);
+    setAgreement(defaults.agreementReference);
+    setOwnership(defaults.ownershipReference);
+    setOwnerShare(defaults.rightsOwnerSharePct);
+  }, [workflow.data, title.language]);
   const grantsByAgreement = grants.reduce<Record<string, typeof grants>>((groups, grant) => {
     const reference = grant.evidence[0]?.agreementReference ?? "Not recorded";
     (groups[reference] ??= []).push(grant);
@@ -215,8 +236,16 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-4">
               <details className="rounded-xl border border-line p-3">
                 <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
-                <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
+                <p className="mt-2 text-xs text-muted">{licenseTerritories.join(", ")} · {licenseLanguages.join(", ")}. Legal evidence is required before review.</p>
                 {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
+                  <>
+                  <p className="mt-2 text-xs text-muted" role="status">
+                    {grants.length && !licenseTerritories.includes("WORLDWIDE")
+                      ? "The saved rights grant is territory-limited and does not authorize WORLDWIDE Loop TVOD. No territory was copied; record a matching worldwide grant before creating this TVOD draft."
+                      : grants.length
+                        ? "Available defaults were loaded from this title's latest saved license record. Missing or invalid evidence and revenue terms remain blank."
+                        : "Worldwide and title language are system defaults. Dates, agreement evidence, ownership evidence and revenue shares remain blank until recorded."}
+                  </p>
                   <form
                     className="mt-3 grid gap-3 sm:grid-cols-2"
                     onSubmit={(e) => {
@@ -225,8 +254,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         submitLoopLicense({
                           data: {
                             titleId: title.id,
-                            territories: ["WORLDWIDE"],
-                            languages: [title.language],
+                            territories: licenseTerritories,
+                            languages: licenseLanguages,
                             windowStart: new Date(start).toISOString(),
                             windowEnd: new Date(end).toISOString(),
                             exclusivity: exclusive ? "EXCLUSIVE" : "NON_EXCLUSIVE",
@@ -253,12 +282,13 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       Exclusive license
                     </label>
                     <button
-                      disabled={action.isPending || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
+                      disabled={action.isPending || !licenseTerritories.includes("WORLDWIDE") || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
                       className="rounded-lg border border-line px-4 py-2 text-sm sm:col-span-2"
                     >
-                      {action.isPending ? "Saving…" : "Save draft"}
+                      {action.isPending ? "Saving…" : "Save license draft"}
                     </button>
                   </form>
+                  </>
                 ) : null}
               </details>
               {input("Legal review note", note, setNote)}
