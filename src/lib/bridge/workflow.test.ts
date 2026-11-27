@@ -478,12 +478,11 @@ test("Submit for QC advances PREPARING and queues a deduplicated internal QC not
     assert.equal(consents.length, 1);
     assert.equal(consents[0].actor_user_id, "owner");
     assert.equal(consents[0].consent_version, "bridge-title-rights-v1");
-    assert.equal(
-      (await f.sql.query(
-        "select * from bridge_qc_cases where title_id='qc-submit-title'",
-      )).length,
-      0,
+    const qcCases = await f.sql.query<{ status: string }>(
+      "select status from bridge_qc_cases where title_id='qc-submit-title'",
     );
+    assert.equal(qcCases.length, 1);
+    assert.equal(qcCases[0].status, "PENDING");
   } finally {
     await f.db.close();
   }
