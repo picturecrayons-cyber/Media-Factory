@@ -244,6 +244,8 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
     return {
       organizationId: actor.organizationId,
       titles,
+      projects,
+      shootDays,
       sessions: sessions.map((session) => ({
         ...session,
         sourceFileCount: Number(session.source_file_count),
