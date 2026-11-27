@@ -90,9 +90,11 @@ function DashboardBody() {
   const metricValue = (value: number) =>
     titlesQ.isPending ? "Loading…" : reportingUnavailable ? "Unavailable" : String(value);
   const moneyValue =
-    titlesQ.isPending || reportingUnavailable
-      ? "—"
-      : `₹${(licensedValuePaise / 100).toLocaleString("en-IN")}`;
+    titlesQ.isPending
+      ? "Loading…"
+      : reportingUnavailable
+        ? "Unavailable"
+        : `₹${(licensedValuePaise / 100).toLocaleString("en-IN")}`;
 
   return (
     <div className="space-y-7">
