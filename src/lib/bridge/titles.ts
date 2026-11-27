@@ -340,42 +340,61 @@ export const createTitle = createServerFn({ method: "POST" })
 export const listTitles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
-    const sql = await getSql();
-    let rows: TitleRow[] = [];
-    if (actor.internalRole && hasPermission(actor, "title.read_catalog")) {
-      rows = await listCatalog(sql);
-    } else if (actor.accountType === "buyer") {
-      assertPermission(actor, "title.read_catalog");
-      if (await hasTitleMergeColumn(sql)) {
-        rows = await sql<TitleRow>`
-          select t.* from bridge_titles t
-          where t.merged_into_title_id is null
-            and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-            and public.bridge_title_buyer_visibility(t.id)
-          order by t.updated_at desc limit 200
-        `;
+    let stage = "actor";
+    try {
+      assertNotDevUser(context.userId);
+      const actor = await requireVerifiedActor(context.userId);
+      stage = "database";
+      const sql = await getSql();
+      let rows: TitleRow[] = [];
+      stage = "title-query";
+      if (actor.internalRole && hasPermission(actor, "title.read_catalog")) {
+        rows = await listCatalog(sql);
+      } else if (actor.accountType === "buyer") {
+        assertPermission(actor, "title.read_catalog");
+        if (await hasTitleMergeColumn(sql)) {
+          rows = await sql<TitleRow>`
+            select t.* from bridge_titles t
+            where t.merged_into_title_id is null
+              and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+              and public.bridge_title_buyer_visibility(t.id)
+            order by t.updated_at desc limit 200
+          `;
+        } else {
+          rows = await sql<TitleRow>`
+            select t.* from bridge_titles t
+            where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+              and public.bridge_title_buyer_visibility(t.id)
+            order by t.updated_at desc limit 200
+          `;
+        }
       } else {
-        rows = await sql<TitleRow>`
-          select t.* from bridge_titles t
-          where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-            and public.bridge_title_buyer_visibility(t.id)
-          order by t.updated_at desc limit 200
-        `;
+        assertPermission(actor, "title.read_own");
+        rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
       }
-    } else {
-      assertPermission(actor, "title.read_own");
-      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
+      stage = "map-response";
+      const titles = rows.flatMap((row) => {
+        try {
+          return [mapTitle(row)];
+        } catch (error) {
+          console.error("[bridge] skipped unreadable title", row?.id, error);
+          return [];
+        }
+      });
+      console.info("[bridge-titles] list completed", {
+        accountType: actor.accountType,
+        internal: Boolean(actor.internalRole),
+        returned: titles.length,
+      });
+      return { titles };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown title-list failure";
+      const code = typeof error === "object" && error !== null && "code" in error
+        ? String((error as { code?: unknown }).code)
+        : undefined;
+      console.error("[bridge-titles] list failed", { stage, code, message: detail });
+      throw error;
     }
-    return { titles: rows.flatMap((row) => {
-      try {
-        return [mapTitle(row)];
-      } catch (error) {
-        console.error("[bridge] skipped unreadable title", row?.id, error);
-        return [];
-      }
-    }) };
   });
 
 export const getTitle = createServerFn({ method: "GET" })
