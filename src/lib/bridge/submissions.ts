@@ -67,7 +67,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
     const slug = `${data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "title"}-${id.slice(0, 6)}`;
     const sql = await getSql();
 
-    await sql.transaction(async (tx) => {
+    return await sql.transaction(async (tx) => {
     if (data.productionProjectId) {
       const projects = await tx<{ id: string; status: string }>`
         select id, status from bridge_production_projects
