@@ -306,12 +306,9 @@ function formatLicensingFeePaise(amountPaise: number): string {
 type BuyerTitleCard = {
   id: string;
   name: string;
-  synopsis: string;
   language: string;
   year: number | null;
-  runtimeMinutes: number | null;
   licensingFeePaise: number;
-  status: string;
 };
 
 function BuyerEmptyState() {
@@ -349,7 +346,6 @@ function TitleGallery({
         const details = [
           title.language,
           title.year ? String(title.year) : null,
-          title.runtimeMinutes ? `${title.runtimeMinutes} min` : null,
         ].filter(Boolean).join(" · ");
         return (
           <article key={title.id} className="overflow-hidden rounded-sm border border-line bg-surface">
@@ -364,11 +360,7 @@ function TitleGallery({
                   </Link>
                   <p className="mt-1 text-xs text-muted">{details || "Details pending"}</p>
                 </div>
-                <StatusChip status={title.status as never} />
               </div>
-              {title.synopsis.trim() ? (
-                <p className="line-clamp-3 text-sm leading-relaxed text-muted">{title.synopsis}</p>
-              ) : null}
               <div className="flex items-center justify-between gap-3 border-t border-line pt-3">
                 <p className="text-sm font-medium">
                   {title.licensingFeePaise > 0
