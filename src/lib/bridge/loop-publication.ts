@@ -121,11 +121,26 @@ export async function verifyDistributionPreflight(
           and v.asset_group = 'VIDEO'
           and v.s3_key = ${title.master_key}
           and v.processing_state = 'PASSED'
-          and v.checksum_sha256 ~ '^[0-9a-f]{64} || !rightsRequest.windowStart || !rightsRequest.windowEnd ||
-      rightsRequest.territories.length!==1 || rightsRequest.territories[0]!=="WORLDWIDE" ||
-      rightsRequest.exploitationModels.length!==1 || rightsRequest.exploitationModels[0]!=="TVOD")
-    reasons.push("Loop requires WORLDWIDE TVOD with explicit start and end dates.");
+          and v.checksum_sha256 ~ '^[0-9a-f]{64}$'
+      ) as master_verified,
+      exists (
+        select 1 from bridge_asset_versions v
+        where v.title_id = ${titleId}
+          and v.asset_group = 'ARTWORK'
+          and v.s3_key = ${title.poster_key}
+          and v.processing_state = 'PASSED'
+          and v.checksum_sha256 ~ '^[0-9a-f]{64}$'
+      ) as artwork_verified
+  `;
+  if (!verifiedAssets[0]?.master_verified)
+    reasons.push("Current master must have a PASSED, SHA-256 verified Bridge asset version matching the sealed title pointer.");
+  if (!verifiedAssets[0]?.artwork_verified)
+    reasons.push("Current artwork must have a PASSED, SHA-256 verified Bridge asset version matching the title poster pointer.");
 
+  if (!rightsRequest || !rightsRequest.windowStart || !rightsRequest.windowEnd ||
+      rightsRequest.territories.length !== 1 || rightsRequest.territories[0] !== "WORLDWIDE" ||
+      rightsRequest.exploitationModels.length !== 1 || rightsRequest.exploitationModels[0] !== "TVOD")
+    reasons.push("Loop requires WORLDWIDE TVOD with explicit start and end dates.");
 
   // 1. QC & Master verification
   if (!title.master_key) {
