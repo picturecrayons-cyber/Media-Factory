@@ -15,6 +15,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AdminCmsRouteImport } from './routes/admin-cms'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as BuyerRouteImport } from './routes/buyer'
+import { Route as BuyerWorkspaceRouteImport } from './routes/buyer-workspace'
 import { Route as CmsRouteImport } from './routes/cms'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CreatorRouteImport } from './routes/creator'
@@ -71,6 +72,11 @@ const AppRoute = AppRouteImport.update({
 const BuyerRoute = BuyerRouteImport.update({
   id: '/buyer',
   path: '/buyer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BuyerWorkspaceRoute = BuyerWorkspaceRouteImport.update({
+  id: '/buyer-workspace',
+  path: '/buyer-workspace',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CmsRoute = CmsRouteImport.update({
@@ -216,6 +222,7 @@ export interface FileRoutesByFullPath {
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
+  '/buyer-workspace': typeof BuyerWorkspaceRoute
   '/cms': typeof CmsRoute
   '/contact': typeof ContactRoute
   '/creator': typeof CreatorRoute
@@ -324,6 +331,7 @@ export interface FileRouteTypes {
     | '/admin-cms'
     | '/app'
     | '/buyer'
+    | '/buyer-workspace'
     | '/cms'
     | '/contact'
     | '/creator'
@@ -430,6 +438,7 @@ export interface RootRouteChildren {
   AdminCmsRoute: typeof AdminCmsRoute
   AppRoute: typeof AppRoute
   BuyerRoute: typeof BuyerRoute
+  BuyerWorkspaceRoute: typeof BuyerWorkspaceRoute
   CmsRoute: typeof CmsRoute
   ContactRoute: typeof ContactRoute
   CreatorRoute: typeof CreatorRoute
@@ -500,6 +509,13 @@ declare module '@tanstack/react-router' {
       path: '/buyer'
       fullPath: '/buyer'
       preLoaderRoute: typeof BuyerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/buyer-workspace': {
+      id: '/buyer-workspace'
+      path: '/buyer-workspace'
+      fullPath: '/buyer-workspace'
+      preLoaderRoute: typeof BuyerWorkspaceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cms': {
@@ -711,6 +727,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminCmsRoute: AdminCmsRoute,
   AppRoute: AppRoute,
   BuyerRoute: BuyerRoute,
+  BuyerWorkspaceRoute: BuyerWorkspaceRoute,
   CmsRoute: CmsRoute,
   ContactRoute: ContactRoute,
   CreatorRoute: CreatorRoute,
