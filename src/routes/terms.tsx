@@ -81,12 +81,12 @@ function Terms() {
           <div>
             <h2 className="font-semibold text-fg">5. Refunds and cancellations</h2>
             <p>
-              Refund and cancellation requests are handled under the applicable
-              Refund Policy and Cancellation Policy shown for the service or
-              transaction, together with any specific written agreement and
-              applicable law. Please review those policies before completing a
-              purchase or subscription. Nothing in these Terms limits rights
-              that cannot lawfully be excluded.
+              Refund and cancellation terms, where applicable, are the terms
+              displayed for the specific transaction and any separate written
+              agreement, subject to applicable law. Please review those terms
+              before confirming a purchase or paid service. For assistance,
+              contact the Crayons Bridge team through the Contact page. Nothing
+              in these Terms limits rights that cannot lawfully be excluded.
             </p>
           </div>
 
@@ -179,7 +179,7 @@ function Terms() {
         </section>
 
         <p className="border-t border-line pt-5 text-xs text-muted">
-          Last updated: 9 October 2026.
+          Last updated: 27 November 2026.
         </p>
       </article>
     </main>
