@@ -59,10 +59,12 @@ export function licenseDraftPrefillFromGrant(
   const start = grant?.window_start ? new Date(grant.window_start) : null;
   const end = grant?.window_end ? new Date(grant.window_end) : null;
   const validWindow =
-    Boolean(start && end) &&
-    Number.isFinite(start?.getTime()) &&
-    Number.isFinite(end?.getTime()) &&
-    Number(end) > Number(start) && Number(end) > Date.now();
+    start !== null &&
+    end !== null &&
+    Number.isFinite(start.getTime()) &&
+    Number.isFinite(end.getTime()) &&
+    end.getTime() > start.getTime() &&
+    end.getTime() > Date.now();
 
   const reference = (value: string | null | undefined) => {
     const normalized = value?.trim() ?? "";
