@@ -28,28 +28,32 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   }
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
+    <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
       {titles.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <Link
-            to="/title/$id"
-            params={{ id: t.id }}
-            className="min-w-0 flex-1 rounded-md py-1 hover:text-accent"
-          >
-            <p className="font-medium">{t.name}</p>
-            <p className="text-sm text-muted">
-              {t.contentType ? `${t.contentType} · ` : ""}
-              {t.language}
-              {t.year ? ` · ${t.year}` : ""}
-            </p>
-          </Link>
-          <div className="flex shrink-0 items-center gap-3">
-            <StatusChip status={t.status} />
-            
+        <Link
+          key={t.id}
+          to="/title/$id"
+          params={{ id: t.id }}
+          className="group overflow-hidden rounded-2xl border border-line bg-surface transition hover:-translate-y-0.5 hover:border-accent hover:shadow-lg"
+        >
+          <div className="relative flex aspect-[16/10] items-end overflow-hidden bg-gradient-to-br from-slate-900 via-slate-700 to-slate-500 p-5">
+            <div aria-hidden="true" className="absolute inset-0 opacity-20" style={{ backgroundImage: "linear-gradient(135deg, transparent 35%, rgba(255,255,255,.35) 35%, transparent 36%, transparent 65%, rgba(255,255,255,.2) 66%, transparent 67%)" }} />
+            <div className="relative max-w-full">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70">{t.contentType || "Title"}</p>
+              <p className="mt-1 line-clamp-2 font-display text-2xl font-semibold text-white">{t.name}</p>
+            </div>
+            <div className="absolute right-3 top-3"><StatusChip status={t.status} /></div>
           </div>
-        </li>
+          <div className="flex items-center justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-fg">{t.name}</p>
+              <p className="mt-1 text-xs text-muted">{t.language}{t.year ? ` · ${t.year}` : ""}</p>
+            </div>
+            <span className="shrink-0 text-xs font-semibold text-accent group-hover:underline">Open title →</span>
+          </div>
+        </Link>
       ))}
-    </ul>
+    </div>
   );
 }
 

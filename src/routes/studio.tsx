@@ -20,7 +20,7 @@ function Studio() {
     <RequireBridge allow="studio">
       {(actor) => (
         <BridgeShell actor={actor} title="Studio dashboard">
-          <div className="mx-auto max-w-5xl space-y-8 px-1 pb-16">
+          <div className="mx-auto max-w-7xl space-y-8 px-1 pb-16">
             <section id="home" className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Studio workspace</p>
@@ -30,11 +30,11 @@ function Studio() {
               <Link to="/deliveries" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">View deliveries</Link>
             </section>
 
-            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Studio workspace navigation">
-              <a href="#studio-titles" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Studio Titles</strong><p className="mt-1 text-sm text-muted">Finished films and story concepts</p></a>
-              <a href="#studio-operations" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Production & DIT</strong><p className="mt-1 text-sm text-muted">Production operations and media handover</p></a>
-              <Link to="/account" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Account</strong><p className="mt-1 text-sm text-muted">Studio account profile</p></Link>
-              <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Studio workspace navigation">
+              <a href="#studio-titles" className="rounded-xl border border-line bg-surface p-5 transition hover:border-accent hover:shadow-sm"><strong>Studio Titles</strong><p className="mt-1 text-sm text-muted">Finished films and story concepts</p></a>
+              <a href="#studio-operations" className="rounded-xl border border-line bg-surface p-5 transition hover:border-accent hover:shadow-sm"><strong>Production & DIT</strong><p className="mt-1 text-sm text-muted">Production operations and media handover</p></a>
+              <Link to="/account" className="rounded-xl border border-line bg-surface p-5 transition hover:border-accent hover:shadow-sm"><strong>Account</strong><p className="mt-1 text-sm text-muted">Studio account profile</p></Link>
+              <a href="#studio-dit" className="rounded-xl border border-line bg-surface p-5 transition hover:border-accent hover:shadow-sm"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
             </section>
 
             <section id="studio-titles" className="space-y-6">
@@ -44,20 +44,20 @@ function Studio() {
                   <p className="mt-1 text-sm text-muted">Choose a dedicated submission workflow. Every title remains subject to Bridge QC, Legal and Rights approvals.</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Link to="/submit-film" className="rounded-sm border border-line p-4 hover:border-accent">
+                  <Link to="/submit-film" className="rounded-xl border border-line bg-surface p-5 transition hover:border-accent hover:shadow-sm">
                     <strong>New Finished Film</strong>
                     <p className="mt-1 text-sm text-muted">Submit a completed film for rights and buyer review</p>
                   </Link>
-                  <Link to="/submit-concept" className="rounded-sm border border-line p-4 hover:border-accent">
+                  <Link to="/submit-concept" className="rounded-xl border border-line bg-surface p-5 transition hover:border-accent hover:shadow-sm">
                     <strong>Story / Concept</strong>
                     <p className="mt-1 text-sm text-muted">Submit a story or concept for separate curation</p>
                   </Link>
                 </div>
               </div>
 
-              <div className="border-t border-line pt-5">
-                <h3 className="font-display text-xl font-semibold">Finished films</h3>
-                <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
+              <div className="border-t border-line pt-6">
+                <h3 className="font-display text-xl font-semibold">Finished films gallery</h3>
+                <p className="mt-1 text-sm text-muted">Gallery view of finished films visible to this studio account. Select a card to open its Bridge workflow.</p>
               </div>
               <TitleList empty="No finished films are currently returned for this studio account." />
               <MyStoryConcepts />
