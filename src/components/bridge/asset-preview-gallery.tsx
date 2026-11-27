@@ -4,6 +4,7 @@ import { previewUrlFor } from "@/lib/bridge/preview-url";
 
 type PreviewAsset = {
   id: string;
+  key: string | null;
   kind: string;
   contentType: string | null;
   byteSize: number | null;
@@ -27,9 +28,9 @@ function prettySize(bytes: number | null) {
 }
 
 
-export function AssetPosterSlot({ assets }: { assets: PreviewAsset[] }) {
+export function AssetPosterSlot({ assets, posterKey }: { assets: PreviewAsset[]; posterKey: string | null }) {
   const poster = assets.find((asset) =>
-    asset.verified && ["poster_vertical", "poster"].includes(asset.kind) && isImage(asset)
+    asset.verified && asset.key === posterKey && ["poster_vertical", "poster"].includes(asset.kind) && isImage(asset)
   );
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -66,7 +67,7 @@ export function AssetPosterSlot({ assets }: { assets: PreviewAsset[] }) {
   );
 }
 
-export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
+export function AssetPreviewGallery({ assets, masterKey, posterKey }: { assets: PreviewAsset[]; masterKey: string | null; posterKey: string | null }) {
   const [selected, setSelected] = useState<PreviewAsset | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -97,7 +98,16 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
     setLoadingId(null);
   }
 
-  const mediaAssets = assets.filter((asset) => asset.verified && (isImage(asset) || isVideo(asset)));
+  const seenAssetIdentities = new Set<string>();
+  const mediaAssets = assets.filter((asset) => asset.verified && (isImage(asset) || isVideo(asset))).filter((asset) => {
+    // Only show the currently referenced master/poster, not stale upload attempts or prior versions.
+    if (asset.kind === "master" && (!masterKey || asset.key !== masterKey)) return false;
+    if ((asset.kind === "poster" || asset.kind === "poster_vertical") && (!posterKey || asset.key !== posterKey)) return false;
+    const identity = `${asset.kind}:${asset.key ?? asset.id}`;
+    if (seenAssetIdentities.has(identity)) return false;
+    seenAssetIdentities.add(identity);
+    return true;
+  });
 
   if (!mediaAssets.length) {
     return (
