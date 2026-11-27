@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listInvestorInvestments } from "@/lib/bridge/investor";
+import { StoryConceptNetworkPanel } from "@/components/bridge/story-concept-network-panel";
 
 export const Route = createFileRoute("/investor")({ component: Investor });
 
@@ -28,6 +29,7 @@ function InvestorBody({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
+      <StoryConceptNetworkPanel accountType="investor" />
       {investmentsQ.isPending ? <p className="text-sm text-muted">Loading your assigned investment records…</p> : null}
       {investmentsQ.isError ? (
         <p role="alert" className="rounded-sm border border-line p-4 text-sm text-muted">
