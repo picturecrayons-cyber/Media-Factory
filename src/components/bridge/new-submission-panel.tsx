@@ -78,7 +78,7 @@ export function NewSubmissionPanel() {
           </div>
           <p className="mt-3 text-xs text-muted">
             Prefer the full rights-ready form?{" "}
-            <Link to="/submit-film" className="underline underline-offset-2">
+            <Link to="/submit-film" search={{}} className="underline underline-offset-2">
               Open detailed submission
             </Link>
           </p>
