@@ -40,7 +40,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
-  // Only the single verified Super Admin receives owner-side Business and Distribution controls.
+  // Super Admin owns Business and Distribution controls; Legal Reviewer receives independent review-only access.
   const canManageRights = actor.emailVerified && actor.internalRole === "super_admin";
   const canReviewRights = actor.emailVerified && actor.internalRole === "legal_reviewer";
   const canViewRights = canManageRights || canReviewRights;
@@ -357,7 +357,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                               ["NON-EXCLUSIVE terms recorded", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
                               ["Revenue-share split recorded and totals 100%", validSplit],
                               ["Territory, language and validity window recorded", selectedGrant.territories.length > 0 && selectedGrant.languages.length > 0 && validWindow],
-                              ["Super Admin legal approval recorded", selectedGrant.status === "VALID"],
+                              ["Independent Legal approval recorded", selectedGrant.status === "VALID"],
                             ] as const;
                             return (
                               <>
@@ -380,7 +380,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 <p className="text-xs font-medium" role="status">
                                   {checks.every(([, passed]) => passed)
                                     ? "All required fields are recorded. Documentary verification and Legal approval remain separate gates."
-                                    : "PENDING — do not mark READY until every required item is verified and the verified Super Admin approves."}
+                                    : "PENDING — do not mark READY until every required item is verified and an independent Legal Reviewer approves."}
                                 </p>
                               </>
                             );
