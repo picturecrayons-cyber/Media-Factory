@@ -271,6 +271,39 @@ test("an audit failure rolls back review records and lifecycle", async () => {
     await f.db.close();
   }
 });
+test("TVOD draft prefill copies only persisted values and leaves missing legal evidence blank", () => {
+  const defaults = policy.licenseDraftPrefillFromGrant({
+    territories: ["WORLDWIDE"],
+    languages: ["Malayalam"],
+    window_start: "2026-11-26T00:00:00.000Z",
+    window_end: "2031-11-26T23:59:59.999Z",
+    exclusivity: "NON_EXCLUSIVE",
+    evidence: [{
+      agreementReference: "",
+      ownershipReference: null,
+      commercialTerms: { rightsOwnerSharePct: 50, distributorSharePct: 50 },
+    }],
+  }, "Malayalam");
+  assert.equal(defaults.territories[0], "WORLDWIDE");
+  assert.deepEqual(defaults.languages, ["Malayalam"]);
+  assert.equal(defaults.windowStart, "2026-11-26T00:00:00.000Z");
+  assert.equal(defaults.windowEnd, "2031-11-26T23:59:59.999Z");
+  assert.equal(defaults.exclusive, false);
+  assert.equal(defaults.agreementReference, "");
+  assert.equal(defaults.ownershipReference, "");
+  assert.equal(defaults.rightsOwnerSharePct, "50");
+
+  const incomplete = policy.licenseDraftPrefillFromGrant({
+    evidence: [{ commercialTerms: { rightsOwnerSharePct: 70, distributorSharePct: 20 } }],
+  }, "Tamil");
+  assert.deepEqual(incomplete.languages, ["Tamil"]);
+  assert.equal(incomplete.windowStart, "");
+  assert.equal(incomplete.windowEnd, "");
+  assert.equal(incomplete.agreementReference, "");
+  assert.equal(incomplete.ownershipReference, "");
+  assert.equal(incomplete.rightsOwnerSharePct, "");
+});
+
 test("license constraints reject unsupported territory, bad window and invalid share totals", () => {
   assert.equal(policy.loopLicenseInput.safeParse(license).success, true);
   for (const data of [
