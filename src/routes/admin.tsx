@@ -7,6 +7,7 @@ import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
+import { BridgeCommercialConfigPanel } from "@/components/bridge/commercial-config-panel";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -153,6 +154,12 @@ function AdminBody({ actor }: { actor: any }) {
             </ul>
           </details>
         </section>
+
+        {actor.internalRole === "super_admin" ? (
+          <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+            <BridgeCommercialConfigPanel />
+          </section>
+        ) : null}
 
         <details className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
           <summary className="cursor-pointer list-none font-semibold">Production services</summary>
