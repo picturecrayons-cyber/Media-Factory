@@ -96,7 +96,7 @@ export const getProductionWorkspace = createServerFn({ method: "GET" })
         order by updated_at desc limit 200`,
     ]);
     return {
-      organizationId: actor.organizationId,
+      organizationId: actor.organizationId ?? null,
       projects: projects.map((p) => ({ ...p, plannedStartDate: p.planned_start_date, plannedEndDate: p.planned_end_date })),
       shootDays: shootDays.map((d) => ({ ...d, shootDate: d.shoot_date })),
       events,
