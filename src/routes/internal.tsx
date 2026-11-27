@@ -185,7 +185,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
         },
       }),
     onSuccess: () => {
-      toast.success("Title authorized and published to Crayons Loop");
+      toast.success("Distribution authorized. Publication remains pending delivery and release verification.");
       setSelectedTitleId("");
       void qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] });
       void qc.invalidateQueries({ queryKey: ["bridge-audit"] });
@@ -328,7 +328,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                 Supported Model: <strong className="text-fg">TVOD rental only</strong>
               </div>
               <div>
-                Active Authorized Titles:{" "}
+                Live & Published Titles:{" "}
                 <strong className="text-fg">
                   {
                     allTitles.filter(
@@ -548,7 +548,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                 <div className="flex items-center gap-2">
                   <span
                     className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${
-                      statusDisplay === "LIVE" || statusDisplay === "AUTHORIZED"
+                      statusDisplay === "LIVE"
                         ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                         : statusDisplay === "SUSPENDED"
                           ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
