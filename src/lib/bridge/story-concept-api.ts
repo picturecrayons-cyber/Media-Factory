@@ -235,6 +235,8 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
         where c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
+          and t.record_classification is distinct from 'TEST'
+          and coalesce(t.external_ids->>'test_only', 'false') <> 'true'
         order by c.created_at asc
         limit 200
       `;
