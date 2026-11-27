@@ -36,7 +36,7 @@ function formatBytes(bytes: number) {
 
 export function DitAgentDesk({ actor }: { actor: StudioActor }) {
   const queryClient = useQueryClient();
-  const queryKey = ["bridge-dit-workspace-v2", actor.userId, actor.organizationId];
+  const queryKey = ["bridge-dit-workspace-v3", actor.userId, actor.organizationId];
   const workspace = useQuery({ queryKey, queryFn: () => getDitWorkspace() });
   const [titleId, setTitleId] = useState("");
   const [cameraUnit, setCameraUnit] = useState<"A" | "B" | "C">("A");
