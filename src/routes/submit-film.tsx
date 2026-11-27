@@ -7,7 +7,12 @@ import { BRIDGE_LOOP_LANES, type BridgeLoopLane } from "@/lib/bridge/loop-lanes"
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute("/submit-film")({ component: RightsReadySubmission });
+export const Route = createFileRoute("/submit-film")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    productionProjectId: typeof search.productionProjectId === "string" ? search.productionProjectId : undefined,
+  }),
+  component: RightsReadySubmission,
+});
 
 const LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English"];
 const TERRITORIES = ["IN", "GCC", "US", "CA", "GB", "AU", "Worldwide"];
@@ -15,6 +20,7 @@ const EXPLOITATION = ["OTT / Streaming", "SVOD", "TVOD", "AVOD", "FAST", "Broadc
 const BUYERS = ["OTT platform", "Broadcaster", "Distributor", "Aggregator", "International buyer", "Educational buyer", "Festival / screening", "Crayons Loop", "Open to qualified buyers"];
 
 function RightsReadySubmission() {
+  const { productionProjectId } = Route.useSearch();
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
   const [name, setName] = useState("");
@@ -71,6 +77,7 @@ function RightsReadySubmission() {
           buyerChannels: buyers,
           screenerMode,
           screenerUrl: screenerUrl || undefined,
+          productionProjectId,
         },
       });
       void navigate({ to: "/title/$id", params: { id: result.titleId } });
@@ -97,6 +104,7 @@ function RightsReadySubmission() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Crayons Bridge</p>
           <h1 className="mt-2 font-display text-3xl">Submit a title for buyer review</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted">Prepare the rights scope once. Bridge verifies the evidence before a title can become Licensing Ready.</p>
+          {productionProjectId ? <p className="mt-3 rounded-xl border border-line p-3 text-sm">Production handoff selected. Bridge will verify that the linked Production project is COMPLETED before creating this Finished Film submission.</p> : null}
         </header>
 
         <section className="space-y-4">

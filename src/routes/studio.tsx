@@ -6,12 +6,11 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 import { BridgeServicesPanel } from "@/components/bridge/service-catalog-panel";
+import { ProductionManagementDesk } from "@/components/bridge/production-management-desk";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
 const comingSoonModules = [
-  ["Productions", "Project-level production tracking and milestone management."],
-  ["Schedule", "Shared production and delivery calendar."],
   ["Statements", "Studio licensing statements and settlement reporting."],
   ["Insights", "Verified portfolio and performance analytics."],
 ] as const;
@@ -33,7 +32,7 @@ function Studio() {
 
             <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Studio workspace navigation">
               <a href="#studio-titles" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Studio Titles</strong><p className="mt-1 text-sm text-muted">Finished films and story concepts</p></a>
-              <a href="#studio-operations" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Production & DIT</strong><p className="mt-1 text-sm text-muted">Production operations and media handover</p></a>
+              <a href="#studio-productions" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Productions</strong><p className="mt-1 text-sm text-muted">Production projects, lifecycle, crew and schedule</p></a>
               <Link to="/account" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Account</strong><p className="mt-1 text-sm text-muted">Studio account profile</p></Link>
               <a href="#studio-services" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Services</strong><p className="mt-1 text-sm text-muted">Browse active production and distribution services</p></a>
               <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
@@ -46,7 +45,7 @@ function Studio() {
                   <p className="mt-1 text-sm text-muted">Choose a dedicated submission workflow. Every title remains subject to Bridge QC, Legal and Rights approvals.</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Link to="/submit-film" className="rounded-sm border border-line p-4 hover:border-accent">
+                  <Link to="/submit-film" search={{}} className="rounded-sm border border-line p-4 hover:border-accent">
                     <strong>New Finished Film</strong>
                     <p className="mt-1 text-sm text-muted">Submit a completed film for rights and buyer review</p>
                   </Link>
@@ -77,6 +76,10 @@ function Studio() {
               <StudioMemberDesk />
             </section>
 
+            <section id="studio-productions" className="space-y-3">
+              <ProductionManagementDesk userId={actor.userId} organizationId={actor.organizationId} />
+            </section>
+
             <section id="studio-dit" className="space-y-3">
               <div>
                 <h3 className="font-display text-xl font-semibold">Studio DIT Agent</h3>
@@ -91,8 +94,8 @@ function Studio() {
 
             <section id="studio-operations" className="space-y-3">
               <div>
-                <h3 className="font-display text-xl font-semibold">Coming soon</h3>
-                <p className="mt-1 text-sm text-muted">These modules are not connected yet. They are shown for visibility only and are not presented as active services.</p>
+                <h3 className="font-display text-xl font-semibold">Other modules</h3>
+                <p className="mt-1 text-sm text-muted">Statements and Insights are not connected yet. They are shown for visibility only and are not presented as active services.</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {comingSoonModules.map(([name, description]) => (
