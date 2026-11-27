@@ -279,11 +279,18 @@ function BuyerBody({ userId }: { userId: string }) {
       {!titles.length ? (
         <BuyerEmptyState />
       ) : tab === "licenses" ? (
-        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
-      ) : view === "gallery" ? (
+        <TitleCatalogue view="list" titles={licensed} artworkByTitle={artworkByTitle} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
+      ) : (
         <div className="space-y-4">
-          <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
-          {visible.length > BUYER_GALLERY_PAGE_SIZE ? (
+          <TitleCatalogue
+            view={view}
+            titles={view === "gallery" ? pageTitles : visible}
+            artworkByTitle={artworkByTitle}
+            entitled={entitled}
+            order={order}
+            empty="No titles match this search."
+          />
+          {view === "gallery" && visible.length > BUYER_GALLERY_PAGE_SIZE ? (
             <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
               <button
                 type="button"
@@ -305,8 +312,6 @@ function BuyerBody({ userId }: { userId: string }) {
             </div>
           ) : null}
         </div>
-      ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
       )}
       {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
         <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>
@@ -358,71 +363,6 @@ function BuyerEmptyState() {
   );
 }
 
-function TitleGallery({
-  titles,
-  artworkByTitle,
-  entitled,
-  order,
-}: {
-  titles: BuyerTitleCard[];
-  artworkByTitle: Map<string, Blob>;
-  entitled: Set<string>;
-  order: { isPending: boolean; mutate: (id: string) => void };
-}) {
-  if (!titles.length) return <p className="text-sm text-muted">No titles match this search.</p>;
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {titles.map((title) => {
-        const posterBlob = artworkByTitle.get(title.id);
-        const details = [
-          title.language,
-          title.year ? String(title.year) : null,
-          title.runtimeMinutes ? `${title.runtimeMinutes} min` : null,
-        ].filter(Boolean).join(" · ");
-        return (
-          <article key={title.id} className="overflow-hidden rounded-sm border border-line bg-surface">
-            <div className="relative aspect-[2/3] overflow-hidden bg-gradient-to-br from-slate-950 via-slate-800 to-slate-950">
-              <BuyerPosterImage blob={posterBlob} title={title.name} />
-            </div>
-            <div className="space-y-3 p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <Link to="/title/$id" params={{ id: title.id }} className="font-semibold leading-snug hover:text-accent">
-                    {title.name}
-                  </Link>
-                  <p className="mt-1 text-xs text-muted">{details || "Details pending"}</p>
-                </div>
-                <StatusChip status={title.status as never} />
-              </div>
-              {title.synopsis.trim() ? (
-                <p className="line-clamp-3 text-sm leading-relaxed text-muted">{title.synopsis}</p>
-              ) : null}
-              <div className="flex items-center justify-between gap-3 border-t border-line pt-3">
-                <p className="text-sm font-medium">
-                  {title.licensingFeePaise > 0
-                    ? `${formatLicensingFeePaise(title.licensingFeePaise)} licensing fee`
-                    : "Commercial terms on request"}
-                </p>
-                {entitled.has(title.id) ? (
-                  <span className="shrink-0 text-sm font-semibold text-accent">Licensed</span>
-                ) : (
-                  <Button
-                    disabled={order.isPending || title.licensingFeePaise <= 0}
-                    onClick={() => order.mutate(title.id)}
-                  >
-                    License
-                  </Button>
-                )}
-              </div>
-            </div>
-          </article>
-        );
-      })}
-    </div>
-  );
-}
-
 function BuyerPosterImage({ blob, title }: { blob: Blob | undefined; title: string }) {
   const [url, setUrl] = useState<string | null>(null);
 
@@ -458,22 +398,77 @@ function BuyerPosterImage({ blob, title }: { blob: Blob | undefined; title: stri
   );
 }
 
-function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
+function TitleCatalogue({
+  view,
+  titles,
+  artworkByTitle,
+  entitled,
+  order,
+  empty,
+}: {
+  view: "gallery" | "list";
+  titles: BuyerTitleCard[];
+  artworkByTitle: Map<string, Blob>;
+  entitled: Set<string>;
+  order: { isPending: boolean; mutate: (id: string) => void };
+  empty: string;
+}) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
+
+  if (view === "list") {
+    return (
+      <ul className="divide-y divide-line rounded-sm border border-line">
+        {titles.map((title) => (
+          <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+            <div>
+              <Link to="/title/$id" params={{ id: title.id }} className="font-medium hover:text-accent">{title.name}</Link>
+              <p className="text-sm text-muted">{title.language}{title.licensingFeePaise > 0 ? ` · ${formatLicensingFeePaise(title.licensingFeePaise)}` : " · fee unset"}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <StatusChip status={title.status as never} />
+              {entitled.has(title.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || title.licensingFeePaise <= 0} onClick={() => order.mutate(title.id)}>License</Button>}
+            </div>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
   return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
-      {titles.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-          <div>
-            <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">{t.name}</Link>
-            <p className="text-sm text-muted">{t.language}{t.licensingFeePaise > 0 ? ` · ${formatLicensingFeePaise(t.licensingFeePaise)}` : " · fee unset"}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <StatusChip status={t.status as never} />
-            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
-          </div>
-        </li>
-      ))}
-    </ul>
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {titles.map((title) => {
+        const posterBlob = artworkByTitle.get(title.id);
+        const details = [
+          title.language,
+          title.year ? String(title.year) : null,
+          title.runtimeMinutes ? `${title.runtimeMinutes} min` : null,
+        ].filter(Boolean).join(" · ");
+        return (
+          <article key={title.id} className="overflow-hidden rounded-sm border border-line bg-surface">
+            <div className="relative aspect-[2/3] overflow-hidden bg-gradient-to-br from-slate-950 via-slate-800 to-slate-950">
+              <BuyerPosterImage blob={posterBlob} title={title.name} />
+            </div>
+            <div className="space-y-3 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <Link to="/title/$id" params={{ id: title.id }} className="font-semibold leading-snug hover:text-accent">{title.name}</Link>
+                  <p className="mt-1 text-xs text-muted">{details || "Details pending"}</p>
+                </div>
+                <StatusChip status={title.status as never} />
+              </div>
+              {title.synopsis.trim() ? <p className="line-clamp-3 text-sm leading-relaxed text-muted">{title.synopsis}</p> : null}
+              <div className="flex items-center justify-between gap-3 border-t border-line pt-3">
+                <p className="text-sm font-medium">
+                  {title.licensingFeePaise > 0 ? `${formatLicensingFeePaise(title.licensingFeePaise)} licensing fee` : "Commercial terms on request"}
+                </p>
+                {entitled.has(title.id) ? <span className="shrink-0 text-sm font-semibold text-accent">Licensed</span> : (
+                  <Button disabled={order.isPending || title.licensingFeePaise <= 0} onClick={() => order.mutate(title.id)}>License</Button>
+                )}
+              </div>
+            </div>
+          </article>
+        );
+      })}
+    </div>
   );
 }
