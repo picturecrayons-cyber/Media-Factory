@@ -263,23 +263,53 @@ function LoopPublicationCard({
 }
 
 function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
+  const [view, setView] = useState<"gallery" | "list">("gallery");
   return (
-    <section className="space-y-3">
-      <SectionHeader title="Titles" description="One canonical Title ID from intake through delivery." />
-      <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-        {titles.length ? titles.slice(0, 100).map((title) => (
-          <div key={title.id} className="flex flex-col gap-3 border-b border-line p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-medium">{title.name}</p>
-              <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
-              <Link to="/title/$id" params={{ id: title.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open</Link>
-            </div>
-          </div>
-        )) : <Empty text="No titles in the Bridge catalog." />}
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <SectionHeader title="Master title catalog" description={`${titles.length} recorded titles · All production stages remain visible here until separately authorized for a destination.`} />
+        </div>
+        <div className="flex gap-2" role="group" aria-label="Catalog view">
+          <Button size="sm" variant={view === "gallery" ? "default" : "outline"} onClick={() => setView("gallery")} aria-pressed={view === "gallery"}>Gallery view</Button>
+          <Button size="sm" variant={view === "list" ? "default" : "outline"} onClick={() => setView("list")} aria-pressed={view === "list"}>List view</Button>
+        </div>
       </div>
+      {!titles.length ? <Empty text="No titles in the Bridge master catalog." /> : view === "gallery" ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {titles.map((title) => (
+            <article key={title.id} className="flex min-h-44 flex-col rounded-2xl border border-line bg-surface p-4">
+              <div className="mb-3 flex aspect-[16/9] items-center justify-center rounded-xl border border-dashed border-line bg-elevated text-xs text-muted">
+                Poster preview is available in the title workspace
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold">{title.name}</p>
+                <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language || "Language not set"}</p>
+                <p className="mt-1 break-all text-[11px] text-muted">{title.id}</p>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
+                <Link to="/title/$id" params={{ id: title.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open title</Link>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+          {titles.map((title) => (
+            <div key={title.id} className="flex flex-col gap-3 border-b border-line p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium">{title.name}</p>
+                <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language || "Language not set"} · {title.id}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
+                <Link to="/title/$id" params={{ id: title.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open title</Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
