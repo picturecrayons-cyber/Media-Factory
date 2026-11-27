@@ -416,7 +416,7 @@ test("legal reviewers and admins cannot approve Bridge rights or licensing", asy
   }
 });
 
-test("Submit for QC advances PREPARING with the referenced vertical poster and writes lifecycle plus audit only", async () => {
+test("Submit for QC creates one pending review case with lifecycle and audit atomically", async () => {
   const f = await fixture();
   try {
     await f.sql.query(`
@@ -455,12 +455,13 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
       )).length,
       1,
     );
-    assert.equal(
-      (await f.sql.query(
-        "select * from bridge_qc_cases where title_id='qc-submit-title'",
-      )).length,
-      0,
+    const qcCases = await f.sql.query<{ status: string; reviewed_by: string | null; reviewed_at: Date | null }>(
+      "select status, reviewed_by, reviewed_at from bridge_qc_cases where title_id='qc-submit-title'",
     );
+    assert.equal(qcCases.length, 1);
+    assert.equal(qcCases[0].status, "PENDING");
+    assert.equal(qcCases[0].reviewed_by, null);
+    assert.equal(qcCases[0].reviewed_at, null);
   } finally {
     await f.db.close();
   }
