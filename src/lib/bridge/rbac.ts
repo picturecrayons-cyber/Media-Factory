@@ -199,7 +199,6 @@ export function canReadTitle(
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
   // Buyer visibility is resource-scoped and must be checked against an active
   // bridge_buyer_title_access grant by the server. Role/status alone is never enough.
-  if (actor.accountType === "buyer") return false;
   return false;
 }
 
