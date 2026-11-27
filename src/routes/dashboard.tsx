@@ -136,7 +136,7 @@ function DashboardBody() {
           <div>
             <h3 id="today-title" className="font-display text-xl font-semibold">Needs your attention</h3>
             <p className="mt-1 text-sm text-muted">
-              Only titles in review or licensing-decision states are listed here.
+              Titles needing preparation, QC, rights or licensing attention are listed here.
             </p>
           </div>
           <p className="text-sm font-semibold">
