@@ -33,7 +33,7 @@ export function StoryConceptDesk() {
   const update = useMutation({
     mutationFn: (input: {
       id: string;
-      status: CurationStatus;
+      status: Exclude<CurationStatus, "INTRODUCED_TO_BUYERS">;
       adminNotes?: string;
     }) => updateStoryConceptCuration({ data: input }),
     onSuccess: () => {
