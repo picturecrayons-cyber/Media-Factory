@@ -157,7 +157,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     )
       throw new Error("Not found");
     const sql = await getSql();
-    const grants = await sql<{
+    const grants = actor.internalRole === "super_admin" ? await sql<{
       id: string;
       status: string;
       territories: string[];
@@ -170,7 +170,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
       }>;
-    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc` : [];
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
