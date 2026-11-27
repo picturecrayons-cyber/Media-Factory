@@ -11,6 +11,7 @@ import {
   getStoryConceptNetworkReadiness,
   grantStoryConceptNetworkAccess,
   listStoryConceptNetworkOrganizations,
+  revokeStoryConceptNetworkAccess,
   reviewStoryConceptReadiness,
 } from "@/lib/bridge/story-concept-network-api";
 
@@ -185,6 +186,12 @@ function StoryConceptNetworkControls({ conceptSubmissionId }: { conceptSubmissio
       void qc.invalidateQueries({ queryKey: ["story-concept-network-readiness", conceptSubmissionId] });
     },
   });
+  const revoke = useMutation({
+    mutationFn: (mandateId: string) => revokeStoryConceptNetworkAccess({
+      data: { mandateId, reason: "Revoked by Super Admin during concept network review." },
+    }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["story-concept-network-readiness", conceptSubmissionId] }),
+  });
   const readiness = useMutation({
     mutationFn: () => reviewStoryConceptReadiness({
       data: { conceptSubmissionId, decision: "APPROVED", reviewNotes: "Positive interest verified from introduced Buyer / Investor organization." },
@@ -203,6 +210,14 @@ function StoryConceptNetworkControls({ conceptSubmissionId }: { conceptSubmissio
   const mandates = readinessQ.data?.mandates ?? [];
   const interest = readinessQ.data?.interest ?? [];
   const gate = readinessQ.data?.readiness;
+  const hasCurrentPositiveInterest = interest.some((event) =>
+    ["INTERESTED", "REQUESTED_MATERIALS"].includes(event.interest_level) &&
+    mandates.some((mandate) =>
+      mandate.grantee_organization_id === event.organization_id &&
+      mandate.grantee_account_type === event.account_type &&
+      mandate.grant_status === "ACTIVE"
+    )
+  );
 
   return (
     <div className="mt-4 space-y-3 rounded-xl border border-line bg-elevated/30 p-4">
@@ -249,6 +264,11 @@ function StoryConceptNetworkControls({ conceptSubmissionId }: { conceptSubmissio
               <p key={mandate.id} className="text-xs text-muted">
                 {mandate.organization_name} · {mandate.grantee_account_type} · {mandate.grant_status}
                 {mandate.expires_at ? ` · expires ${new Date(mandate.expires_at).toLocaleDateString()}` : ""}
+                {mandate.grant_status === "ACTIVE" ? (
+                  <button type="button" disabled={revoke.isPending} onClick={() => revoke.mutate(mandate.id)} className="ml-2 underline">
+                    Revoke
+                  </button>
+                ) : null}
               </p>
             )) : <p className="text-xs text-muted">No organization introductions recorded.</p>}
           </div>
@@ -267,13 +287,14 @@ function StoryConceptNetworkControls({ conceptSubmissionId }: { conceptSubmissio
             </p>
             <Button
               size="sm"
-              disabled={readiness.isPending || !interest.some((event) => ["INTERESTED", "REQUESTED_MATERIALS"].includes(event.interest_level))}
+              disabled={readiness.isPending || !hasCurrentPositiveInterest}
               onClick={() => readiness.mutate()}
             >
               {readiness.isPending ? "Reviewing…" : "Approve Production readiness"}
             </Button>
           </div>
           {readiness.isError ? <p role="alert" className="text-xs text-accent">{String(readiness.error)}</p> : null}
+          {revoke.isError ? <p role="alert" className="text-xs text-accent">{String(revoke.error)}</p> : null}
           <p className="text-xs leading-5 text-muted">
             Readiness approval is not Production handoff. The Production project migration and linked Finished Film creation remain a separate release gate.
           </p>
