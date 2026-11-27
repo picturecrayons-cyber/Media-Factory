@@ -10,6 +10,8 @@ import type { CurationStatus } from "@/lib/bridge/story-concept";
 import {
   getStoryConceptNetworkReadiness,
   grantStoryConceptNetworkAccess,
+  handoffStoryConceptToProduction,
+  listStoryConceptProductionOrganizations,
   listStoryConceptNetworkOrganizations,
   revokeStoryConceptNetworkAccess,
   reviewStoryConceptReadiness,
@@ -166,6 +168,7 @@ function StoryConceptNetworkControls({ conceptSubmissionId }: { conceptSubmissio
   const qc = useQueryClient();
   const [accountType, setAccountType] = useState<"buyer" | "investor">("buyer");
   const [organizationId, setOrganizationId] = useState("");
+  const [productionOrganizationId, setProductionOrganizationId] = useState("");
   const orgsQ = useQuery({
     queryKey: ["story-concept-network-organizations"],
     queryFn: () => listStoryConceptNetworkOrganizations(),
@@ -177,6 +180,12 @@ function StoryConceptNetworkControls({ conceptSubmissionId }: { conceptSubmissio
     retry: false,
   });
   const available = (orgsQ.data?.organizations ?? []).filter((org) => org.account_type === accountType);
+  const productionOrgsQ = useQuery({
+    queryKey: ["story-concept-production-organizations"],
+    queryFn: () => listStoryConceptProductionOrganizations(),
+    enabled: readinessQ.data?.readiness?.readiness_status === "APPROVED",
+    retry: false,
+  });
   const grant = useMutation({
     mutationFn: () => grantStoryConceptNetworkAccess({
       data: { conceptSubmissionId, organizationId, accountType },
@@ -191,6 +200,15 @@ function StoryConceptNetworkControls({ conceptSubmissionId }: { conceptSubmissio
       data: { mandateId, reason: "Revoked by Super Admin during concept network review." },
     }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["story-concept-network-readiness", conceptSubmissionId] }),
+  });
+  const handoff = useMutation({
+    mutationFn: () => handoffStoryConceptToProduction({
+      data: { conceptSubmissionId, productionOrganizationId },
+    }),
+    onSuccess: () => {
+      setProductionOrganizationId("");
+      void qc.invalidateQueries({ queryKey: ["story-concept-network-readiness", conceptSubmissionId] });
+    },
   });
   const readiness = useMutation({
     mutationFn: () => reviewStoryConceptReadiness({
@@ -295,9 +313,58 @@ function StoryConceptNetworkControls({ conceptSubmissionId }: { conceptSubmissio
           </div>
           {readiness.isError ? <p role="alert" className="text-xs text-accent">{String(readiness.error)}</p> : null}
           {revoke.isError ? <p role="alert" className="text-xs text-accent">{String(revoke.error)}</p> : null}
-          <p className="text-xs leading-5 text-muted">
-            Readiness approval is not Production handoff. The Production project migration and linked Finished Film creation remain a separate release gate.
-          </p>
+          {gate?.readiness_status === "APPROVED" ? (
+            <div className="space-y-2 border-t border-line pt-3">
+              <p className="text-xs font-medium">Production handoff</p>
+              {productionOrgsQ.isPending ? (
+                <p className="text-xs text-muted">Loading verified Production studios…</p>
+              ) : productionOrgsQ.isError ? (
+                <p className="text-xs text-accent">Unable to load eligible Production studios.</p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    aria-label="Production studio organization"
+                    value={productionOrganizationId}
+                    onChange={(event) => setProductionOrganizationId(event.target.value)}
+                    className="min-w-56 rounded-md border border-line bg-surface px-3 py-2 text-xs"
+                  >
+                    <option value="">Select Production studio</option>
+                    {(productionOrgsQ.data?.organizations ?? []).map((org) => (
+                      <option key={org.organization_id} value={org.organization_id}>
+                        {org.organization_name} ({org.verified_member_count} verified)
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    size="sm"
+                    disabled={!productionOrganizationId || handoff.isPending}
+                    onClick={() => handoff.mutate()}
+                  >
+                    {handoff.isPending ? "Handing off…" : "Create Production project"}
+                  </Button>
+                </div>
+              )}
+              {handoff.isError ? <p role="alert" className="text-xs text-accent">{String(handoff.error)}</p> : null}
+            </div>
+          ) : null}
+          {gate?.readiness_status === "HANDED_OFF" ? (
+            <div className="border-t border-line pt-3 text-xs">
+              <p className="font-medium">Production handoff completed</p>
+              <p className="mt-1 text-muted">
+                Project: {gate.production_project_id ?? "—"} · Finished Film: {gate.finished_film_title_id ?? "—"}
+              </p>
+              {gate.finished_film_title_id ? (
+                <Link to="/title/$id" params={{ id: gate.finished_film_title_id }} className="mt-2 inline-flex underline">
+                  Open Finished Film draft
+                </Link>
+              ) : null}
+              <p className="mt-2 text-muted">Production starts at PRE_PRODUCTION. The new Finished Film remains DRAFT; ingest, DIT, QC, Rights and Legal gates still apply.</p>
+            </div>
+          ) : (
+            <p className="text-xs leading-5 text-muted">
+              Interest does not trigger Production automatically. Super Admin must approve readiness and select a verified Studio organization for the handoff.
+            </p>
+          )}
         </>
       )}
     </div>
