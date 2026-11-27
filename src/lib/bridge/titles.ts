@@ -23,6 +23,7 @@ type TitleRow = {
   owner_account_type: string;
   owner_organization_id?: string | null;
   record_classification?: string | null;
+  submission_type?: string | null;
   status: string;
   synopsis: string;
   language: string;
@@ -427,6 +428,10 @@ export const getTitle = createServerFn({ method: "GET" })
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
     const sql = await getSql();
+    const submissionKind = await sql<{ submission_type: string | null }>`
+      select submission_type from bridge_titles where id = ${data.id} limit 1
+    `;
+    if (submissionKind[0]?.submission_type === "story_concept") throw new Error("Not found");
     const buyerView = actor.accountType === "buyer" && !actor.internalRole;
     if (buyerView) {
       // A published title is visible only to the buyer account explicitly granted
