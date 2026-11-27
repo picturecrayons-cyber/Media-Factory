@@ -7,6 +7,7 @@ import { loadTitle } from "./titles";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
+import { assertVendorJobsSuperAdmin } from "./delivery-jobs-policy";
 
 const jobType = z.enum(["dubbing", "loudness_check", "imf_request", "dcp_request", "human_qc", "localization"]);
 const databaseType: Record<z.infer<typeof jobType>, string> = {
@@ -27,17 +28,11 @@ async function actorFor(userId: string) {
   return requireVerifiedActor(userId);
 }
 
-function requireSuperAdmin(actor: Awaited<ReturnType<typeof actorFor>>) {
-  if (!actor.emailVerified || actor.internalRole !== "super_admin") {
-    throw new Error("Only the verified Bridge Super Admin may access Vendor Jobs");
-  }
-}
-
 export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await actorFor(context.userId);
-    requireSuperAdmin(actor);
+    assertVendorJobsSuperAdmin(actor);
     const sql = await getSql();
     const rows = await sql<{
       id: string; title_id: string; job_type: string; status: string; assigned_vendor: string | null;
@@ -74,7 +69,7 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
   }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    requireSuperAdmin(actor);
+    assertVendorJobsSuperAdmin(actor);
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Title not found");
     const id = randomUUID();
@@ -95,7 +90,7 @@ export const assignBridgeDeliveryJob = createServerFn({ method: "POST" })
   .validator(z.object({ jobId: z.string().uuid(), vendor: z.string().trim().min(2).max(160) }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    requireSuperAdmin(actor);
+    assertVendorJobsSuperAdmin(actor);
     const sql = await getSql();
     const rows = await sql<{ id: string }>`
       update bridge_delivery_jobs set status='in_progress', assigned_vendor=${data.vendor}, updated_at=now()
@@ -111,7 +106,7 @@ export const completeBridgeDeliveryJob = createServerFn({ method: "POST" })
   .validator(z.object({ jobId: z.string().uuid(), receiptUrl: z.string().url().max(2048) }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    requireSuperAdmin(actor);
+    assertVendorJobsSuperAdmin(actor);
     const url = new URL(data.receiptUrl);
     if (url.protocol !== "https:") throw new Error("Delivery receipt must use HTTPS");
     const sql = await getSql();
@@ -129,7 +124,7 @@ export const approveBridgeDeliveryJob = createServerFn({ method: "POST" })
   .validator(z.object({ jobId: z.string().uuid(), note: z.string().trim().min(8).max(1000) }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    requireSuperAdmin(actor);
+    assertVendorJobsSuperAdmin(actor);
     const sql = await getSql();
     const rows = await sql<{ id: string; title_id: string }>`
       update bridge_delivery_jobs set status='approved', admin_sign_off=true, updated_at=now()
