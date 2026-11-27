@@ -26,6 +26,7 @@ type ConceptRow = {
   synopsis: string | null;
   treatment_url: string | null;
   screenplay_url: string | null;
+  development_stage: "NOT_STARTED" | "IN_DEVELOPMENT" | null;
   genre: string[] | null;
   estimated_budget_range: string | null;
   target_platforms: string[] | null;
@@ -49,6 +50,7 @@ function mapConcept(r: ConceptRow): StoryConceptSubmission {
     synopsis: r.synopsis,
     treatment_url: r.treatment_url,
     screenplay_url: r.screenplay_url,
+    development_stage: r.development_stage ?? null,
     genre: r.genre ?? [],
     estimated_budget_range: r.estimated_budget_range,
     target_platforms: r.target_platforms ?? [],
@@ -95,6 +97,7 @@ const createPayloadSchema = z.object({
   synopsis: z.string().min(40).max(8000),
   genre: z.array(z.string().min(1).max(40)).max(12).default([]),
   estimatedBudgetRange: z.string().max(80).optional(),
+  developmentStage: z.enum(["NOT_STARTED", "IN_DEVELOPMENT"]).default("NOT_STARTED"),
   targetPlatforms: z.array(z.string().min(1).max(40)).max(12).default([]),
   treatmentUrl: z.string().url().max(500).optional().or(z.literal("")),
   screenplayUrl: z.string().url().max(500).optional().or(z.literal("")),
@@ -144,14 +147,13 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
 
       const conceptRows = await sql<ConceptRow>`
         insert into bridge_story_concept_submissions (
-          title_id, logline, synopsis, treatment_url, screenplay_url,
-          genre, estimated_budget_range, target_platforms, curation_status
+          title_id, logline, synopsis, development_stage, genre,
+          estimated_budget_range, target_platforms, curation_status
         ) values (
           ${titleId},
           ${data.logline},
           ${data.synopsis},
-          ${data.treatmentUrl || null},
-          ${data.screenplayUrl || null},
+          ${data.developmentStage},
           ${data.genre},
           ${data.estimatedBudgetRange ?? null},
           ${data.targetPlatforms},
