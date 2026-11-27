@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
+import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { getDashboardSession } from "@/lib/bridge/session";
 
@@ -75,6 +76,12 @@ function DashboardBody() {
     enabled: dashboardQ.isSuccess,
     retry: 1,
   });
+  const publicationReadinessQ = useQuery({
+    queryKey: ["loop-publication-readiness"],
+    queryFn: () => listLoopPublicationReadiness(),
+    enabled: dashboardQ.isSuccess,
+    retry: 1,
+  });
 
   if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
   if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
@@ -84,7 +91,7 @@ function DashboardBody() {
   const liveOrCommercial = titles.filter((title) =>
     ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status),
   );
-  const readyToList = titles.filter((title) => title.status === "LICENSING_READY").length;
+  const loopPublicationEligible = publicationReadinessQ.data?.titles.filter((title) => title.ready).length ?? 0;
   const activeDeals = titles.filter((title) =>
     title.status === "LICENSED" || title.status === "IN_NEGOTIATION",
   ).length;
@@ -200,15 +207,15 @@ function DashboardBody() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Stat label="Licensed value*" value={moneyValue} />
           <Link to="/workspace" className="block rounded-sm outline-offset-2 transition hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
-            <Stat label="Live / commercial titles" value={metricValue(liveOrCommercial.length)} />
+            <Stat label="Commercial workflow titles" value={metricValue(liveOrCommercial.length)} />
             <span className="px-4 pb-3 text-xs font-semibold text-accent">Open title register →</span>
           </Link>
-          <Link to="/admin/workstations" className="block rounded-sm outline-offset-2 transition hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
-            <Stat label="Ready for licensing review" value={metricValue(readyToList)} />
-            <span className="px-4 pb-3 text-xs font-semibold text-accent">Open operations →</span>
+          <Link to="/cms?tab=publishing" className="block rounded-sm outline-offset-2 transition hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+            <Stat label="Loop publication eligible" value={publicationReadinessQ.isPending || publicationReadinessQ.isError ? "—" : String(loopPublicationEligible)} />
+            <span className="px-4 pb-3 text-xs font-semibold text-accent">Open publishing desk →</span>
           </Link>
           <Link to="/buyer" className="block rounded-sm outline-offset-2 transition hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
-            <Stat label="Licensed or negotiating deals" value={metricValue(activeDeals)} />
+            <Stat label="Licensed / negotiating titles" value={metricValue(activeDeals)} />
             <span className="px-4 pb-3 text-xs font-semibold text-accent">Open buyer desk →</span>
           </Link>
         </div>
