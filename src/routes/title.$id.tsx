@@ -103,26 +103,27 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     queryKey: ["bridge-title", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitle({ data: { id } }),
   });
+  const isStoryConcept = titleQ.data?.submissionType === "story_concept";
   const assetsQ = useQuery({
     queryKey: ["bridge-assets", id, actor.userId],
     queryFn: () => listTitleAssets({ data: { titleId: id } }),
-    enabled: !buyerView,
+    enabled: !buyerView && !isStoryConcept,
   });
   const productionAssetsQ = useQuery({
     queryKey: ["bridge-production-assets", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => listProductionAssets({ data: { titleId: id } }),
-    enabled: !buyerView,
+    enabled: !buyerView && !isStoryConcept,
   });
   const pubQ = useQuery({
     queryKey: ["loop-pub", id, actor.userId],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }),
-    enabled: !buyerView,
+    enabled: !buyerView && !isStoryConcept,
   });
 
   const reviewQ = useQuery({
     queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
-    enabled: !buyerView,
+    enabled: !buyerView && !isStoryConcept,
   });
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
@@ -137,6 +138,34 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   if (titleQ.isError)
     return <p role="alert">Title workspace unavailable: {titleQ.error.message}</p>;
   if (!title) return <p className="text-sm text-muted">Title not found.</p>;
+
+  // Story / Concept records must never fall through to the Finished Film
+  // workspace, which exposes master/trailer/artwork upload controls.
+  if (isStoryConcept) {
+    const returnPath = actor.internalRole
+      ? "/admin/workstations"
+      : actor.accountType === "studio"
+        ? "/studio"
+        : "/creator";
+    const returnLabel = actor.internalRole
+      ? "Return to Admin Workstations → Concepts"
+      : actor.accountType === "studio"
+        ? "Return to Studio Home"
+        : "Return to Creator Home";
+    return (
+      <section className="rounded-2xl border border-line bg-surface p-6 sm:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Story / Concept</p>
+        <h1 className="mt-2 font-display text-2xl font-semibold">{title.name}</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
+          This submission belongs to the dedicated Story / Concept workflow. Finished Film master,
+          trailer, artwork and technical-file uploads are not available for this record.
+        </p>
+        <a href={returnPath} className="mt-5 inline-flex rounded-full border border-line px-4 py-2 text-sm font-semibold hover:border-line-strong">
+          {returnLabel}
+        </a>
+      </section>
+    );
+  }
 
   const qcReady =
     reviewQ.data?.qc?.status === "PASSED" &&
