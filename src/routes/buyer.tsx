@@ -6,6 +6,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
+import { StoryConceptNetworkPanel } from "@/components/bridge/story-concept-network-panel";
 import { getBearerToken } from "@/lib/auth/client";
 import { listTitles } from "@/lib/bridge/titles";
 import {
@@ -251,6 +252,7 @@ function BuyerBody({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-5">
+      <StoryConceptNetworkPanel accountType="buyer" />
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
         <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
