@@ -257,7 +257,8 @@ export const getCheckoutConfig = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole) throw new Error("Buyer account required");
     const { keyId } = requireRazorpayKeys();
     return { keyId };
   });
@@ -274,6 +275,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole) throw new Error("Buyer account required");
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
     if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
@@ -405,6 +407,7 @@ export const verifyLicensePayment = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole) throw new Error("Buyer account required");
     const { keySecret } = requireRazorpayKeys();
     const ok = verifyRazorpaySignature({
       secret: keySecret,
@@ -423,6 +426,7 @@ export const listOwnEntitlements = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole) throw new Error("Buyer account required");
     assertPermission(actor, "entitlement.read_own");
     const sql = await getSql();
     const rows = await sql<{
