@@ -235,7 +235,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
     onError: (err) => toast.error(err instanceof Error ? err.message : "Window extension failed"),
   });
 
-  const allTitles = q.data?.titles;
+  const allTitles = q.data?.titles ?? [];
   // Keep the hook unconditional; use the same empty collection while data is unavailable.
   const filteredTitles = useMemo(() => (allTitles ?? []).filter((t) => {
     const pubStatus = t.publication?.authorizationStatus?.toLowerCase();
