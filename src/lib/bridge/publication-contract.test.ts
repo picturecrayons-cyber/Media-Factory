@@ -18,6 +18,7 @@ function harness(
     curation_status: "APPROVED",
     delivery_status: "READY",
   },
+  internalRole: "super_admin" | "admin" | "legal_reviewer" = "super_admin",
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
@@ -62,7 +63,7 @@ function harness(
     "@/lib/auth/middleware": { authMiddleware: {} },
     "@/lib/db": { getSql: async () => sql },
     "./rbac": { assertPermission: () => { if (!allowed) throw new Error("Forbidden"); } },
-    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true }) },
+    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true, internalRole }) },
     "./guards": { assertNotDevUser: () => {} },
     "./audit": { writeAudit: async () => {} },
     "./rights-coverage": rights,
@@ -107,6 +108,15 @@ const data = {
   windowEnd: "2099-01-01T00:00:00.000Z",
 };
 const context = { userId: "operator" };
+
+test("only the verified Super Admin can authorize Bridge distribution", async () => {
+  const h = harness([grant], true, false, undefined, "admin");
+  await assert.rejects(
+    h.authorize({ context, data }),
+    /Only the verified Super Admin may authorize Bridge distribution/,
+  );
+  assert.equal(h.writes.length, 0);
+});
 
 test("new and existing publications emit the status accepted by the Loop catalog", async () => {
   for (const existing of [false, true]) {

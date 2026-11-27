@@ -17,7 +17,17 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 70;
+const EXPECTED_HISTORICAL_MIGRATIONS = 70;
+const ADDITIVE_MIGRATIONS = new Map([
+  [
+    "20261127130000_bridge_explicit_test_title_classification.sql",
+    {
+      bytes: 2083,
+      sha256: "52d57f73ecafa0bde77cc29a01cd80d400a22f57bd682d0dbaf1a55da499c112",
+    },
+  ],
+]);
+const EXPECTED_MIGRATIONS = EXPECTED_HISTORICAL_MIGRATIONS + ADDITIVE_MIGRATIONS.size;
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -86,16 +96,16 @@ for (const line of manifest.split(String.fromCharCode(10))) {
   }
   manifestRows.set(`${version}_${migrationName}.sql`, { bytes, sha256 });
 }
-if (manifestRows.size !== EXPECTED_MIGRATIONS) {
+if (manifestRows.size !== EXPECTED_HISTORICAL_MIGRATIONS) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
+    `Expected ${EXPECTED_HISTORICAL_MIGRATIONS} historical manifest rows; found ${manifestRows.size}`,
   );
 }
 
 for (const name of names) {
   const contents = await readFile(join(MIGRATIONS_DIR, name));
-  const expected = manifestRows.get(name);
-  if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
+  const expected = manifestRows.get(name) ?? ADDITIVE_MIGRATIONS.get(name);
+  if (!expected) throw new Error(`Migration missing from historical manifest or additive allowlist: ${name}`);
   const actualBytes = contents.byteLength;
   const actualSha256 = createHash("sha256").update(contents).digest("hex");
   if (actualBytes !== expected.bytes || actualSha256 !== expected.sha256) {

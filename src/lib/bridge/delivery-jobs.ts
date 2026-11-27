@@ -3,11 +3,11 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
+import { loadTitle } from "./titles";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
-import { assertPermission, canReadTitle } from "./rbac";
-import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
+import { assertVendorJobsSuperAdmin } from "./delivery-jobs-policy";
 
 const jobType = z.enum(["dubbing", "loudness_check", "imf_request", "dcp_request", "human_qc", "localization"]);
 const databaseType: Record<z.infer<typeof jobType>, string> = {
@@ -32,45 +32,17 @@ export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await actorFor(context.userId);
+    assertVendorJobsSuperAdmin(actor);
     const sql = await getSql();
-    const internal = Boolean(actor.internalRole && (actor.internalRole === "admin" || actor.internalRole === "super_admin"));
-    if (!internal && !actor.organizationId && !["independent_creator", "studio"].includes(actor.accountType)) {
-      throw new Error("Delivery workspace access required");
-    }
-    const rows = internal
-      ? await sql<{
-          id: string; title_id: string; job_type: string; status: string; assigned_vendor: string | null;
-          delivery_receipt_url: string | null; admin_sign_off: boolean; request_note: string | null;
-          requested_by: string | null; created_at: string | Date; updated_at: string | Date;
-        }>`
-          select id, title_id, job_type, status, assigned_vendor, delivery_receipt_url,
-            admin_sign_off, request_note, requested_by, created_at, updated_at
-          from bridge_delivery_jobs order by created_at desc limit 200
-        `
-      : await sql<{
-          id: string; title_id: string; job_type: string; status: string; assigned_vendor: string | null;
-          delivery_receipt_url: string | null; admin_sign_off: boolean; request_note: string | null;
-          requested_by: string | null; created_at: string | Date; updated_at: string | Date;
-        }>`
-          select j.id, j.title_id, j.job_type, j.status, j.assigned_vendor, j.delivery_receipt_url,
-            j.admin_sign_off, j.request_note, j.requested_by, j.created_at, j.updated_at
-          from bridge_delivery_jobs j
-          join bridge_titles t on t.id = j.title_id
-          where j.requested_by = ${actor.userId}
-            or t.owner_user_id = ${actor.userId}
-            or (
-              ${actor.accountType === "studio" && Boolean(actor.organizationId)}
-              and t.owner_account_type = 'studio'
-              and t.owner_organization_id = ${actor.organizationId ?? null}::uuid
-              and exists (
-                select 1 from bridge_organization_memberships m
-                where m.organization_id = t.owner_organization_id
-                  and m.user_id = ${actor.userId}
-                  and m.status = 'active'
-              )
-            )
-          order by j.created_at desc limit 200
-        `;
+    const rows = await sql<{
+      id: string; title_id: string; job_type: string; status: string; assigned_vendor: string | null;
+      delivery_receipt_url: string | null; admin_sign_off: boolean; request_note: string | null;
+      requested_by: string | null; created_at: string | Date; updated_at: string | Date;
+    }>`
+      select id, title_id, job_type, status, assigned_vendor, delivery_receipt_url,
+        admin_sign_off, request_note, requested_by, created_at, updated_at
+      from bridge_delivery_jobs order by created_at desc limit 200
+    `;
     return {
       jobs: rows.map((row) => ({
         id: row.id,
@@ -97,15 +69,9 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
   }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
+    assertVendorJobsSuperAdmin(actor);
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Title not found");
-    const canManage = Boolean(actor.internalRole && hasDeliveryPermission(actor));
-    if (!canManage && (!canReadTitle(actor, title) || actor.internalRole)) {
-      throw new Error("You can request delivery services only for titles you are authorized to access");
-    }
-    if (!canManage && !["independent_creator", "studio"].includes(actor.accountType)) {
-      throw new Error("Delivery requests are not enabled for this account type");
-    }
     const id = randomUUID();
     const sql = await getSql();
     await sql`
@@ -119,16 +85,12 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
     return { id, status: "requested" as const };
   });
 
-function hasDeliveryPermission(actor: Awaited<ReturnType<typeof actorFor>>) {
-  try { assertPermission(actor, "title.deliver"); return true; } catch { return false; }
-}
-
 export const assignBridgeDeliveryJob = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ jobId: z.string().uuid(), vendor: z.string().trim().min(2).max(160) }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    assertPermission(actor, "title.deliver");
+    assertVendorJobsSuperAdmin(actor);
     const sql = await getSql();
     const rows = await sql<{ id: string }>`
       update bridge_delivery_jobs set status='in_progress', assigned_vendor=${data.vendor}, updated_at=now()
@@ -144,7 +106,7 @@ export const completeBridgeDeliveryJob = createServerFn({ method: "POST" })
   .validator(z.object({ jobId: z.string().uuid(), receiptUrl: z.string().url().max(2048) }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    assertPermission(actor, "title.deliver");
+    assertVendorJobsSuperAdmin(actor);
     const url = new URL(data.receiptUrl);
     if (url.protocol !== "https:") throw new Error("Delivery receipt must use HTTPS");
     const sql = await getSql();
@@ -162,7 +124,7 @@ export const approveBridgeDeliveryJob = createServerFn({ method: "POST" })
   .validator(z.object({ jobId: z.string().uuid(), note: z.string().trim().min(8).max(1000) }))
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    assertPermission(actor, "loop.publish");
+    assertVendorJobsSuperAdmin(actor);
     const sql = await getSql();
     const rows = await sql<{ id: string; title_id: string }>`
       update bridge_delivery_jobs set status='approved', admin_sign_off=true, updated_at=now()

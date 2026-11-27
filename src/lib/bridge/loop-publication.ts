@@ -399,6 +399,8 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (!actor.emailVerified || actor.internalRole !== "super_admin")
+      throw new Error("Only the verified Super Admin may authorize Bridge distribution");
     assertPermission(actor, "loop.publish");
 
     if (
@@ -517,6 +519,8 @@ export const suspendLoopPublication = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (!actor.emailVerified || actor.internalRole !== "super_admin")
+      throw new Error("Only the verified Super Admin may suspend or revoke Bridge distribution");
     assertPermission(actor, "loop.revoke");
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{ loop_title_id: string }>`
@@ -557,6 +561,8 @@ export const revokeLoopPublication = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (!actor.emailVerified || actor.internalRole !== "super_admin")
+      throw new Error("Only the verified Super Admin may suspend or revoke Bridge distribution");
     assertPermission(actor, "loop.revoke");
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{ loop_title_id: string }>`
@@ -601,6 +607,8 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (!actor.emailVerified || actor.internalRole !== "super_admin")
+      throw new Error("Only the verified Super Admin may authorize Bridge distribution");
     assertPermission(actor, "loop.publish");
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{

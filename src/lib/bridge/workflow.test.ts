@@ -154,7 +154,6 @@ const owner = {
   internalRole: null,
 };
 const qc = { ...owner, userId: "qc", internalRole: "qc_reviewer" as const };
-const legal = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
 const license = {
   titleId: "title-123",
   territories: ["WORLDWIDE"],
@@ -168,10 +167,36 @@ const license = {
   distributorSharePct: 20,
 };
 
+test("Submit for QC creates a pending review case atomically and never pre-approves it", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query("update bridge_titles set status='PREPARING'");
+    const result = await submitTitleForQc(
+      f.sql,
+      { id: "title-123", status: "PREPARING", masterKey: "sealed/master", posterKey: "sealed/poster" },
+      "owner",
+      "Studio submitted the verified film for QC",
+    );
+    assert.equal(result.title.status, "QC_REVIEW");
+    const cases = await f.sql.query<{ status: string; reviewed_by: string | null; reviewed_at: string | null }>(
+      "select status, reviewed_by, reviewed_at from bridge_qc_cases",
+    );
+    assert.equal(cases.length, 1);
+    assert.equal(cases[0].status, "PENDING");
+    assert.equal(cases[0].reviewed_by, null);
+    assert.equal(cases[0].reviewed_at, null);
+    assert.equal((await f.sql.query("select * from bridge_title_events where to_status='QC_REVIEW'")).length, 1);
+    assert.equal((await f.sql.query("select * from bridge_audit_logs where action='title.advance'")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
   const f = await fixture();
   try {
-    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+    const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
       grantId: string;
     };
     await f.sql.transaction((tx) =>
@@ -183,7 +208,7 @@ test("real SQL services persist QC, independently approved license, lifecycle an
       }),
     );
     await f.sql.transaction((tx) =>
-      f.review(tx, legal, {
+      f.review(tx, superAdmin, {
         titleId: "title-123",
         stage: "LEGAL",
         decision: "APPROVE",
@@ -303,6 +328,23 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
   }
 });
 
+test("Studio/creator and non-Super-Admin staff cannot create Bridge license drafts", async () => {
+  const f = await fixture();
+  try {
+    const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
+    const legalReviewer = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
+    for (const actor of [owner, admin, legalReviewer]) {
+      await assert.rejects(
+        f.sql.transaction((tx) => f.save(tx, actor, license)),
+        /Only the verified Super Admin may create Bridge license drafts/,
+      );
+    }
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("verified Super Admin can approve their own license draft as the single Bridge approval authority", async () => {
   const f = await fixture();
   try {
@@ -343,38 +385,38 @@ test("verified Super Admin can approve their own license draft as the single Bri
   }
 });
 
-test("license author cannot approve their own agreement", async () => {
+test("legal reviewers and admins cannot approve Bridge rights or licensing", async () => {
   const f = await fixture();
   try {
-    const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
-    const legalReviewer = { ...admin, internalRole: "legal_reviewer" as const };
-    const saved = (await f.sql.transaction((tx) => f.save(tx, admin, license))) as {
+    const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
       grantId: string;
     };
     await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
-    await assert.rejects(
-      f.sql.transaction((tx) =>
-        f.review(tx, legalReviewer, {
-          titleId: "title-123",
-          stage: "LEGAL",
-          decision: "APPROVE",
-          note: "Agreement checked",
-          grantId: saved.grantId,
-        }),
-      ),
-      /Only the verified Super Admin may approve their own license draft/,
-    );
-    assert.equal(
-      (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
-      "DRAFT",
-    );
+    const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
+    const legalReviewer = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
+    for (const actor of [admin, legalReviewer]) {
+      await assert.rejects(
+        f.sql.transaction((tx) =>
+          f.review(tx, actor, {
+            titleId: "title-123",
+            stage: "LEGAL",
+            decision: "APPROVE",
+            note: "Agreement checked",
+            grantId: saved.grantId,
+          }),
+        ),
+        /Only the verified Super Admin may approve Bridge rights and licensing/,
+      );
+    }
+    assert.equal((await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status, "DRAFT");
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
   } finally {
     await f.db.close();
   }
 });
 
-
-test("Submit for QC advances PREPARING with the referenced vertical poster and writes lifecycle plus audit only", async () => {
+test("Submit for QC creates one pending review case with lifecycle and audit atomically", async () => {
   const f = await fixture();
   try {
     await f.sql.query(`
@@ -413,12 +455,13 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
       )).length,
       1,
     );
-    assert.equal(
-      (await f.sql.query(
-        "select * from bridge_qc_cases where title_id='qc-submit-title'",
-      )).length,
-      0,
+    const qcCases = await f.sql.query<{ status: string; reviewed_by: string | null; reviewed_at: Date | null }>(
+      "select status, reviewed_by, reviewed_at from bridge_qc_cases where title_id='qc-submit-title'",
     );
+    assert.equal(qcCases.length, 1);
+    assert.equal(qcCases[0].status, "PENDING");
+    assert.equal(qcCases[0].reviewed_by, null);
+    assert.equal(qcCases[0].reviewed_at, null);
   } finally {
     await f.db.close();
   }

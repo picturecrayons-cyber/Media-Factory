@@ -40,6 +40,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
+  // Only the single verified Super Admin receives owner-side Business and Distribution controls.
+  const canManageRights = actor.emailVerified && actor.internalRole === "super_admin";
+  const visibleStages = canManageRights
+    ? stages
+    : stages.filter((s) => s === "Prepare" || (s === "Revenue" && canFinance));
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
     queryFn: () => getTitleRevenue({ data: { titleId: title.id } }),
@@ -129,7 +134,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl">Title operations</h2>
       <nav className="flex flex-wrap gap-2" aria-label="Operational workflow">
-        {stages.map((s) => (
+        {visibleStages.map((s) => (
           <button
             type="button"
             key={s}
@@ -213,6 +218,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           ) : null}
           {stage === "Business" ? (
             <div className="space-y-4">
+              {canManageRights ? (
               <details className="rounded-xl border border-line p-3">
                 <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
                 <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
@@ -261,12 +267,19 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   </form>
                 ) : null}
               </details>
-              {input("Legal review note", note, setNote)}
-              <p className="text-xs text-muted" aria-live="polite">
-                {note.trim().length < 8
-                  ? `Enter at least 8 characters (${note.trim().length}/8).`
-                  : "Review note meets the minimum length."}
-              </p>
+              ) : null}
+              {canManageRights ? (
+                <>
+                  {input("Legal review note", note, setNote)}
+                  <p className="text-xs text-muted" aria-live="polite">
+                    {note.trim().length < 8
+                      ? `Enter at least 8 characters (${note.trim().length}/8).`
+                      : "Review note meets the minimum length."}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-muted">Rights and licensing are managed by the verified Bridge Super Admin. Your rights and license status is read-only.</p>
+              )}
               {Object.entries(grantsByAgreement).map(([reference, agreementGrants]) => {
                 const selectedId = selectedGrantByAgreement[reference] ?? agreementGrants[0]?.id ?? "";
                 const selectedGrant = agreementGrants.find((grant) => grant.id === selectedId) ?? agreementGrants[0];
@@ -371,7 +384,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         </div>
                         {selectedGrant.status === "DRAFT" &&
                         title.status === "RIGHTS_REVIEW" &&
-                        hasPermission(actor, "title.rights_review") ? (
+                        canManageRights ? (
                           <div className="flex flex-wrap gap-2 border-t border-line pt-3">
                             {button(
                               "Approve rights / license",
@@ -525,7 +538,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     </table>
                   </div>
 
-                  {hasPermission(actor, "finance.record_settlement") ? (
+                  {canManageRights && hasPermission(actor, "finance.record_settlement") ? (
                     <form
                       className="grid gap-3 sm:grid-cols-2"
                       onSubmit={(e) => {

@@ -30,6 +30,18 @@ export async function submitTitleForQc(
     if (!locked || locked.status !== title.status) {
       throw new Error("Title changed; refresh before retrying");
     }
+    const openCases = await tx<{ id: string }>`
+      select id from bridge_qc_cases
+      where title_id = ${title.id} and status in ('PENDING', 'IN_REVIEW')
+      order by created_at desc
+      limit 1
+    `;
+    if (!openCases[0]) {
+      await tx`
+        insert into bridge_qc_cases (title_id, status, automated_findings, reviewer_findings)
+        values (${title.id}, 'PENDING', '[]'::jsonb, '[]'::jsonb)
+      `;
+    }
     await tx`
       update bridge_titles set status = 'QC_REVIEW', updated_at = now()
       where id = ${title.id}

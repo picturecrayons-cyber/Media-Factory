@@ -21,6 +21,8 @@ export async function saveLoopLicense(
   data: z.infer<typeof loopLicenseInput>,
 ) {
   data = loopLicenseInput.parse(data);
+  if (!actor.emailVerified || actor.internalRole !== "super_admin")
+    throw new Error("Only the verified Super Admin may create Bridge license drafts");
   const [title] = await tx<{
     owner_user_id: string;
     owner_account_type: string;
@@ -74,6 +76,8 @@ const reviewInput = z.object({
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
   data = reviewInput.parse(data);
+  if (data.stage === "LEGAL" && (!actor.emailVerified || actor.internalRole !== "super_admin"))
+    throw new Error("Only the verified Super Admin may approve Bridge rights and licensing");
   assertPermission(actor, data.stage === "QC" ? "title.qc_review" : "title.rights_review");
   const [title] = await tx<{
     status: string;
@@ -153,7 +157,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     )
       throw new Error("Not found");
     const sql = await getSql();
-    const grants = await sql<{
+    const grants = actor.internalRole === "super_admin" ? await sql<{
       id: string;
       status: string;
       territories: string[];
@@ -166,7 +170,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
       }>;
-    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc` : [];
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
@@ -353,6 +357,8 @@ export const recordSettlementEvidence = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
+    if (!actor.emailVerified || actor.internalRole !== "super_admin")
+      throw new Error("Only the verified Super Admin may record settlement evidence");
     assertPermission(actor, "finance.record_settlement");
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
