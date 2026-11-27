@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
@@ -241,7 +241,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
     return <p role="alert">Distribution readiness is unavailable. Refresh to retry.</p>;
 
   // Filter based on active tab
-  const filteredTitles = allTitles.filter((t) => {
+  const filteredTitles = useMemo(() => allTitles.filter((t) => {
     const pubStatus = t.publication?.authorizationStatus?.toLowerCase();
     switch (activeTab) {
       case "Ready for Distribution":
@@ -251,7 +251,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
       case "Authorizations":
         return Boolean(t.publication);
       case "Deliveries":
-        return Boolean(t.publication && t.hasMaster);
+        // Asset presence is not proof of delivery. Until persisted destination acknowledgement
+        // and independent verification evidence are available, fail closed and show no deliveries.
+        return false;
       case "Live":
         return pubStatus === "live" && t.publication?.listed === true && t.publication?.published === true;
       case "Suspended":
@@ -263,7 +265,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
       default:
         return true;
     }
-  });
+  }), [activeTab, allTitles]);
 
   return (
     <section className="space-y-6">
@@ -510,6 +512,11 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
       ) : null}
 
       {/* Main List */}
+      {activeTab === "Deliveries" ? (
+        <div role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-muted">
+          Delivery completion is not yet certified. A title will appear here only after a persisted destination acknowledgement and independent delivery verification are recorded. Asset presence, authorization, and signed downloads do not count as delivery.
+        </div>
+      ) : null}
       <div className="space-y-4">
         {filteredTitles.map((t) => {
           const pub = t.publication;
