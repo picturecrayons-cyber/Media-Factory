@@ -240,9 +240,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
                   <>
                   <p className="mt-2 text-xs text-muted" role="status">
-                    {grants.length
-                      ? "Available defaults were loaded from this title's latest saved license record. Missing or invalid evidence and revenue terms remain blank."
-                      : "Worldwide and title language are system defaults. Dates, agreement evidence, ownership evidence and revenue shares remain blank until recorded."}
+                    {grants.length && !licenseTerritories.includes("WORLDWIDE")
+                      ? "The saved rights grant is territory-limited and does not authorize WORLDWIDE Loop TVOD. No territory was copied; record a matching worldwide grant before creating this TVOD draft."
+                      : grants.length
+                        ? "Available defaults were loaded from this title's latest saved license record. Missing or invalid evidence and revenue terms remain blank."
+                        : "Worldwide and title language are system defaults. Dates, agreement evidence, ownership evidence and revenue shares remain blank until recorded."}
                   </p>
                   <form
                     className="mt-3 grid gap-3 sm:grid-cols-2"
@@ -280,7 +282,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       Exclusive license
                     </label>
                     <button
-                      disabled={action.isPending || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
+                      disabled={action.isPending || !licenseTerritories.includes("WORLDWIDE") || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
                       className="rounded-lg border border-line px-4 py-2 text-sm sm:col-span-2"
                     >
                       {action.isPending ? "Saving…" : "Save license draft"}
