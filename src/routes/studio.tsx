@@ -5,6 +5,7 @@ import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
+import { BridgeServicesPanel } from "@/components/bridge/service-catalog-panel";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -34,6 +35,7 @@ function Studio() {
               <a href="#studio-titles" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Studio Titles</strong><p className="mt-1 text-sm text-muted">Finished films and story concepts</p></a>
               <a href="#studio-operations" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Production & DIT</strong><p className="mt-1 text-sm text-muted">Production operations and media handover</p></a>
               <Link to="/account" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Account</strong><p className="mt-1 text-sm text-muted">Studio account profile</p></Link>
+              <a href="#studio-services" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Services</strong><p className="mt-1 text-sm text-muted">Browse active production and distribution services</p></a>
               <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
             </section>
 
@@ -81,6 +83,10 @@ function Studio() {
                 <p className="mt-1 text-sm text-muted">Register source-card manifests, compare Primary and Recovery manifest evidence, and record operator sign-off. Server actions are restricted to active Studio owner, admin, producer or DIT memberships.</p>
               </div>
               <DitAgentDesk actor={actor} />
+            </section>
+
+            <section id="studio-services" className="space-y-3">
+              <BridgeServicesPanel />
             </section>
 
             <section id="studio-operations" className="space-y-3">

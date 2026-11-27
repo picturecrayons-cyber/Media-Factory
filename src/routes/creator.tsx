@@ -6,6 +6,7 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { BridgeServicesPanel } from "@/components/bridge/service-catalog-panel";
 import { listTitles } from "@/lib/bridge/titles";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
@@ -22,6 +23,7 @@ const SECTIONS = [
   ["My Assets", "#assets"],
   ["Review & Corrections", "#review"],
   ["Delivery Status", "#delivery"],
+  ["Creator Services", "#services"],
   ["Statements", "#statements"],
 ] as const;
 
@@ -264,6 +266,10 @@ function CreatorDashboard({
         ) : (
           <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">No title updates yet.</p>
         )}
+      </section>
+
+      <section id="services" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <BridgeServicesPanel />
       </section>
 
       <section id="statements" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">

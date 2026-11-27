@@ -268,3 +268,16 @@ it("reserves final approval, duplicate merge, and Loop publication to Super Admi
   assert.equal(hasPermission(qc, "title.rights_review"), false);
   assert.equal(hasPermission(legal, "title.qc_review"), false);
 });
+
+it("restricts customer-visible service catalogue access to Creator, Studio, Admin and Super Admin", () => {
+  assert.equal(hasPermission(creator(), "service.catalog_read"), true);
+  assert.equal(hasPermission(studio(), "service.catalog_read"), true);
+  assert.equal(hasPermission(admin(), "service.catalog_read"), true);
+  assert.equal(hasPermission(superAdmin(), "service.catalog_read"), true);
+  assert.equal(hasPermission(buyer(), "service.catalog_read"), false);
+  assert.equal(hasPermission(investor(), "service.catalog_read"), false);
+  assert.equal(hasPermission(viewer(), "service.catalog_read"), false);
+  assert.equal(hasPermission(qc, "service.catalog_read"), false);
+  assert.equal(hasPermission(legal, "service.catalog_read"), false);
+  assert.equal(hasPermission(finance, "service.catalog_read"), false);
+});
