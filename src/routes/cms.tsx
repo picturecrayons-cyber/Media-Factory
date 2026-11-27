@@ -154,10 +154,10 @@ function LicensingDesk({ titles }: { titles: Array<any> }) {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
             Licensing desk
           </p>
-          <h3 className="mt-1 font-display text-2xl font-semibold">Market-ready titles</h3>
+          <h3 className="mt-1 font-display text-2xl font-semibold">Licensing pipeline</h3>
           <p className="mt-2 text-sm text-muted">
-            This desk consolidates licensing readiness without inventing commercial terms or
-            bypassing rights checks.
+            These titles are in licensing or commercial workflow states. This list does not mean they
+            are cleared for Crayons Loop publication; check the Publishing desk for the full release gates.
           </p>
         </div>
         <Link to="/buyer">
