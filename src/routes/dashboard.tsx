@@ -57,6 +57,7 @@ const ADMIN_MODULES = [
 ] as const;
 
 const ACTION_GUIDANCE: Record<string, string> = {
+  PREPARING: "Complete preparation and verify required assets before QC submission",
   QC_REVIEW: "QC review is pending",
   RIGHTS_REVIEW: "Rights review is pending",
   LICENSING_READY: "Licensing decision is pending",
@@ -162,10 +163,11 @@ function DashboardBody() {
                   </p>
                 </div>
                 <Link
-                  to="/workspace"
+                  to="/title/$id"
+                  params={{ id: title.id }}
                   className="shrink-0 text-sm font-semibold text-accent hover:underline"
                 >
-                  Review in workspace →
+                  {title.status === "PREPARING" ? "Open preparation →" : "Open review →"}
                 </Link>
               </li>
             ))}
@@ -197,9 +199,18 @@ function DashboardBody() {
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Stat label="Licensed value*" value={moneyValue} />
-          <Stat label="Live / commercial titles" value={metricValue(liveOrCommercial.length)} />
-          <Stat label="Ready for licensing review" value={metricValue(readyToList)} />
-          <Stat label="Licensed or negotiating deals" value={metricValue(activeDeals)} />
+          <Link to="/workspace" className="block rounded-sm outline-offset-2 transition hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+            <Stat label="Live / commercial titles" value={metricValue(liveOrCommercial.length)} />
+            <span className="px-4 pb-3 text-xs font-semibold text-accent">Open title register →</span>
+          </Link>
+          <Link to="/admin/workstations" className="block rounded-sm outline-offset-2 transition hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+            <Stat label="Ready for licensing review" value={metricValue(readyToList)} />
+            <span className="px-4 pb-3 text-xs font-semibold text-accent">Open operations →</span>
+          </Link>
+          <Link to="/buyer" className="block rounded-sm outline-offset-2 transition hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+            <Stat label="Licensed or negotiating deals" value={metricValue(activeDeals)} />
+            <span className="px-4 pb-3 text-xs font-semibold text-accent">Open buyer desk →</span>
+          </Link>
         </div>
         <p className="text-xs text-muted">
           *Sum of recorded licensing fees for licensed or delivered titles; not cash received.
@@ -215,15 +226,15 @@ function DashboardBody() {
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {BRIDGE_LOOP_LANES.map((lane) => (
-            <article key={lane.id} className="rounded-sm border border-line px-4 py-3">
+            <Link key={lane.id} to="/workspace" className="block rounded-sm border border-line px-4 py-3 transition hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
               <p className="text-xs uppercase tracking-widest text-muted">{lane.label}</p>
               <p className="mt-1 text-2xl font-semibold">
                 {titlesQ.isPending || reportingUnavailable
                   ? "—"
                   : titles.filter((title) => loopStageType(title.contentType) === lane.loopType).length}
               </p>
-              <p className="mt-1 text-xs text-muted">Titles in this content lane</p>
-            </article>
+              <p className="mt-1 text-xs text-muted">Titles in this content lane · View titles →</p>
+            </Link>
           ))}
         </div>
       </section>
@@ -273,10 +284,10 @@ function DashboardBody() {
           <ul className="divide-y divide-line">
             {titles.slice(0, 6).map((title) => (
               <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
-                <div className="min-w-0">
+                <Link to="/title/$id" params={{ id: title.id }} className="min-w-0 hover:text-accent">
                   <p className="font-medium">{title.name}</p>
-                  <p className="break-all font-mono text-[10px] text-muted">ID: {title.id}</p>
-                </div>
+                  <p className="mt-1 text-xs text-muted">Open title workspace →</p>
+                </Link>
                 <span className="shrink-0 rounded-sm border border-line px-2 py-1 text-xs text-muted">
                   {title.status.replaceAll("_", " ").toLowerCase()}
                 </span>
