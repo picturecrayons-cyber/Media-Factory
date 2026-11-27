@@ -109,7 +109,16 @@ const data = {
 };
 const context = { userId: "operator" };
 
-test("only the verified Super Admin can authorize Bridge distribution", async () => {\n  const h = harness([grant], true, false, undefined, "admin");\n  await assert.rejects(\n    h.authorize({ context, data }),\n    /Only the verified Super Admin may authorize Bridge distribution/,\n  );\n  assert.equal(h.writes.length, 0);\n});\n\ntest("new and existing publications emit the status accepted by the Loop catalog", async () => {
+test("only the verified Super Admin can authorize Bridge distribution", async () => {
+  const h = harness([grant], true, false, undefined, "admin");
+  await assert.rejects(
+    h.authorize({ context, data }),
+    /Only the verified Super Admin may authorize Bridge distribution/,
+  );
+  assert.equal(h.writes.length, 0);
+});
+
+test("new and existing publications emit the status accepted by the Loop catalog", async () => {
   for (const existing of [false, true]) {
     const h = harness([grant], true, existing);
     const result = await h.authorize({ context, data });
