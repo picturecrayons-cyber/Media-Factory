@@ -199,14 +199,16 @@ function WorkflowReviewCard({ title, stage, grants, canAct, mutation }: {
 }) {
   const [note, setNote] = useState("");
   const [grantId, setGrantId] = useState(grants[0]?.id ?? "");
-  const valid = note.trim().length >= 8 && (stage === "QC" || Boolean(grants.find((grant) => grant.id === grantId)));
+  const [agreementReference, setAgreementReference] = useState("");
+  const [ownershipReference, setOwnershipReference] = useState("");
+  const valid = note.trim().length >= 8 && (stage === "QC" || (Boolean(grants.find((grant) => grant.id === grantId)) && agreementReference.trim().length > 0 && ownershipReference.trim().length > 0));
   const submit = (decision: "APPROVE" | "REJECT") => mutation.mutate({
     data: {
       titleId: title.id,
       stage,
       decision,
       note: note.trim(),
-      ...(stage === "LEGAL" ? { grantId } : {}),
+      ...(stage === "LEGAL" ? { grantId, agreementReference: agreementReference.trim(), ownershipReference: ownershipReference.trim() } : {}),
     },
   });
 
@@ -239,6 +241,19 @@ function WorkflowReviewCard({ title, stage, grants, canAct, mutation }: {
         <span className="text-muted">Reviewer notes / evidence reference (minimum 8 characters)</span>
         <textarea className="min-h-20 w-full rounded-lg border border-line bg-bg px-3 py-2" value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} />
       </label>
+      {stage === "LEGAL" ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted">Signed distribution / OTT agreement reference</span>
+            <input className="w-full rounded-lg border border-line bg-bg px-3 py-2" value={agreementReference} onChange={(event) => setAgreementReference(event.target.value)} maxLength={1000} placeholder="Document ID or secure evidence reference" />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted">Signed chain-of-title / authority reference</span>
+            <input className="w-full rounded-lg border border-line bg-bg px-3 py-2" value={ownershipReference} onChange={(event) => setOwnershipReference(event.target.value)} maxLength={1000} placeholder="Document ID or secure evidence reference" />
+          </label>
+          <p className="text-xs text-muted sm:col-span-2">The reviewer must open and verify both signed documents. A typed reference alone is not legal approval evidence.</p>
+        </div>
+      ) : null}
       {canAct ? (
         <div className="flex flex-wrap gap-2">
           <Button size="sm" disabled={mutation.isPending || !valid} onClick={() => submit("APPROVE")}>
