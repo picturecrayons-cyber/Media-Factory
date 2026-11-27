@@ -38,6 +38,9 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
   const queryClient = useQueryClient();
   const queryKey = ["bridge-dit-workspace", actor.userId, actor.organizationId];
   const workspace = useQuery({ queryKey, queryFn: () => getDitWorkspace() });
+  const [targetMode, setTargetMode] = useState<"PRODUCTION" | "FINISHED_FILM">("PRODUCTION");
+  const [productionProjectId, setProductionProjectId] = useState("");
+  const [shootDayId, setShootDayId] = useState("");
   const [titleId, setTitleId] = useState("");
   const [cameraUnit, setCameraUnit] = useState<"A" | "B" | "C">("A");
   const [cameraLabel, setCameraLabel] = useState("Main Camera");
@@ -77,8 +80,19 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
         }
       }
 
+      const selectedShootDay = (workspace.data?.shootDays ?? []).find((day) => day.id === shootDayId);
+      if (targetMode === "PRODUCTION" && (!productionProjectId || !selectedShootDay)) {
+        throw new Error("Select a Production Project and its Shoot Day");
+      }
+      if (targetMode === "FINISHED_FILM" && !titleId) {
+        throw new Error("Select a Finished Film");
+      }
+      const effectiveShootDate = targetMode === "PRODUCTION" ? selectedShootDay!.shoot_date : shootDate;
       const sessionId = activeSessionId ?? (await createDitIngestSession({ data: {
-        titleId, cameraUnit, cameraLabel, cardLabel, shootDate, sourceVolume, sourceRoot,
+        ...(targetMode === "PRODUCTION"
+          ? { productionProjectId, shootDayId }
+          : { titleId }),
+        cameraUnit, cameraLabel, cardLabel, shootDate: effectiveShootDate, sourceVolume, sourceRoot,
         manifest: sourceManifest,
       } })).sessionId;
       if (!activeSessionId) setActiveSessionId(sessionId);
@@ -181,12 +195,34 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="space-y-1 text-sm">
-            <span className="font-medium">Finished film</span>
+            <span className="font-medium">Ingest target</span>
+            <select className="h-11 w-full rounded-lg border border-line bg-bg px-3" value={targetMode} onChange={(event) => setTargetMode(event.target.value as "PRODUCTION" | "FINISHED_FILM")}>
+              <option value="PRODUCTION">Production Project / Shoot Day</option>
+              <option value="FINISHED_FILM">Existing Finished Film</option>
+            </select>
+          </label>
+          {targetMode === "PRODUCTION" ? <>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">Production Project</span>
+              <select className="h-11 w-full rounded-lg border border-line bg-bg px-3" value={productionProjectId} onChange={(event) => { setProductionProjectId(event.target.value); setShootDayId(""); }}>
+                <option value="">Select a Production Project</option>
+                {(workspace.data?.projects ?? []).filter((project) => ["PRE_PRODUCTION", "IN_PRODUCTION", "WRAP"].includes(project.status)).map((project) => <option key={project.id} value={project.id}>{project.name} · {project.status.replaceAll("_", " ")}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">Shoot Day</span>
+              <select className="h-11 w-full rounded-lg border border-line bg-bg px-3" value={shootDayId} onChange={(event) => setShootDayId(event.target.value)} disabled={!productionProjectId}>
+                <option value="">Select a Shoot Day</option>
+                {(workspace.data?.shootDays ?? []).filter((day) => day.project_id === productionProjectId).map((day) => <option key={day.id} value={day.id}>{day.shoot_date} · {day.day_label || "Shoot Day"}</option>)}
+              </select>
+            </label>
+          </> : <label className="space-y-1 text-sm">
+            <span className="font-medium">Finished Film</span>
             <select className="h-11 w-full rounded-lg border border-line bg-bg px-3" value={titleId} onChange={(event) => setTitleId(event.target.value)}>
               <option value="">Select a finished film</option>
               {(workspace.data?.titles ?? []).map((title) => <option key={title.id} value={title.id}>{title.name}</option>)}
             </select>
-          </label>
+          </label>}
           <label className="space-y-1 text-sm">
             <span className="font-medium">Camera unit</span>
             <select className="h-11 w-full rounded-lg border border-line bg-bg px-3" value={cameraUnit} onChange={(event) => setCameraUnit(event.target.value as "A" | "B" | "C")}>
@@ -234,7 +270,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
         {fileError ? <p role="alert" className="mt-3 text-sm text-red-600">{fileError}</p> : null}
         {createMutation.error ? <p role="alert" className="mt-3 text-sm text-red-600">{createMutation.error.message}</p> : null}
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button disabled={createMutation.isPending || !titleId || !cardLabel.trim() || !sourceVolume.trim() || !sourceRoot.trim() || !sourceManifest || !sourceMediaFiles.length} onClick={() => createMutation.mutate()}>
+          <Button disabled={createMutation.isPending || (targetMode === "PRODUCTION" ? !productionProjectId || !shootDayId : !titleId) || !cardLabel.trim() || !sourceVolume.trim() || !sourceRoot.trim() || !sourceManifest || !sourceMediaFiles.length} onClick={() => createMutation.mutate()}>
             {createMutation.isPending ? "Uploading and verifying…" : activeSessionId ? "Resume camera-card ingest" : "Register and ingest camera card"}
           </Button>
           <span className="text-xs text-muted">Original files upload to OCI Primary; Bridge creates and verifies the Recovery copy independently.</span>
@@ -260,14 +296,21 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h4 className="font-semibold">{session.camera_unit} · {session.camera_label} · {session.card_label}</h4>
-                  <p className="mt-1 text-xs text-muted">{session.title_id} · {session.shoot_date} · {session.source_file_count} files · {formatBytes(Number(session.source_total_bytes))}</p>
+                  <p className="mt-1 text-xs text-muted">{session.project_name ? `${session.project_name} · Shoot Day ${session.shoot_day_date}` : session.title_id || "Production DIT"} · {session.shoot_date} · {session.source_file_count} files · {formatBytes(Number(session.source_total_bytes))}</p>
                   <p className="mt-1 break-all text-xs text-muted">Source: {session.source_root}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{session.status.replaceAll("_", " ")}</span>
                   {!signedOff ? <Button size="sm" variant="outline" onClick={() => {
                     setActiveSessionId(session.id);
-                    setTitleId(session.title_id);
+                    setTitleId(session.title_id || "");
+                    if (session.production_project_id) {
+                      setTargetMode("PRODUCTION");
+                      setProductionProjectId(session.production_project_id);
+                      setShootDayId(session.shoot_day_id || "");
+                    } else {
+                      setTargetMode("FINISHED_FILM");
+                    }
                     setCameraUnit(session.camera_unit as "A" | "B" | "C");
                     setCameraLabel(session.camera_label);
                     setCardLabel(session.card_label);
