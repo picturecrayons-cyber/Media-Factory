@@ -116,6 +116,8 @@ async function requireStudioTitle(sql: Awaited<ReturnType<typeof getSql>>, title
       )
       and submission_type = 'finished_film'
       and merged_into_title_id is null
+      and record_classification is distinct from 'TEST'
+      and coalesce(external_ids->>'test_only', 'false') <> 'true'
     limit 1
   `;
   if (!rows[0]) throw new Error("Finished film was not found in the active Studio organization");
