@@ -71,7 +71,7 @@ function CreatorDashboard({ actor }: { actor: { userId: string; organizationId?:
 
     <section id="my-titles" className="scroll-mt-24 space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.15em] text-accent">Your catalogue</p><h2 className="mt-1 font-display text-2xl font-semibold">My Titles</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-muted">Only records returned by the authenticated, server-scoped Creator title query appear here.</p></div><a href="#add-title" className="inline-flex min-h-10 items-center rounded-full border border-line-strong px-4 py-2 text-sm font-semibold">+ New title</a></div>
-      <div className="overflow-hidden rounded-2xl border border-line bg-surface p-4 sm:p-5"><TitleList empty="No titles are available for this account yet. Start a submission to add your first title." /></div>
+      <div className="overflow-hidden rounded-2xl border border-line bg-surface p-4 sm:p-5"><TitleList queryKey={["bridge-titles", actor.userId, actor.organizationId]} empty="No titles are available for this account yet. Start a submission to add your first title." /></div>
     </section>
 
     <section id="add-title" className="scroll-mt-24 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
