@@ -56,7 +56,7 @@ export function StoryConceptForm() {
           screenplayUrl: screenplayUrl || undefined,
         },
       }),
-    onSuccess: (res) => {
+    onSuccess: () => {
       toast("Story / Concept submitted for internal curation");
       // Concepts have their own curation workspace; never route them into the finished-film asset/QC desk.
       void navigate({ to: "/studio", hash: "studio-titles" });
