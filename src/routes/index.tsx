@@ -74,6 +74,9 @@ function Home() {
 
           <div className="flex items-center gap-3 text-sm">
             <SignedOut>
+              <Link to="/login" className="px-2 text-xs font-semibold text-muted transition-colors hover:text-fg">
+                Sign in
+              </Link>
               <Link to="/signup">
                 <Button size="sm" className="rounded-full px-4 py-1.5 text-xs font-semibold shadow-xs">
                   Create account
@@ -252,8 +255,14 @@ function Home() {
                   Loop is the consumer streaming experience.
                 </p>
               </div>
-
-
+              <a
+                href="https://crayonsloop.in/"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex shrink-0 items-center justify-center rounded-full border border-line px-5 py-3 text-sm font-semibold text-fg transition hover:border-accent hover:text-accent"
+              >
+                Open Crayons Loop ↗
+              </a>
             </div>
           </div>
         </section>
@@ -290,6 +299,8 @@ function Home() {
             <span className="font-semibold text-fg">Crayons Bridge</span>
             <span className="mx-2 text-muted/40">·</span>
             <span>© 2026 StreamVista OPC Pvt Ltd.</span>
+            <span className="mx-2 text-muted/40">·</span>
+            <span>Crayons Bridge v1.0.0</span>
           </div>
 
           <nav
