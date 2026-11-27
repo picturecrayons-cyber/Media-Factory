@@ -13,6 +13,7 @@ import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, assertBuyerTitleAccess, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
+import { isFinishedFilmCatalogueRecord } from "./catalogue-classification";
 
 type TitleRow = {
   id: string;
