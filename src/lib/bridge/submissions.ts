@@ -41,6 +41,7 @@ const submissionSchema = z.object({
   buyerChannels: z.array(z.string().trim().min(2).max(80)).max(30),
   screenerMode: z.enum(["NONE", "PRIVATE_BRIDGE", "SECURE_EXTERNAL"]),
   screenerUrl: z.string().url().max(2000).optional(),
+  productionProjectId: z.string().uuid().optional(),
 }).superRefine((data, ctx) => {
   if (new Date(data.windowEnd) <= new Date(data.windowStart)) {
     ctx.addIssue({ code: "custom", path: ["windowEnd"], message: "Rights end must be after rights start" });
@@ -66,7 +67,23 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
     const slug = `${data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "title"}-${id.slice(0, 6)}`;
     const sql = await getSql();
 
-    await sql`
+    await sql.transaction(async (tx) => {
+    if (data.productionProjectId) {
+      const projects = await tx<{ id: string; status: string }>`
+        select id, status from bridge_production_projects
+        where id = ${data.productionProjectId}::uuid
+          and organization_id = ${actor.organizationId ?? null}
+        for update
+      `;
+      if (!projects[0] || actor.accountType !== "studio" || !actor.organizationId) {
+        throw new Error("Production project was not found in this Studio");
+      }
+      if (projects[0].status !== "COMPLETED") {
+        throw new Error("Finished Film handoff is allowed only after Production is COMPLETED");
+      }
+    }
+
+    await tx`
       insert into bridge_titles (
         id, slug, name, original_title, owner_user_id, owner_account_type, owner_organization_id, status,
         synopsis, long_synopsis, language, original_language, year, runtime_minutes,
@@ -80,7 +97,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       )
     `;
 
-    const rightsRows = await sql<{ id: string }>`
+    const rightsRows = await tx<{ id: string }>`
       insert into bridge_rights_grants (
         title_id, grant_type, territories, languages, media, window_start, window_end,
         exclusivity, evidence, status, created_by
@@ -94,7 +111,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       returning id::text
     `;
 
-    await sql`
+    await tx`
       insert into bridge_legal_cases (title_id, status, evidence)
       values (
         ${id}, 'PENDING',
@@ -107,7 +124,7 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       )
     `;
 
-    await sql`
+    await tx`
       insert into bridge_title_submission_intake (
         title_id, authority_type, authorization_evidence_type, authorization_confirmed,
         buyer_channels, screener_mode, screener_url
@@ -117,10 +134,18 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
       )
     `;
 
-    await sql`
+    await tx`
       insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
       values (${id}, null, 'DRAFT', ${actor.userId}, 'rights-ready public submission')
     `;
+
+    if (data.productionProjectId) {
+      await tx`
+        insert into bridge_production_title_links
+          (production_project_id, title_id, link_type, created_by)
+        values (${data.productionProjectId}::uuid, ${id}, 'FINISHED_FILM_OUTPUT', ${actor.userId})
+      `;
+    }
 
     await writeAudit({
       actorUserId: actor.userId,
@@ -131,8 +156,10 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
         rightsGrantId: rightsRows[0]?.id ?? null,
         screenerMode: data.screenerMode,
         buyerChannels: data.buyerChannels,
+        productionProjectId: data.productionProjectId ?? null,
       },
-    });
+    }, tx);
 
     return { titleId: id, status: "DRAFT" as const };
+    });
   });
