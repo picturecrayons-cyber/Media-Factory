@@ -17,9 +17,9 @@ concurrency:
 
 jobs:
   verify:
-    name: Typecheck, lint, unit tests and security scans
+    name: Build, typecheck, lint, unit tests and security scans
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@v4
@@ -32,6 +32,11 @@ jobs:
 
       - name: Install locked dependencies
         run: npm ci
+
+      # TanStack Start generates src/routeTree.gen.ts during the Vite build.
+      # Build first so tsc sees the route tree for the exact checked-out source.
+      - name: Generate routes and build
+        run: npm run build
 
       - name: TypeScript typecheck
         run: npm run typecheck
