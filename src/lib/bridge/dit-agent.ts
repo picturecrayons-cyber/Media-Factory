@@ -165,7 +165,7 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
         )
       )
         and submission_type = 'finished_film'
-        and is_test = false
+        and record_classification <> 'TEST'
         and merged_into_title_id is null
       order by updated_at desc
       limit 200
