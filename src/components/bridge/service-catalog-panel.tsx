@@ -14,11 +14,11 @@ function formatMethod(value: string, unit: string) {
   return value.replaceAll("_", " ").toLowerCase() + (unit ? " · " + unit : "");
 }
 
-export function BridgeServicesPanel() {
+export function BridgeServicesPanel({ userId, organizationId }: { userId: string; organizationId?: string | null }) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("ALL");
   const catalogQ = useQuery({
-    queryKey: ["bridge-customer-service-catalog"],
+    queryKey: ["bridge-customer-service-catalog", userId, organizationId],
     queryFn: () => getCustomerServiceCatalog(),
     retry: 1,
   });
