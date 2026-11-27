@@ -19,7 +19,7 @@ create table if not exists public.bridge_production_projects (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (planned_start_date is null or planned_end_date is null or planned_end_date >= planned_start_date),
-  unique (id, organization_id)
+  constraint bridge_production_projects_id_organization_key unique (id, organization_id)
 );
 
 create unique index if not exists bridge_production_projects_org_code_uidx
