@@ -38,8 +38,7 @@ export function StoryConceptForm() {
   const [genre, setGenre] = useState<string[]>([]);
   const [targetPlatforms, setTargetPlatforms] = useState<string[]>([]);
   const [estimatedBudgetRange, setEstimatedBudgetRange] = useState("");
-  const [treatmentUrl, setTreatmentUrl] = useState("");
-  const [screenplayUrl, setScreenplayUrl] = useState("");
+  const [developmentStage, setDevelopmentStage] = useState<"NOT_STARTED" | "IN_DEVELOPMENT">("NOT_STARTED");
 
   const mut = useMutation({
     mutationFn: () =>
@@ -52,8 +51,7 @@ export function StoryConceptForm() {
           genre,
           targetPlatforms,
           estimatedBudgetRange: estimatedBudgetRange || undefined,
-          treatmentUrl: treatmentUrl || undefined,
-          screenplayUrl: screenplayUrl || undefined,
+          developmentStage,
         },
       }),
     onSuccess: (res) => {
@@ -178,25 +176,19 @@ export function StoryConceptForm() {
       </div>
 
       <label className="text-sm sm:col-span-2">
-        Treatment URL (optional)
-        <input
-          type="url"
-          value={treatmentUrl}
-          onChange={(e) => setTreatmentUrl(e.target.value)}
+        Development status
+        <select
+          required
+          value={developmentStage}
+          onChange={(e) => setDevelopmentStage(e.target.value as "NOT_STARTED" | "IN_DEVELOPMENT")}
           className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
-          placeholder="https://…"
-        />
-      </label>
-
-      <label className="text-sm sm:col-span-2">
-        Screenplay URL (optional)
-        <input
-          type="url"
-          value={screenplayUrl}
-          onChange={(e) => setScreenplayUrl(e.target.value)}
-          className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
-          placeholder="https://…"
-        />
+        >
+          <option value="NOT_STARTED">Not started — synopsis only</option>
+          <option value="IN_DEVELOPMENT">In development</option>
+        </select>
+        <span className="mt-1 block text-xs text-muted">
+          A logline and synopsis are enough to submit. Treatment and screenplay links are not required.
+        </span>
       </label>
 
       <div className="rounded-xl border border-line bg-elevated p-4 text-xs leading-relaxed text-muted sm:col-span-2">
