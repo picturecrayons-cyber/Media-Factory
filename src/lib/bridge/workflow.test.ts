@@ -423,3 +423,41 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
     await f.db.close();
   }
 });
+
+
+test("Submit for QC accepts the sealed pointer derived from the verified source asset row", async () => {
+  const f = await fixture();
+  try {
+    const masterSource = "bridge/title/master.mov";
+    const posterSource = "bridge/title/poster.jpg";
+    const masterId = "sealed-master-id";
+    const posterId = "sealed-poster-id";
+    const masterPointer = `${masterSource}.verified/${masterId}`;
+    const posterPointer = `${posterSource}.verified/${posterId}`;
+    await f.sql.query(
+      `insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
+       values ('qc-sealed-pointer-title','owner','PREPARING',${"$"}1,${"$"}2,now())`,
+      [masterPointer, posterPointer],
+    );
+    await f.sql.query(
+      `insert into bridge_assets values
+       (${"$"}1,'qc-sealed-pointer-title','master',${"$"}2,4096),
+       (${"$"}3,'qc-sealed-pointer-title','poster',${"$"}4,1024)`,
+      [masterId, masterSource, posterId, posterSource],
+    );
+    const result = await submitTitleForQc(
+      f.sql,
+      {
+        id: "qc-sealed-pointer-title",
+        status: "PREPARING",
+        masterKey: masterPointer,
+        posterKey: posterPointer,
+      },
+      "owner",
+      "Submit verified sealed pointers for QC",
+    );
+    assert.equal(result.title.status, "QC_REVIEW");
+  } finally {
+    await f.db.close();
+  }
+});
