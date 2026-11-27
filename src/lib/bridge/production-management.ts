@@ -66,26 +66,26 @@ export const getProductionWorkspace = createServerFn({ method: "GET" })
     const actor = await requireStudioMembership(context.userId);
     const sql = await getSql();
     const [projects, shootDays, events, crew, finishedFilms] = await Promise.all([
-      sql`select id, name, project_code, production_type, status, planned_start_date::text,
-        planned_end_date::text, primary_location, created_at, updated_at
+      sql<{ id: string; name: string; project_code: string | null; production_type: string; status: string; planned_start_date: string | null; planned_end_date: string | null; primary_location: string | null; created_at: string; updated_at: string }>`select id, name, project_code, production_type, status, planned_start_date::text as planned_start_date,
+        planned_end_date::text as planned_end_date, primary_location, created_at::text as created_at, updated_at::text as updated_at
         from bridge_production_projects
         where organization_id = ${actor.organizationId}
         order by updated_at desc limit 100`,
-      sql`select d.id, d.project_id, d.shoot_date::text, d.day_label, d.location, d.notes
+      sql<{ id: string; project_id: string; shoot_date: string; day_label: string | null; location: string | null; notes: string | null }>`select d.id, d.project_id, d.shoot_date::text as shoot_date, d.day_label, d.location, d.notes
         from bridge_production_shoot_days d
         join bridge_production_projects p on p.id = d.project_id
         where p.organization_id = ${actor.organizationId}
         order by d.shoot_date asc limit 500`,
-      sql`select e.id, e.project_id, e.title_id, e.event_type, e.event_name,
-        e.starts_at, e.ends_at, e.location, e.notes, e.status
+      sql<{ id: string; project_id: string; title_id: string | null; event_type: string; event_name: string; starts_at: string; ends_at: string; location: string | null; notes: string | null; status: string }>`select e.id, e.project_id, e.title_id, e.event_type, e.event_name,
+        e.starts_at::text as starts_at, e.ends_at::text as ends_at, e.location, e.notes, e.status
         from bridge_production_schedule_events e
         where e.organization_id = ${actor.organizationId}
         order by e.starts_at asc limit 500`,
-      sql`select c.id, c.project_id, c.full_name, c.role, c.department, c.notes, c.status
+      sql<{ id: string; project_id: string; full_name: string; role: string; department: string | null; notes: string | null; status: string }>`select c.id, c.project_id, c.full_name, c.role, c.department, c.notes, c.status
         from bridge_production_project_crew c
         where c.organization_id = ${actor.organizationId}
         order by c.full_name asc limit 1000`,
-      sql`select id, name, status
+      sql<{ id: string; name: string; status: string }>`select id, name, status
         from bridge_titles
         where owner_account_type = 'studio'
           and owner_organization_id = ${actor.organizationId}
