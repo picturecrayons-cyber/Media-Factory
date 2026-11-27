@@ -33,9 +33,9 @@ function Studio() {
 
             <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Studio workspace navigation">
               <a href="#studio-titles" className="rounded-[14px] border border-line p-4 hover:border-accent"><strong>Studio Titles</strong><p className="mt-1 text-sm text-muted">Finished films and story concepts</p></a>
-              <a href="#studio-operations" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Production & DIT</strong><p className="mt-1 text-sm text-muted">Production operations and media handover</p></a>
-              <Link to="/account" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Account</strong><p className="mt-1 text-sm text-muted">Studio account profile</p></Link>
-              <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
+              <a href="#studio-operations" className="rounded-[14px] border border-line p-4 hover:border-accent"><strong>Production & DIT</strong><p className="mt-1 text-sm text-muted">Production operations and media handover</p></a>
+              <Link to="/account" className="rounded-[14px] border border-line p-4 hover:border-accent"><strong>Account</strong><p className="mt-1 text-sm text-muted">Studio account profile</p></Link>
+              <a href="#studio-dit" className="rounded-[14px] border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
             </section>
 
             <section id="studio-titles" className="space-y-6">
@@ -45,11 +45,11 @@ function Studio() {
                   <p className="mt-1 text-sm text-muted">Choose a dedicated submission workflow. Every title remains subject to Bridge QC, Legal and Rights approvals.</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Link to="/submit-film" className="rounded-sm border border-line p-4 hover:border-accent">
+                  <Link to="/submit-film" className="rounded-[14px] border border-line p-4 hover:border-accent">
                     <strong>New Finished Film</strong>
                     <p className="mt-1 text-sm text-muted">Submit a completed film for rights and buyer review</p>
                   </Link>
-                  <Link to="/submit-concept" className="rounded-sm border border-line p-4 hover:border-accent">
+                  <Link to="/submit-concept" className="rounded-[14px] border border-line p-4 hover:border-accent">
                     <strong>Story / Concept</strong>
                     <p className="mt-1 text-sm text-muted">Submit a story or concept for separate curation</p>
                   </Link>
@@ -91,7 +91,7 @@ function Studio() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {comingSoonModules.map(([name, description]) => (
-                  <article key={name} className="rounded-sm border border-dashed border-line p-4">
+                  <article key={name} className="rounded-[14px] border border-dashed border-line p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h4 className="font-semibold">{name}</h4>
                       <span className="rounded-full border border-line px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">Coming soon</span>
