@@ -99,8 +99,7 @@ const createPayloadSchema = z.object({
   estimatedBudgetRange: z.string().max(80).optional(),
   developmentStage: z.enum(["NOT_STARTED", "IN_DEVELOPMENT"]).default("NOT_STARTED"),
   targetPlatforms: z.array(z.string().min(1).max(40)).max(12).default([]),
-  treatmentUrl: z.string().url().max(500).optional().or(z.literal("")),
-  screenplayUrl: z.string().url().max(500).optional().or(z.literal("")),
+
   language: z.string().min(2).max(40).default("Malayalam"),
 });
 
