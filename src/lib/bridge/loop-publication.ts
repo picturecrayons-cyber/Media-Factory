@@ -290,7 +290,16 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                select 1 from bridge_asset_versions v
                where v.title_id = b.id and v.asset_group = 'VIDEO'
                  and v.s3_key = b.master_key and v.processing_state = 'PASSED'
-                 and v.checksum_sha256 ~ '^[0-9a-f]{64}
+                 and v.checksum_sha256 ~ '^[0-9a-f]{64}$'
+             ) as master_version_verified,
+             exists (
+               select 1 from bridge_asset_versions v
+               where v.title_id = b.id and v.asset_group = 'ARTWORK'
+                 and v.s3_key = b.poster_key and v.processing_state = 'PASSED'
+                 and v.checksum_sha256 ~ '^[0-9a-f]{64}$'
+             ) as artwork_version_verified,
+             exists (
+               select 1 from bridge_qc_cases q
                where q.title_id=b.id and q.status='PASSED'
                  and q.reviewer_findings->0->>'masterKey'=b.master_key
                  and q.reviewer_findings->0->>'posterKey'=b.poster_key
