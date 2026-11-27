@@ -1,11 +1,9 @@
--- Allow QC to validate the immutable sealed-object pointer written by
--- persistVerifiedAsset. The asset row keeps its source key for provenance;
--- bridge_titles.master_key/poster_key point at <source>.verified/<asset-id>.
--- Exact-key matches remain supported for already-normalized rows.
+-- QC accepts only the immutable sealed pointer written by persistVerifiedAsset.
+-- A positive byte_size or a legacy exact source-key match is not verification evidence.
 create or replace function public.bridge_require_verified_assets_before_qc()
 returns trigger
 language plpgsql
-set search_path = public
+set search_path = ''
 as $function$
 begin
   if new.status = 'QC_REVIEW'
@@ -18,9 +16,18 @@ begin
          where a.title_id = new.id
            and a.kind = 'master'
            and coalesce(a.byte_size, 0) > 0
-           and (
-             a.s3_key = new.master_key
-             or a.s3_key || '.verified/' || a.id::text = new.master_key
+           and a.s3_key = new.master_key
+           and a.s3_key like '%.verified/' || a.id
+           and exists (
+             select 1
+             from public.bridge_audit_logs v
+             where v.entity_type = 'bridge_asset'
+               and v.entity_id = a.id
+               and v.action = 'asset.upload_verified'
+               and (v.metadata::jsonb ->> 'titleId') = new.id
+               and (v.metadata::jsonb ->> 'kind') = a.kind
+               and (v.metadata::jsonb ->> 'byteSize') = a.byte_size::text
+               and nullif(v.metadata::jsonb ->> 'checksum', '') is not null
            )
        )
        or not exists (
@@ -29,15 +36,24 @@ begin
          where a.title_id = new.id
            and a.kind in ('poster', 'poster_vertical')
            and coalesce(a.byte_size, 0) > 0
-           and (
-             a.s3_key = new.poster_key
-             or a.s3_key || '.verified/' || a.id::text = new.poster_key
+           and a.s3_key = new.poster_key
+           and a.s3_key like '%.verified/' || a.id
+           and exists (
+             select 1
+             from public.bridge_audit_logs v
+             where v.entity_type = 'bridge_asset'
+               and v.entity_id = a.id
+               and v.action = 'asset.upload_verified'
+               and (v.metadata::jsonb ->> 'titleId') = new.id
+               and (v.metadata::jsonb ->> 'kind') = a.kind
+               and (v.metadata::jsonb ->> 'byteSize') = a.byte_size::text
+               and nullif(v.metadata::jsonb ->> 'checksum', '') is not null
            )
        ) then
       raise exception using
         errcode = '23514',
         message = 'QC_BLOCKED_VERIFIED_ASSETS_REQUIRED',
-        detail = 'A title requires a verified master and verified poster artwork before QC.';
+        detail = 'A title requires sealed master and poster pointers with matching persisted verification evidence before QC.';
     end if;
   end if;
   return new;
