@@ -167,6 +167,31 @@ const license = {
   distributorSharePct: 20,
 };
 
+test("Submit for QC creates a pending review case atomically and never pre-approves it", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query("update bridge_titles set status='PREPARING'");
+    const result = await submitTitleForQc(
+      f.sql,
+      { id: "title-123", status: "PREPARING", masterKey: "sealed/master", posterKey: "sealed/poster" },
+      "owner",
+      "Studio submitted the verified film for QC",
+    );
+    assert.equal(result.title.status, "QC_REVIEW");
+    const cases = await f.sql.query<{ status: string; reviewed_by: string | null; reviewed_at: string | null }>(
+      "select status, reviewed_by, reviewed_at from bridge_qc_cases",
+    );
+    assert.equal(cases.length, 1);
+    assert.equal(cases[0].status, "PENDING");
+    assert.equal(cases[0].reviewed_by, null);
+    assert.equal(cases[0].reviewed_at, null);
+    assert.equal((await f.sql.query("select * from bridge_title_events where to_status='QC_REVIEW'")).length, 1);
+    assert.equal((await f.sql.query("select * from bridge_audit_logs where action='title.advance'")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
   const f = await fixture();
   try {
