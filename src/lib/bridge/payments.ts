@@ -274,6 +274,11 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    // A broad internal permission (including Super Admin) must never make
+    // an internal account eligible to create a Buyer checkout order.
+    if (actor.accountType !== "buyer" || actor.internalRole) {
+      throw new Error("Buyer account required");
+    }
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
     if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");

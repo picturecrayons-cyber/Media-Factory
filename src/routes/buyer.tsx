@@ -4,10 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { getBearerToken } from "@/lib/auth/client";
-import { listTitles } from "@/lib/bridge/titles";
+import { listBuyerCataloguePreview } from "@/lib/bridge/titles";
 import {
   createLicenseOrder,
   listOwnEntitlements,
@@ -52,11 +51,8 @@ function Buyer() {
   return (
     <RequireBridge allow="buyer">
       {(actor) => (
-        <BridgeShell actor={actor} title="Buyer dashboard">
-          <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
-            Discover licensing-ready titles, open a listing, then license only after captured payment.
-          </p>
-          <BuyerBody userId={actor.userId} />
+        <BridgeShell actor={actor} title="Buyer Gallery">
+          <BuyerBody userId={actor.userId} readOnly={Boolean(actor.internalRole)} />
         </BridgeShell>
       )}
     </RequireBridge>
@@ -151,10 +147,8 @@ async function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs = 
   }
 }
 
-function BuyerBody({ userId }: { userId: string }) {
+function BuyerBody({ userId, readOnly }: { userId: string; readOnly: boolean }) {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
-  const [view, setView] = useState<"gallery" | "list">("gallery");
   const [query, setQuery] = useState("");
   const [galleryPage, setGalleryPage] = useState(0);
   // Buyer-sensitive responses must never share a React Query cache entry across accounts.
@@ -162,7 +156,7 @@ function BuyerBody({ userId }: { userId: string }) {
   const entitlementsKey = ["bridge-buyer-entitlements", userId] as const;
   const titlesQ = useQuery({
     queryKey: titlesKey,
-    queryFn: () => withTimeout(listTitles(), "Buyer catalogue"),
+    queryFn: () => withTimeout(listBuyerCataloguePreview(), "Buyer catalogue"),
     retry: 1,
   });
   const titles = titlesQ.data?.titles ?? [];
@@ -179,12 +173,13 @@ function BuyerBody({ userId }: { userId: string }) {
     queryKey: ["bridge-buyer-poster-artwork", userId, posterTitleIds],
     queryFn: ({ signal }) =>
       withTimeout(fetchBuyerPosterArtwork(posterTitleIds, signal), "Buyer artwork", 120_000),
-    enabled: tab !== "licenses" && view === "gallery" && posterTitleIds.length > 0,
+    enabled: posterTitleIds.length > 0,
     retry: 1,
   });
   const entQ = useQuery({
     queryKey: entitlementsKey,
     queryFn: () => withTimeout(listOwnEntitlements(), "Buyer licenses"),
+    enabled: !readOnly,
     retry: 1,
   });
   const entitled = new Set(entQ.data?.entitlements.map((e) => e.titleId));
@@ -222,26 +217,25 @@ function BuyerBody({ userId }: { userId: string }) {
       toast("Payment captured — entitlement recorded");
       void qc.invalidateQueries({ queryKey: titlesKey });
       void qc.invalidateQueries({ queryKey: entitlementsKey });
-      setTab("licenses");
     },
     onError: (err) => toast(err instanceof Error ? err.message : "Payment did not complete"),
   });
 
-  const licensed = visible.filter((t) => entitled.has(t.id));
+  const licensed = readOnly ? [] : visible.filter((t) => entitled.has(t.id));
   const artworkByTitle = postersQ.data ?? new Map<string, Blob>();
-  if (titlesQ.isPending || entQ.isPending) {
+  if (titlesQ.isPending || (!readOnly && entQ.isPending)) {
     return <p role="status" aria-live="polite">Loading your Buyer catalogue and licenses…</p>;
   }
-  if (titlesQ.isError || entQ.isError) {
+  if (titlesQ.isError || (!readOnly && entQ.isError)) {
     return (
       <section role="alert" className="space-y-3 rounded-sm border border-line p-4">
         <p className="font-medium">Buyer data could not be loaded.</p>
         {titlesQ.isError ? <p className="text-sm text-muted">Catalogue: {titlesQ.error.message}</p> : null}
-        {entQ.isError ? <p className="text-sm text-muted">Licenses: {entQ.error.message}</p> : null}
+        {!readOnly && entQ.isError ? <p className="text-sm text-muted">Licenses: {entQ.error.message}</p> : null}
         <button
           type="button"
           className="underline"
-          onClick={() => void Promise.all([titlesQ.refetch(), entQ.refetch()])}
+          onClick={() => void Promise.all([titlesQ.refetch(), ...(readOnly ? [] : [entQ.refetch()])])}
         >
           Retry both checks
         </button>
@@ -251,38 +245,24 @@ function BuyerBody({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
-        <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
-        <Stat label="Licenses" value={String(licensed.length)} note="Captured entitlements" />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {(["discover", "listing", "licenses"] as const).map((id) => (
-          <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-sm border px-3 py-1.5 text-sm capitalize ${tab === id ? "border-accent text-accent" : "border-line text-muted"}`}>
-            {id}
-          </button>
-        ))}
-      </div>
-      {tab !== "licenses" && (
-        <div className="flex flex-wrap items-center gap-3">
-          <input value={query} onChange={(e) => { setQuery(e.target.value); setGalleryPage(0); }} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
-          <div className="inline-flex rounded-sm border border-line p-1" role="group" aria-label="Catalogue view">
-            <button type="button" onClick={() => setView("gallery")} aria-pressed={view === "gallery"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "gallery" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
-              Gallery
-            </button>
-            <button type="button" onClick={() => setView("list")} aria-pressed={view === "list"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "list" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
-              List
-            </button>
-          </div>
-        </div>
-      )}
+      <input
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setGalleryPage(0); }}
+        placeholder="Search title or language"
+        aria-label="Search title or language"
+        className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm"
+      />
       {!titles.length ? (
         <BuyerEmptyState />
-      ) : tab === "licenses" ? (
-        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
-      ) : view === "gallery" ? (
+      ) : (
         <div className="space-y-4">
-          <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
+          <TitleGallery
+            titles={pageTitles}
+            artworkByTitle={artworkByTitle}
+            entitled={entitled}
+            order={order}
+            readOnly={readOnly}
+          />
           {visible.length > BUYER_GALLERY_PAGE_SIZE ? (
             <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
               <button
@@ -305,10 +285,8 @@ function BuyerBody({ userId }: { userId: string }) {
             </div>
           ) : null}
         </div>
-      ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
       )}
-      {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
+      {postersQ.isError && titles.length > 0 ? (
         <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>
       ) : null}
     </div>
@@ -324,25 +302,12 @@ function formatLicensingFeePaise(amountPaise: number): string {
   }).format(amountPaise / 100);
 }
 
-function Stat({ label, value, note }: { label: string; value: string; note: string }) {
-  return (
-    <div className="rounded-sm border border-line px-4 py-3">
-      <div className="text-xs uppercase tracking-widest text-muted">{label}</div>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
-      <div className="text-xs text-muted">{note}</div>
-    </div>
-  );
-}
-
 type BuyerTitleCard = {
   id: string;
   name: string;
-  synopsis: string;
   language: string;
   year: number | null;
-  runtimeMinutes: number | null;
   licensingFeePaise: number;
-  status: string;
 };
 
 function BuyerEmptyState() {
@@ -363,11 +328,13 @@ function TitleGallery({
   artworkByTitle,
   entitled,
   order,
+  readOnly,
 }: {
   titles: BuyerTitleCard[];
   artworkByTitle: Map<string, Blob>;
   entitled: Set<string>;
   order: { isPending: boolean; mutate: (id: string) => void };
+  readOnly: boolean;
 }) {
   if (!titles.length) return <p className="text-sm text-muted">No titles match this search.</p>;
 
@@ -378,7 +345,6 @@ function TitleGallery({
         const details = [
           title.language,
           title.year ? String(title.year) : null,
-          title.runtimeMinutes ? `${title.runtimeMinutes} min` : null,
         ].filter(Boolean).join(" · ");
         return (
           <article key={title.id} className="overflow-hidden rounded-sm border border-line bg-surface">
@@ -393,11 +359,7 @@ function TitleGallery({
                   </Link>
                   <p className="mt-1 text-xs text-muted">{details || "Details pending"}</p>
                 </div>
-                <StatusChip status={title.status as never} />
               </div>
-              {title.synopsis.trim() ? (
-                <p className="line-clamp-3 text-sm leading-relaxed text-muted">{title.synopsis}</p>
-              ) : null}
               <div className="flex items-center justify-between gap-3 border-t border-line pt-3">
                 <p className="text-sm font-medium">
                   {title.licensingFeePaise > 0
@@ -406,7 +368,7 @@ function TitleGallery({
                 </p>
                 {entitled.has(title.id) ? (
                   <span className="shrink-0 text-sm font-semibold text-accent">Licensed</span>
-                ) : (
+                ) : readOnly ? null : (
                   <Button
                     disabled={order.isPending || title.licensingFeePaise <= 0}
                     onClick={() => order.mutate(title.id)}
@@ -455,25 +417,5 @@ function BuyerPosterImage({ blob, title }: { blob: Blob | undefined; title: stri
       <p className="mt-4 line-clamp-4 font-display text-2xl font-semibold text-white">{title}</p>
       <p className="mt-4 text-xs text-white/60">Poster artwork unavailable</p>
     </div>
-  );
-}
-
-function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
-  if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
-  return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
-      {titles.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-          <div>
-            <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">{t.name}</Link>
-            <p className="text-sm text-muted">{t.language}{t.licensingFeePaise > 0 ? ` · ${formatLicensingFeePaise(t.licensingFeePaise)}` : " · fee unset"}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <StatusChip status={t.status as never} />
-            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
-          </div>
-        </li>
-      ))}
-    </ul>
   );
 }
