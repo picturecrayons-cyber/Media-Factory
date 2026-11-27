@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,12 @@ import {
   updateStoryConceptCuration,
 } from "@/lib/bridge/story-concept-api";
 import type { CurationStatus } from "@/lib/bridge/story-concept";
+import {
+  getStoryConceptNetworkReadiness,
+  grantStoryConceptNetworkAccess,
+  listStoryConceptNetworkOrganizations,
+  reviewStoryConceptReadiness,
+} from "@/lib/bridge/story-concept-network-api";
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Pending",
@@ -138,6 +145,9 @@ export function StoryConceptDesk() {
                   This is a legacy introduction status. Verify actual Buyer / Investor access records before treating the concept as introduced.
                 </p>
               )}
+              {c.curation_status === "APPROVED" ? (
+                <StoryConceptNetworkControls conceptSubmissionId={c.id} />
+              ) : null}
 
               {update.isError ? (
                 <p className="mt-3 text-xs text-accent">{String(update.error)}</p>
@@ -147,5 +157,128 @@ export function StoryConceptDesk() {
         </div>
       )}
     </section>
+  );
+}
+
+
+function StoryConceptNetworkControls({ conceptSubmissionId }: { conceptSubmissionId: string }) {
+  const qc = useQueryClient();
+  const [accountType, setAccountType] = useState<"buyer" | "investor">("buyer");
+  const [organizationId, setOrganizationId] = useState("");
+  const orgsQ = useQuery({
+    queryKey: ["story-concept-network-organizations"],
+    queryFn: () => listStoryConceptNetworkOrganizations(),
+    retry: false,
+  });
+  const readinessQ = useQuery({
+    queryKey: ["story-concept-network-readiness", conceptSubmissionId],
+    queryFn: () => getStoryConceptNetworkReadiness({ data: { conceptSubmissionId } }),
+    retry: false,
+  });
+  const available = (orgsQ.data?.organizations ?? []).filter((org) => org.account_type === accountType);
+  const grant = useMutation({
+    mutationFn: () => grantStoryConceptNetworkAccess({
+      data: { conceptSubmissionId, organizationId, accountType },
+    }),
+    onSuccess: () => {
+      setOrganizationId("");
+      void qc.invalidateQueries({ queryKey: ["story-concept-network-readiness", conceptSubmissionId] });
+    },
+  });
+  const readiness = useMutation({
+    mutationFn: () => reviewStoryConceptReadiness({
+      data: { conceptSubmissionId, decision: "APPROVED", reviewNotes: "Positive interest verified from introduced Buyer / Investor organization." },
+    }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["story-concept-network-readiness", conceptSubmissionId] }),
+  });
+
+  if (orgsQ.isError || readinessQ.isError) {
+    return (
+      <div className="mt-4 rounded-lg border border-line bg-elevated/40 p-3 text-xs text-muted">
+        Network controls require Super Admin access and the network migration. Curation approval alone does not grant network access.
+      </div>
+    );
+  }
+
+  const mandates = readinessQ.data?.mandates ?? [];
+  const interest = readinessQ.data?.interest ?? [];
+  const gate = readinessQ.data?.readiness;
+
+  return (
+    <div className="mt-4 space-y-3 rounded-xl border border-line bg-elevated/30 p-4">
+      <div>
+        <p className="text-sm font-semibold">Buyer / Investor network</p>
+        <p className="mt-1 text-xs text-muted">Grant access only to verified, active organizations. Each grant is revocable and audited.</p>
+      </div>
+      {orgsQ.isPending || readinessQ.isPending ? (
+        <p className="text-xs text-muted">Loading network controls…</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Network account type"
+              value={accountType}
+              onChange={(event) => { setAccountType(event.target.value as "buyer" | "investor"); setOrganizationId(""); }}
+              className="rounded-md border border-line bg-surface px-3 py-2 text-xs"
+            >
+              <option value="buyer">Buyer</option>
+              <option value="investor">Investor</option>
+            </select>
+            <select
+              aria-label="Verified network organization"
+              value={organizationId}
+              onChange={(event) => setOrganizationId(event.target.value)}
+              className="min-w-48 rounded-md border border-line bg-surface px-3 py-2 text-xs"
+            >
+              <option value="">Select organization</option>
+              {available.map((org) => (
+                <option key={org.organization_id} value={org.organization_id}>
+                  {org.organization_name} ({org.verified_member_count} verified)
+                </option>
+              ))}
+            </select>
+            <Button size="sm" disabled={!organizationId || grant.isPending} onClick={() => grant.mutate()}>
+              {grant.isPending ? "Granting…" : "Grant introduction"}
+            </Button>
+          </div>
+          {!available.length ? <p className="text-xs text-muted">No verified active {accountType} organizations are eligible.</p> : null}
+          {grant.isError ? <p role="alert" className="text-xs text-accent">{String(grant.error)}</p> : null}
+          <div className="space-y-1">
+            <p className="text-xs font-medium">Access grants ({mandates.length})</p>
+            {mandates.length ? mandates.map((mandate) => (
+              <p key={mandate.id} className="text-xs text-muted">
+                {mandate.organization_name} · {mandate.grantee_account_type} · {mandate.grant_status}
+                {mandate.expires_at ? ` · expires ${new Date(mandate.expires_at).toLocaleDateString()}` : ""}
+              </p>
+            )) : <p className="text-xs text-muted">No organization introductions recorded.</p>}
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-medium">Interest history ({interest.length})</p>
+            {interest.length ? interest.slice(0, 6).map((event, index) => (
+              <p key={`${event.actor_user_id}-${event.created_at}-${index}`} className="text-xs text-muted">
+                {event.organization_name} · {event.account_type} · {event.interest_level} · {new Date(event.created_at).toLocaleDateString()}
+              </p>
+            )) : <p className="text-xs text-muted">No Buyer / Investor response recorded yet.</p>}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+            <p className="text-xs text-muted">
+              Readiness: {gate?.readiness_status ?? "Not reviewed"}
+              {gate ? ` · ${gate.qualifying_interest_count} positive responses (${gate.buyer_interest_count} Buyer / ${gate.investor_interest_count} Investor)` : ""}
+            </p>
+            <Button
+              size="sm"
+              disabled={readiness.isPending || !interest.some((event) => ["INTERESTED", "REQUESTED_MATERIALS"].includes(event.interest_level))}
+              onClick={() => readiness.mutate()}
+            >
+              {readiness.isPending ? "Reviewing…" : "Approve Production readiness"}
+            </Button>
+          </div>
+          {readiness.isError ? <p role="alert" className="text-xs text-accent">{String(readiness.error)}</p> : null}
+          <p className="text-xs leading-5 text-muted">
+            Readiness approval is not Production handoff. The Production project migration and linked Finished Film creation remain a separate release gate.
+          </p>
+        </>
+      )}
+    </div>
   );
 }
