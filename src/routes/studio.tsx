@@ -62,7 +62,7 @@ function Studio() {
                 <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
               </div>
               <TitleList queryKey={["bridge-titles", actor.userId, actor.organizationId]} empty="No finished films are currently returned for this studio account." />
-              <MyStoryConcepts queryKey={["my-story-concepts", actor.userId, actor.organizationId]} />
+              <MyStoryConcepts queryKey={["my-story-concepts-v2", actor.userId, actor.organizationId]} />
             </section>
 
 
