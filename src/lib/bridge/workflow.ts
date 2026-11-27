@@ -21,6 +21,8 @@ export async function saveLoopLicense(
   data: z.infer<typeof loopLicenseInput>,
 ) {
   data = loopLicenseInput.parse(data);
+  if (!actor.emailVerified || actor.internalRole !== "super_admin")
+    throw new Error("Only the verified Super Admin may create Bridge license drafts");
   const [title] = await tx<{
     owner_user_id: string;
     owner_account_type: string;
@@ -74,6 +76,8 @@ const reviewInput = z.object({
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
   data = reviewInput.parse(data);
+  if (data.stage === "LEGAL" && (!actor.emailVerified || actor.internalRole !== "super_admin"))
+    throw new Error("Only the verified Super Admin may approve Bridge rights and licensing");
   assertPermission(actor, data.stage === "QC" ? "title.qc_review" : "title.rights_review");
   const [title] = await tx<{
     status: string;
