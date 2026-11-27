@@ -13,6 +13,7 @@ import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, assertBuyerTitleAccess, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
+import { isFinishedFilmCatalogueRecord } from "./catalogue-classification";
 
 type TitleRow = {
   id: string;
@@ -24,6 +25,7 @@ type TitleRow = {
   owner_organization_id?: string | null;
   record_classification?: string | null;
   submission_type?: string | null;
+  external_ids?: Record<string, unknown> | null;
   status: string;
   synopsis: string;
   language: string;
@@ -87,10 +89,26 @@ async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
 }
 
 async function listCatalog(sql: Sql): Promise<TitleRow[]> {
+  // Finished-film catalogue excludes Story / Concept submissions and test-only
+  // records at the query boundary. to_jsonb keeps this compatible with older
+  // schemas where one or more classification columns are not installed.
   if (!(await hasTitleMergeColumn(sql))) {
-    return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
+    return sql<TitleRow>`
+      select t.* from bridge_titles t
+      where coalesce(to_jsonb(t)->>'record_classification', '') <> 'TEST'
+        and coalesce(to_jsonb(t)->>'submission_type', '') <> 'story_concept'
+        and coalesce(to_jsonb(t)->'external_ids'->>'test_only', 'false') <> 'true'
+      order by t.updated_at desc limit 200
+    `;
   }
-  return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
+  return sql<TitleRow>`
+    select t.* from bridge_titles t
+    where t.merged_into_title_id is null
+      and coalesce(to_jsonb(t)->>'record_classification', '') <> 'TEST'
+      and coalesce(to_jsonb(t)->>'submission_type', '') <> 'story_concept'
+      and coalesce(to_jsonb(t)->'external_ids'->>'test_only', 'false') <> 'true'
+    order by t.updated_at desc limit 200
+  `;
 }
 
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
@@ -138,7 +156,7 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   // TEST fixtures remain in the database for controlled verification, but never
   // appear in customer-facing Creator or Studio title lists. Older schemas that
   // predate record_classification return no value and retain their normal rows.
-  return rows.filter((row) => row.record_classification !== "TEST");
+  return rows.filter(isFinishedFilmCatalogueRecord);
 }
 
 function slugify(name: string, id: string): string {
@@ -429,10 +447,13 @@ export const getTitle = createServerFn({ method: "GET" })
     if (!title) throw new Error("Not found");
     const sql = await getSql();
     const submissionKind = await sql<{ submission_type: string | null }>`
-      select submission_type from bridge_titles where id = ${data.id} limit 1
+      select to_jsonb(t)->>'submission_type' as submission_type
+      from bridge_titles t where t.id = ${data.id} limit 1
     `;
-    if (submissionKind[0]?.submission_type === "story_concept") throw new Error("Not found");
     const buyerView = actor.accountType === "buyer" && !actor.internalRole;
+    // Concepts are never buyer catalogue content. Their owners and authorized
+    // internal curators may still open the record from the dedicated Concepts desk. 
+    if (buyerView && submissionKind[0]?.submission_type === "story_concept") throw new Error("Not found");
     if (buyerView) {
       // A published title is visible only to the buyer account explicitly granted
       // access; publication gates are independently re-checked on direct access.
@@ -461,6 +482,7 @@ export const getTitle = createServerFn({ method: "GET" })
       title: buyerView
         ? { ...title, ownerUserId: "", ownerOrganizationId: null, posterKey: null, masterKey: null }
         : title,
+      submissionType: submissionKind[0]?.submission_type ?? null,
       events: events.map((e) => ({
         from: e.from_status,
         to: e.to_status,

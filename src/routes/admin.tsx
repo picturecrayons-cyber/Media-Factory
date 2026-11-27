@@ -64,15 +64,18 @@ function AdminBody({ actor }: { actor: any }) {
           <div className="flex flex-wrap gap-2">
             <a href="/admin/workstations" aria-label="Open workspace"><Button>Open workspace</Button></a>
             <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
-            <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Loop ↗</Button></a>
+            <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open consumer Loop ↗</Button></a>
           </div>
         </section>
 
-        <section aria-label="Title overview" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="All titles" value={loading ? "—" : String(titles.length)} detail="Canonical catalog" />
-          <Metric label="QC / intake" value={loading ? "—" : String(qcQueue)} detail="Awaiting review" />
-          <Metric label="Rights review" value={loading ? "—" : String(rightsQueue)} detail="Clearance queue" />
-          <Metric label="Buyer-ready" value={loading ? "—" : String(buyerReady)} detail="Licensing stages" />
+        <section aria-label="Title overview" className="space-y-2">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric label="All titles" value={titlesQ.isError ? "Unavailable" : loading ? "Loading…" : String(titles.length)} detail="Canonical Finished Film catalogue" />
+          <Metric label="QC / intake" value={titlesQ.isError ? "Unavailable" : loading ? "Loading…" : String(qcQueue)} detail="Awaiting review" />
+          <Metric label="Rights review" value={titlesQ.isError ? "Unavailable" : loading ? "Loading…" : String(rightsQueue)} detail="Clearance queue" />
+          <Metric label="Buyer-ready" value={titlesQ.isError ? "Unavailable" : loading ? "Loading…" : String(buyerReady)} detail="Licensing stages" />
+          </div>
+          {titlesQ.isError ? <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent"><span>Title metrics unavailable. No zero values are assumed.</span><Button size="sm" variant="outline" onClick={() => void titlesQ.refetch()}>Retry</Button></div> : null}
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4">
@@ -81,10 +84,11 @@ function AdminBody({ actor }: { actor: any }) {
             <span className="text-xs text-muted">Live records</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <CompactMetric label="Loop publications" value={distQ.isPending ? "—" : String(live)} />
-            <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "—" : String(profiles.length)} />
-            <CompactMetric label="Organizations" value={profilesQ.isPending ? "—" : String(organizations.size)} />
+            <CompactMetric label="Loop publications" value={distQ.isError ? "Unavailable" : distQ.isPending ? "Loading…" : String(live)} />
+            <CompactMetric label="Bridge profiles" value={profilesQ.isError ? "Unavailable" : profilesQ.isPending ? "Loading…" : String(profiles.length)} />
+            <CompactMetric label="Organizations" value={profilesQ.isError ? "Unavailable" : profilesQ.isPending ? "Loading…" : String(organizations.size)} />
           </div>
+          {distQ.isError || profilesQ.isError ? <p role="alert" className="mt-3 text-sm text-accent">Some workspace metrics are unavailable. Check the affected source and retry.</p> : null}
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
@@ -115,7 +119,7 @@ function AdminBody({ actor }: { actor: any }) {
 
         <section className="grid gap-3 lg:grid-cols-2">
           <details className="min-w-0 rounded-2xl border border-line bg-surface p-4">
-            <summary className="cursor-pointer list-none font-semibold">Users & organizations <span className="ml-1 text-sm font-normal text-muted">({profiles.length})</span></summary>
+            <summary className="cursor-pointer list-none font-semibold">Users & organizations <span className="ml-1 text-sm font-normal text-muted">({profilesQ.isError ? "Unavailable" : profilesQ.isPending ? "Loading…" : profiles.length})</span></summary>
             <p className="mt-2 text-sm text-muted">Read-only Bridge profile view. Role changes remain controlled by the invitation and onboarding flow.</p>
             {profilesQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Profiles could not be loaded.</p> : null}
             <div className="mt-3 max-h-80 overflow-auto">
