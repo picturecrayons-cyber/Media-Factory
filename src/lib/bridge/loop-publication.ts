@@ -179,6 +179,8 @@ export async function verifyDistributionPreflight(
       reasons.push(
         "No active Bridge rights grant covers the requested Loop destination, territory, language, exploitation model, and window.",
       );
+    } else if (coveringGrant.exclusivity.toUpperCase() !== "NON_EXCLUSIVE") {
+      reasons.push("Loop release requires an active NON_EXCLUSIVE digital rights grant; exclusive or unspecified terms cannot be published.");
     }
   }
 
@@ -347,6 +349,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           : null;
         const legalGrantIds = Array.isArray(r.legal_grant_ids) ? r.legal_grant_ids : [];
         const legalApproved = Boolean(coveringGrant && legalGrantIds.includes(coveringGrant.id));
+        const nonExclusiveGrant = coveringGrant?.exclusivity?.toUpperCase() === "NON_EXCLUSIVE";
         const gatesReady =
           r.ott_preparation_status === "READY" &&
           r.packaging_status === "COMPLETE" &&
@@ -354,6 +357,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           r.delivery_status === "READY";
         const isReady =
           Boolean(coveringGrant) &&
+          nonExclusiveGrant &&
           legalApproved &&
           Boolean(r.qc_approved) &&
           gatesReady &&
@@ -372,6 +376,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         const blockers: string[] = [];
         if (!coveringGrant)
           blockers.push("A matching rights grant and explicit publication dimensions are required");
+        else if (!nonExclusiveGrant)
+          blockers.push("A valid NON_EXCLUSIVE digital rights grant is required for Loop.");
         if (!r.qc_approved) blockers.push("QC approval for the current master and artwork is required");
         if (!legalApproved) blockers.push("Legal approval must reference the active rights grant");
         if (r.ott_preparation_status !== "READY") blockers.push("OTT preparation is not certified READY");
