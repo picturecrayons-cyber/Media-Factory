@@ -113,11 +113,34 @@ export async function verifyDistributionPreflight(
   }
 
   const reasons: string[] = [];
-  if (!rightsRequest || !rightsRequest.windowStart || !rightsRequest.windowEnd ||
-      rightsRequest.territories.length!==1 || rightsRequest.territories[0]!=="WORLDWIDE" ||
-      rightsRequest.exploitationModels.length!==1 || rightsRequest.exploitationModels[0]!=="TVOD")
-    reasons.push("Loop requires WORLDWIDE TVOD with explicit start and end dates.");
+  const verifiedAssets = await sql<{ master_verified: boolean; artwork_verified: boolean }>`
+    select
+      exists (
+        select 1 from bridge_asset_versions v
+        where v.title_id = ${titleId}
+          and v.asset_group = 'VIDEO'
+          and v.s3_key = ${title.master_key}
+          and v.processing_state = 'PASSED'
+          and v.checksum_sha256 ~ '^[0-9a-f]{64}$'
+      ) as master_verified,
+      exists (
+        select 1 from bridge_asset_versions v
+        where v.title_id = ${titleId}
+          and v.asset_group = 'ARTWORK'
+          and v.s3_key = ${title.poster_key}
+          and v.processing_state = 'PASSED'
+          and v.checksum_sha256 ~ '^[0-9a-f]{64}$'
+      ) as artwork_verified
+  `;
+  if (!verifiedAssets[0]?.master_verified)
+    reasons.push("Current master must have a PASSED, SHA-256 verified Bridge asset version matching the sealed title pointer.");
+  if (!verifiedAssets[0]?.artwork_verified)
+    reasons.push("Current artwork must have a PASSED, SHA-256 verified Bridge asset version matching the title poster pointer.");
 
+  if (!rightsRequest || !rightsRequest.windowStart || !rightsRequest.windowEnd ||
+      rightsRequest.territories.length !== 1 || rightsRequest.territories[0] !== "WORLDWIDE" ||
+      rightsRequest.exploitationModels.length !== 1 || rightsRequest.exploitationModels[0] !== "TVOD")
+    reasons.push("Loop requires WORLDWIDE TVOD with explicit start and end dates.");
 
   // 1. QC & Master verification
   if (!title.master_key) {
@@ -156,6 +179,8 @@ export async function verifyDistributionPreflight(
       reasons.push(
         "No active Bridge rights grant covers the requested Loop destination, territory, language, exploitation model, and window.",
       );
+    } else if (coveringGrant.exclusivity.toUpperCase() !== "NON_EXCLUSIVE") {
+      reasons.push("Loop release requires an active NON_EXCLUSIVE digital rights grant; exclusive or unspecified terms cannot be published.");
     }
   }
 
@@ -227,21 +252,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
     const rows = await sql<{
       id: string;
       slug: string;
@@ -265,6 +275,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       published: boolean | null;
       playback_path: string | null;
       qc_approved: boolean;
+      master_version_verified: boolean;
+      artwork_version_verified: boolean;
       legal_grant_ids: string[] | null;
       ott_preparation_status: string | null;
       packaging_status: string | null;
@@ -275,7 +287,22 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
              b.synopsis, b.year, b.runtime_minutes,
              p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
-             l.status as loop_status, l.listed, l.published, l.playback_path,
+             l.status as loop_status,
+             coalesce((to_jsonb(l)->>'is_listed')::boolean, (to_jsonb(l)->>'listed')::boolean, false) as listed,
+             coalesce((to_jsonb(l)->>'is_published')::boolean, (to_jsonb(l)->>'published')::boolean, false) as published,
+             l.playback_path,
+             exists (
+               select 1 from bridge_asset_versions v
+               where v.title_id = b.id and v.asset_group = 'VIDEO'
+                 and v.s3_key = b.master_key and v.processing_state = 'PASSED'
+                 and v.checksum_sha256 ~ '^[0-9a-f]{64}$'
+             ) as master_version_verified,
+             exists (
+               select 1 from bridge_asset_versions v
+               where v.title_id = b.id and v.asset_group = 'ARTWORK'
+                 and v.s3_key = b.poster_key and v.processing_state = 'PASSED'
+                 and v.checksum_sha256 ~ '^[0-9a-f]{64}$'
+             ) as artwork_version_verified,
              exists(
                select 1 from bridge_qc_cases q
                where q.title_id=b.id and q.status='PASSED'
@@ -303,6 +330,13 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
 
     return {
       titles: rows.map((r) => {
+        // GET reports effective expiry without mutating persisted publication or title history.
+        const windowExpired = Boolean(r.window_end && new Date(r.window_end).getTime() < Date.now());
+        const storedAuthorizationStatus = r.authorization_status?.toUpperCase() || "PENDING";
+        const effectiveAuthorizationStatus =
+          windowExpired && ["AUTHORIZED", "LIVE"].includes(storedAuthorizationStatus)
+            ? "EXPIRED"
+            : storedAuthorizationStatus;
         const coveringGrant = r.loop_title_id
           ? findCoveringRightsGrant(
               grants.filter((grant) => grant.title_id === r.id),
@@ -318,6 +352,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           : null;
         const legalGrantIds = Array.isArray(r.legal_grant_ids) ? r.legal_grant_ids : [];
         const legalApproved = Boolean(coveringGrant && legalGrantIds.includes(coveringGrant.id));
+        const nonExclusiveGrant = coveringGrant?.exclusivity?.toUpperCase() === "NON_EXCLUSIVE";
         const gatesReady =
           r.ott_preparation_status === "READY" &&
           r.packaging_status === "COMPLETE" &&
@@ -325,6 +360,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           r.delivery_status === "READY";
         const isReady =
           Boolean(coveringGrant) &&
+          nonExclusiveGrant &&
           legalApproved &&
           Boolean(r.qc_approved) &&
           gatesReady &&
@@ -336,11 +372,15 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             "DELIVERED",
           ].includes(r.status) &&
           Boolean(r.master_key) &&
-          Boolean(r.poster_key);
+          Boolean(r.poster_key) &&
+          Boolean(r.master_version_verified) &&
+          Boolean(r.artwork_version_verified);
 
         const blockers: string[] = [];
         if (!coveringGrant)
           blockers.push("A matching rights grant and explicit publication dimensions are required");
+        else if (!nonExclusiveGrant)
+          blockers.push("A valid NON_EXCLUSIVE digital rights grant is required for Loop.");
         if (!r.qc_approved) blockers.push("QC approval for the current master and artwork is required");
         if (!legalApproved) blockers.push("Legal approval must reference the active rights grant");
         if (r.ott_preparation_status !== "READY") blockers.push("OTT preparation is not certified READY");
@@ -360,6 +400,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         }
         if (!r.master_key) blockers.push("QC master video is missing");
         if (!r.poster_key) blockers.push("Artwork/poster is missing");
+        if (!r.master_version_verified) blockers.push("Current master has no matching PASSED SHA-256 verified asset version.");
+        if (!r.artwork_version_verified) blockers.push("Current artwork has no matching PASSED SHA-256 verified asset version.");
 
         return {
           id: r.id,
@@ -369,22 +411,23 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           language: r.language,
           hasMaster: Boolean(r.master_key),
           hasPoster: Boolean(r.poster_key),
+          masterVerified: Boolean(r.master_version_verified),
+          artworkVerified: Boolean(r.artwork_version_verified),
           ready: isReady,
           blockers,
           publication: r.loop_title_id
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
-                  "PENDING") as DistributionAuthorizationStatus,
+                authorizationStatus: effectiveAuthorizationStatus as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
                 loopStatus: r.loop_status,
-                listed: Boolean(r.listed),
-                published: Boolean(r.published),
+                listed: !windowExpired && Boolean(r.listed),
+                published: !windowExpired && Boolean(r.published),
                 playbackPath: r.playback_path,
               }
             : null,
@@ -671,7 +714,10 @@ export const getLoopPublication = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     const rows = await sql<PublicationRow>`
-      select p.*, l.status as loop_status, l.listed, l.published, l.playback_path
+      select p.*, l.status as loop_status,
+             coalesce((to_jsonb(l)->>'is_listed')::boolean, (to_jsonb(l)->>'listed')::boolean, false) as listed,
+             coalesce((to_jsonb(l)->>'is_published')::boolean, (to_jsonb(l)->>'published')::boolean, false) as published,
+             l.playback_path
       from bridge_loop_publications p
       join loop_titles l on l.id = p.loop_title_id
       where p.bridge_title_id = ${data.bridgeTitleId}

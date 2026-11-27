@@ -32,6 +32,8 @@ function harness(
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
     if (query.includes("from bridge_titles")) return [title];
+    if (query.includes("from bridge_asset_versions"))
+      return [{ master_verified: true, artwork_verified: true }];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
         { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
