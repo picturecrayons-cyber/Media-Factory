@@ -10,9 +10,9 @@ import type { CurationStatus } from "@/lib/bridge/story-concept";
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Pending",
   UNDER_REVIEW: "Under review",
-  APPROVED: "Approved",
+  APPROVED: "Approved for network introduction",
   REJECTED: "Rejected",
-  INTRODUCED_TO_BUYERS: "Introduced to buyers",
+  INTRODUCED_TO_BUYERS: "Legacy introduction status",
 };
 
 export function StoryConceptDesk() {
@@ -52,7 +52,7 @@ export function StoryConceptDesk() {
       <div>
         <h3 className="font-display text-2xl font-semibold">Story / Concept curation</h3>
         <p className="mt-1 text-sm text-muted">
-          Review submissions before any buyer or investor introduction. Nothing auto-publishes to Loop.
+          Review submissions before any Buyer or Investor introduction. Nothing auto-publishes to Loop.
         </p>
       </div>
 
@@ -112,7 +112,7 @@ export function StoryConceptDesk() {
                         update.mutate({ id: c.id, status: "APPROVED" })
                       }
                     >
-                      Approve
+                      Approve for introduction review
                     </Button>
                     <Button
                       size="sm"
@@ -126,21 +126,18 @@ export function StoryConceptDesk() {
                     </Button>
                   </>
                 )}
-                {c.curation_status === "APPROVED" && (
-                  <Button
-                    size="sm"
-                    disabled={update.isPending}
-                    onClick={() =>
-                      update.mutate({
-                        id: c.id,
-                        status: "INTRODUCED_TO_BUYERS",
-                      })
-                    }
-                  >
-                    Introduce to buyers / investors
-                  </Button>
-                )}
               </div>
+
+              {c.curation_status === "APPROVED" && (
+                <p className="mt-3 rounded-lg border border-line bg-elevated/40 px-3 py-2 text-xs leading-5 text-muted">
+                  Curation approval is recorded. Buyer / Investor invitations, access grants and interest capture are not active yet; this status does not mean an introduction has occurred.
+                </p>
+              )}
+              {c.curation_status === "INTRODUCED_TO_BUYERS" && (
+                <p className="mt-3 rounded-lg border border-line bg-elevated/40 px-3 py-2 text-xs leading-5 text-muted">
+                  This is a legacy introduction status. Verify actual Buyer / Investor access records before treating the concept as introduced.
+                </p>
+              )}
 
               {update.isError ? (
                 <p className="mt-3 text-xs text-accent">{String(update.error)}</p>
