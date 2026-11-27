@@ -5,10 +5,10 @@ import {
   recordStoryConceptInterest,
 } from "@/lib/bridge/story-concept-network-api";
 
-export function StoryConceptNetworkPanel({ accountType }: { accountType: "buyer" | "investor" }) {
+export function StoryConceptNetworkPanel({ accountType, userId }: { accountType: "buyer" | "investor"; userId: string }) {
   const qc = useQueryClient();
   const query = useQuery({
-    queryKey: ["story-concept-network", accountType],
+    queryKey: ["story-concept-network", accountType, userId],
     queryFn: () => listMyIntroducedStoryConcepts(),
     retry: false,
   });
