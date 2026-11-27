@@ -75,7 +75,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [licenseTerritories, setLicenseTerritories] = useState(["WORLDWIDE"]);
   const [licenseLanguages, setLicenseLanguages] = useState([title.language]);
   const [selectedGrantByAgreement, setSelectedGrantByAgreement] = useState<Record<string, string>>({});
-  const defaultsApplied = useRef(false);
+  const defaultsApplied = useRef<string | null>(null);
   function downloadStatement() {
     const safe = (v: string) =>
       '"' + (/^[=+@-]/.test(v) ? "'" : "") + v.replaceAll('"', '""') + '"';
@@ -104,8 +104,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   }
   const grants = workflow.data?.grants ?? [];
   useEffect(() => {
-    if (!workflow.data || defaultsApplied.current) return;
-    defaultsApplied.current = true;
+    if (!workflow.data || defaultsApplied.current === title.id) return;
+    defaultsApplied.current = title.id;
     const defaults = licenseDraftPrefillFromGrant(grants[0], title.language);
     setLicenseTerritories(defaults.territories);
     setLicenseLanguages(defaults.languages);
