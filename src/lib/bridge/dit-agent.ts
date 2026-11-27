@@ -116,6 +116,8 @@ async function requireStudioTitle(sql: Awaited<ReturnType<typeof getSql>>, title
       )
       and submission_type = 'finished_film'
       and merged_into_title_id is null
+      and record_classification is distinct from 'TEST'
+      and coalesce(external_ids->>'test_only', 'false') <> 'true'
     limit 1
   `;
   if (!rows[0]) throw new Error("Finished film was not found in the active Studio organization");
@@ -148,8 +150,8 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireDitOperator(context.userId);
     const sql = await getSql();
-    const titles = await sql<{ id: string; name: string; status: string; year: number | null }>`
-      select id, name, status, year
+    const titles = await sql<{ id: string; name: string; status: string; year: number | null; record_classification?: string | null }>`
+      select *
       from bridge_titles
       where owner_account_type = 'studio'
         and (
@@ -166,6 +168,8 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
       )
         and submission_type = 'finished_film'
         and merged_into_title_id is null
+        and record_classification is distinct from 'TEST'
+        and coalesce(external_ids->>'test_only', 'false') <> 'true'
       order by updated_at desc
       limit 200
     `;
@@ -195,7 +199,7 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
       : [];
     return {
       organizationId: actor.organizationId,
-      titles,
+      titles: titles.filter((title) => title.record_classification !== "TEST").map(({ id, name, status, year }) => ({ id, name, status, year })),
       sessions: sessions.map((session) => ({
         ...session,
         sourceFileCount: Number(session.source_file_count),

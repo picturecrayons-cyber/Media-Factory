@@ -61,8 +61,8 @@ function Studio() {
                 <h3 className="font-display text-xl font-semibold">Finished films</h3>
                 <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
               </div>
-              <TitleList empty="No finished films are currently returned for this studio account." />
-              <MyStoryConcepts />
+              <TitleList queryKey={["bridge-titles", actor.userId, actor.organizationId]} empty="No finished films are currently returned for this studio account." />
+              <MyStoryConcepts queryKey={["my-story-concepts-v3", actor.userId, actor.organizationId]} />
             </section>
 
 
@@ -74,7 +74,7 @@ function Studio() {
                 </div>
                 <p className="mt-1 text-sm text-muted">The verified member roster is read-only. Invitations, access changes and owner transfers are not enabled from this workspace.</p>
               </div>
-              <StudioMemberDesk />
+              <StudioMemberDesk userId={actor.userId} organizationId={actor.organizationId} />
             </section>
 
             <section id="studio-dit" className="space-y-3">
@@ -86,7 +86,7 @@ function Studio() {
             </section>
 
             <section id="studio-services" className="space-y-3">
-              <BridgeServicesPanel />
+              <BridgeServicesPanel userId={actor.userId} organizationId={actor.organizationId} />
             </section>
 
             <section id="studio-operations" className="space-y-3">

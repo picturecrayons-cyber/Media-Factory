@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { listStudioMembers } from "@/lib/bridge/studio-members";
 
-export function StudioMemberDesk() {
+export function StudioMemberDesk({ userId, organizationId }: { userId: string; organizationId?: string | null }) {
   const query = useQuery({
-    queryKey: ["bridge-studio-members"],
+    queryKey: ["bridge-studio-members", userId, organizationId],
     queryFn: () => listStudioMembers(),
     retry: 1,
   });
