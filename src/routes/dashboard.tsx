@@ -4,7 +4,6 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
-import { getDashboardSession } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -63,20 +62,13 @@ const ACTION_GUIDANCE: Record<string, string> = {
 };
 
 function DashboardBody() {
-  const dashboardQ = useQuery({
-    queryKey: ["bridge-dashboard-session"],
-    queryFn: () => getDashboardSession(),
-    retry: false,
-  });
+  // RequireBridge already verified the Super Admin actor. Avoid a second
+  // session-resolution request before loading the canonical title snapshot.
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
     queryFn: () => listTitles(),
-    enabled: dashboardQ.isSuccess,
     retry: 1,
   });
-
-  if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
-  if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
 
   const titles = titlesQ.data?.titles ?? [];
   const actionItems = titles.filter((title) => title.status in ACTION_GUIDANCE);
@@ -96,7 +88,7 @@ function DashboardBody() {
   );
   const reportingUnavailable = titlesQ.isError;
   const metricValue = (value: number) =>
-    titlesQ.isPending || reportingUnavailable ? "—" : String(value);
+    titlesQ.isPending ? "Loading…" : reportingUnavailable ? "Unavailable" : String(value);
   const moneyValue =
     titlesQ.isPending || reportingUnavailable
       ? "—"
@@ -139,15 +131,16 @@ function DashboardBody() {
             </p>
           </div>
           <p className="text-sm font-semibold">
-            {titlesQ.isPending || reportingUnavailable ? "—" : actionItems.length} pending
+            {titlesQ.isPending ? "Loading…" : reportingUnavailable ? "Unavailable" : actionItems.length} pending
           </p>
         </div>
         {titlesQ.isPending ? (
           <p className="px-4 py-6 text-sm text-muted">Loading the action queue…</p>
         ) : reportingUnavailable ? (
-          <p role="alert" className="px-4 py-6 text-sm text-accent">
-            The action queue could not be loaded. Refresh to retry; no zero values are assumed.
-          </p>
+          <div role="alert" className="flex flex-wrap items-center gap-3 px-4 py-6 text-sm text-accent">
+            <span>The action queue could not be loaded. No zero values are assumed.</span>
+            <button type="button" className="rounded-sm border border-line px-3 py-1.5 font-semibold" onClick={() => void titlesQ.refetch()}>Retry</button>
+          </div>
         ) : actionItems.length ? (
           <ul className="divide-y divide-line">
             {actionItems.slice(0, 6).map((title) => (
@@ -218,9 +211,11 @@ function DashboardBody() {
             <article key={lane.id} className="rounded-sm border border-line px-4 py-3">
               <p className="text-xs uppercase tracking-widest text-muted">{lane.label}</p>
               <p className="mt-1 text-2xl font-semibold">
-                {titlesQ.isPending || reportingUnavailable
-                  ? "—"
-                  : titles.filter((title) => loopStageType(title.contentType) === lane.loopType).length}
+                {titlesQ.isPending
+                  ? "Loading…"
+                  : reportingUnavailable
+                    ? "Unavailable"
+                    : titles.filter((title) => loopStageType(title.contentType) === lane.loopType).length}
               </p>
               <p className="mt-1 text-xs text-muted">Titles in this content lane</p>
             </article>
@@ -266,9 +261,10 @@ function DashboardBody() {
         {titlesQ.isPending ? (
           <p className="px-4 py-6 text-sm text-muted">Loading title records…</p>
         ) : reportingUnavailable ? (
-          <p role="alert" className="px-4 py-6 text-sm text-accent">
-            Title records could not be loaded. Refresh to retry.
-          </p>
+          <div role="alert" className="flex flex-wrap items-center gap-3 px-4 py-6 text-sm text-accent">
+            <span>Title records could not be loaded. No zero values are assumed.</span>
+            <button type="button" className="rounded-sm border border-line px-3 py-1.5 font-semibold" onClick={() => void titlesQ.refetch()}>Retry</button>
+          </div>
         ) : (
           <ul className="divide-y divide-line">
             {titles.slice(0, 6).map((title) => (
