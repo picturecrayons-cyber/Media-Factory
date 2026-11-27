@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, sharesStudioOrganization, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 import { PERMISSIONS } from "./types.ts";
 
@@ -215,9 +215,11 @@ describe("PRD authorization matrix", () => {
       ...sameOrgTitle,
       ownerAccountType: "independent_creator" as const,
     };
+    assert.equal(sharesStudioOrganization(member, sameOrgTitle), true);
     assert.equal(canReadTitle(member, sameOrgTitle), true);
     assert.equal(canMutateTitle(member, sameOrgTitle, "title.update_own", "title.license"), true);
     assert.equal(canOperateOnTitle(member, sameOrgTitle, "asset.sign_upload"), true);
+    assert.equal(sharesStudioOrganization(member, otherOrgTitle), false);
     assert.equal(canReadTitle(member, otherOrgTitle), false);
     assert.equal(canMutateTitle(member, otherOrgTitle, "title.update_own", "title.license"), false);
     assert.equal(canOperateOnTitle(member, otherOrgTitle, "asset.sign_upload"), false);
