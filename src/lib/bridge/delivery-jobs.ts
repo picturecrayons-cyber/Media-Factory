@@ -39,40 +39,15 @@ export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
     const actor = await actorFor(context.userId);
     requireSuperAdmin(actor);
     const sql = await getSql();
-    const rows = internal
-      ? await sql<{
-          id: string; title_id: string; job_type: string; status: string; assigned_vendor: string | null;
-          delivery_receipt_url: string | null; admin_sign_off: boolean; request_note: string | null;
-          requested_by: string | null; created_at: string | Date; updated_at: string | Date;
-        }>`
-          select id, title_id, job_type, status, assigned_vendor, delivery_receipt_url,
-            admin_sign_off, request_note, requested_by, created_at, updated_at
-          from bridge_delivery_jobs order by created_at desc limit 200
-        `
-      : await sql<{
-          id: string; title_id: string; job_type: string; status: string; assigned_vendor: string | null;
-          delivery_receipt_url: string | null; admin_sign_off: boolean; request_note: string | null;
-          requested_by: string | null; created_at: string | Date; updated_at: string | Date;
-        }>`
-          select j.id, j.title_id, j.job_type, j.status, j.assigned_vendor, j.delivery_receipt_url,
-            j.admin_sign_off, j.request_note, j.requested_by, j.created_at, j.updated_at
-          from bridge_delivery_jobs j
-          join bridge_titles t on t.id = j.title_id
-          where j.requested_by = ${actor.userId}
-            or t.owner_user_id = ${actor.userId}
-            or (
-              ${actor.accountType === "studio" && Boolean(actor.organizationId)}
-              and t.owner_account_type = 'studio'
-              and t.owner_organization_id = ${actor.organizationId ?? null}::uuid
-              and exists (
-                select 1 from bridge_organization_memberships m
-                where m.organization_id = t.owner_organization_id
-                  and m.user_id = ${actor.userId}
-                  and m.status = 'active'
-              )
-            )
-          order by j.created_at desc limit 200
-        `;
+    const rows = await sql<{
+      id: string; title_id: string; job_type: string; status: string; assigned_vendor: string | null;
+      delivery_receipt_url: string | null; admin_sign_off: boolean; request_note: string | null;
+      requested_by: string | null; created_at: string | Date; updated_at: string | Date;
+    }>`
+      select id, title_id, job_type, status, assigned_vendor, delivery_receipt_url,
+        admin_sign_off, request_note, requested_by, created_at, updated_at
+      from bridge_delivery_jobs order by created_at desc limit 200
+    `;
     return {
       jobs: rows.map((row) => ({
         id: row.id,
