@@ -95,7 +95,7 @@ export function BridgeServicesPanel() {
           <p className="mt-1 text-sm text-muted">The catalogue and base tax configuration are present. A title-specific quote is still subject to asset evidence, destination requirements and server-side validation.</p>
         ) : (
           <p className="mt-1 text-sm text-muted">
-            Quote generation is not yet enabled. Active service rates and/or tax configuration must be approved by the authorised Bridge finance administrator. No prices or payment amounts are displayed until then.
+            Full catalogue quoting is not enabled. One or more active service rates or tax configuration is missing. A title-specific quote also requires every service identified for that title to have an active rate. No prices or payment amounts are invented.
           </p>
         )}
         <Link to="/workspace" className="mt-3 inline-flex text-sm font-semibold text-accent hover:underline">
