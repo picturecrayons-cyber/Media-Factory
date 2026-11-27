@@ -115,7 +115,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
 const LOOP_PUBLISHING_TARGETS = [
   { id: "f15e0a5385aaf8365f6ad730de747da0", name: "Pranayam 1947" },
   { id: "cb8c141dc72d727a53a4f35d8851e100", name: "Jananam 1947 Pranayam Thudarunnu" },
-  { id: "858f0ec5a11bc9acd2e9c20266541a3", name: "Malayalakkara Residency" },
+  { id: "858f0ec5a11bc9acd2e9c20266541a3a", name: "Malayalakkara Residency" },
 ] as const;
 
 function LoopPublishing({ actor }: { actor: BridgeActor }) {
