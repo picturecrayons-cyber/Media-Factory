@@ -32,30 +32,37 @@ export function MyStoryConcepts() {
   if (!concepts.length) return null;
 
   return (
-    <section>
-      <h2 className="mb-3 text-lg font-semibold">Story concepts</h2>
-      <ul className="divide-y divide-line rounded-sm border border-line">
+    <section className="space-y-4">
+      <div>
+        <h2 className="font-display text-xl font-semibold">Story concepts</h2>
+        <p className="mt-1 text-sm text-muted">Concepts submitted by this studio, shown separately from finished films.</p>
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {concepts.map((c) => {
           const logline = listLogline(c.logline);
+          const title = (c as { titleName?: string }).titleName ?? "Concept";
           return (
-            <li key={c.id}>
-              <Link
-                to="/title/$id"
-                params={{ id: c.title_id }}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
-              >
-                <div>
-                  <p className="font-medium">{(c as { titleName?: string }).titleName ?? "Concept"}</p>
-                  <p className="text-sm text-muted">
-                    {STATUS_LABEL[c.curation_status] ?? c.curation_status}
-                    {logline ? ` · ${logline}` : ""}
-                  </p>
+            <Link
+              key={c.id}
+              to="/title/$id"
+              params={{ id: c.title_id }}
+              className="group overflow-hidden rounded-2xl border border-line bg-surface transition hover:-translate-y-0.5 hover:border-accent hover:shadow-lg"
+            >
+              <div className="flex aspect-[16/10] flex-col justify-between bg-gradient-to-br from-violet-950 via-indigo-800 to-slate-700 p-5">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70">Story / Concept</span>
+                <h3 className="line-clamp-2 font-display text-2xl font-semibold text-white">{title}</h3>
+              </div>
+              <div className="space-y-2 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted">{STATUS_LABEL[c.curation_status] ?? c.curation_status}</span>
+                  <span className="text-xs font-semibold text-accent group-hover:underline">Open →</span>
                 </div>
-              </Link>
-            </li>
+                {logline ? <p className="text-sm leading-6 text-muted">{logline}</p> : null}
+              </div>
+            </Link>
           );
         })}
-      </ul>
+      </div>
     </section>
   );
 }
