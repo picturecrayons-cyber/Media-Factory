@@ -8,6 +8,7 @@ import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { hasPermission } from "@/lib/bridge/rbac";
 import type { BridgeActor } from "@/lib/bridge/session";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
+import { reviewTitleWorkflow } from "@/lib/bridge/workflow";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
@@ -34,6 +35,10 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
   const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
   const review = useMutation({
     mutationFn: reviewAdminTitle,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
+  });
+  const workflowReview = useMutation({
+    mutationFn: reviewTitleWorkflow,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
   const gate = useMutation({
@@ -78,11 +83,11 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
       ) : activeTab === "Concepts" ? (
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
-        <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
-          canAct={hasPermission(actor, "title.qc_review")} actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
+        <ReviewQueue title="QC Review" description="Review verified current assets before rights review." stage="QC" titles={qcQueue}
+          grants={data.rights} canAct={hasPermission(actor, "title.qc_review")} mutation={workflowReview} />
       ) : activeTab === "Rights" ? (
-        <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
-          canAct={hasPermission(actor, "title.rights_review")} actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
+        <ReviewQueue title="Rights Review" description="Select a DRAFT grant and record the legal evidence review before licensing." stage="LEGAL" titles={rightsQueue}
+          grants={data.rights} canAct={hasPermission(actor, "title.rights_review")} mutation={workflowReview} />
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
@@ -159,12 +164,97 @@ function SectionHeader({ title, description }: { title: string; description: str
 function ActionButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return <Button size="sm" disabled={disabled} onClick={onClick}>{label}</Button>;
 }
-function ReviewQueue({ title, description, titles, canAct, actions, mutation }: { title: string; description: string; titles: any[]; canAct: boolean; actions: [string, string][]; mutation: any }) {
-  return <section className="space-y-3"><SectionHeader title={title} description={description} />{titles.length ? titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span>{canAct ? <div className="flex gap-2">{actions.map(([decision, label]) => <ActionButton key={decision} label={label} disabled={mutation.isPending} onClick={() => mutation.mutate({ data: { titleId: t.id, decision } })} />)}</div> : <span className="text-xs text-muted">Review reserved to designated {title.startsWith("QC") ? "QC Reviewer" : "Legal Reviewer"} or Super Admin</span>}</div>) : <Empty text="Queue is clear." />}</section>;
+function ReviewQueue({ title, description, titles, stage, grants, canAct, mutation }: {
+  title: string;
+  description: string;
+  titles: any[];
+  stage: "QC" | "LEGAL";
+  grants: any[];
+  canAct: boolean;
+  mutation: any;
+}) {
+  return (
+    <section className="space-y-3">
+      <SectionHeader title={title} description={description} />
+      {titles.length ? titles.map((item) => (
+        <WorkflowReviewCard
+          key={item.id}
+          title={item}
+          stage={stage}
+          grants={grants.filter((grant) => grant.title_id === item.id && grant.status === "DRAFT")}
+          canAct={canAct}
+          mutation={mutation}
+        />
+      )) : <Empty text="Queue is clear." />}
+    </section>
+  );
 }
-function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
-  return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
+
+function WorkflowReviewCard({ title, stage, grants, canAct, mutation }: {
+  title: any;
+  stage: "QC" | "LEGAL";
+  grants: any[];
+  canAct: boolean;
+  mutation: any;
+}) {
+  const [note, setNote] = useState("");
+  const [grantId, setGrantId] = useState(grants[0]?.id ?? "");
+  const valid = note.trim().length >= 8 && (stage === "QC" || Boolean(grants.find((grant) => grant.id === grantId)));
+  const submit = (decision: "APPROVE" | "REJECT") => mutation.mutate({
+    data: {
+      titleId: title.id,
+      stage,
+      decision,
+      note: note.trim(),
+      ...(stage === "LEGAL" ? { grantId } : {}),
+    },
+  });
+
+  return (
+    <article className="space-y-3 rounded-2xl border border-line bg-surface p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="font-medium">{title.name}</p>
+          <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status}</p>
+        </div>
+        <Link to="/title/$id" params={{ id: title.id }} className="text-sm text-accent hover:underline">Open title</Link>
+      </div>
+      {stage === "LEGAL" ? (
+        grants.length ? (
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted">DRAFT rights grant</span>
+            <select className="w-full rounded-lg border border-line bg-bg px-3 py-2" value={grantId} onChange={(event) => setGrantId(event.target.value)}>
+              {grants.map((grant) => (
+                <option key={grant.id} value={grant.id}>
+                  {grant.id} · {(grant.territories ?? []).join(", ") || "No territories"} · {(grant.media ?? []).join(", ") || "No media"}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <p className="text-sm text-muted">No DRAFT rights grant exists. Rights approval is unavailable until a grant is submitted.</p>
+        )
+      ) : null}
+      <label className="block space-y-1 text-sm">
+        <span className="text-muted">Reviewer notes / evidence reference (minimum 8 characters)</span>
+        <textarea className="min-h-20 w-full rounded-lg border border-line bg-bg px-3 py-2" value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} />
+      </label>
+      {canAct ? (
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" disabled={mutation.isPending || !valid} onClick={() => submit("APPROVE")}>
+            {stage === "QC" ? "Pass QC → Rights" : "Approve rights → Licensing"}
+          </Button>
+          <Button size="sm" variant="outline" disabled={mutation.isPending || !valid} onClick={() => submit("REJECT")}>
+            {stage === "QC" ? "Return for QC corrections" : "Reject rights"}
+          </Button>
+        </div>
+      ) : (
+        <span className="text-xs text-muted">Review reserved to the designated reviewer or Super Admin.</span>
+      )}
+    </article>
+  );
 }
+
 function BuyerRelease({ titles, canApprove, onGate }: { titles: any[]; canApprove: boolean; onGate: (titleId: string, gateName: string) => void }) {
   return <section className="space-y-3"><SectionHeader title="Buyer release" description="Pass a gate only after the required check." />{titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span>{canApprove ? <ActionButton label="Pass gate" onClick={() => onGate(t.id, "buyer")} /> : <span className="text-xs text-muted">Approval reserved to Super Admin</span>}</div>)}</section>;
 }
