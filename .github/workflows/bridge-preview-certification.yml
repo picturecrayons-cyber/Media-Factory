@@ -48,6 +48,10 @@ jobs:
         run: npm test
 
       - name: Start app environment dev server
+        # A dummy, unreachable local Postgres URL prevents PGLite migrations from
+        # bootstrapping; this check only reads /__app-env and never opens a DB connection.
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
         run: |
           npm run dev > /tmp/bridge-dev.log 2>&1 &
           for attempt in $(seq 1 30); do
