@@ -25,8 +25,10 @@ export const Route = createFileRoute("/api/buyer/poster")({
 
           const user = await requireUser(bearerToken);
           assertNotDevUser(user.id);
-          const actor = await requireVerifiedActor(user.id);
-          if (actor.accountType !== "buyer" || actor.internalRole) {
+          const actor = await requireVerifiedActor(user.id, user.aal);
+          // Internal reviewers may preview artwork only through this buyer-safe
+          // endpoint. The SQL below still enforces publication, QC and rights gates.
+          if (actor.accountType !== "buyer" && !actor.internalRole) {
             return new Response(null, { status: 404 });
           }
           try {
