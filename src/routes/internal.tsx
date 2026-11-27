@@ -253,7 +253,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
       case "Deliveries":
         return Boolean(t.publication && t.hasMaster);
       case "Live":
-        return pubStatus === "live" || pubStatus === "authorized";
+        return pubStatus === "live" && t.publication?.listed === true && t.publication?.published === true;
       case "Suspended":
         return pubStatus === "suspended";
       case "Expired":
@@ -331,8 +331,8 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                   {
                     allTitles.filter(
                       (t) =>
-                        t.publication?.authorizationStatus?.toLowerCase() === "live" ||
-                        t.publication?.authorizationStatus?.toLowerCase() === "authorized",
+                        t.publication?.authorizationStatus?.toLowerCase() === "live" &&
+                        t.publication?.listed === true && t.publication?.published === true,
                     ).length
                   }
                 </strong>
