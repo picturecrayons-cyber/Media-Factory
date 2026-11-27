@@ -48,6 +48,9 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
     const title = rows[0];
     if (!title) throw new Error("Title not found");
+    if (data.decision === "PASS" || data.decision === "APPROVE") {
+      throw new Error("Legacy approval is disabled. Open the title workspace and use the evidence-linked QC or Legal review action.");
+    }
     let next: string | null = null;
     let action = "admin.review";
     if (data.decision === "ACCEPT") {
