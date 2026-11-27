@@ -48,6 +48,7 @@ export function MyStoryConcepts() {
                   <p className="font-medium">{(c as { titleName?: string }).titleName ?? "Concept"}</p>
                   <p className="text-sm text-muted">
                     {STATUS_LABEL[c.curation_status] ?? c.curation_status}
+                    {c.development_stage === "NOT_STARTED" ? " · Not started — synopsis only" : c.development_stage === "IN_DEVELOPMENT" ? " · In development" : " · Development status not recorded"}
                     {logline ? ` · ${logline}` : ""}
                   </p>
                 </div>
