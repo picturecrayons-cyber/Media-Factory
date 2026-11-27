@@ -69,6 +69,11 @@ create unique index if not exists bridge_production_project_crew_identity_uidx
 create index if not exists bridge_production_project_crew_org_project_idx
   on public.bridge_production_project_crew (organization_id, project_id, status);
 
+-- One Production project can produce only one canonical Finished Film output.
+create unique index if not exists bridge_production_title_links_one_output_uidx
+  on public.bridge_production_title_links (production_project_id)
+  where link_type = 'FINISHED_FILM_OUTPUT';
+
 alter table public.bridge_production_project_crew enable row level security;
 revoke all privileges on table public.bridge_production_project_crew from public, anon, authenticated;
 grant all privileges on table public.bridge_production_project_crew to service_role;
