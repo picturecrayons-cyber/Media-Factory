@@ -88,6 +88,7 @@ function AdminBody({ actor }: { actor: any }) {
             <CompactMetric label="Bridge profiles" value={profilesQ.isError ? "Unavailable" : profilesQ.isPending ? "Loading…" : String(profiles.length)} />
             <CompactMetric label="Organizations" value={profilesQ.isError ? "Unavailable" : profilesQ.isPending ? "Loading…" : String(organizations.size)} />
           </div>
+          {distQ.isError || profilesQ.isError ? <p role="alert" className="mt-3 text-sm text-accent">Some workspace metrics are unavailable. Check the affected source and retry.</p> : null}
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
@@ -118,7 +119,7 @@ function AdminBody({ actor }: { actor: any }) {
 
         <section className="grid gap-3 lg:grid-cols-2">
           <details className="min-w-0 rounded-2xl border border-line bg-surface p-4">
-            <summary className="cursor-pointer list-none font-semibold">Users & organizations <span className="ml-1 text-sm font-normal text-muted">({profiles.length})</span></summary>
+            <summary className="cursor-pointer list-none font-semibold">Users & organizations <span className="ml-1 text-sm font-normal text-muted">({profilesQ.isError ? "Unavailable" : profilesQ.isPending ? "Loading…" : profiles.length})</span></summary>
             <p className="mt-2 text-sm text-muted">Read-only Bridge profile view. Role changes remain controlled by the invitation and onboarding flow.</p>
             {profilesQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Profiles could not be loaded.</p> : null}
             <div className="mt-3 max-h-80 overflow-auto">
