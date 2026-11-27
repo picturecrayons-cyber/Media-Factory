@@ -51,29 +51,41 @@ export function ProductionManagementDesk({ userId, organizationId }: { userId: s
     onSuccess: async (result) => { setName(""); setProjectCode(""); setSelectedProjectId(result.projectId); await refresh(); },
   });
   const changeLifecycle = useMutation({
-    mutationFn: (status: (typeof lifecycleOptions)[number]) => updateProductionLifecycle({ data: { projectId: selectedProject.id, status } }),
+    mutationFn: (status: (typeof lifecycleOptions)[number]) => {
+      if (!selectedProject) throw new Error("Select a Production project");
+      return updateProductionLifecycle({ data: { projectId: selectedProject.id, status } });
+    },
     onSuccess: refresh,
   });
   const addShootDay = useMutation({
-    mutationFn: () => createProductionShootDay({ data: {
-      projectId: selectedProject.id, shootDate, dayLabel: dayLabel || undefined,
-      location: location || undefined,
-    } }),
+    mutationFn: () => {
+      if (!selectedProject) throw new Error("Select a Production project");
+      return createProductionShootDay({ data: {
+        projectId: selectedProject.id, shootDate, dayLabel: dayLabel || undefined,
+        location: location || undefined,
+      } });
+    },
     onSuccess: async () => { setShootDate(""); setDayLabel(""); await refresh(); },
   });
   const addEvent = useMutation({
-    mutationFn: () => createProductionScheduleEvent({ data: {
-      projectId: selectedProject.id, eventType, eventName,
-      startsAt: new Date(eventStart).toISOString(), endsAt: new Date(eventEnd).toISOString(),
-      location: location || undefined,
-    } }),
+    mutationFn: () => {
+      if (!selectedProject) throw new Error("Select a Production project");
+      return createProductionScheduleEvent({ data: {
+        projectId: selectedProject.id, eventType, eventName,
+        startsAt: new Date(eventStart).toISOString(), endsAt: new Date(eventEnd).toISOString(),
+        location: location || undefined,
+      } });
+    },
     onSuccess: async () => { setEventName(""); setEventStart(""); setEventEnd(""); await refresh(); },
   });
   const addCrew = useMutation({
-    mutationFn: () => createProductionCrewMember({ data: {
-      projectId: selectedProject.id, fullName: crewName, role: crewRole,
-      department: crewDepartment || undefined,
-    } }),
+    mutationFn: () => {
+      if (!selectedProject) throw new Error("Select a Production project");
+      return createProductionCrewMember({ data: {
+        projectId: selectedProject.id, fullName: crewName, role: crewRole,
+        department: crewDepartment || undefined,
+      } });
+    },
     onSuccess: async () => { setCrewName(""); setCrewRole(""); setCrewDepartment(""); await refresh(); },
   });
   const shootDays = useMemo(() => (workspace.data?.shootDays ?? []).filter((d) => d.project_id === selectedProject?.id), [workspace.data?.shootDays, selectedProject?.id]);
