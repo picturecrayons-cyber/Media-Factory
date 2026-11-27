@@ -40,6 +40,7 @@ export type LicenseDraftPrefillSource = {
 
 /**
  * Copy only values already persisted on this title's latest license record.
+ * A local-only grant must not be represented as worldwide TVOD authority.
  * References are not documentary verification; missing/invalid values stay blank.
  */
 export function licenseDraftPrefillFromGrant(
@@ -72,7 +73,9 @@ export function licenseDraftPrefillFromGrant(
   };
 
   return {
-    territories: grant?.territories?.includes("WORLDWIDE") ? ["WORLDWIDE"] : ["WORLDWIDE"],
+    territories: grant
+      ? grant.territories?.includes("WORLDWIDE") ? ["WORLDWIDE"] : []
+      : ["WORLDWIDE"],
     languages: grant?.languages?.length ? [...grant.languages] : [titleLanguage],
     windowStart: validWindow ? start!.toISOString() : "",
     windowEnd: validWindow ? end!.toISOString() : "",
