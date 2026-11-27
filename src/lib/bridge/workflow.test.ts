@@ -154,7 +154,6 @@ const owner = {
   internalRole: null,
 };
 const qc = { ...owner, userId: "qc", internalRole: "qc_reviewer" as const };
-const legal = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
 const license = {
   titleId: "title-123",
   territories: ["WORLDWIDE"],
