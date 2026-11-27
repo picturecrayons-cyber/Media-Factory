@@ -9,6 +9,7 @@ export function downloadDecision(opts: {
   kind: string;
   actorIsOwner: boolean;
   actorIsInternal: boolean;
+  actorCanPreviewArtwork: boolean;
   accountType: string;
   hasLicenseEntitlement: boolean;
 }): DownloadDecision {
@@ -32,6 +33,9 @@ export function downloadDecision(opts: {
   }
   if (opts.actorIsOwner || opts.actorIsInternal) {
     return { allow: true, reason: "Owner or internal reviewer" };
+  }
+  if (opts.actorCanPreviewArtwork && ["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(opts.kind)) {
+    return { allow: true, reason: "Artwork preview is allowed for an authorized Studio organization collaborator" };
   }
   if (opts.kind === "poster") return { allow: true, reason: "Poster is readable with the title" };
   if ((opts.kind === "screener" || opts.kind === "subtitle") && opts.hasLicenseEntitlement) {

@@ -131,7 +131,7 @@ export function canAccessTitleWorkspace(actor: Actor): boolean {
   );
 }
 
-function sharesStudioOrganization(
+export function sharesStudioOrganization(
   actor: Actor,
   title: { ownerUserId: string; ownerAccountType?: AccountType; ownerOrganizationId?: string | null },
 ): boolean {
