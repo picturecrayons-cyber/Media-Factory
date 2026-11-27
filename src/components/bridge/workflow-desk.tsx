@@ -72,6 +72,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
   const [ownerShare, setOwnerShare] = useState("");
+  const [licenseTerritories, setLicenseTerritories] = useState(["WORLDWIDE"]);
+  const [licenseLanguages, setLicenseLanguages] = useState([title.language]);
   const [selectedGrantByAgreement, setSelectedGrantByAgreement] = useState<Record<string, string>>({});
   const defaultsApplied = useRef(false);
   function downloadStatement() {
@@ -105,6 +107,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     if (!workflow.data || defaultsApplied.current) return;
     defaultsApplied.current = true;
     const defaults = licenseDraftPrefillFromGrant(grants[0], title.language);
+    setLicenseTerritories(defaults.territories);
+    setLicenseLanguages(defaults.languages);
     setStart(defaults.windowStart ? toLocalDateTimeInput(defaults.windowStart) : "");
     setEnd(defaults.windowEnd ? toLocalDateTimeInput(defaults.windowEnd) : "");
     setExclusive(defaults.exclusive);
@@ -232,7 +236,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-4">
               <details className="rounded-xl border border-line p-3">
                 <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
-                <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
+                <p className="mt-2 text-xs text-muted">{licenseTerritories.join(", ")} · {licenseLanguages.join(", ")}. Legal evidence is required before review.</p>
                 {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
                   <>
                   <p className="mt-2 text-xs text-muted" role="status">
@@ -248,8 +252,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         submitLoopLicense({
                           data: {
                             titleId: title.id,
-                            territories: ["WORLDWIDE"],
-                            languages: [title.language],
+                            territories: licenseTerritories,
+                            languages: licenseLanguages,
                             windowStart: new Date(start).toISOString(),
                             windowEnd: new Date(end).toISOString(),
                             exclusivity: exclusive ? "EXCLUSIVE" : "NON_EXCLUSIVE",
