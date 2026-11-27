@@ -403,6 +403,19 @@ export const listTitles = createServerFn({ method: "GET" })
       assertPermission(actor, "title.read_own");
       rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
     }
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      // Buyer catalogue responses are deliberately allow-listed. Never serialize
+      // internal title IDs, synopsis, runtime, lifecycle state, owner or storage keys.
+      return {
+        titles: rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          language: row.language,
+          year: row.year,
+          licensingFeePaise: Number(row.licensing_fee_paise ?? 0),
+        })),
+      };
+    }
     return { titles: rows.flatMap((row) => {
       try {
         return [mapTitle(row)];
