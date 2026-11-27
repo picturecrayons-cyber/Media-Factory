@@ -29,7 +29,7 @@ function InvestorBody({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
-      <StoryConceptNetworkPanel accountType="investor" />
+      <StoryConceptNetworkPanel accountType="investor" userId={userId} />
       {investmentsQ.isPending ? <p className="text-sm text-muted">Loading your assigned investment records…</p> : null}
       {investmentsQ.isError ? (
         <p role="alert" className="rounded-sm border border-line p-4 text-sm text-muted">
