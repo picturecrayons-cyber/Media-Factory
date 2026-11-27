@@ -154,7 +154,6 @@ const owner = {
   internalRole: null,
 };
 const qc = { ...owner, userId: "qc", internalRole: "qc_reviewer" as const };
-const legal = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
 const license = {
   titleId: "title-123",
   territories: ["WORLDWIDE"],
@@ -171,7 +170,8 @@ const license = {
 test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
   const f = await fixture();
   try {
-    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+    const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
       grantId: string;
     };
     await f.sql.transaction((tx) =>
@@ -182,12 +182,25 @@ test("real SQL services persist QC, independently approved license, lifecycle an
         note: "Playback and codec checked",
       }),
     );
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.review(tx, superAdmin, {
+          titleId: "title-123",
+          stage: "LEGAL",
+          decision: "APPROVE",
+          note: "Ownership and agreement verified",
+          grantId: saved.grantId,
+        }),
+      ),
+      /Only a verified Legal Reviewer may approve Bridge rights and licensing/,
+    );
+    const legalReviewer = { ...owner, userId: "legal-reviewer", internalRole: "legal_reviewer" as const };
     await f.sql.transaction((tx) =>
-      f.review(tx, legal, {
+      f.review(tx, legalReviewer, {
         titleId: "title-123",
         stage: "LEGAL",
         decision: "APPROVE",
-        note: "Ownership and agreement verified",
+        note: "Independent legal evidence reviewed",
         grantId: saved.grantId,
       }),
     );
@@ -303,7 +316,24 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
   }
 });
 
-test("verified Super Admin can approve their own license draft as the single Bridge approval authority", async () => {
+test("Studio/creator and non-Super-Admin staff cannot create Bridge license drafts", async () => {
+  const f = await fixture();
+  try {
+    const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
+    const legalReviewer = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
+    for (const actor of [owner, admin, legalReviewer]) {
+      await assert.rejects(
+        f.sql.transaction((tx) => f.save(tx, actor, license)),
+        /Only the verified Super Admin may create Bridge license drafts/,
+      );
+    }
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("Super Admin cannot approve a license draft; a different Legal Reviewer must approve it", async () => {
   const f = await fixture();
   try {
     const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
@@ -318,12 +348,38 @@ test("verified Super Admin can approve their own license draft as the single Bri
         note: "Super Admin verified current master and artwork",
       }),
     );
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.review(tx, superAdmin, {
+          titleId: "title-123",
+          stage: "LEGAL",
+          decision: "APPROVE",
+          note: "Super Admin attempted self approval",
+          grantId: saved.grantId,
+        }),
+      ),
+      /Only a verified Legal Reviewer may approve Bridge rights and licensing/,
+    );
+    const sameIdentityReviewer = { ...superAdmin, internalRole: "legal_reviewer" as const };
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.review(tx, sameIdentityReviewer, {
+          titleId: "title-123",
+          stage: "LEGAL",
+          decision: "APPROVE",
+          note: "Same identity attempted Legal review",
+          grantId: saved.grantId,
+        }),
+      ),
+      /A different verified Legal Reviewer must review this license draft/,
+    );
+    const legalReviewer = { ...owner, userId: "independent-legal", internalRole: "legal_reviewer" as const };
     await f.sql.transaction((tx) =>
-      f.review(tx, superAdmin, {
+      f.review(tx, legalReviewer, {
         titleId: "title-123",
         stage: "LEGAL",
         decision: "APPROVE",
-        note: "Super Admin reviewed the recorded rights agreement evidence",
+        note: "Independent legal review completed",
         grantId: saved.grantId,
       }),
     );
@@ -343,36 +399,43 @@ test("verified Super Admin can approve their own license draft as the single Bri
   }
 });
 
-test("license author cannot approve their own agreement", async () => {
+test("admins cannot approve Bridge rights; Legal Reviewer can approve another user's draft", async () => {
   const f = await fixture();
   try {
-    const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
-    const legalReviewer = { ...admin, internalRole: "legal_reviewer" as const };
-    const saved = (await f.sql.transaction((tx) => f.save(tx, admin, license))) as {
+    const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
       grantId: string;
     };
     await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
+    const legalReviewer = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
     await assert.rejects(
       f.sql.transaction((tx) =>
-        f.review(tx, legalReviewer, {
+        f.review(tx, admin, {
           titleId: "title-123",
           stage: "LEGAL",
           decision: "APPROVE",
-          note: "Agreement checked",
+          note: "Admin attempted Legal review",
           grantId: saved.grantId,
         }),
       ),
-      /Only the verified Super Admin may approve their own license draft/,
+      /Only a verified Legal Reviewer may approve Bridge rights and licensing/,
     );
-    assert.equal(
-      (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
-      "DRAFT",
+    await f.sql.transaction((tx) =>
+      f.review(tx, legalReviewer, {
+        titleId: "title-123",
+        stage: "LEGAL",
+        decision: "APPROVE",
+        note: "Independent Legal Reviewer approval",
+        grantId: saved.grantId,
+      }),
     );
+    assert.equal((await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status, "VALID");
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 1);
   } finally {
     await f.db.close();
   }
 });
-
 
 test("Submit for QC advances PREPARING with the referenced vertical poster and writes lifecycle plus audit only", async () => {
   const f = await fixture();

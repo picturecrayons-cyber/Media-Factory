@@ -21,6 +21,8 @@ export async function saveLoopLicense(
   data: z.infer<typeof loopLicenseInput>,
 ) {
   data = loopLicenseInput.parse(data);
+  if (!actor.emailVerified || actor.internalRole !== "super_admin")
+    throw new Error("Only the verified Super Admin may create Bridge license drafts");
   const [title] = await tx<{
     owner_user_id: string;
     owner_account_type: string;
@@ -74,6 +76,8 @@ const reviewInput = z.object({
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
   data = reviewInput.parse(data);
+  if (data.stage === "LEGAL" && (!actor.emailVerified || actor.internalRole !== "legal_reviewer"))
+    throw new Error("Only a verified Legal Reviewer may approve Bridge rights and licensing");
   assertPermission(actor, data.stage === "QC" ? "title.qc_review" : "title.rights_review");
   const [title] = await tx<{
     status: string;
@@ -105,8 +109,8 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       created_by: string;
     }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
-    if (grant.created_by === actor.userId && actor.internalRole !== "super_admin")
-      throw new Error("Only the verified Super Admin may approve their own license draft");
+    if (grant.created_by === actor.userId)
+      throw new Error("A different verified Legal Reviewer must review this license draft");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
@@ -153,8 +157,9 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     )
       throw new Error("Not found");
     const sql = await getSql();
-    const grants = await sql<{
+    const grants = actor.internalRole === "super_admin" || actor.internalRole === "legal_reviewer" ? await sql<{
       id: string;
+      created_by: string;
       status: string;
       territories: string[];
       languages: string[];
@@ -166,7 +171,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
       }>;
-    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    }>`select id,created_by,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc` : [];
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
@@ -353,6 +358,8 @@ export const recordSettlementEvidence = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
+    if (!actor.emailVerified || actor.internalRole !== "super_admin")
+      throw new Error("Only the verified Super Admin may record settlement evidence");
     assertPermission(actor, "finance.record_settlement");
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
