@@ -171,7 +171,7 @@ function CreatorDashboard({
           </p>
           <NewSubmissionPanel />
         </div>
-        <div className="space-y-3 rounded-2xl border border-line bg-surface p-5">
+        <div className="space-y-3 rounded-[14px] border border-line bg-surface p-5">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted">Separate submission path</p>
           <h3 className="font-display text-xl font-semibold">Story & Concept</h3>
           <p className="text-sm leading-relaxed text-muted">
@@ -200,7 +200,7 @@ function CreatorDashboard({
         />
       </section>
 
-      <section id="assets" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <section id="assets" className="scroll-mt-20 rounded-[14px] border border-line bg-surface p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-accent">Secure media</p>
@@ -264,7 +264,7 @@ function CreatorDashboard({
         )}
       </section>
 
-      <section id="statements" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <section id="statements" className="scroll-mt-20 rounded-[14px] border border-line bg-surface p-5 sm:p-6">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted">Creator finance</p>
         <h2 className="mt-1 font-display text-2xl font-semibold">Statements</h2>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">
@@ -311,7 +311,7 @@ function InfoPanel({
   href: string;
 }) {
   return (
-    <article id={id} className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+    <article id={id} className="scroll-mt-20 rounded-[14px] border border-line bg-surface p-5 sm:p-6">
       <p className="text-xs font-semibold uppercase tracking-widest text-accent">{eyebrow}</p>
       <h2 className="mt-2 font-display text-xl font-semibold">{title}</h2>
       <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
