@@ -92,7 +92,19 @@ function CreatorDashboard({ actor }: { actor: { userId: string; organizationId?:
       {titlesQ.isPending ? <p className="rounded-2xl border border-line bg-surface p-5 text-sm text-muted">Loading recent title updates…</p> : titlesQ.isError ? <p className="rounded-2xl border border-line bg-surface p-5 text-sm text-muted">Updates are unavailable while title records cannot be loaded.</p> : recent.length ? <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">{recent.map((title)=><li key={title.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-5"><div className="min-w-0"><Link to="/title/$id" params={{id:title.id}} className="font-semibold hover:text-accent">{title.name}</Link><p className="mt-1 text-xs text-muted">Updated {formatDate(title.updatedAt)}</p></div><StatusChip status={title.status} /></li>)}</ul> : <p className="rounded-2xl border border-dashed border-line p-5 text-sm text-muted">No title updates yet.</p>}
     </section>
 
-    <section id="services" className="scroll-mt-24 rounded-2xl border border-line bg-surface p-5 sm:p-6 lg:p-7"><BridgeServicesPanel userId={actor.userId} organizationId={actor.organizationId} /></section>
+    <details id="services" className="group scroll-mt-24 overflow-hidden rounded-2xl border border-line bg-surface">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-4 p-5 sm:p-6 lg:p-7 [&::-webkit-details-marker]:hidden">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.15em] text-muted">Optional support</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Creator Services</h2>
+          <p className="mt-1 text-sm text-muted">Browse available preparation, mastering, QC, rights and delivery services when needed.</p>
+        </div>
+        <span className="inline-flex min-h-10 items-center rounded-full border border-line-strong px-4 text-sm font-semibold text-fg group-open:bg-bg">Browse services <span aria-hidden="true" className="ml-2 transition-transform group-open:rotate-180">⌄</span></span>
+      </summary>
+      <div className="border-t border-line p-5 sm:p-6 lg:p-7">
+        <BridgeServicesPanel userId={actor.userId} organizationId={actor.organizationId} />
+      </div>
+    </details>
 
     <section id="statements" className="scroll-mt-24 rounded-2xl border border-line bg-surface p-5 sm:p-6"><p className="text-xs font-bold uppercase tracking-[0.15em] text-muted">Creator finance</p><div className="mt-2 flex flex-wrap items-start justify-between gap-4"><div className="max-w-3xl"><h2 className="font-display text-2xl font-semibold">Statements</h2><p className="mt-2 text-sm leading-7 text-muted">Creator earnings, commissions, adjustments and downloadable statements are shown only when verified creator-payable ledger and reconciliation data are available. Title licensing values are not treated as creator earnings.</p></div><span className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-muted">NOT VERIFIED · No statement feed connected</span></div></section>
     <footer className="flex flex-col gap-3 border-t border-line pt-5 text-xs text-muted sm:flex-row sm:items-center sm:justify-between"><p>Creator access is limited to your own authorized records. QC, Legal and publishing approvals remain separate.</p><Link to="/account" className="font-semibold text-fg hover:text-accent">Manage account →</Link></footer>
