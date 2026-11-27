@@ -322,7 +322,22 @@ export const getStoryConceptNetworkReadiness = createServerFn({ method: "GET" })
       where concept_submission_id = ${data.conceptSubmissionId}::uuid
       limit 1
     `;
-    return { interest, readiness: readiness[0] ?? null };
+    const mandates = await sql<{
+      id: string;
+      grantee_organization_id: string;
+      organization_name: string;
+      grantee_account_type: string;
+      grant_status: string;
+      expires_at: string | null;
+    }>`
+      select m.id, m.grantee_organization_id, o.legal_name as organization_name,
+             m.grantee_account_type, m.grant_status, m.expires_at
+      from bridge_story_concept_mandates m
+      join bridge_organizations o on o.id = m.grantee_organization_id
+      where m.concept_submission_id = ${data.conceptSubmissionId}::uuid
+      order by m.created_at desc
+    `;
+    return { interest, readiness: readiness[0] ?? null, mandates };
   });
 
 /** Super Admin: approve readiness only when the latest response from an introduced org is positive. */
