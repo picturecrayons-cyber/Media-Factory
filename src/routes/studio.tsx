@@ -45,7 +45,7 @@ function Studio() {
                   <p className="mt-1 text-sm text-muted">Choose a dedicated submission workflow. Every title remains subject to Bridge QC, Legal and Rights approvals.</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Link to="/submit-film" className="rounded-sm border border-line p-4 hover:border-accent">
+                  <Link to="/submit-film" search={{}} className="rounded-sm border border-line p-4 hover:border-accent">
                     <strong>New Finished Film</strong>
                     <p className="mt-1 text-sm text-muted">Submit a completed film for rights and buyer review</p>
                   </Link>
