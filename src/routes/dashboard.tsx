@@ -210,7 +210,7 @@ function DashboardBody() {
             <Stat label="Commercial workflow titles" value={metricValue(liveOrCommercial.length)} />
             <span className="px-4 pb-3 text-xs font-semibold text-accent">Open title register →</span>
           </Link>
-          <Link to="/cms?tab=publishing" className="block rounded-sm outline-offset-2 transition hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+          <Link to="/cms" search={{ tab: "publishing" }} className="block rounded-sm outline-offset-2 transition hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
             <Stat label="Loop publication eligible" value={publicationReadinessQ.isPending || publicationReadinessQ.isError ? "—" : String(loopPublicationEligible)} />
             <span className="px-4 pb-3 text-xs font-semibold text-accent">Open publishing desk →</span>
           </Link>
