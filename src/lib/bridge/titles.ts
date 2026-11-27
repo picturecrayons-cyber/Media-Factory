@@ -23,6 +23,7 @@ type TitleRow = {
   owner_account_type: string;
   owner_organization_id?: string | null;
   record_classification?: string | null;
+  submission_type?: string | null;
   status: string;
   synopsis: string;
   language: string;
@@ -137,7 +138,7 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   // TEST fixtures remain in the database for controlled verification, but never
   // appear in customer-facing Creator or Studio title lists. Older schemas that
   // predate record_classification return no value and retain their normal rows.
-  return rows.filter((row) => row.record_classification !== "TEST");
+  return rows.filter((row) => row.record_classification !== "TEST" && row.submission_type !== "story_concept");
 }
 
 function slugify(name: string, id: string): string {
@@ -406,6 +407,10 @@ export const getTitle = createServerFn({ method: "GET" })
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
     const sql = await getSql();
+    const submissionKind = await sql<{ submission_type: string | null }>`
+      select submission_type from bridge_titles where id = ${data.id} limit 1
+    `;
+    if (submissionKind[0]?.submission_type === "story_concept") throw new Error("Not found");
     const buyerView = actor.accountType === "buyer" && !actor.internalRole;
     if (buyerView) {
       // A published status alone is not enough: re-check every publication gate

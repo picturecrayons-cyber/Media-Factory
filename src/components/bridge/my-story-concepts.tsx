@@ -40,8 +40,8 @@ export function MyStoryConcepts({ queryKey = ["my-story-concepts-v3"] }: { query
           return (
             <li key={c.id}>
               <Link
-                to="/title/$id"
-                params={{ id: c.title_id }}
+                to="/studio"
+                hash="studio-titles"
                 className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
               >
                 <div>
