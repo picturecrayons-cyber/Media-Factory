@@ -40,6 +40,7 @@ import {
   sessionStorageKey,
 } from "@/lib/bridge/multipart-upload";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
+import { StoryConceptWorkspace } from "@/components/bridge/story-concept-workspace";
 
 export const Route = createFileRoute("/title/$id")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -153,17 +154,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         ? "Return to Studio Home"
         : "Return to Creator Home";
     return (
-      <section className="rounded-2xl border border-line bg-surface p-6 sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Story / Concept</p>
-        <h1 className="mt-2 font-display text-2xl font-semibold">{title.name}</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
-          This submission belongs to the dedicated Story / Concept workflow. Finished Film master,
-          trailer, artwork and technical-file uploads are not available for this record.
-        </p>
-        <a href={returnPath} className="mt-5 inline-flex rounded-full border border-line px-4 py-2 text-sm font-semibold hover:border-line-strong">
-          {returnLabel}
-        </a>
-      </section>
+      <StoryConceptWorkspace titleId={id} titleName={title.name} returnPath={returnPath} returnLabel={returnLabel} />
     );
   }
 

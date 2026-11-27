@@ -258,7 +258,7 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
   .validator(
     z.object({
       id: z.string().uuid(),
-      status: z.enum(["PENDING", "UNDER_REVIEW", "APPROVED", "REJECTED", "INTRODUCED_TO_BUYERS"]),
+      status: z.enum(["PENDING", "UNDER_REVIEW", "APPROVED", "REJECTED"]),
       adminNotes: z.string().max(2000).optional(),
     }),
   )
@@ -310,4 +310,52 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
     } catch (err) {
       migrationHint(err);
     }
+  });
+
+
+/** Owner-scoped Story / Concept details. No film assets or QC records are queried. */
+export const getMyStoryConceptWorkspace = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(1).max(128) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    const rows = await sql<ConceptRow & {
+      title_name: string;
+      title_language: string;
+      title_synopsis: string | null;
+      owner_user_id: string;
+      owner_account_type: string;
+      owner_organization_id: string | null;
+    }>`
+      select c.*, t.name as title_name, t.language as title_language,
+             t.synopsis as title_synopsis, t.owner_user_id,
+             t.owner_account_type, t.owner_organization_id
+      from bridge_story_concept_submissions c
+      join bridge_titles t on t.id = c.title_id
+      where t.id = ${data.titleId}
+        and t.submission_type = 'story_concept'
+        and t.record_classification is distinct from 'TEST'
+        and coalesce(t.external_ids->>'test_only', 'false') <> 'true'
+      limit 1
+    `;
+    const row = rows[0];
+    if (!row) throw new Error("Story / Concept not found");
+    const ownsTitle = row.owner_user_id === actor.userId ||
+      (actor.accountType === "studio" && row.owner_account_type === "studio" &&
+       Boolean(actor.organizationId) && actor.organizationId === row.owner_organization_id);
+    if (actor.internalRole) {
+      requireCurationStaff(actor);
+    } else if (!ownsTitle || !["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Forbidden");
+    }
+    return {
+      concept: {
+        ...mapConcept(row),
+        titleName: row.title_name,
+        language: row.title_language,
+        titleSynopsis: row.title_synopsis,
+      },
+    };
   });

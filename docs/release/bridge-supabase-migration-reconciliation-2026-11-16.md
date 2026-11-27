@@ -4,6 +4,7 @@
 - Project ref: `mlmgugivsyoxzdgwkbpu`.
 - Snapshot date: 2026-11-18.
 - Recorded remote migrations restored to active `supabase/migrations/`: **70**.
+- The active directory additionally contains three non-manifest migrations: `20261127110000_bridge_production_projects_schema_reconciliation.sql` reconstructs the Testing-only Production-project baseline from read-only catalog metadata (not a byte-exact copy of the unavailable original source), and `20261127120000_story_concept_network_interest_readiness_handoff.sql` adds Story / Concept network and readiness tables. The three non-manifest migrations are intentionally excluded from the Production-source manifest; local replay verifies the 70 remote-source files against the manifest and applies these additional migrations as migrations 71–73. The third adds readiness-controlled Production handoff fields and the source/output title-link type.
 - SQL bytes: **144632**.
 - Every active SQL file now preserves the exact stored statement text joined with LF, including all trailing spaces and newline characters. No trailing-whitespace normalization is performed. SHA-256 values are calculated from the same exact stored statement text.
 - The additive `bridge_master_language` migration (version `20261118123335`) was applied to canonical Production project `mlmgugivsyoxzdgwkbpu`. Read-back confirmed the column exists; all 42 existing title rows retain `master_language = NULL`. No `language` values, title rows, asset rows, or OCI objects were changed.

@@ -17,7 +17,13 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 70;
+const EXPECTED_MIGRATIONS = 73;
+const EXPECTED_REMOTE_MIGRATIONS = 70;
+const LOCAL_ADDITIVE_MIGRATIONS = new Set([
+  "20261127110000_bridge_production_projects_schema_reconciliation.sql",
+  "20261127120000_story_concept_network_interest_readiness_handoff.sql",
+  "20261127130000_story_concept_production_handoff_gate.sql",
+]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -86,15 +92,19 @@ for (const line of manifest.split(String.fromCharCode(10))) {
   }
   manifestRows.set(`${version}_${migrationName}.sql`, { bytes, sha256 });
 }
-if (manifestRows.size !== EXPECTED_MIGRATIONS) {
+if (manifestRows.size !== EXPECTED_REMOTE_MIGRATIONS) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
+    `Expected ${EXPECTED_REMOTE_MIGRATIONS} remote manifest rows; found ${manifestRows.size}`,
   );
 }
 
 for (const name of names) {
   const contents = await readFile(join(MIGRATIONS_DIR, name));
   const expected = manifestRows.get(name);
+  if (!expected && LOCAL_ADDITIVE_MIGRATIONS.has(name)) {
+    console.log(`[migration-replay] applying PR-local additive migration outside the Production-source manifest: ${name}`);
+    continue;
+  }
   if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
   const actualBytes = contents.byteLength;
   const actualSha256 = createHash("sha256").update(contents).digest("hex");
