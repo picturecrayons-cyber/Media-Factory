@@ -298,6 +298,10 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       published: boolean | null;
       playback_path: string | null;
       qc_approved: boolean;
+      qc_reviewer_email: string | null;
+      qc_reviewed_at: string | Date | null;
+      legal_reviewer_email: string | null;
+      legal_reviewed_at: string | Date | null;
       legal_grant_ids: string[] | null;
       ott_preparation_status: string | null;
       packaging_status: string | null;
@@ -332,6 +336,52 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         )
       )
              ) as qc_approved,
+             (
+               select bp.email
+               from bridge_qc_cases q
+               join bridge_profiles bp on bp.user_id = q.reviewed_by
+               where q.title_id = b.id
+                 and q.status = 'PASSED'
+                 and q.reviewer_findings->0->>'masterKey' = b.master_key
+                 and q.reviewer_findings->0->>'posterKey' = b.poster_key
+                 and q.reviewed_by is not null
+                 and q.reviewed_at is not null
+               order by q.reviewed_at desc
+               limit 1
+             ) as qc_reviewer_email,
+             (
+               select q.reviewed_at
+               from bridge_qc_cases q
+               where q.title_id = b.id
+                 and q.status = 'PASSED'
+                 and q.reviewer_findings->0->>'masterKey' = b.master_key
+                 and q.reviewer_findings->0->>'posterKey' = b.poster_key
+                 and q.reviewed_by is not null
+                 and q.reviewed_at is not null
+               order by q.reviewed_at desc
+               limit 1
+             ) as qc_reviewed_at,
+             (
+               select bp.email
+               from bridge_legal_cases lc
+               join bridge_profiles bp on bp.user_id = lc.reviewed_by
+               where lc.title_id = b.id
+                 and lc.status = 'APPROVED'
+                 and lc.reviewed_by is not null
+                 and lc.reviewed_at is not null
+               order by lc.reviewed_at desc
+               limit 1
+             ) as legal_reviewer_email,
+             (
+               select lc.reviewed_at
+               from bridge_legal_cases lc
+               where lc.title_id = b.id
+                 and lc.status = 'APPROVED'
+                 and lc.reviewed_by is not null
+                 and lc.reviewed_at is not null
+               order by lc.reviewed_at desc
+               limit 1
+             ) as legal_reviewed_at,
              coalesce((
                select jsonb_agg(lc.evidence->0->>'grantId')
                from bridge_legal_cases lc
@@ -421,6 +471,35 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           Boolean(r.master_key) &&
           Boolean(r.poster_key);
 
+        const verificationDates = [r.qc_reviewed_at, r.legal_reviewed_at]
+          .filter((value): value is string | Date => Boolean(value))
+          .map((value) => value instanceof Date ? value : new Date(value))
+          .filter((value) => Number.isFinite(value.getTime()));
+        const lastVerifiedAt = verificationDates.length
+          ? new Date(Math.max(...verificationDates.map((value) => value.getTime()))).toISOString()
+          : null;
+        const licensingCleared = [
+          "LICENSING_READY",
+          "LIVE_FOR_BUYERS",
+          "IN_NEGOTIATION",
+          "LICENSED",
+          "DELIVERED",
+        ].includes(r.status);
+        const publicationStatus = (r.authorization_status || "").toUpperCase();
+        const publicationGateStatus = ["AUTHORIZED", "LIVE", "DELIVERED"].includes(publicationStatus)
+          ? "PASS"
+          : ["SUSPENDED", "EXPIRED", "REVOKED", "FAILED"].includes(publicationStatus)
+            ? "FAIL"
+            : "BLOCKED";
+        const gateStatus = {
+          assetReferences: !r.master_key || !r.poster_key ? "BLOCKED" : "NOT VERIFIED",
+          qc: r.qc_approved ? "PASS" : "BLOCKED",
+          rights: coveringGrant ? "PASS" : "BLOCKED",
+          legal: legalApproved ? "PASS" : "BLOCKED",
+          licensing: licensingCleared ? "PASS" : "BLOCKED",
+          publicationAuthorization: publicationGateStatus,
+          loopSyncAcknowledgement: "NOT VERIFIED",
+        };
         const blockers: string[] = [];
         if (!coveringGrant)
           blockers.push("A matching rights grant and explicit publication dimensions are required");
@@ -455,6 +534,12 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           hasPoster: Boolean(r.poster_key),
           ready: isReady,
           blockers,
+          reviewers: {
+            qc: r.qc_reviewer_email,
+            legal: r.legal_reviewer_email,
+          },
+          lastVerifiedAt,
+          gateStatus,
           publication: r.loop_title_id
             ? {
                 destination: "CRAYONS_LOOP" as const,
