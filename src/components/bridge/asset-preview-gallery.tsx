@@ -66,39 +66,77 @@ export function AssetPosterSlot({ assets }: { assets: PreviewAsset[] }) {
   );
 }
 
+function AssetPreviewCard({ asset, onOpen, disabled, loading }: {
+  asset: PreviewAsset; onOpen: () => void; disabled: boolean; loading: boolean;
+}) {
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setThumbnailUrl(null);
+    setThumbnailFailed(false);
+    void requestAssetDownload({ data: { assetId: asset.id } })
+      .then((signed) => {
+        if (active && signed?.url) setThumbnailUrl(previewUrlFor(signed.url, asset.kind, asset.contentType));
+        else if (active) setThumbnailFailed(true);
+      })
+      .catch(() => { if (active) setThumbnailFailed(true); });
+    return () => { active = false; };
+  }, [asset.id, asset.kind, asset.contentType]);
+  return (
+    <article className="overflow-hidden rounded-xl border border-line bg-elevated/30">
+      <button type="button" onClick={onOpen} disabled={disabled}
+        className="group block w-full text-left disabled:cursor-wait"
+        aria-label={`Preview ${asset.kind.replaceAll("_", " ")}`}>
+        <div className={`relative grid place-items-center overflow-hidden bg-black/10 ${isVideo(asset) ? "aspect-video" : "aspect-[4/3]"}`}>
+          {thumbnailUrl && !thumbnailFailed && isImage(asset) ? (
+            <img src={thumbnailUrl} alt={`${asset.kind.replaceAll("_", " ")} thumbnail`}
+              className="h-full w-full object-contain" onError={() => setThumbnailFailed(true)} />
+          ) : thumbnailUrl && !thumbnailFailed && isVideo(asset) ? (
+            <video src={thumbnailUrl} muted playsInline preload="metadata"
+              className="h-full w-full object-contain"
+              onLoadedData={(event) => {
+                const video = event.currentTarget;
+                if (video.duration > 0) video.currentTime = Math.min(1, video.duration / 4);
+              }}
+              onError={() => setThumbnailFailed(true)} aria-hidden="true" />
+          ) : (
+            <span className="px-4 text-center text-xs text-muted">
+              {thumbnailFailed ? "Thumbnail unavailable" : "Loading thumbnail…"}
+            </span>
+          )}
+          <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-line bg-surface/95 px-4 py-2 text-sm font-semibold shadow">
+            {loading ? "Loading preview…" : isVideo(asset) ? "▶ Play video" : "View image"}
+          </span>
+        </div>
+        <div className="p-4">
+          <p className="text-sm font-semibold capitalize">{asset.kind.replaceAll("_", " ")}</p>
+          <p className="mt-1 text-xs text-muted">{prettySize(asset.byteSize)} · Storage verified</p>
+        </div>
+      </button>
+    </article>
+  );
+}
+
 export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
   const [selected, setSelected] = useState<PreviewAsset | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [failedId, setFailedId] = useState<string | null>(null);
-
   async function openPreview(asset: PreviewAsset) {
     if (!asset.verified || loadingId) return;
-    setSelected(asset);
-    setPreviewUrl(null);
-    setFailedId(null);
-    setLoadingId(asset.id);
+    setSelected(asset); setPreviewUrl(null); setFailedId(null); setLoadingId(asset.id);
     try {
-      // Resolve an expiring, server-authorized URL only after the user requests a preview.
       const signed = await requestAssetDownload({ data: { assetId: asset.id } });
       if (!signed?.url) throw new Error("Preview URL unavailable");
       setPreviewUrl(previewUrlFor(signed.url, asset.kind, asset.contentType));
-    } catch {
-      setFailedId(asset.id);
-    } finally {
-      setLoadingId(null);
-    }
+    } catch { setFailedId(asset.id); }
+    finally { setLoadingId(null); }
   }
-
   function closePreview() {
-    setSelected(null);
-    setPreviewUrl(null);
-    setFailedId(null);
-    setLoadingId(null);
+    setSelected(null); setPreviewUrl(null); setFailedId(null); setLoadingId(null);
   }
-
   const mediaAssets = assets.filter((asset) => asset.verified && (isImage(asset) || isVideo(asset)));
-
   if (!mediaAssets.length) {
     return (
       <section className="mt-6 rounded-2xl border border-line bg-surface p-5" aria-labelledby="asset-preview-heading">
@@ -108,7 +146,6 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
       </section>
     );
   }
-
   return (
     <>
       <section className="mt-6 rounded-2xl border border-line bg-surface p-5 sm:p-6" aria-labelledby="asset-preview-heading">
@@ -121,81 +158,38 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
           <span className="text-xs text-muted">{mediaAssets.length} item{mediaAssets.length === 1 ? "" : "s"}</span>
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {mediaAssets.map((asset) => (
-            <article key={asset.id} className="overflow-hidden rounded-xl border border-line bg-elevated/30">
-              <button
-                type="button"
-                onClick={() => void openPreview(asset)}
-                disabled={loadingId !== null}
-                className="group block w-full text-left disabled:cursor-wait"
-                aria-label={`Preview ${asset.kind.replaceAll("_", " ")}`}
-              >
-                <div className={`grid place-items-center bg-black/5 ${isVideo(asset) ? "aspect-video" : "aspect-[4/3]"}`}>
-                  <span className="rounded-full border border-line bg-surface px-4 py-2 text-sm font-semibold group-hover:border-accent">
-                    {loadingId === asset.id ? "Loading preview…" : isVideo(asset) ? "▶ Play video" : "View image"}
-                  </span>
-                </div>
-                <div className="p-4">
-                  <p className="text-sm font-semibold capitalize">{asset.kind.replaceAll("_", " ")}</p>
-                  <p className="mt-1 text-xs text-muted">{prettySize(asset.byteSize)} · Storage verified</p>
-                </div>
-              </button>
-            </article>
-          ))}
+          {mediaAssets.map((asset) => <AssetPreviewCard key={asset.id} asset={asset}
+            onOpen={() => void openPreview(asset)} disabled={loadingId !== null} loading={loadingId === asset.id} />)}
         </div>
       </section>
-
       {selected ? (
-        <div
-          className="fixed inset-0 z-[100] grid place-items-center bg-black/80 p-3 sm:p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="asset-preview-title"
-          onKeyDown={(event) => { if (event.key === "Escape") closePreview(); }}
-        >
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-black/80 p-3 sm:p-6"
+          role="dialog" aria-modal="true" aria-labelledby="asset-preview-title"
+          onKeyDown={(event) => { if (event.key === "Escape") closePreview(); }}>
           <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl">
             <div className="flex items-center justify-between gap-3 border-b border-line p-4">
               <div className="min-w-0">
                 <h4 id="asset-preview-title" className="truncate text-base font-semibold capitalize">{selected.kind.replaceAll("_", " ")}</h4>
                 <p className="text-xs text-muted">Authorized, time-limited preview</p>
               </div>
-              <button type="button" onClick={closePreview} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">
-                Close
-              </button>
+              <button type="button" onClick={closePreview} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">Close</button>
             </div>
             <div className="grid min-h-48 flex-1 place-items-center overflow-auto bg-black p-3 sm:p-6">
-              {loadingId === selected.id ? (
-                <p className="text-sm text-white" role="status">Loading preview…</p>
-              ) : failedId === selected.id ? (
+              {loadingId === selected.id ? <p className="text-sm text-white" role="status">Loading preview…</p>
+              : failedId === selected.id ? (
                 <div className="text-center text-white">
                   <p className="text-sm font-semibold">Preview unavailable</p>
                   <p className="mt-1 text-xs text-white/70">In-page playback failed. The stored file was not uploaded again.</p>
-                  <button type="button" onClick={() => void openPreview(selected)} className="mt-4 rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">
-                    Retry preview
-                  </button>
+                  <button type="button" onClick={() => void openPreview(selected)} className="mt-4 rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">Retry preview</button>
                 </div>
               ) : previewUrl && isVideo(selected) ? (
-                <video
-                  key={previewUrl}
-                  src={previewUrl}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  className="max-h-[75vh] w-full"
-                  onError={() => setFailedId(selected.id)}
-                  aria-label={`${selected.kind} preview`}
-                />
+                <video key={previewUrl} src={previewUrl} controls playsInline preload="metadata"
+                  className="max-h-[75vh] w-full" onError={() => setFailedId(selected.id)}
+                  aria-label={`${selected.kind} preview`} />
               ) : previewUrl && isImage(selected) ? (
-                <img
-                  key={previewUrl}
-                  src={previewUrl}
-                  alt={`${selected.kind.replaceAll("_", " ")} preview`}
-                  className="max-h-[75vh] max-w-full object-contain"
-                  onError={() => setFailedId(selected.id)}
-                />
-              ) : previewUrl ? (
-                <p className="text-sm text-white">Preview is not supported for this file type.</p>
-              ) : null}
+                <img key={previewUrl} src={previewUrl} alt={`${selected.kind.replaceAll("_", " ")} preview`}
+                  className="max-h-[75vh] max-w-full object-contain" onError={() => setFailedId(selected.id)} />
+              ) : previewUrl ? <p className="text-sm text-white">Preview is not supported for this file type.</p> : null}
             </div>
           </div>
         </div>

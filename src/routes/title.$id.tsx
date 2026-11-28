@@ -316,6 +316,8 @@ type ProductionAssetView = {
   fileSize: number;
   contentType: string | null;
   sourceKind: string | null;
+  sourceAssetId: string | null;
+  verificationState: string | null;
   verifiedSource: boolean;
 };
 
@@ -341,10 +343,19 @@ function ProductionAssetsPanel({
       void qc.invalidateQueries({ queryKey: ["bridge-title", titleId] });
     },
   });
-  const videos = assets.filter((asset) => asset.category === "raw_video");
-  const artwork = assets.filter((asset) => asset.category === "stills");
+  const previewable = assets.filter((asset) =>
+    asset.verifiedSource && Boolean(asset.sourceAssetId) &&
+    (["raw_video", "stills"].includes(asset.category) ||
+      Boolean(asset.contentType?.toLowerCase().startsWith("video/")) ||
+      Boolean(asset.contentType?.toLowerCase().startsWith("image/"))),
+  );
   const documents = assets.filter((asset) => asset.category === "documents");
-  const other = assets.filter((asset) => !["raw_video", "stills", "documents"].includes(asset.category));
+  const pendingMedia = assets.filter((asset) =>
+    !asset.verifiedSource && ["raw_video", "stills"].includes(asset.category),
+  );
+  const other = assets.filter((asset) =>
+    !["raw_video", "stills", "documents"].includes(asset.category),
+  );
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -385,42 +396,52 @@ function ProductionAssetsPanel({
         </div>
       ) : null}
       {!loading && !error && assets.length > 0 ? (
-        <div className="mt-5 grid gap-5 lg:grid-cols-2">
-          {[
-            { label: "Video files", items: videos },
-            { label: "Artwork & stills", items: artwork },
-            { label: "Documents & subtitles", items: documents },
-            { label: "Other linked files", items: other },
-          ].map((group) => (
-            <div key={group.label} className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">{group.label}</h3>
-                <span className="text-xs text-muted">{group.items.length} files</span>
-              </div>
-              {group.items.length === 0 ? (
-                <p className="rounded-lg border border-line p-3 text-xs text-muted">No files linked in this category.</p>
-              ) : (
-                <div className="space-y-2">
-                  {group.items.map((asset) => (
-                    <article key={asset.id} className="rounded-xl border border-line bg-elevated/30 p-3">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="break-all text-sm font-medium">{asset.fileName}</p>
-                          <p className="mt-1 text-xs text-muted">
-                            {(asset.sourceKind || asset.category).replaceAll("_", " ")} · {formatProductionBytes(asset.fileSize)}
-                            {asset.contentType ? ` · ${asset.contentType}` : ""}
-                          </p>
-                        </div>
-                        <span className="rounded-full border border-line px-2 py-1 text-[10px] font-semibold">
-                          {asset.verifiedSource ? "Verified source" : "Reference"}
-                        </span>
-                      </div>
-                    </article>
-                  ))}
+        <div className="mt-5 space-y-6">
+          <AssetPreviewGallery
+            assets={previewable.map((asset) => ({
+              id: asset.sourceAssetId!,
+              kind: asset.sourceKind || asset.category,
+              contentType: asset.contentType,
+              byteSize: asset.fileSize,
+              verified: true,
+            }))}
+          />
+          <div className="grid gap-5 lg:grid-cols-2">
+            {[
+              { label: "Documents & subtitles", items: documents },
+              { label: "Pending media verification", items: pendingMedia },
+              { label: "Other linked files", items: other },
+            ].map((group) => (
+              <div key={group.label} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">{group.label}</h3>
+                  <span className="text-xs text-muted">{group.items.length} files</span>
                 </div>
-              )}
-            </div>
-          ))}
+                {group.items.length === 0 ? (
+                  <p className="rounded-lg border border-line p-3 text-xs text-muted">No files linked in this category.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {group.items.map((asset) => (
+                      <article key={asset.id} className="rounded-xl border border-line bg-elevated/30 p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="break-all text-sm font-medium">{asset.fileName}</p>
+                            <p className="mt-1 text-xs text-muted">
+                              {(asset.sourceKind || asset.category).replaceAll("_", " ")} · {asset.verifiedSource ? formatProductionBytes(asset.fileSize) : "Size unverified"}
+                              {asset.contentType ? ` · ${asset.contentType}` : ""}
+                            </p>
+                          </div>
+                          <span className="rounded-full border border-line px-2 py-1 text-[10px] font-semibold">
+                            {asset.verifiedSource ? "Verified source" : asset.verificationState === "UNVERIFIED_POINTER" ? "Legacy pointer · unverified" : "Unverified reference"}
+                          </span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
     </section>
