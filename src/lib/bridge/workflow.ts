@@ -227,16 +227,19 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
+      reviewed_by: string | null;
       reviewer_findings: Array<{
         note: string;
         masterKey: string | null;
         posterKey: string | null;
+        technicalEvidence?: z.infer<typeof qcEvidenceInput> | null;
       }>;
-    }>`select status,reviewed_at,reviewer_findings from bridge_qc_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+    }>`select status,reviewed_at,reviewed_by,reviewer_findings from bridge_qc_cases where title_id=${data.titleId} order by created_at desc limit 1`;
     const legal = canViewRights ? await sql<{
       status: string;
       reviewed_at: string | Date;
-    }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1` : [];
+      reviewed_by: string | null;
+    }>`select status,reviewed_at,reviewed_by from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1` : [];
     return {
       grants: grants.map((g) => ({
         ...g,
