@@ -153,13 +153,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     qcEvidence.posterVerified === true &&
     (qcEvidence.subtitleStatus === "NOT_APPLICABLE" ||
       (qcEvidence.subtitleStatus === "VERIFIED" && Boolean(qcEvidence.subtitleLanguages?.trim())));
-  const legalReady = [
-    "LICENSING_READY",
-    "LIVE_FOR_BUYERS",
-    "IN_NEGOTIATION",
-    "LICENSED",
-    "DELIVERED",
-  ].includes(title.status);
   const rightsReady =
     reviewQ.data?.legal?.status === "APPROVED" &&
     reviewQ.data.grants.some((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
