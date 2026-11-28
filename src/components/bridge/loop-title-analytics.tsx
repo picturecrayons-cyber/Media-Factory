@@ -5,6 +5,9 @@ type AnalyticsRow = {
   bridge_title_id: string;
   title_name: string;
   lifecycle_status: string;
+  owner_display_name: string | null;
+  owner_email: string | null;
+  owner_organization_name: string | null;
   publication_status: string | null;
   loop_title_status: string | null;
   listed: boolean | null;
@@ -35,11 +38,12 @@ export function LoopTitleAnalytics({ title = "Loop performance & owner report", 
     retry: 1,
   });
   const rows = (query.data?.rows ?? []) as AnalyticsRow[];
+  const isPortfolio = query.data?.scope === "ALL_TITLES";
 
   function exportCsv() {
-    const headings = ["Bridge title ID","Title","Bridge lifecycle","Bridge publication","Loop status","Listed","Published","Unique viewers (latest progress)","Completed viewers","Watch seconds (latest progress sum)","Average completion %","Active rentals","Active purchases","Fulfilled payment events","Refunded payment events"];
+    const headings = ["Bridge title ID","Title","Owner","Owner email","Studio","Bridge lifecycle","Bridge publication","Loop status","Listed","Published","Unique viewers (latest progress)","Completed viewers","Watch seconds (latest progress sum)","Average completion %","Active rentals","Active purchases","Fulfilled payment events","Refunded payment events"];
     const values = rows.map((row) => [
-      row.bridge_title_id,row.title_name,row.lifecycle_status,row.publication_status ?? "Not published",
+      row.bridge_title_id,row.title_name,row.owner_display_name ?? "",row.owner_email ?? "",row.owner_organization_name ?? "",row.lifecycle_status,row.publication_status ?? "Not published",
       row.loop_title_status ?? "Not linked",row.listed ?? false,row.published ?? false,
       count(row.unique_viewers),count(row.completed_viewers),count(row.watch_seconds),
       row.average_completion_pct == null ? "" : count(row.average_completion_pct),
@@ -69,9 +73,10 @@ export function LoopTitleAnalytics({ title = "Loop performance & owner report", 
       {query.isError ? <div role="alert" className="rounded-lg border border-line p-4 text-sm"><p>Loop analytics are unavailable. No zero totals are assumed.</p><button type="button" className="mt-2 font-semibold text-accent underline" onClick={()=>void query.refetch()}>Retry</button></div> : null}
       {query.isSuccess && rows.length === 0 ? <p className="rounded-lg border border-dashed border-line p-4 text-sm text-muted">No Bridge-owned title has a linked Loop publication record yet.</p> : null}
       {rows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm">
-        <thead className="border-b border-line text-xs uppercase text-muted"><tr><th className="p-2">Title</th><th className="p-2">Loop</th><th className="p-2">Viewers</th><th className="p-2">Completed</th><th className="p-2">Watch time</th><th className="p-2">Rentals</th><th className="p-2">Purchases</th><th className="p-2">Payment events</th></tr></thead>
+        <thead className="border-b border-line text-xs uppercase text-muted"><tr><th className="p-2">Title</th>{isPortfolio?<th className="p-2">Title owner</th>:null}<th className="p-2">Loop</th><th className="p-2">Viewers</th><th className="p-2">Completed</th><th className="p-2">Watch time</th><th className="p-2">Rentals</th><th className="p-2">Purchases</th><th className="p-2">Payment events</th></tr></thead>
         <tbody className="divide-y divide-line">{rows.map(row=><tr key={row.bridge_title_id}>
           <td className="p-2"><div className="font-medium">{row.title_name}</div><div className="text-xs text-muted">{row.lifecycle_status.replaceAll("_"," ")}</div></td>
+          {isPortfolio?<td className="p-2"><div>{row.owner_display_name||"Owner not recorded"}</div><div className="text-xs text-muted">{row.owner_email||row.owner_organization_name||"—"}</div></td>:null}
           <td className="p-2">{row.publication_status ?? "Not linked"}<div className="text-xs text-muted">{row.published ? "Published" : "Not public"}</div></td>
           <td className="p-2 tabular-nums">{count(row.unique_viewers)}</td>
           <td className="p-2 tabular-nums">{count(row.completed_viewers)}</td>
