@@ -194,9 +194,6 @@ const license = {
 test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
   const f = await fixture();
   try {
-    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
-      grantId: string;
-    };
     await f.sql.transaction((tx) =>
       f.review(tx, qc, {
         titleId: "title-123",
@@ -206,6 +203,9 @@ test("real SQL services persist QC, independently approved license, lifecycle an
         qcEvidence,
       }),
     );
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
+      grantId: string;
+    };
     await f.sql.transaction((tx) =>
       f.review(tx, legal, {
         titleId: "title-123",
@@ -387,11 +387,11 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
 test("Super Admin cannot self-approve rights; independent Legal Reviewer is required", async () => {
   const f = await fixture();
   try {
-    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as { grantId: string };
     await f.sql.transaction((tx) => f.review(tx, superAdmin, {
       titleId: "title-123", stage: "QC", decision: "APPROVE",
       note: "Super Admin QC reviewer attestation", qcEvidence,
     }));
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as { grantId: string };
     await assert.rejects(
       f.sql.transaction((tx) => f.review(tx, superAdmin, {
         titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
