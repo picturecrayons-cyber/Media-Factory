@@ -41,6 +41,8 @@ type RzPayment = {
   status: string;
   amount: number;
   currency: string;
+  fee?: number | null;
+  tax?: number | null;
 };
 
 const loadBridgeMail = createServerOnlyFn(() => import("./mail.server"));
@@ -148,8 +150,14 @@ export async function grantFromCapturedPayment(opts: {
     package_id: string | null;
     purpose: string;
     provider: string;
+    service_code: string | null;
+    subtotal_paise: number | null;
+    tax_paise: number | null;
+    pricing_rate_version: number | null;
+    tax_rate_id: string | null;
   }>`
-    select id, user_id, title_id, package_id, amount_paise, status, currency, provider_payment_id, purpose, provider
+    select id, user_id, title_id, package_id, amount_paise, status, currency, provider_payment_id, purpose, provider,
+           service_code, subtotal_paise, tax_paise, pricing_rate_version, tax_rate_id
     from bridge_payments where provider_order_id = ${opts.orderId} limit 1
   `;
   const payment = rows[0];
@@ -165,7 +173,10 @@ export async function grantFromCapturedPayment(opts: {
   }
 
   if (payment.purpose === "story_concept_submission") {
-    if (!payment.title_id || payment.provider !== "razorpay") {
+    if (!payment.title_id || payment.provider !== "razorpay" ||
+        payment.service_code !== "STORY_CONCEPT_NETWORK_SUBMISSION" ||
+        payment.subtotal_paise == null || payment.tax_paise == null ||
+        Number(payment.subtotal_paise) + Number(payment.tax_paise) !== Number(payment.amount_paise)) {
       throw new Error("Invalid Story / Concept payment record");
     }
     const concepts = await sql<{ id: string; payment_status: string }>`
@@ -180,7 +191,10 @@ export async function grantFromCapturedPayment(opts: {
     }
     const capturedRows = await sql<{ id: string }>`
       update bridge_payments
-      set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = coalesce(verified_at, now())
+      set status = 'captured', provider_payment_id = ${opts.paymentId},
+          provider_fee_paise = coalesce(${captured.fee ?? null}, provider_fee_paise),
+          provider_tax_paise = coalesce(${captured.tax ?? null}, provider_tax_paise),
+          verified_at = coalesce(verified_at, now())
       where id = ${payment.id}
         and (provider_payment_id is null or provider_payment_id = ${opts.paymentId})
       returning id
@@ -197,6 +211,32 @@ export async function grantFromCapturedPayment(opts: {
       returning id
     `;
     if (!paidRows[0]) throw new Error("Story / Concept submission could not be marked paid");
+    await sql`
+      insert into bridge_financial_ledger (
+        title_id, payment_id, service_code, entry_type, classification,
+        amount_paise, currency, reference, metadata, idempotency_key, source_event_id
+      ) values (
+        ${payment.title_id}, ${payment.id}, ${payment.service_code},
+        'REVENUE', 'BILLABLE', ${Number(payment.subtotal_paise)}, 'INR',
+        'story_concept_submission',
+        ${JSON.stringify({ conceptId: concept.id, rateVersion: payment.pricing_rate_version, taxRateId: payment.tax_rate_id, taxPaise: Number(payment.tax_paise), providerPaymentId: opts.paymentId })}::jsonb,
+        ${`story-concept-revenue:${payment.id}`}, ${opts.paymentId}
+      ) on conflict (idempotency_key) do nothing
+    `;
+    if (Number(payment.tax_paise) > 0) {
+      await sql`
+        insert into bridge_financial_ledger (
+          title_id, payment_id, service_code, entry_type, classification,
+          amount_paise, currency, reference, metadata, idempotency_key, source_event_id
+        ) values (
+          ${payment.title_id}, ${payment.id}, ${payment.service_code},
+          'TAX', 'BILLABLE', ${Number(payment.tax_paise)}, 'INR',
+          'story_concept_submission_tax',
+          ${JSON.stringify({ conceptId: concept.id, taxRateId: payment.tax_rate_id, providerPaymentId: opts.paymentId })}::jsonb,
+          ${`story-concept-tax:${payment.id}`}, ${opts.paymentId}
+        ) on conflict (idempotency_key) do nothing
+      `;
+    }
     await writeAudit({
       actorUserId: opts.actorUserId ?? payment.user_id,
       action: "story_concept.payment_captured",
@@ -557,9 +597,52 @@ export async function ingestRazorpayWebhook(rawBody: string, signature: string |
 }
 
 
+type StoryConceptPricing = {
+  subtotalPaise: number;
+  taxPaise: number;
+  totalPaise: number;
+  rateVersion: number;
+  taxRateId: string;
+  taxRatePercent: number;
+};
+
+async function loadStoryConceptPricing(sql: Awaited<ReturnType<typeof getSql>>): Promise<StoryConceptPricing> {
+  const rates = await sql.query<{
+    base_price_paise: number | null;
+    cost_basis_paise: number | null;
+    target_margin_percent: number | null;
+    version: number;
+  }>(
+    "select r.base_price_paise,r.cost_basis_paise,r.target_margin_percent,r.version from public.bridge_service_catalog c join public.bridge_service_rates r on r.service_code=c.code where c.code=$1 and c.active=true and c.customer_visible=true and r.active=true and r.currency='INR' and r.effective_from<=now() and (r.effective_to is null or r.effective_to>now()) order by r.effective_from desc,r.version desc limit 1",
+    ["STORY_CONCEPT_NETWORK_SUBMISSION"],
+  );
+  const rate = rates[0];
+  if (!rate || rate.base_price_paise === null || Number(rate.base_price_paise) <= 0 ||
+      rate.cost_basis_paise === null || rate.target_margin_percent === null) {
+    throw new Error("Story / Concept submission fee is not certified yet. No payment has been requested.");
+  }
+  const taxes = await sql.query<{ id: string; rate_percent: number }>(
+    "select id,rate_percent from public.bridge_tax_rates where active=true and currency='INR' and effective_from<=now() and (effective_to is null or effective_to>now()) order by effective_from desc limit 1",
+    [],
+  );
+  const tax = taxes[0];
+  if (!tax) throw new Error("Story / Concept tax configuration is not certified yet. No payment has been requested.");
+  const subtotalPaise = Number(rate.base_price_paise);
+  const taxRatePercent = Number(tax.rate_percent);
+  const taxPaise = Math.round(subtotalPaise * taxRatePercent / 100);
+  return {
+    subtotalPaise,
+    taxPaise,
+    totalPaise: subtotalPaise + taxPaise,
+    rateVersion: Number(rate.version),
+    taxRateId: tax.id,
+    taxRatePercent,
+  };
+}
+
 /**
  * Story / Concept network fee. Customer checkout is enabled only when Finance has
- * activated the service and configured an effective, costed INR rate.
+ * activated the service and configured an effective, costed INR rate and tax rate.
  */
 export const getStoryConceptFee = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
@@ -571,29 +654,33 @@ export const getStoryConceptFee = createServerFn({ method: "GET" })
     }
     assertPermission(actor, "title.create");
     const sql = await getSql();
-    const rows = await sql.query<{
-      base_price_paise: number | null;
-      cost_basis_paise: number | null;
-      target_margin_percent: number | null;
-      version: number;
-    }>(
-      "select r.base_price_paise,r.cost_basis_paise,r.target_margin_percent,r.version from public.bridge_service_catalog c join public.bridge_service_rates r on r.service_code=c.code where c.code=$1 and c.active=true and c.customer_visible=true and r.active=true and r.currency='INR' and r.effective_from<=now() and (r.effective_to is null or r.effective_to>now()) order by r.effective_from desc,r.version desc limit 1",
-      ["STORY_CONCEPT_NETWORK_SUBMISSION"],
-    );
-    const rate = rows[0];
-    const available = Boolean(
-      rate &&
-      rate.base_price_paise !== null &&
-      Number(rate.base_price_paise) > 0 &&
-      rate.cost_basis_paise !== null &&
-      rate.target_margin_percent !== null,
-    );
-    return {
-      available,
-      amountPaise: available ? Number(rate!.base_price_paise) : null,
-      currency: "INR",
-      rateVersion: available ? Number(rate!.version) : null,
-    };
+    try {
+      const pricing = await loadStoryConceptPricing(sql);
+      return {
+        available: true,
+        amountPaise: pricing.totalPaise,
+        subtotalPaise: pricing.subtotalPaise,
+        taxPaise: pricing.taxPaise,
+        currency: "INR",
+        rateVersion: pricing.rateVersion,
+        taxRateId: pricing.taxRateId,
+        taxRatePercent: pricing.taxRatePercent,
+      };
+    } catch (error) {
+      if (error instanceof Error && /fee is not certified|tax configuration is not certified/.test(error.message)) {
+        return {
+          available: false,
+          amountPaise: null,
+          subtotalPaise: null,
+          taxPaise: null,
+          currency: "INR",
+          rateVersion: null,
+          taxRateId: null,
+          taxRatePercent: null,
+        };
+      }
+      throw error;
+    }
   });
 
 export const createStoryConceptOrder = createServerFn({ method: "POST" })
@@ -634,21 +721,8 @@ export const createStoryConceptOrder = createServerFn({ method: "POST" })
       throw new Error("This Story / Concept submission is already paid");
     }
 
-    const rates = await sql.query<{
-      base_price_paise: number | null;
-      cost_basis_paise: number | null;
-      target_margin_percent: number | null;
-      version: number;
-    }>(
-      "select r.base_price_paise,r.cost_basis_paise,r.target_margin_percent,r.version from public.bridge_service_catalog c join public.bridge_service_rates r on r.service_code=c.code where c.code=$1 and c.active=true and c.customer_visible=true and r.active=true and r.currency='INR' and r.effective_from<=now() and (r.effective_to is null or r.effective_to>now()) order by r.effective_from desc,r.version desc limit 1",
-      ["STORY_CONCEPT_NETWORK_SUBMISSION"],
-    );
-    const rate = rates[0];
-    if (!rate || rate.base_price_paise === null || Number(rate.base_price_paise) <= 0 ||
-        rate.cost_basis_paise === null || rate.target_margin_percent === null) {
-      throw new Error("Story / Concept submission fee is not certified yet. No payment has been requested.");
-    }
-    const amountPaise = Number(rate.base_price_paise);
+    const pricing = await loadStoryConceptPricing(sql);
+    const amountPaise = pricing.totalPaise;
     const { keyId } = requireRazorpayKeys();
     const existing = await sql<{
       id: string; title_id: string | null; provider_order_id: string | null; amount_paise: number; status: string;
@@ -689,7 +763,10 @@ export const createStoryConceptOrder = createServerFn({ method: "POST" })
           titleId: title.id,
           conceptId: concept.id,
           userId: actor.userId,
-          rateVersion: String(rate.version),
+          rateVersion: String(pricing.rateVersion),
+          subtotalPaise: String(pricing.subtotalPaise),
+          taxPaise: String(pricing.taxPaise),
+          taxRateId: pricing.taxRateId,
         },
       }),
     });
@@ -701,10 +778,13 @@ export const createStoryConceptOrder = createServerFn({ method: "POST" })
     const inserted = await sql<{ id: string }>`
       insert into bridge_payments (
         id, user_id, title_id, purpose, provider, provider_order_id,
-        amount_paise, currency, status, idempotency_key
+        amount_paise, currency, status, idempotency_key, service_code,
+        subtotal_paise, tax_paise, pricing_rate_version, tax_rate_id
       ) values (
         ${paymentId}, ${actor.userId}, ${title.id}, 'story_concept_submission',
-        'razorpay', ${rz.id}, ${amountPaise}, 'INR', 'created', ${data.idempotencyKey}
+        'razorpay', ${rz.id}, ${amountPaise}, 'INR', 'created', ${data.idempotencyKey},
+        'STORY_CONCEPT_NETWORK_SUBMISSION', ${pricing.subtotalPaise},
+        ${pricing.taxPaise}, ${pricing.rateVersion}, ${pricing.taxRateId}
       )
       on conflict (user_id, purpose, idempotency_key) do nothing
       returning id
@@ -734,9 +814,16 @@ export const createStoryConceptOrder = createServerFn({ method: "POST" })
       action: "story_concept.payment_order_created",
       entityType: "bridge_story_concept_submission",
       entityId: concept.id,
-      metadata: { titleId: title.id, paymentId, orderId: rz.id, amountPaise, rateVersion: rate.version },
+      metadata: {
+        titleId: title.id, paymentId, orderId: rz.id, amountPaise,
+        subtotalPaise: pricing.subtotalPaise, taxPaise: pricing.taxPaise,
+        rateVersion: pricing.rateVersion, taxRateId: pricing.taxRateId,
+      },
     });
-    return { orderId: rz.id, amountPaise, currency: "INR", keyId, paymentRecordId: paymentId };
+    return {
+      orderId: rz.id, amountPaise, currency: "INR", keyId, paymentRecordId: paymentId,
+      rateVersion: pricing.rateVersion, taxRateId: pricing.taxRateId,
+    };
   });
 
 export const verifyStoryConceptPayment = createServerFn({ method: "POST" })
