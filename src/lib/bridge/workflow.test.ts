@@ -191,6 +191,25 @@ const license = {
   distributorSharePct: 20,
 };
 
+test("only verified Super Admin can create a license draft after QC has passed", async () => {
+  const f = await fixture();
+  try {
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, license)),
+      /Only the verified Super Admin may create Bridge license drafts/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 0);
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, legal, license)),
+      /Only the verified Super Admin may create Bridge license drafts/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
   const f = await fixture();
   try {
