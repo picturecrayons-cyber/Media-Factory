@@ -51,7 +51,7 @@ if (
 }
 
 const names = (await readdir(MIGRATIONS_DIR))
-  .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name) && !["20261128120000_bridge_require_evidence_for_buyer_visibility.sql", "20261128150000_bridge_investor_access_requests.sql"].includes(name))
+  .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name) && !["20261128120000_bridge_require_evidence_for_buyer_visibility.sql", "20261128150000_bridge_investor_access_requests.sql", "20261128180000_bridge_distribution_partners_and_deals.sql"].includes(name))
   .sort((a, b) => a.localeCompare(b));
 
 if (names.length !== EXPECTED_MIGRATIONS) {
