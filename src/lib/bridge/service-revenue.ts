@@ -64,7 +64,7 @@ async function loadAssetEvidence(titleId: string) {
 async function loadQcPassed(titleId: string) {
   const sql = await getSql();
   const rows = await sql.query<{ passed: boolean }>(
-    "select exists (select 1 from public.bridge_qc_cases where title_id=$1 and status='PASSED') as passed",
+    "select exists (select 1 from public.bridge_qc_cases where title_id=$1 and status='PASSED' and reviewer_findings->0->'technicalEvidence'->>'playbackVerified'='true' and nullif(reviewer_findings->0->'technicalEvidence'->>'codec','') is not null and nullif(reviewer_findings->0->'technicalEvidence'->>'resolution','') is not null and nullif(reviewer_findings->0->'technicalEvidence'->>'frameRate','') is not null and reviewer_findings->0->'technicalEvidence'->>'audioVerified'='true' and nullif(reviewer_findings->0->'technicalEvidence'->>'audioDetails','') is not null and nullif(reviewer_findings->0->'technicalEvidence'->>'masterLanguage','') is not null and reviewer_findings->0->'technicalEvidence'->>'posterVerified'='true') as passed",
     [titleId],
   );
   return rows[0]?.passed === true;
