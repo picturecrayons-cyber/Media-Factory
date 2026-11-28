@@ -81,6 +81,15 @@ async function fixture() {
       status text,
       master_key text,
       poster_key text,
+      name text,
+      content_type text,
+      language text,
+      year integer,
+      runtime_minutes integer,
+      country_of_origin text,
+      release_date date,
+      credits jsonb,
+      synopsis text,
       updated_at timestamptz
     );
     create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint);
@@ -92,8 +101,10 @@ async function fixture() {
         "utf8",
       ).replaceAll("public.", `${schema}.`),
     );
-    await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
-      values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
+    await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,name,content_type,language,year,runtime_minutes,country_of_origin,release_date,credits,synopsis,updated_at)
+      values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster','Original Film','Film','Malayalam',2024,106,'India','2024-01-01',
+      '[{"role":"Director","name":"Director One"},{"role":"Producer","name":"Producer One"},{"role":"Cast","name":"Actor One"}]'::jsonb,
+      'Verified test synopsis',now());
     insert into bridge_assets values
       ('master','title-123','master','sealed/master',100),
       ('legacy-poster','title-123','poster','older/unreferenced-poster',100),
@@ -192,6 +203,7 @@ test("real SQL services persist QC, independently approved license, lifecycle an
         stage: "QC",
         decision: "APPROVE",
         note: "Playback and codec checked",
+        qcEvidence,
       }),
     );
     await f.sql.transaction((tx) =>
@@ -201,6 +213,8 @@ test("real SQL services persist QC, independently approved license, lifecycle an
         decision: "APPROVE",
         note: "Ownership and agreement verified",
         grantId: saved.grantId,
+        agreementReference: "signed-agreement-document",
+        ownershipReference: "signed-chain-of-title-document",
       }),
     );
     assert.equal(
@@ -224,6 +238,7 @@ test("unauthorized review and unverified current assets cannot clear QC", async 
       stage: "QC",
       decision: "APPROVE",
       note: "Review findings",
+      qcEvidence,
     };
     await assert.rejects(
       f.sql.transaction((tx) => f.review(tx, owner, data)),
@@ -250,6 +265,7 @@ test("a stale artwork pointer cannot clear QC even when a verified vertical post
           stage: "QC",
           decision: "APPROVE",
           note: "Check current artwork pointer",
+          qcEvidence,
         }),
       ),
       /Verified/,
@@ -271,6 +287,7 @@ test("an audit failure rolls back review records and lifecycle", async () => {
           stage: "QC",
           decision: "APPROVE",
           note: "Real review findings",
+          qcEvidence,
         }),
       ),
     );
@@ -303,6 +320,7 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
       stage: "QC",
       decision: "APPROVE",
       note: "Verified playback review",
+      qcEvidence,
     };
     const results = await Promise.allSettled([
       f.sql.transaction((tx) => f.review(tx, qc, data)),
@@ -328,6 +346,7 @@ test("verified Super Admin can approve their own license draft as the single Bri
         stage: "QC",
         decision: "APPROVE",
         note: "Super Admin verified current master and artwork",
+        qcEvidence,
       }),
     );
     await f.sql.transaction((tx) =>
@@ -337,6 +356,8 @@ test("verified Super Admin can approve their own license draft as the single Bri
         decision: "APPROVE",
         note: "Super Admin reviewed the recorded rights agreement evidence",
         grantId: saved.grantId,
+        agreementReference: "signed-agreement-document",
+        ownershipReference: "signed-chain-of-title-document",
       }),
     );
     assert.equal(
