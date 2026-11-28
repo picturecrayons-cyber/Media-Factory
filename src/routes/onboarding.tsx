@@ -101,7 +101,8 @@ function Onboarding() {
   });
 
   const [displayName, setDisplayName] = useState("");
-  const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");\n  const [investorInvite, setInvestorInvite] = useState(false);
+  const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
+  const [investorInvite, setInvestorInvite] = useState(false);
   const [organizationName, setOrganizationName] = useState("");
 
   const [titleName, setTitleName] = useState("");
