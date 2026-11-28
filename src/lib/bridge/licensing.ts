@@ -29,7 +29,7 @@ export const listLicensingWorkspace = createServerFn({ method: "GET" })
     const sql = await getSql();
     const [buyers, partners, deals] = await Promise.all([
       sql`select user_id, display_name, email, organization_name, email_verified
-          from bridge_profiles where account_type='buyer'
+          from bridge_profiles where account_type='buyer' and internal_role is null
           order by display_name,email limit 500`,
       sql`select id, partner_type, legal_name, display_name, country, contact_name,
                  contact_email, status, created_at
@@ -246,7 +246,7 @@ export const listOwnLicensingEnquiries = createServerFn({ method: "GET" })
     const actor=await verifiedActor(context.userId);
     if(actor.internalRole || actor.accountType!=="buyer") throw new Error("External Buyer account required");
     const sql=await getSql();
-    const rows=await sql`select d.id,d.title_id,t.name as title_name,d.status,d.territories,d.languages,d.media,
+    const rows=await sql<{id:string;title_id:string;title_name:string;status:string;territories:string[];languages:string[];media:string[];window_start:string|Date|null;window_end:string|Date|null;exclusivity:string|null;offer_fee_paise:number|string|null;agreement_reference:string|null;created_at:string|Date;updated_at:string|Date}>`select d.id,d.title_id,t.name as title_name,d.status,d.territories,d.languages,d.media,
       d.window_start,d.window_end,d.exclusivity,d.offer_fee_paise,d.agreement_reference,d.created_at,d.updated_at
       from bridge_distribution_deals d join bridge_titles t on t.id=d.title_id
       where d.deal_type='EXTERNAL_BUYER' and d.buyer_user_id=${actor.userId}
