@@ -32,13 +32,13 @@ const WORKSPACES = [
 ] as const;
 
 function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = 15_000): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout>;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     promise,
     new Promise<T>((_, reject) => {
       timeout = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs / 1000} seconds`)), timeoutMs);
     }),
-  ]).finally(() => clearTimeout(timeout));
+  ]).finally(() => { if (timeout) clearTimeout(timeout); });
 }
 
 const RELEASE_TARGETS = [
