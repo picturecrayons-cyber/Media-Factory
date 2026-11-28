@@ -8,7 +8,15 @@ export async function getBuyerGateStatus(titleId: string): Promise<BuyerGateStat
   const sql = await getSql();
   const rows = await sql<BuyerGateStatus>`
     select
-      exists(select 1 from bridge_qc_cases q where q.title_id=${titleId} and q.status='PASSED') as qc,
+      exists(select 1 from bridge_qc_cases q where q.title_id=${titleId} and q.status='PASSED'
+        and q.reviewer_findings->0->'technicalEvidence'->>'playbackVerified'='true'
+        and nullif(q.reviewer_findings->0->'technicalEvidence'->>'codec','') is not null
+        and nullif(q.reviewer_findings->0->'technicalEvidence'->>'resolution','') is not null
+        and nullif(q.reviewer_findings->0->'technicalEvidence'->>'frameRate','') is not null
+        and q.reviewer_findings->0->'technicalEvidence'->>'audioVerified'='true'
+        and nullif(q.reviewer_findings->0->'technicalEvidence'->>'audioDetails','') is not null
+        and nullif(q.reviewer_findings->0->'technicalEvidence'->>'masterLanguage','') is not null
+        and q.reviewer_findings->0->'technicalEvidence'->>'posterVerified'='true') as qc,
       exists(select 1 from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED') as legal,
       exists(select 1 from bridge_title_gate_certifications g where g.title_id=${titleId} and g.ott_preparation_status='READY') as ott,
       exists(select 1 from bridge_title_gate_certifications g where g.title_id=${titleId} and g.packaging_status='COMPLETE') as packaging,
