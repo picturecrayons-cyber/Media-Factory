@@ -63,7 +63,6 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   });
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
-  const [exclusive, setExclusive] = useState(false);
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
   const [ownerShare, setOwnerShare] = useState("");
@@ -229,7 +228,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             languages: [title.language],
                             windowStart: new Date(start).toISOString(),
                             windowEnd: new Date(end).toISOString(),
-                            exclusivity: exclusive ? "EXCLUSIVE" : "NON_EXCLUSIVE",
+                            exclusivity: "NON_EXCLUSIVE",
                             agreementReference: agreement,
                             ownershipReference: ownership,
                             rightsOwnerSharePct: Number(ownerShare),
@@ -244,14 +243,6 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     {input("Agreement reference", agreement, setAgreement)}
                     {input("Ownership evidence reference", ownership, setOwnership)}
                     {input("Rights owner share (%)", ownerShare, setOwnerShare, "number")}
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={exclusive}
-                        onChange={(e) => setExclusive(e.target.checked)}
-                      />
-                      Exclusive license
-                    </label>
                     <button
                       disabled={action.isPending || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
                       className="rounded-lg border border-line px-4 py-2 text-sm sm:col-span-2"
@@ -293,7 +284,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       >
                         {agreementGrants.map((grant, index) => (
                           <option key={grant.id} value={grant.id}>
-                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · {new Date(grant.window_start).toLocaleDateString()}
+                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · {grant.window_start ? new Date(grant.window_start).toLocaleDateString() : "Dates missing"}
                           </option>
                         ))}
                       </select>
@@ -307,7 +298,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           <span>· {selectedGrant.languages.join(", ")}</span>
                         </div>
                         <p className="text-xs text-muted">
-                          {selectedGrant.window_start} → {selectedGrant.window_end}
+                          {selectedGrant.window_start && selectedGrant.window_end
+                            ? `${selectedGrant.window_start} → ${selectedGrant.window_end}`
+                            : "License validity dates are not recorded."}
                         </p>
                         <p className="break-all text-xs text-muted">Grant record: {selectedGrant.id}</p>
                         <div className="space-y-2 rounded-lg border border-line bg-surface p-3">
