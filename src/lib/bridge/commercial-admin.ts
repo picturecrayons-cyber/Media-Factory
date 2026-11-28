@@ -37,8 +37,9 @@ export const configureServiceRate = createServerFn({ method: "POST" })
       throw new Error("SERVICE_NOT_ACTIVE");
     }
     if (isConceptSubmission && data.activate &&
-        (data.basePricePaise <= 0 || data.costBasisPaise == null || data.targetMarginPercent == null)) {
-      throw new Error("Story / Concept fee activation requires a positive customer price, verified cost basis and target margin.");
+        (data.basePricePaise <= 0 || data.costBasisPaise == null || data.targetMarginPercent == null ||
+         data.sourceNote.trim().length < 10)) {
+      throw new Error("Story / Concept fee activation requires a positive customer price, verified cost basis, target margin and source note.");
     }
 
     const current = await sql.query<{ version: number }>(
@@ -50,13 +51,6 @@ export const configureServiceRate = createServerFn({ method: "POST" })
     if (data.activate) {
       await sql.query(
         "update public.bridge_service_rates set active=false,effective_to=coalesce(effective_to,now()) where service_code=$1 and active=true",
-        [data.serviceCode],
-      );
-    }
-
-    if (isConceptSubmission && data.activate) {
-      await sql.query(
-        "update public.bridge_service_catalog set active=true where code=$1 and active=false",
         [data.serviceCode],
       );
     }
@@ -76,6 +70,13 @@ export const configureServiceRate = createServerFn({ method: "POST" })
         actor.userId,
       ],
     );
+
+    if (isConceptSubmission && data.activate) {
+      await sql.query(
+        "update public.bridge_service_catalog set active=true where code=$1 and active=false",
+        [data.serviceCode],
+      );
+    }
 
     await writeAudit({
       actorUserId: actor.userId,
