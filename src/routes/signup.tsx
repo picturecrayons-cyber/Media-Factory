@@ -203,7 +203,7 @@ function Signup() {
     );
   }
 
-  if (search.role === "investor") return <InvestorRequestForm />;
+  if (search.role === "investor" && !search.invite) return <InvestorRequestForm />;
 
   return (
     <main className="grid min-h-screen place-items-center bg-bg p-6">
