@@ -47,6 +47,8 @@ function VendorJobs({ actor }: { actor: Actor }) {
   const [titleId, setTitleId] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const titlesQuery = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const titles = titlesQuery.data?.titles ?? [];
 
   const jobsQuery = useQuery({
     queryKey: ["bridge-delivery-jobs"],
@@ -84,16 +86,22 @@ function VendorJobs({ actor }: { actor: Actor }) {
             </select>
           </label>
           <label className="space-y-1 text-xs text-muted">
-            <span>Title ID</span>
-            <input
+            <span>Title</span>
+            <select
               id="vendor-job-title-id"
               name="titleId"
-              aria-label="Title ID"
+              aria-label="Select title"
               className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
-              placeholder="Title id"
               value={titleId}
               onChange={(e) => setTitleId(e.target.value)}
-            />
+              disabled={titlesQuery.isPending || titles.length === 0}
+            >
+              <option value="">Select a title</option>
+              {titles.map((title) => (
+                <option key={title.id} value={title.id}>{title.name}</option>
+              ))}
+            </select>
+            {titlesQuery.isError ? <span className="text-red-600">Titles could not be loaded.</span> : null}
           </label>
           <label className="space-y-1 text-xs text-muted">
             <span>Instructions</span>
@@ -205,35 +213,53 @@ function DeliveryJobActions({
 function DeliveryList() {
   const q = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = q.data?.titles ?? [];
+  const [selectedTitleId, setSelectedTitleId] = useState("");
+  const selectedTitle = titles.find((title) => title.id === selectedTitleId)
+    ?? (titles.length === 1 ? titles[0] : undefined);
   if (q.isError) return <p role="alert">Delivery data is unavailable. Refresh to retry.</p>;
   if (q.isPending) return <p className="text-sm text-muted">Loading deliveries…</p>;
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <h2 className="font-display text-xl font-semibold">Delivery desk</h2>
       <p className="mt-1 text-sm text-muted">
-        Open a title to review its canonical Delivery workspace. No rights or fulfilment rules are changed here.
+        Select a title to open its canonical Delivery workspace. No rights or fulfilment rules are changed here.
       </p>
-      <div className="mt-5 divide-y divide-line rounded-xl border border-line">
-        {titles.map((t) => (
-          <Link
-            key={t.id}
-            to="/title/$id"
-            params={{ id: t.id }}
-            className="flex items-center justify-between gap-3 p-4 hover:bg-fg/5"
+      <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <label className="space-y-1 text-xs text-muted">
+          <span>Select title</span>
+          <select
+            id="delivery-title-selector"
+            name="deliveryTitle"
+            aria-label="Select title for delivery"
+            className="w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
+            value={selectedTitle?.id ?? ""}
+            onChange={(e) => setSelectedTitleId(e.target.value)}
+            disabled={titles.length === 0}
           >
-            <div>
-              <p className="text-sm font-semibold">{t.name}</p>
-              <p className="text-xs text-muted">
-                {t.language}
-                {t.year ? ` · ${t.year}` : ""}
-              </p>
-            </div>
-            <span className="rounded-full border border-line px-3 py-1 text-[10px] font-semibold">
-              {t.status === "DELIVERED" ? "DELIVERED" : "OPEN TITLE"}
-            </span>
+            <option value="">Select a title</option>
+            {titles.map((title) => (
+              <option key={title.id} value={title.id}>{title.name}</option>
+            ))}
+          </select>
+        </label>
+        {selectedTitle ? (
+          <Link
+            to="/title/$id"
+            params={{ id: selectedTitle.id }}
+            className="inline-flex items-center justify-center rounded-lg border border-line px-4 py-2 text-sm font-semibold hover:bg-fg/5"
+          >
+            Open title
           </Link>
-        ))}
+        ) : (
+          <span className="rounded-lg border border-line px-4 py-2 text-center text-sm text-muted">Choose a title</span>
+        )}
       </div>
+      {selectedTitle ? (
+        <p className="mt-3 text-xs text-muted">
+          {selectedTitle.language}{selectedTitle.year ? ` · ${selectedTitle.year}` : ""}
+          {selectedTitle.status === "DELIVERED" ? " · DELIVERED" : ""}
+        </p>
+      ) : null}
       {!titles.length ? <p className="mt-5 text-sm text-muted">No titles available.</p> : null}
     </section>
   );
