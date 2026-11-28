@@ -478,6 +478,28 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         const lastVerifiedAt = verificationDates.length
           ? new Date(Math.max(...verificationDates.map((value) => value.getTime()))).toISOString()
           : null;
+        const licensingCleared = [
+          "LICENSING_READY",
+          "LIVE_FOR_BUYERS",
+          "IN_NEGOTIATION",
+          "LICENSED",
+          "DELIVERED",
+        ].includes(r.status);
+        const publicationStatus = (r.authorization_status || "").toUpperCase();
+        const publicationGateStatus = ["AUTHORIZED", "LIVE", "DELIVERED"].includes(publicationStatus)
+          ? "PASS"
+          : ["SUSPENDED", "EXPIRED", "REVOKED", "FAILED"].includes(publicationStatus)
+            ? "FAIL"
+            : "BLOCKED";
+        const gateStatus = {
+          assetReferences: !r.master_key || !r.poster_key ? "BLOCKED" : "NOT VERIFIED",
+          qc: r.qc_approved ? "PASS" : "BLOCKED",
+          rights: coveringGrant ? "PASS" : "BLOCKED",
+          legal: legalApproved ? "PASS" : "BLOCKED",
+          licensing: licensingCleared ? "PASS" : "BLOCKED",
+          publicationAuthorization: publicationGateStatus,
+          loopSyncAcknowledgement: "NOT VERIFIED",
+        };
         const blockers: string[] = [];
         if (!coveringGrant)
           blockers.push("A matching rights grant and explicit publication dimensions are required");
@@ -517,6 +539,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             legal: r.legal_reviewer_email,
           },
           lastVerifiedAt,
+          gateStatus,
           publication: r.loop_title_id
             ? {
                 destination: "CRAYONS_LOOP" as const,
