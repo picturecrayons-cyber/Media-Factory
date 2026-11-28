@@ -34,7 +34,7 @@ type ConceptRow = {
   introduced_to_buyers_at: string | Date | null;
   created_at: string | Date;
   updated_at: string | Date;
-  payment_status: string;
+  payment_status: "PENDING" | "PAID" | "REFUNDED";
   payment_id: string | null;
   paid_at: string | Date | null;
 };
