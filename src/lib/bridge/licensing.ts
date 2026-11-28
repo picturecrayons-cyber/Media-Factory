@@ -154,6 +154,10 @@ const transitionInput = z.object({
   status:z.enum(["OFFERED","NEGOTIATION","AGREEMENT_PENDING","AGREEMENT_RECORDED","APPROVED","REJECTED","CANCELLED"]),
   agreementReference:z.string().trim().min(4).max(500).optional(),
   rightsGrantId:z.string().uuid().optional(),
+  offerFeePaise:z.number().int().nonnegative().max(2_000_000_000).nullable().optional(),
+  windowStart:z.string().datetime().optional(),
+  windowEnd:z.string().datetime().optional(),
+  exclusivity:z.enum(["EXCLUSIVE","NON_EXCLUSIVE"]).optional(),
   notes:z.string().trim().min(8).max(2000).optional(),
 });
 export const transitionLicensingDeal = createServerFn({ method: "POST" })
@@ -166,9 +170,10 @@ export const transitionLicensingDeal = createServerFn({ method: "POST" })
     const rows=await sql<{
       id:string;title_id:string;deal_type:string;partner_id:string|null;buyer_user_id:string|null;
       territories:unknown;languages:unknown;media:unknown;window_start:string|Date|null;
-      window_end:string|Date|null;status:string;delivery_specs:unknown;
+      window_end:string|Date|null;status:string;delivery_specs:unknown;offer_fee_paise:number|null;
+      exclusivity:string|null;agreement_reference:string|null;rights_grant_id:string|null;
     }>`select id,title_id,deal_type,partner_id,buyer_user_id,territories,languages,media,
-      window_start,window_end,status,delivery_specs from bridge_distribution_deals
+      window_start,window_end,status,delivery_specs,offer_fee_paise,exclusivity,agreement_reference,rights_grant_id from bridge_distribution_deals
       where id=${data.dealId}::uuid limit 1`;
     const deal=rows[0];
     if(!deal) throw new Error("Licensing deal not found");
@@ -180,10 +185,23 @@ export const transitionLicensingDeal = createServerFn({ method: "POST" })
       AGREEMENT_RECORDED:["APPROVED","NEGOTIATION","REJECTED","CANCELLED"],
     };
     if(!(allowed[deal.status]||[]).includes(data.status)) throw new Error("Invalid licensing deal transition");
-    const rightsGrantId=data.rightsGrantId||null;
-    if(data.status==="AGREEMENT_RECORDED" && !data.agreementReference) throw new Error("Agreement reference is required");
+    const rightsGrantId=data.rightsGrantId||deal.rights_grant_id||null;
+    const agreementReference=data.agreementReference||deal.agreement_reference||null;
+    const effectiveStart=data.windowStart?new Date(data.windowStart):deal.window_start?new Date(deal.window_start):null;
+    const effectiveEnd=data.windowEnd?new Date(data.windowEnd):deal.window_end?new Date(deal.window_end):null;
+    const effectiveFee=data.offerFeePaise!==undefined?data.offerFeePaise:deal.offer_fee_paise;
+    if(data.windowStart && data.windowEnd && new Date(data.windowEnd)<=new Date(data.windowStart)) throw new Error("Deal window end must be after its start");
+    if(data.status==="OFFERED") {
+      if(!effectiveStart||!effectiveEnd||effectiveEnd<=effectiveStart) throw new Error("A valid offer start and end date are required");
+      if(effectiveFee===null||effectiveFee===undefined) throw new Error("Enter an explicit offer fee in paise; do not leave the commercial offer unset");
+      if(!(data.exclusivity||deal.exclusivity)) throw new Error("Choose exclusive or non-exclusive terms");
+    }
+    if(data.status==="AGREEMENT_RECORDED" && !agreementReference) throw new Error("Agreement reference is required");
     if(data.status==="APPROVED") {
-      if(!data.agreementReference && !rightsGrantId) throw new Error("Recorded agreement and verified rights grant are required");
+      if(!agreementReference) throw new Error("Signed agreement reference is required before approval");
+      if(!effectiveStart||!effectiveEnd||effectiveEnd<=effectiveStart) throw new Error("A valid agreed distribution window is required");
+      if(effectiveFee===null||effectiveFee===undefined) throw new Error("Agreed fee must be explicitly recorded");
+      if(!(data.exclusivity||deal.exclusivity)) throw new Error("Exclusive or non-exclusive terms must be recorded");
       if(!rightsGrantId) throw new Error("Select the VALID Bridge rights grant covering this deal");
       const grants=await sql<{id:string;territories:unknown;languages:unknown;media:unknown;window_start:string|Date|null;window_end:string|Date|null}>`select id,territories,languages,media,window_start,window_end
         from bridge_rights_grants where id=${rightsGrantId}::uuid and title_id=${deal.title_id}
@@ -192,8 +210,8 @@ export const transitionLicensingDeal = createServerFn({ method: "POST" })
       const includes=(source:unknown,requested:unknown)=>Array.isArray(source)&&Array.isArray(requested)&&requested.every(v=>source.map(x=>String(x).toUpperCase()).some(x=>["ALL","*","WORLDWIDE"].includes(x)||x===String(v).toUpperCase()));
       const gs=grant?.window_start?new Date(grant.window_start).getTime():Number.NEGATIVE_INFINITY;
       const ge=grant?.window_end?new Date(grant.window_end).getTime():Number.POSITIVE_INFINITY;
-      const ds=deal.window_start?new Date(deal.window_start).getTime():Number.NEGATIVE_INFINITY;
-      const de=deal.window_end?new Date(deal.window_end).getTime():Number.POSITIVE_INFINITY;
+      const ds=effectiveStart?.getTime()??Number.NEGATIVE_INFINITY;
+      const de=effectiveEnd?.getTime()??Number.POSITIVE_INFINITY;
       if(!grant||!includes(grant.territories,deal.territories)||!includes(grant.languages,deal.languages)||!includes(grant.media,deal.media)||gs>ds||ge<de) {
         throw new Error("VALID rights grant does not cover this title, territory, language, media and full deal window");
       }
@@ -203,12 +221,15 @@ export const transitionLicensingDeal = createServerFn({ method: "POST" })
         and reviewed_by is not null and reviewed_at is not null
         and evidence->0->>'grantId'=${rightsGrantId} limit 1`;
       if(!qc.length||!legal.length) throw new Error("Independent QC PASS and Legal approval for the selected grant are required");
-      if(!data.agreementReference) throw new Error("Signed agreement reference is required before approval");
     }
     const nextNotes=data.notes||null;
     await sql`update bridge_distribution_deals set status=${data.status},
-      agreement_reference=coalesce(${data.agreementReference||null},agreement_reference),
+      agreement_reference=coalesce(${agreementReference},agreement_reference),
       rights_grant_id=coalesce(${rightsGrantId},rights_grant_id),
+      offer_fee_paise=coalesce(${data.offerFeePaise===undefined?null:data.offerFeePaise},offer_fee_paise),
+      window_start=coalesce(${data.windowStart?new Date(data.windowStart):null},window_start),
+      window_end=coalesce(${data.windowEnd?new Date(data.windowEnd):null},window_end),
+      exclusivity=coalesce(${data.exclusivity||null},exclusivity),
       notes=coalesce(${nextNotes},notes),updated_by=${actor.userId},
       reviewed_by=case when ${data.status}='APPROVED' then ${actor.userId} else reviewed_by end,
       reviewed_at=case when ${data.status}='APPROVED' then now() else reviewed_at end,
