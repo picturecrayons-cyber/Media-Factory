@@ -73,7 +73,11 @@ const gateInput = z.object({
   titleId: z.string().min(1),
   gate: z.enum(["OTT","PACKAGING","CURATION","DELIVERY"]),
   decision: z.enum(["PASS","HOLD","FAIL","REVOKE"]),
-  notes: z.string().max(4000).optional(),
+  notes: z.string().trim().min(8).max(4000).optional(),
+}).superRefine((data, ctx) => {
+  if (data.decision === "PASS" && !data.notes) {
+    ctx.addIssue({ code: "custom", path: ["notes"], message: "Evidence note is required before passing a release gate" });
+  }
 });
 
 export const setBuyerPublicationGate = createServerFn({ method: "POST" })
@@ -85,27 +89,47 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
       throw new Error("Only the verified Super Admin may certify OTT, packaging, curation or delivery gates");
     assertPermission(actor, "title.approve");
     const sql = await getSql();
-    const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
-    if (!rows[0]) throw new Error("Title not found");
-
-    const value = (data.decision as string) === "PASS"
-      ? ({OTT:"READY",PACKAGING:"COMPLETE",CURATION:"APPROVED",DELIVERY:"READY"} as const)[data.gate]
-      : data.decision === "REVOKE" && data.gate === "DELIVERY" ? "REVOKED"
-      : "HOLD";
-
-    await sql`
-      insert into bridge_title_gate_certifications (title_id, ott_preparation_status, packaging_status, curation_status, delivery_status, updated_by, evidence, updated_at)
-      values (${data.titleId}, 'HOLD', 'HOLD', 'HOLD', 'HOLD', ${actor.userId}, ${JSON.stringify({[data.gate]:{decision:data.decision,notes:data.notes??null,actor:actor.userId,at:new Date().toISOString()}})}::jsonb, now())
-      on conflict (title_id) do nothing
-    `;
-    const gateEvidence = JSON.stringify({
-      [data.gate]: {
-        decision: data.decision,
-        notes: data.notes ?? null,
-        actor: actor.userId,
-        at: new Date().toISOString(),
-      },
+    return sql.transaction(async (tx) => {
+      const rows = await tx<{ id: string }>`select id from bridge_titles where id = ${data.titleId} for update`;
+      if (!rows[0]) throw new Error("Title not found");
+      const value = data.decision === "PASS"
+        ? ({ OTT: "READY", PACKAGING: "COMPLETE", CURATION: "APPROVED", DELIVERY: "READY" } as const)[data.gate]
+        : data.decision === "REVOKE" && data.gate === "DELIVERY" ? "REVOKED" : "HOLD";
+      const gateEvidence = JSON.stringify({
+        [data.gate]: {
+          decision: data.decision,
+          notes: data.notes ?? null,
+          actor: actor.userId,
+          at: new Date().toISOString(),
+        },
+      });
+      await tx`
+        insert into bridge_title_gate_certifications
+          (title_id, ott_preparation_status, packaging_status, curation_status, delivery_status, updated_by, evidence, updated_at)
+        values (${data.titleId}, 'HOLD', 'HOLD', 'HOLD', 'HOLD', ${actor.userId}, ${gateEvidence}::jsonb, now())
+        on conflict (title_id) do nothing
+      `;
+      if (data.gate === "OTT") {
+        await tx`update bridge_title_gate_certifications set ott_preparation_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${gateEvidence}::jsonb, updated_at=now() where title_id=${data.titleId}`;
+      } else if (data.gate === "PACKAGING") {
+        await tx`update bridge_title_gate_certifications set packaging_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${gateEvidence}::jsonb, updated_at=now() where title_id=${data.titleId}`;
+      } else if (data.gate === "CURATION") {
+        await tx`update bridge_title_gate_certifications set curation_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${gateEvidence}::jsonb, updated_at=now() where title_id=${data.titleId}`;
+      } else {
+        await tx`update bridge_title_gate_certifications set delivery_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${gateEvidence}::jsonb, updated_at=now() where title_id=${data.titleId}`;
+      }
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: `buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,
+        entityType: "bridge_title",
+        entityId: data.titleId,
+        metadata: { gate: data.gate, decision: data.decision, notes: data.notes ?? null },
+      }, tx);
+      const result = await tx<{ ok: boolean }>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
+      return { ok: true, gate: data.gate, decision: data.decision, publishable: result[0]?.ok === true };
     });
+  });
+
     if (data.gate === "OTT") {
       await sql`update bridge_title_gate_certifications
         set ott_preparation_status=${value}, updated_by=${actor.userId},
