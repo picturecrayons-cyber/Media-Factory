@@ -131,6 +131,8 @@ Deno.serve(async (req: Request) => {
 
         const providerAmount = Number(payment.amount);
         const providerCurrency = String(payment.currency ?? "").toUpperCase();
+        const providerFeePaise = Number.isSafeInteger(payment.fee) && Number(payment.fee) >= 0 ? Number(payment.fee) : undefined;
+        const providerTaxPaise = Number.isSafeInteger(payment.tax) && Number(payment.tax) >= 0 ? Number(payment.tax) : undefined;
         if (!Number.isSafeInteger(providerAmount) || providerAmount !== Number(localPayment.amount_paise)) {
           return await failEvent(supabase, id, "Payment amount mismatch");
         }
@@ -142,6 +144,8 @@ Deno.serve(async (req: Request) => {
         if (localPayment.purpose !== "title_license") {
           const { error } = await supabase.from("bridge_payments").update({
             status: "captured", provider_payment_id: payment.id, verified_at: new Date().toISOString(),
+            ...(providerFeePaise !== undefined ? { provider_fee_paise: providerFeePaise } : {}),
+            ...(providerTaxPaise !== undefined ? { provider_tax_paise: providerTaxPaise } : {}),
           }).eq("id", localPayment.id);
           if (error) return await failEvent(supabase, id, "Bridge service payment capture record failed");
         } else {
@@ -174,7 +178,11 @@ Deno.serve(async (req: Request) => {
 
           const now = new Date().toISOString();
           const { data: updated, error: updateError } = await supabase.from("bridge_payments")
-            .update({ status: "captured", provider_payment_id: payment.id, verified_at: now })
+            .update({
+              status: "captured", provider_payment_id: payment.id, verified_at: now,
+              ...(providerFeePaise !== undefined ? { provider_fee_paise: providerFeePaise } : {}),
+              ...(providerTaxPaise !== undefined ? { provider_tax_paise: providerTaxPaise } : {}),
+            })
             .eq("id", localPayment.id).select("id").maybeSingle();
           if (updateError || !updated) return await failEvent(supabase, id, "Bridge payment update failed");
 
