@@ -268,7 +268,7 @@ function CreatorDashboard({
       </section>
 
       <section id="statements" className="scroll-mt-20">
-        <LoopTitleAnalytics title="My Loop performance & title report" />
+        <LoopTitleAnalytics title="My Loop performance & title report" scopeKey={`${actor.userId}:${actor.organizationId ?? "personal"}`} />
       </section>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5 text-xs text-muted">
