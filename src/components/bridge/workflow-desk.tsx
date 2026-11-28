@@ -526,13 +526,16 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               ) : publication.isPending ? (
                 <p>Loading publication…</p>
               ) : (
-                <p>
-                  Loop authorization: {pub?.authorizationStatus ?? "Not authorized"}.{" "}
-                  {pub &&
-                  publicationIsActive(pub.authorizationStatus, pub.windowStart, pub.windowEnd)
-                    ? "Active window"
-                    : "No active distribution window"}
-                </p>
+                <div className="space-y-1 text-sm">
+                  <p>Bridge authorization: {pub?.authorizationStatus ?? "NOT AUTHORIZED"}.</p>
+                  <p>Loop catalogue: {pub?.listed && pub?.published ? "PUBLISHED" : "NOT PUBLISHED"}.</p>
+                  <p className="text-xs text-muted">Consumer playback is a separate entitlement and delivery verification gate.</p>
+                  <p className="text-xs text-muted">
+                    {pub && publicationIsActive(pub.authorizationStatus, pub.windowStart, pub.windowEnd)
+                      ? "Distribution window active"
+                      : "No active distribution window"}
+                  </p>
+                </div>
               )}
               <p>
                 Bridge authorization publishes the approved catalogue entry to Loop only after all six release gates pass. Catalogue visibility is not proof of consumer playback.
@@ -580,14 +583,14 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   )}
                 </div>
               ) : null}
-              {pub ? (
+              {pub?.listed && pub?.published ? (
                 <a
                   className="text-accent underline"
                   href={`https://crayonsloop.in/title/${title.slug}`}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Inspect consumer title
+                  Inspect published Loop title
                 </a>
               ) : null}
             </div>
