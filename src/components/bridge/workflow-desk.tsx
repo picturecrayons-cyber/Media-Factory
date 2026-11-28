@@ -37,6 +37,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [subtitleStatus, setSubtitleStatus] = useState<"VERIFIED" | "NOT_APPLICABLE">("NOT_APPLICABLE");
   const [subtitleLanguages, setSubtitleLanguages] = useState("");
   const [posterVerified, setPosterVerified] = useState(false);
+  const [correctionAffectedItem, setCorrectionAffectedItem] = useState("");
+  const [correctionRequiredAction, setCorrectionRequiredAction] = useState("");
   const [error, setError] = useState("");
   const qc = useQueryClient();
   const workflow = useQuery({
@@ -263,11 +265,16 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       }),
                       !qcEvidenceReady || note.trim().length < 8 || missingMetadata.length > 0,
                     )}
+                    {input("Affected file / asset / metadata field", correctionAffectedItem, setCorrectionAffectedItem)}
+                    {input("Required replacement or correction evidence", correctionRequiredAction, setCorrectionRequiredAction)}
                     {button("Return for correction", () =>
                       reviewTitleWorkflow({
-                        data: { titleId: title.id, stage: "QC", decision: "REJECT", note },
+                        data: {
+                          titleId: title.id, stage: "QC", decision: "REJECT", note,
+                          correction: { affectedItem: correctionAffectedItem, requiredAction: correctionRequiredAction },
+                        },
                       }),
-                      note.trim().length < 8,
+                      note.trim().length < 8 || correctionAffectedItem.trim().length < 2 || correctionRequiredAction.trim().length < 8,
                     )}
                   </div>
                   {!qcEvidenceReady ? <p className="text-xs text-amber-600">QC approval BLOCKED — complete every technical evidence field and reviewer check.</p> : null}
@@ -279,9 +286,12 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 </p>
               ) : null}
               {workflow.data?.qc?.reviewer_findings.map((f, i) => (
-                <p key={i} className="text-sm">
-                  {f.note}
-                </p>
+                <div key={i} className="space-y-1 rounded-lg border border-line p-3 text-sm">
+                  <p>{f.note}</p>
+                  {f.correction ? (
+                    <p className="text-xs text-amber-600">Correction required · {f.correction.affectedItem}: {f.correction.requiredAction}</p>
+                  ) : null}
+                </div>
               ))}
             </div>
           ) : null}
