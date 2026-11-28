@@ -7,7 +7,7 @@ export const loopLicenseInput = z
     languages: z.array(z.string().trim().min(2).max(40)).min(1).max(20),
     windowStart: z.string().datetime(),
     windowEnd: z.string().datetime(),
-    exclusivity: z.enum(["EXCLUSIVE", "NON_EXCLUSIVE"]),
+    exclusivity: z.literal("NON_EXCLUSIVE"),
     agreementReference: z.string().trim().min(8).max(500),
     ownershipReference: z.string().trim().min(8).max(500),
     rightsOwnerSharePct: z.number().int().min(0).max(100),
@@ -53,8 +53,10 @@ export function loopLicenseReviewBlockers(
   if (grant.exclusivity !== "NON_EXCLUSIVE")
     blockers.push("NON-EXCLUSIVE terms must be recorded.");
 
-  const start = grant.window_start ? new Date(grant.window_start).getTime() : Number.NaN;
-  const end = grant.window_end ? new Date(grant.window_end).getTime() : Number.NaN;
+  const timestamp = (value: string | Date | null | undefined) =>
+    value instanceof Date ? value.getTime() : value ? new Date(value).getTime() : Number.NaN;
+  const start = timestamp(grant.window_start);
+  const end = timestamp(grant.window_end);
   if (!Number.isFinite(start) || !Number.isFinite(end)) {
     blockers.push("License start and end dates are required.");
   } else {
