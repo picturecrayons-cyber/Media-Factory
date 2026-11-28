@@ -15,7 +15,7 @@ import {
   suspendLoopPublication,
 } from "@/lib/bridge/loop-publication";
 import { hasPermission, canOperateOnTitle } from "@/lib/bridge/rbac";
-import { publicationIsActive } from "@/lib/bridge/workflow-policy";
+import { loopLicenseReviewBlockers, publicationIsActive } from "@/lib/bridge/workflow-policy";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { BridgeTitle } from "@/lib/bridge/types";
 
@@ -63,7 +63,6 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   });
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
-  const [exclusive, setExclusive] = useState(false);
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
   const [ownerShare, setOwnerShare] = useState("");
@@ -229,7 +228,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             languages: [title.language],
                             windowStart: new Date(start).toISOString(),
                             windowEnd: new Date(end).toISOString(),
-                            exclusivity: exclusive ? "EXCLUSIVE" : "NON_EXCLUSIVE",
+                            exclusivity: "NON_EXCLUSIVE",
                             agreementReference: agreement,
                             ownershipReference: ownership,
                             rightsOwnerSharePct: Number(ownerShare),
@@ -244,14 +243,6 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     {input("Agreement reference", agreement, setAgreement)}
                     {input("Ownership evidence reference", ownership, setOwnership)}
                     {input("Rights owner share (%)", ownerShare, setOwnerShare, "number")}
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={exclusive}
-                        onChange={(e) => setExclusive(e.target.checked)}
-                      />
-                      Exclusive license
-                    </label>
                     <button
                       disabled={action.isPending || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
                       className="rounded-lg border border-line px-4 py-2 text-sm sm:col-span-2"
@@ -270,6 +261,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               {Object.entries(grantsByAgreement).map(([reference, agreementGrants]) => {
                 const selectedId = selectedGrantByAgreement[reference] ?? agreementGrants[0]?.id ?? "";
                 const selectedGrant = agreementGrants.find((grant) => grant.id === selectedId) ?? agreementGrants[0];
+                const reviewBlockers = selectedGrant ? loopLicenseReviewBlockers(selectedGrant) : ["Select a license record."];
                 return (
                   <section key={reference} className="space-y-3 rounded-xl border border-line p-3">
                     <div>
@@ -292,7 +284,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       >
                         {agreementGrants.map((grant, index) => (
                           <option key={grant.id} value={grant.id}>
-                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · {new Date(grant.window_start).toLocaleDateString()}
+                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · {grant.window_start ? new Date(grant.window_start).toLocaleDateString() : "Dates missing"}
                           </option>
                         ))}
                       </select>
@@ -306,7 +298,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           <span>· {selectedGrant.languages.join(", ")}</span>
                         </div>
                         <p className="text-xs text-muted">
-                          {selectedGrant.window_start} → {selectedGrant.window_end}
+                          {selectedGrant.window_start && selectedGrant.window_end
+                            ? `${selectedGrant.window_start} → ${selectedGrant.window_end}`
+                            : "License validity dates are not recorded."}
                         </p>
                         <p className="break-all text-xs text-muted">Grant record: {selectedGrant.id}</p>
                         <div className="space-y-2 rounded-lg border border-line bg-surface p-3">
@@ -338,6 +332,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                               ["Ownership evidence reference recorded", Boolean(evidence?.ownershipReference?.trim())],
                               ["Agreement reference recorded", Boolean(evidence?.agreementReference?.trim())],
                               ["NON-EXCLUSIVE terms recorded", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
+                              ["Crayons LOOP TVOD media scope recorded", selectedGrant.media.includes("CRAYONS_LOOP") && selectedGrant.media.includes("TVOD")],
                               ["Revenue-share split recorded and totals 100%", validSplit],
                               ["Territory, language and validity window recorded", selectedGrant.territories.length > 0 && selectedGrant.languages.length > 0 && validWindow],
                               ["Super Admin legal approval recorded", selectedGrant.status === "VALID"],
@@ -361,9 +356,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                   <p>Distributor share: {typeof distributorShare === "number" && Number.isInteger(distributorShare) ? `${distributorShare}%` : "Not recorded"}</p>
                                 </div>
                                 <p className="text-xs font-medium" role="status">
-                                  {checks.every(([, passed]) => passed)
+                                  {reviewBlockers.length === 0
                                     ? "All required fields are recorded. Documentary verification and Legal approval remain separate gates."
-                                    : "PENDING — do not mark READY until every required item is verified and the verified Super Admin approves."}
+                                    : `PENDING — ${reviewBlockers.join(" ")}`}
                                 </p>
                               </>
                             );
@@ -385,7 +380,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                     grantId: selectedGrant.id,
                                   },
                                 }),
-                              note.trim().length < 8,
+                              note.trim().length < 8 || reviewBlockers.length > 0,
                             )}
                             {button(
                               "Reject",

@@ -5,7 +5,7 @@ import { getSql, type Sql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
 import { loadTitle } from "./titles";
-import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
+import { loopLicenseInput, loopLicenseReviewBlockers, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
 import { hasVerifiedMasterAndArtwork } from "./asset-roles";
 
@@ -101,14 +101,28 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     if (!data.grantId) throw new Error("Select a license draft");
     const [grant] = await tx<{
       status: string;
-      window_end: string;
+      window_start: string | Date | null;
+      window_end: string | Date | null;
       created_by: string;
-    }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
+      territories: string[];
+      languages: string[];
+      media: string[];
+      exclusivity: string;
+      evidence: Array<{
+        agreementReference?: string;
+        ownershipReference?: string;
+        commercialTerms?: { rightsOwnerSharePct?: number; distributorSharePct?: number };
+      }>;
+    }>`select status,window_start,window_end,created_by,territories,languages,media,exclusivity,evidence
+      from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
     if (grant.created_by === actor.userId && actor.internalRole !== "super_admin")
       throw new Error("Only the verified Super Admin may approve their own license draft");
-    if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
-      throw new Error("License has expired");
+    if (data.decision === "APPROVE") {
+      const blockers = loopLicenseReviewBlockers(grant);
+      if (blockers.length)
+        throw new Error(`License evidence incomplete: ${blockers.join(" ")}`);
+    }
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
       ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
@@ -158,6 +172,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
       status: string;
       territories: string[];
       languages: string[];
+      media: string[];
       window_start: string | Date;
       window_end: string | Date;
       exclusivity: string;
@@ -166,7 +181,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
       }>;
-    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    }>`select id,status,territories,languages,media,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;

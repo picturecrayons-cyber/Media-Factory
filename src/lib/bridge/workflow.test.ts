@@ -276,11 +276,49 @@ test("license constraints reject unsupported territory, bad window and invalid s
   for (const data of [
     { ...license, territories: ["IN"] },
     { ...license, windowEnd: license.windowStart },
+    { ...license, exclusivity: "EXCLUSIVE" },
     { ...license, distributorSharePct: 30 },
   ])
     assert.equal(policy.loopLicenseInput.safeParse(data).success, false);
   assert.equal(policy.publicationIsActive("REVOKED", null, null), false);
   assert.equal(policy.publicationIsActive("AUTHORIZED", null, "2000-01-01"), false);
+});
+
+test("legal approval rejects incomplete legacy rights evidence without advancing the title", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+      grantId: string;
+    };
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW' where id='title-123'");
+    await f.sql.query(
+      "update bridge_rights_grants set window_start=null, window_end=null, media='[\"TVOD\"]'::jsonb, evidence=$2::jsonb where id=$1",
+      [saved.grantId, JSON.stringify([{ note: "Founder declaration only" }])],
+    );
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.review(tx, legal, {
+          titleId: "title-123",
+          stage: "LEGAL",
+          decision: "APPROVE",
+          note: "Review the recorded ownership declaration",
+          grantId: saved.grantId,
+        }),
+      ),
+      /License evidence incomplete/,
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_titles where id='title-123'"))[0].status,
+      "RIGHTS_REVIEW",
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_rights_grants where id=$1", [saved.grantId]))[0].status,
+      "DRAFT",
+    );
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+  } finally {
+    await f.db.close();
+  }
 });
 
 test("concurrent reviewer calls cannot approve the same lifecycle twice", async () => {
