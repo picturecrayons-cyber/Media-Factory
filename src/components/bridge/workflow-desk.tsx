@@ -67,9 +67,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     : canReviewRights
       ? stages.filter((s) => s === "Prepare" || s === "Business")
       : stages.filter((s) => s === "Prepare" || (s === "Revenue" && canFinance));
-  const qcEvidenceReady = playbackVerified && codec.trim() && resolution.trim() && frameRate.trim() &&
+  const qcEvidenceReady = Boolean(
+    playbackVerified && codec.trim() && resolution.trim() && frameRate.trim() &&
     audioVerified && audioDetails.trim() && masterLanguage.trim() &&
-    (subtitleStatus === "NOT_APPLICABLE" || subtitleLanguages.trim()) && posterVerified;
+    (subtitleStatus === "NOT_APPLICABLE" || subtitleLanguages.trim()) && posterVerified
+  );
   const creditExists = (role: string) => title.credits?.some((credit) => String(credit.role ?? "").toLowerCase() === role && credit.name.trim().length > 0) ?? false;
   const missingMetadata = [
     !title.name?.trim() && "Original title",
