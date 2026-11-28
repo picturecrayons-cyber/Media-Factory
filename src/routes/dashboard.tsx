@@ -128,23 +128,17 @@ function FounderHome() {
               const matches = releaseQ.data.titles.filter((item) => target.aliases.includes(item.name.trim().toLowerCase()));
               const item = matches.length === 1 ? matches[0] : null;
               const gate = (label: string, status: string) => ({ label, status });
-              const hasBlocker = (phrase: string) => item?.blockers.some((blocker) => blocker.toLowerCase().includes(phrase.toLowerCase())) ?? true;
-              const clearedStatuses = ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"];
-              const publicationStatus = item?.publication?.authorizationStatus ?? "NOT AUTHORIZED";
-              const publicationGate = ["AUTHORIZED", "LIVE", "DELIVERED"].includes(publicationStatus)
-                ? "PASS"
-                : ["SUSPENDED", "EXPIRED", "REVOKED", "FAILED"].includes(publicationStatus)
-                  ? "FAIL"
-                  : "BLOCKED";
+              const gateStatus = item?.gateStatus;
               const gates = [
-                gate("Asset references", item ? (!item.hasMaster || !item.hasPoster ? "BLOCKED" : "NOT VERIFIED") : "NOT VERIFIED"),
-                gate("Technical QC", item ? (hasBlocker("QC approval") ? "BLOCKED" : "PASS") : "NOT VERIFIED"),
-                gate("Rights grant", item ? (hasBlocker("matching rights grant") ? "BLOCKED" : "PASS") : "NOT VERIFIED"),
-                gate("Legal review", item ? (hasBlocker("Legal approval") ? "BLOCKED" : "PASS") : "NOT VERIFIED"),
-                gate("Licensing", item ? (clearedStatuses.includes(item.bridgeStatus) ? "PASS" : "BLOCKED") : "NOT VERIFIED"),
-                gate("Bridge publication authorization", item ? publicationGate : "NOT VERIFIED"),
-                gate("LOOP sync acknowledgement", "NOT VERIFIED"),
+                gate("Asset references", gateStatus?.assetReferences ?? "NOT VERIFIED"),
+                gate("Technical QC", gateStatus?.qc ?? "NOT VERIFIED"),
+                gate("Rights grant", gateStatus?.rights ?? "NOT VERIFIED"),
+                gate("Legal review", gateStatus?.legal ?? "NOT VERIFIED"),
+                gate("Licensing", gateStatus?.licensing ?? "NOT VERIFIED"),
+                gate("Bridge publication authorization", gateStatus?.publicationAuthorization ?? "NOT VERIFIED"),
+                gate("LOOP sync acknowledgement", gateStatus?.loopSyncAcknowledgement ?? "NOT VERIFIED"),
               ];
+              const overallHold = !item || !item.ready || gates.some((entry) => entry.status !== "PASS");
               const tone = (status: string) => status === "PASS" ? "text-emerald-700" : status === "FAIL" ? "text-red-700" : status === "BLOCKED" ? "text-amber-700" : "text-muted";
               return (
                 <article key={target.name} className="rounded-2xl border border-line p-4">
@@ -156,7 +150,7 @@ function FounderHome() {
                       </p>
                     </div>
                     <span className={`text-xs font-semibold ${item?.ready ? "text-emerald-700" : "text-amber-700"}`}>
-                      {item?.ready ? "EVALUATOR: READY" : "RELEASE HOLD"}
+                      {overallHold ? "RELEASE HOLD" : "BRIDGE PREFLIGHT PASS"}
                     </span>
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
