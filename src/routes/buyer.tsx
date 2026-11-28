@@ -13,7 +13,7 @@ import {
   listOwnEntitlements,
   verifyLicensePayment,
 } from "@/lib/bridge/payments";
-import { createBuyerLicensingEnquiry } from "@/lib/bridge/licensing";
+import { createBuyerLicensingEnquiry, listOwnLicensingEnquiries } from "@/lib/bridge/licensing";
 
 export const Route = createFileRoute("/buyer")({ component: Buyer });
 
@@ -154,7 +154,7 @@ async function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs = 
 
 function BuyerBody({ userId }: { userId: string }) {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
+  const [tab, setTab] = useState<"discover" | "listing" | "licenses" | "enquiries">("discover");
   const [view, setView] = useState<"gallery" | "list">("gallery");
   const [query, setQuery] = useState("");
   const [galleryPage, setGalleryPage] = useState(0);
@@ -180,12 +180,18 @@ function BuyerBody({ userId }: { userId: string }) {
     queryKey: ["bridge-buyer-poster-artwork", userId, posterTitleIds],
     queryFn: ({ signal }) =>
       withTimeout(fetchBuyerPosterArtwork(posterTitleIds, signal), "Buyer artwork", 120_000),
-    enabled: tab !== "licenses" && view === "gallery" && posterTitleIds.length > 0,
+    enabled: (tab === "discover" || tab === "listing") && view === "gallery" && posterTitleIds.length > 0,
     retry: 1,
   });
   const entQ = useQuery({
     queryKey: entitlementsKey,
     queryFn: () => withTimeout(listOwnEntitlements(), "Buyer licenses"),
+    retry: 1,
+  });
+  const enquiriesQ = useQuery({
+    queryKey: ["bridge-buyer-enquiries", userId],
+    queryFn: () => withTimeout(listOwnLicensingEnquiries(), "Buyer enquiries"),
+    enabled: tab === "enquiries",
     retry: 1,
   });
   const entitled = new Set(entQ.data?.entitlements.map((e) => e.titleId));
@@ -252,13 +258,14 @@ function BuyerBody({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
         <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
         <Stat label="Licenses" value={String(licensed.length)} note="Captured entitlements" />
+        <Stat label="Enquiries" value={enquiriesQ.data?.enquiries?.length == null ? "—" : String(enquiriesQ.data.enquiries.length)} note="Your licensing discussions" />
       </div>
       <div className="flex flex-wrap gap-2">
-        {(["discover", "listing", "licenses"] as const).map((id) => (
+        {(["discover", "listing", "licenses", "enquiries"] as const).map((id) => (
           <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-sm border px-3 py-1.5 text-sm capitalize ${tab === id ? "border-accent text-accent" : "border-line text-muted"}`}>
             {id}
           </button>
@@ -277,8 +284,13 @@ function BuyerBody({ userId }: { userId: string }) {
           </div>
         </div>
       )}
-      {!titles.length ? (
+      {!titles.length && tab !== "enquiries" ? (
         <BuyerEmptyState />
+      ) : tab === "enquiries" ? (
+        enquiriesQ.isPending ? <p role="status" className="text-sm text-muted">Loading your licensing enquiries…</p>
+        : enquiriesQ.isError ? <section role="alert" className="rounded-lg border border-line p-4 text-sm">Your enquiries are unavailable. <button type="button" className="underline" onClick={()=>void enquiriesQ.refetch()}>Retry</button></section>
+        : enquiriesQ.data.enquiries.length ? <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b border-line text-xs uppercase text-muted"><tr><th className="p-3">Title</th><th className="p-3">Stage</th><th className="p-3">Requested rights</th><th className="p-3">Offer</th><th className="p-3">Window</th></tr></thead><tbody className="divide-y divide-line">{enquiriesQ.data.enquiries.map((item:any)=><tr key={item.id}><td className="p-3 font-medium">{item.title_name}</td><td className="p-3">{item.status.replaceAll("_"," ")}</td><td className="p-3 text-xs">{(item.territories||[]).join(", ")} · {(item.languages||[]).join(", ")} · {(item.media||[]).join(", ")}</td><td className="p-3">{item.offer_fee_paise==null?"Pending":formatLicensingFeePaise(Number(item.offer_fee_paise))}</td><td className="p-3 text-xs">{item.window_start&&item.window_end?new Date(item.window_start).toLocaleDateString()+" – "+new Date(item.window_end).toLocaleDateString():"Not agreed"}</td></tr>)}</tbody></table></div>
+        : <p className="rounded-md border border-dashed border-line p-5 text-sm text-muted">You have not submitted any licensing enquiries yet.</p>
       ) : tab === "licenses" ? (
         <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." allowEnquiry={false} />
       ) : view === "gallery" ? (
@@ -426,6 +438,7 @@ function TitleGallery({
 }
 
 function BuyerEnquiryForm({ title }: { title: BuyerTitleCard }) {
+  const qc = useQueryClient();
   const [territories, setTerritories] = useState("WORLDWIDE");
   const [languages, setLanguages] = useState(title.language || "Malayalam");
   const [media, setMedia] = useState("TVOD");
@@ -438,7 +451,7 @@ function BuyerEnquiryForm({ title }: { title: BuyerTitleCard }) {
       media: media.split(",").map((value) => value.trim()).filter(Boolean),
       notes,
     } }),
-    onSuccess: () => { toast.success("Licensing enquiry sent to Crayons Bridge"); setNotes(""); },
+    onSuccess: () => { toast.success("Licensing enquiry sent to Crayons Bridge"); setNotes(""); void qc.invalidateQueries({ queryKey: ["bridge-buyer-enquiries"] }); },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Enquiry could not be sent"),
   });
   return (
