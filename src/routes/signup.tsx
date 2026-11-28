@@ -245,7 +245,13 @@ function Signup() {
             />
           </label>
 
-          <fieldset className="space-y-1.5">
+          {search.role === "investor" && search.invite ? (
+            <div className="rounded-xl border border-line bg-elevated p-4 text-sm text-muted">
+              <p className="font-semibold text-fg">Approved Investor invitation</p>
+              <p className="mt-1">Your account type is fixed to Investor for this invitation. Internal administration permissions are not included.</p>
+            </div>
+          ) : (
+            <fieldset className="space-y-1.5">
             <legend className="block text-sm font-medium text-fg">I am a:</legend>
             <p id="account-type-help" className="text-xs text-muted">
               Choose the workspace that matches your role. Access is restricted by permissions after sign-in.
@@ -281,6 +287,7 @@ function Signup() {
               ))}
             </div>
           </fieldset>
+          )}
 
           <label className="block text-sm font-medium text-fg">
             Password
