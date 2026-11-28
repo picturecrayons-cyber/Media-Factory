@@ -105,7 +105,7 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
         where t.merged_into_title_id is null
           and (t.owner_account_type <> 'studio' or t.submission_type = 'finished_film')
           and (
-            t.owner_user_id = ${userId}
+            (t.owner_user_id = ${userId} and t.owner_account_type <> 'studio')
             or (
               t.owner_account_type = 'studio'
               and t.owner_organization_id = ${orgId}
@@ -123,7 +123,7 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
         select t.* from bridge_titles t
         where (t.owner_account_type <> 'studio' or t.submission_type = 'finished_film')
           and (
-            t.owner_user_id = ${userId}
+            (t.owner_user_id = ${userId} and t.owner_account_type <> 'studio')
             or (
             t.owner_account_type = 'studio'
             and t.owner_organization_id = ${orgId}
