@@ -335,6 +335,7 @@ type ProductionAssetView = {
   fileSize: number;
   contentType: string | null;
   sourceKind: string | null;
+  sourceAssetId: string | null;
   verificationState: string | null;
   verifiedSource: boolean;
 };
@@ -361,10 +362,20 @@ function ProductionAssetsPanel({
       void qc.invalidateQueries({ queryKey: ["bridge-title", titleId] });
     },
   });
-  const videos = assets.filter((asset) => asset.category === "raw_video");
-  const artwork = assets.filter((asset) => asset.category === "stills");
+  const previewable = assets.filter((asset) =>
+    asset.verifiedSource &&
+    Boolean(asset.sourceAssetId) &&
+    (["raw_video", "stills"].includes(asset.category) ||
+      Boolean(asset.contentType?.toLowerCase().startsWith("video/")) ||
+      Boolean(asset.contentType?.toLowerCase().startsWith("image/"))),
+  );
   const documents = assets.filter((asset) => asset.category === "documents");
-  const other = assets.filter((asset) => !["raw_video", "stills", "documents"].includes(asset.category));
+  const pendingMedia = assets.filter((asset) =>
+    !asset.verifiedSource && ["raw_video", "stills"].includes(asset.category),
+  );
+  const other = assets.filter((asset) =>
+    !["raw_video", "stills", "documents"].includes(asset.category),
+  );
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -405,11 +416,20 @@ function ProductionAssetsPanel({
         </div>
       ) : null}
       {!loading && !error && assets.length > 0 ? (
-        <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <div className="mt-5 space-y-6">
+          <AssetPreviewGallery
+            assets={previewable.map((asset) => ({
+              id: asset.sourceAssetId!,
+              kind: asset.sourceKind || asset.category,
+              contentType: asset.contentType,
+              byteSize: asset.fileSize,
+              verified: true,
+            }))}
+          />
+          <div className="grid gap-5 lg:grid-cols-2">
           {[
-            { label: "Video files", items: videos },
-            { label: "Artwork & stills", items: artwork },
             { label: "Documents & subtitles", items: documents },
+            { label: "Pending media verification", items: pendingMedia },
             { label: "Other linked files", items: other },
           ].map((group) => (
             <div key={group.label} className="space-y-3">
@@ -441,6 +461,7 @@ function ProductionAssetsPanel({
               )}
             </div>
           ))}
+          </div>
         </div>
       ) : null}
     </section>
