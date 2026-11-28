@@ -155,6 +155,18 @@ const owner = {
 };
 const qc = { ...owner, userId: "qc", internalRole: "qc_reviewer" as const };
 const legal = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
+const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
+const qcEvidence = {
+  playbackVerified: true as const,
+  codec: "H.264",
+  resolution: "1920x1080",
+  frameRate: "25 fps",
+  audioVerified: true as const,
+  audioDetails: "Stereo 48 kHz",
+  masterLanguage: "Malayalam",
+  subtitleStatus: "NOT_APPLICABLE" as const,
+  posterVerified: true as const,
+};
 const license = {
   titleId: "title-123",
   territories: ["WORLDWIDE"],
@@ -171,7 +183,7 @@ const license = {
 test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
   const f = await fixture();
   try {
-    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
       grantId: string;
     };
     await f.sql.transaction((tx) =>
@@ -348,7 +360,7 @@ test("license author cannot approve their own agreement", async () => {
   try {
     const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
     const legalReviewer = { ...admin, internalRole: "legal_reviewer" as const };
-    const saved = (await f.sql.transaction((tx) => f.save(tx, admin, license))) as {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
       grantId: string;
     };
     await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
