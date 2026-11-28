@@ -250,7 +250,8 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
       status: string;
       reviewed_at: string | Date;
       reviewed_by: string | null;
-    }>`select status,reviewed_at,reviewed_by from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1` : [];
+      evidence: Array<{ grantId?: string; agreementReference?: string; ownershipReference?: string; reviewerConfirmedEvidence?: boolean }>;
+    }>`select status,reviewed_at,reviewed_by,evidence from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1` : [];
     return {
       grants: grants.map((g) => ({
         ...g,
