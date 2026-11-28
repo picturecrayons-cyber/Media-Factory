@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { getBearerToken } from "@/lib/auth/client";
 import { listTitles } from "@/lib/bridge/titles";
 import {
+  createBuyerLicensingEnquiry,
   createLicenseOrder,
   listOwnEntitlements,
   verifyLicensePayment,
@@ -279,7 +280,7 @@ function BuyerBody({ userId }: { userId: string }) {
       {!titles.length ? (
         <BuyerEmptyState />
       ) : tab === "licenses" ? (
-        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
+        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." allowEnquiry={false} />
       ) : view === "gallery" ? (
         <div className="space-y-4">
           <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
@@ -306,7 +307,7 @@ function BuyerBody({ userId }: { userId: string }) {
           ) : null}
         </div>
       ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
+        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." allowEnquiry />
       )}
       {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
         <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>
@@ -415,11 +416,42 @@ function TitleGallery({
                   </Button>
                 )}
               </div>
+              <BuyerEnquiryForm title={title} />
             </div>
           </article>
         );
       })}
     </div>
+  );
+}
+
+function BuyerEnquiryForm({ title }: { title: BuyerTitleCard }) {
+  const [territories, setTerritories] = useState("WORLDWIDE");
+  const [languages, setLanguages] = useState(title.language || "Malayalam");
+  const [media, setMedia] = useState("TVOD");
+  const [notes, setNotes] = useState("");
+  const enquiry = useMutation({
+    mutationFn: () => createBuyerLicensingEnquiry({ data: {
+      titleId: title.id,
+      territories: territories.split(",").map((value) => value.trim()).filter(Boolean),
+      languages: languages.split(",").map((value) => value.trim()).filter(Boolean),
+      media: media.split(",").map((value) => value.trim()).filter(Boolean),
+      notes,
+    } }),
+    onSuccess: () => { toast.success("Licensing enquiry sent to Crayons Bridge"); setNotes(""); },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Enquiry could not be sent"),
+  });
+  return (
+    <details className="border-t border-line pt-2">
+      <summary className="cursor-pointer text-xs font-semibold text-accent">Request licensing discussion</summary>
+      <form className="mt-3 grid gap-2" onSubmit={(event) => { event.preventDefault(); enquiry.mutate(); }}>
+        <input required value={territories} onChange={(event) => setTerritories(event.target.value)} placeholder="Territories (comma separated)" className="w-full rounded-sm border border-line bg-bg px-2 py-2 text-xs" />
+        <input required value={languages} onChange={(event) => setLanguages(event.target.value)} placeholder="Languages (comma separated)" className="w-full rounded-sm border border-line bg-bg px-2 py-2 text-xs" />
+        <input required value={media} onChange={(event) => setMedia(event.target.value)} placeholder="Media (TVOD, SVOD, TV...)" className="w-full rounded-sm border border-line bg-bg px-2 py-2 text-xs" />
+        <textarea required minLength={8} maxLength={2000} rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What licensing terms would you like to discuss?" className="w-full rounded-sm border border-line bg-bg px-2 py-2 text-xs" />
+        <Button type="submit" disabled={enquiry.isPending}>{enquiry.isPending ? "Sending..." : "Send enquiry"}</Button>
+      </form>
+    </details>
   );
 }
 
@@ -458,7 +490,7 @@ function BuyerPosterImage({ blob, title }: { blob: Blob | undefined; title: stri
   );
 }
 
-function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
+function TitleList({ titles, entitled, order, empty, allowEnquiry = true }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string; allowEnquiry?: boolean }) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
@@ -472,6 +504,7 @@ function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[
             <StatusChip status={t.status as never} />
             {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
           </div>
+          {allowEnquiry ? <div className="mt-3 w-full"><BuyerEnquiryForm title={t} /></div> : null}
         </li>
       ))}
     </ul>
