@@ -190,7 +190,15 @@ export async function verifyDistributionPreflight(
       and q.reviewer_findings->0->'technicalEvidence'->>'audioVerified'='true'
       and nullif(q.reviewer_findings->0->'technicalEvidence'->>'audioDetails','') is not null
       and nullif(q.reviewer_findings->0->'technicalEvidence'->>'masterLanguage','') is not null
-      and q.reviewer_findings->0->'technicalEvidence'->>'posterVerified'='true') as qc_ok,
+      and q.reviewer_findings->0->'technicalEvidence'->>'posterVerified'='true'
+      and q.reviewed_by is not null and q.reviewed_at is not null
+      and (
+        q.reviewer_findings->0->'technicalEvidence'->>'subtitleStatus'='NOT_APPLICABLE'
+        or (
+          q.reviewer_findings->0->'technicalEvidence'->>'subtitleStatus'='VERIFIED'
+          and nullif(q.reviewer_findings->0->'technicalEvidence'->>'subtitleLanguages','') is not null
+        )
+      )) as qc_ok,
     exists(select 1 from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED'
       and l.evidence->0->>'grantId'=${rightsGrantId}
       and l.reviewed_by is not null and l.reviewed_at is not null
@@ -315,6 +323,14 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                  and nullif(q.reviewer_findings->0->'technicalEvidence'->>'audioDetails','') is not null
                  and nullif(q.reviewer_findings->0->'technicalEvidence'->>'masterLanguage','') is not null
                  and q.reviewer_findings->0->'technicalEvidence'->>'posterVerified'='true'
+      and q.reviewed_by is not null and q.reviewed_at is not null
+      and (
+        q.reviewer_findings->0->'technicalEvidence'->>'subtitleStatus'='NOT_APPLICABLE'
+        or (
+          q.reviewer_findings->0->'technicalEvidence'->>'subtitleStatus'='VERIFIED'
+          and nullif(q.reviewer_findings->0->'technicalEvidence'->>'subtitleLanguages','') is not null
+        )
+      )
              ) as qc_approved,
              coalesce((
                select jsonb_agg(lc.evidence->0->>'grantId')
