@@ -8,6 +8,7 @@ import {
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
 import { advanceTitle } from "@/lib/bridge/titles";
+import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
 import {
   authorizeLoopPublication,
   getLoopPublication,
@@ -29,6 +30,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [settlementAmount, setSettlementAmount] = useState("");
   const [note, setNote] = useState("");
   const [playbackVerified, setPlaybackVerified] = useState(false);
+  const [playbackCompleted, setPlaybackCompleted] = useState(false);
+  const [masterPlaybackUrl, setMasterPlaybackUrl] = useState("");
   const [codec, setCodec] = useState("");
   const [resolution, setResolution] = useState("");
   const [frameRate, setFrameRate] = useState("");
@@ -58,6 +61,27 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     enabled: stage === "Distribution" && actor.emailVerified && actor.internalRole === "super_admin",
   });
   const readinessTitle = readiness.data?.titles.find((item) => item.id === title.id);
+  const qcAssets = useQuery({
+    queryKey: ["qc-assets", title.id],
+    queryFn: () => listTitleAssets({ data: { titleId: title.id } }),
+    enabled: title.status === "QC_REVIEW" && actor.emailVerified && actor.internalRole === "qc_reviewer",
+  });
+  const masterAsset = qcAssets.data?.assets.find((asset) =>
+    asset.kind === "master" && asset.key === title.masterKey && asset.verified && Number(asset.byteSize) > 0
+  );
+  const masterPlayback = useMutation({
+    mutationFn: () => {
+      if (!masterAsset) throw new Error("No verified current master asset is available");
+      return requestAssetDownload({ data: { assetId: masterAsset.id } });
+    },
+    onSuccess: (result) => {
+      setMasterPlaybackUrl(result.url);
+      setPlaybackCompleted(false);
+      setPlaybackVerified(false);
+      setError("");
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "Master playback could not be opened"),
+  });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   const canManageRights = actor.emailVerified && actor.internalRole === "super_admin";
   const canReviewRights = actor.emailVerified && actor.internalRole === "legal_reviewer";
@@ -249,7 +273,37 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       <p className="mt-1 text-xs text-emerald-600">PASS — required metadata fields are present.</p>
                     )}
                   </div>
-                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={playbackVerified} onChange={(e) => setPlaybackVerified(e.target.checked)} /> Full video playback checked</label>
+                  <div className="space-y-2 rounded-lg border border-line p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium">Current sealed master</p>
+                        <p className="text-xs text-muted">{masterAsset ? `${(Number(masterAsset.byteSize) / (1024 ** 3)).toFixed(2)} GiB · ${masterAsset.contentType || "content type unavailable"}` : "Matching verified master not found"}</p>
+                      </div>
+                      <button type="button" className="rounded-lg border border-line px-3 py-2 text-sm"
+                        disabled={!masterAsset || masterPlayback.isPending}
+                        onClick={() => masterPlayback.mutate()}>
+                        {masterPlayback.isPending ? "Opening master…" : "Load master for playback"}
+                      </button>
+                    </div>
+                    {masterPlaybackUrl ? (
+                      <video
+                        controls
+                        preload="metadata"
+                        src={masterPlaybackUrl}
+                        className="max-h-[520px] w-full rounded-lg bg-black"
+                        onPlay={() => { setPlaybackCompleted(false); setPlaybackVerified(false); }}
+                        onEnded={() => setPlaybackCompleted(true)}
+                        onError={() => { setPlaybackCompleted(false); setPlaybackVerified(false); setError("The master could not be played in this browser. QC approval remains blocked."); }}
+                      />
+                    ) : null}
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={playbackVerified} disabled={!playbackCompleted}
+                        onChange={(e) => setPlaybackVerified(e.target.checked)} />
+                      Full master playback completed and verified
+                    </label>
+                    {!masterAsset ? <p className="text-xs text-amber-600">BLOCKED — current sealed master asset is not available for playback.</p> : null}
+                    {masterPlaybackUrl && !playbackCompleted ? <p className="text-xs text-muted">Complete playback to enable the reviewer attestation.</p> : null}
+                  </div>
                   <div className="grid gap-3 sm:grid-cols-3">
                     {input("Video codec", codec, setCodec)}
                     {input("Resolution", resolution, setResolution)}
