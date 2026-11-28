@@ -58,7 +58,7 @@ function LaneStore({ titleId, stored, locked }: { titleId: string; stored: strin
   });
   return (
     <label className="mt-4 block text-sm">
-      Stored for Loop preview
+      Loop content lane · Bridge metadata only
       <select
         value={value}
         disabled={locked || save.isPending}
@@ -74,7 +74,7 @@ function LaneStore({ titleId, stored, locked }: { titleId: string; stored: strin
         ))}
       </select>
       <span className="mt-1 block text-xs text-muted">
-        {locked ? "Locked after prepare. Staff can still correct it before publish." : "Saved on the Bridge title. Loop shows it only after TVOD publish."}
+        {locked ? "Locked after prepare. Staff can still correct it before publish." : "Saved on Bridge only. This does not publish the title to Crayons Loop; Loop visibility requires the complete release preflight and explicit authorization."}
         {save.isError ? ` ${save.error instanceof Error ? save.error.message : "Could not save."}` : ""}
       </span>
     </label>
@@ -138,9 +138,21 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     return <p role="alert">Title workspace unavailable: {titleQ.error.message}</p>;
   if (!title) return <p className="text-sm text-muted">Title not found.</p>;
 
+  const qcEvidence = reviewQ.data?.qc?.reviewer_findings[0]?.technicalEvidence;
   const qcReady =
     reviewQ.data?.qc?.status === "PASSED" &&
-    reviewQ.data.qc.reviewer_findings[0]?.masterKey === title.masterKey;
+    reviewQ.data.qc.reviewer_findings[0]?.masterKey === title.masterKey &&
+    reviewQ.data.qc.reviewer_findings[0]?.posterKey === title.posterKey &&
+    qcEvidence?.playbackVerified === true &&
+    Boolean(qcEvidence.codec?.trim()) &&
+    Boolean(qcEvidence.resolution?.trim()) &&
+    Boolean(qcEvidence.frameRate?.trim()) &&
+    qcEvidence.audioVerified === true &&
+    Boolean(qcEvidence.audioDetails?.trim()) &&
+    Boolean(qcEvidence.masterLanguage?.trim()) &&
+    qcEvidence.posterVerified === true &&
+    (qcEvidence.subtitleStatus === "NOT_APPLICABLE" ||
+      (qcEvidence.subtitleStatus === "VERIFIED" && Boolean(qcEvidence.subtitleLanguages?.trim())));
   const legalReady = [
     "LICENSING_READY",
     "LIVE_FOR_BUYERS",
@@ -151,9 +163,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const rightsReady =
     reviewQ.data?.legal?.status === "APPROVED" &&
     reviewQ.data.grants.some((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
-  const packageReady = Boolean(qcReady && legalReady);
   const distributionReady = Boolean(
-    pub && publicationIsActive(pub.authorizationStatus, pub.windowStart, pub.windowEnd),
+    pub && pub.listed && pub.published &&
+    publicationIsActive(pub.authorizationStatus, pub.windowStart, pub.windowEnd),
   );
 
   return (
@@ -247,7 +259,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{title.status}</span>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Original title" value={title.nameMl || "—"} />
+            <Metric label="Original title" value={title.nameMl || title.name || "—"} />
             <Metric label="Content type" value={loopStageType(title.contentType)} />
             <Metric label="Language" value={title.language || "—"} />
             <Metric label="Year" value={title.year ? String(title.year) : "—"} />
@@ -265,7 +277,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
                 <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
                 <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
-                <Metric label="Publish" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
+                <Metric label="Loop publication" value={distributionReady ? "PUBLISHED" : pub?.authorizationStatus === "authorized" ? "AUTHORIZED · NOT PUBLISHED" : "NOT PUBLISHED"} />
               </div>
             </>
           ) : null}
