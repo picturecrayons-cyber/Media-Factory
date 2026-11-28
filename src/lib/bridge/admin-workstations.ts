@@ -36,11 +36,7 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
 const reviewInput = z.object({
   titleId: z.string().min(1),
   decision: z.literal("ACCEPT"),
-  notes: z.string().trim().min(8).max(4000).optional(),
-}).superRefine((data, ctx) => {
-  if (data.decision === "PASS" && !data.notes) {
-    ctx.addIssue({ code: "custom", path: ["notes"], message: "Evidence note is required before passing a release gate" });
-  }
+  notes: z.string().trim().min(8).max(4000),
 });
 
 export const reviewAdminTitle = createServerFn({ method: "POST" })
@@ -94,7 +90,9 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
       if (!rows[0]) throw new Error("Title not found");
       const value = data.decision === "PASS"
         ? ({ OTT: "READY", PACKAGING: "COMPLETE", CURATION: "APPROVED", DELIVERY: "READY" } as const)[data.gate]
-        : data.decision === "REVOKE" && data.gate === "DELIVERY" ? "REVOKED" : "HOLD";
+        : data.decision === "FAIL"
+          ? ({ OTT: "FAILED", PACKAGING: "FAILED", CURATION: "REJECTED", DELIVERY: "FAILED" } as const)[data.gate]
+          : data.decision === "REVOKE" && data.gate === "DELIVERY" ? "REVOKED" : "HOLD";
       const gateEvidence = JSON.stringify({
         [data.gate]: {
           decision: data.decision,
