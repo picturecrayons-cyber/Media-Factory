@@ -34,6 +34,9 @@ type ConceptRow = {
   introduced_to_buyers_at: string | Date | null;
   created_at: string | Date;
   updated_at: string | Date;
+  payment_status: string;
+  payment_id: string | null;
+  paid_at: string | Date | null;
 };
 
 function asIso(v: string | Date | null | undefined): string | null {
@@ -57,6 +60,9 @@ function mapConcept(r: ConceptRow): StoryConceptSubmission {
     introduced_to_buyers_at: asIso(r.introduced_to_buyers_at),
     created_at: asIso(r.created_at) ?? "",
     updated_at: asIso(r.updated_at) ?? "",
+    payment_status: r.payment_status,
+    payment_id: r.payment_id,
+    paid_at: asIso(r.paid_at),
   };
 }
 
@@ -145,7 +151,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
       const conceptRows = await sql<ConceptRow>`
         insert into bridge_story_concept_submissions (
           title_id, logline, synopsis, treatment_url, screenplay_url,
-          genre, estimated_budget_range, target_platforms, curation_status
+          genre, estimated_budget_range, target_platforms, curation_status, payment_status
         ) values (
           ${titleId},
           ${data.logline},
@@ -155,6 +161,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
           ${data.genre},
           ${data.estimatedBudgetRange ?? null},
           ${data.targetPlatforms},
+          ${"PENDING"},
           ${"PENDING"}
         )
         returning *
@@ -240,7 +247,8 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name, t.owner_user_id
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
+        where c.payment_status = 'PAID'
+          and c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
         order by c.created_at asc
         limit 200
       `;
