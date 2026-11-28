@@ -25,10 +25,11 @@ function Dashboard() {
 const WORKSPACES = [
   { title: "Titles", description: "Create titles, manage assets and see each title's current stage.", to: "/workspace", action: "Open title library" },
   { title: "Operations & approvals", description: "QC, legal, rights and operational review queues.", to: "/admin/workstations", action: "Review operations" },
-  { title: "Licensing & buyers", description: "Buyer enquiries, offers, licensing and broadcast partners.", to: "/licensing", action: "Open Licensing Desk" },
+  { title: "Buyer desk & licensing", description: "Buyer activity, offers and licensing workflow.", to: "/buyer", action: "Open Buyer Desk" },
+  { title: "Deliveries & services", description: "Delivery work and service requests.", to: "/deliveries", action: "Open deliveries" },
   { title: "Loop Gateway", description: "Check publication eligibility and controlled Loop delivery.", to: "/cms", action: "Open Loop Gateway" },
   { title: "People & access", description: "Internal team, invitations and account access.", to: "/internal", action: "Manage access" },
-  { title: "Website CMS", description: "Public homepage, website content and preview.", to: "/admin-cms", action: "Edit website" },
+  { title: "CMS & site content", description: "Bridge-managed website content.", to: "/admin-cms", action: "Edit website" },
 ] as const;
 
 function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = 15_000): Promise<T> {
@@ -125,7 +126,7 @@ function FounderHome() {
         ) : (
           <div className="mt-4 space-y-3">
             {RELEASE_TARGETS.map((target) => {
-              const matches = releaseQ.data.titles.filter((item) => target.aliases.includes(item.name.trim().toLowerCase()));
+              const matches = releaseQ.data.titles.filter((item) => target.aliases.some((alias) => alias === item.name.trim().toLowerCase()));
               const item = matches.length === 1 ? matches[0] : null;
               const gate = (label: string, status: string) => ({ label, status });
               const gateStatus = item?.gateStatus;
