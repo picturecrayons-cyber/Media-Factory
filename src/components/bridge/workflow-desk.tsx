@@ -61,6 +61,20 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const qcEvidenceReady = playbackVerified && codec.trim() && resolution.trim() && frameRate.trim() &&
     audioVerified && audioDetails.trim() && masterLanguage.trim() &&
     (subtitleStatus === "NOT_APPLICABLE" || subtitleLanguages.trim()) && posterVerified;
+  const creditExists = (role: string) => title.credits?.some((credit) => credit.role.toLowerCase() === role && credit.name.trim().length > 0) ?? false;
+  const missingMetadata = [
+    !title.name?.trim() && "Original title",
+    !title.contentType?.trim() && "Content type",
+    !title.language?.trim() && "Language",
+    !title.year && "Year",
+    !title.runtimeMinutes && "Runtime",
+    !title.countryOfOrigin?.trim() && "Country",
+    !title.releaseDate && "Release date",
+    !creditExists("director") && "Director",
+    !creditExists("producer") && "Producer",
+    !creditExists("cast") && "Cast",
+    !title.synopsis?.trim() && "Synopsis",
+  ].filter(Boolean) as string[];
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
     queryFn: () => getTitleRevenue({ data: { titleId: title.id } }),
@@ -210,6 +224,14 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 <div className="space-y-3 rounded-xl border border-line p-3">
                   <h3 className="font-semibold">Technical QC evidence</h3>
                   <p className="text-xs text-muted">Record the reviewer’s actual checks against the current master and artwork. These are reviewer attestations, not automated media-analysis results.</p>
+                  <div className="rounded-lg border border-line p-3">
+                    <p className="text-sm font-medium">Required metadata</p>
+                    {missingMetadata.length ? (
+                      <p className="mt-1 text-xs text-amber-600">BLOCKED — missing: {missingMetadata.join(", ")}</p>
+                    ) : (
+                      <p className="mt-1 text-xs text-emerald-600">PASS — required metadata fields are present.</p>
+                    )}
+                  </div>
                   <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={playbackVerified} onChange={(e) => setPlaybackVerified(e.target.checked)} /> Full video playback checked</label>
                   <div className="grid gap-3 sm:grid-cols-3">
                     {input("Video codec", codec, setCodec)}
@@ -239,7 +261,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           },
                         },
                       }),
-                      !qcEvidenceReady || note.trim().length < 8,
+                      !qcEvidenceReady || note.trim().length < 8 || missingMetadata.length > 0,
                     )}
                     {button("Return for correction", () =>
                       reviewTitleWorkflow({
@@ -484,7 +506,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 Publish copies the approved title metadata, artwork and media reference into the
                 shared Loop catalog. Catalog publication alone does not prove consumer playback.
               </p>
-              {valid && hasPermission(actor, "loop.publish")
+              {canManageRights && valid && hasPermission(actor, "loop.publish")
                 ? button("Publish approved license to Loop", () =>
                     authorizeLoopPublication({
                       data: {
