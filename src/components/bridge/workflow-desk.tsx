@@ -72,7 +72,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     const safe = (v: string) =>
       '"' + (/^[=+@-]/.test(v) ? "'" : "") + v.replaceAll('"', '""') + '"';
     const lines = [
-      ["Payment", "Purchased at", "Captured paise", "Provider fee paise", "Provider tax paise", "Refunded paise", "Net after provider costs paise", "Producer share paise", "Currency", "Reconciliation"],
+      ["Payment", "Purchased at", "Captured paise", "Provider fee paise", "Provider tax paise", "Refunded paise", "Chargeback paise", "Remainder after recorded deductions paise", "Producer share paise", "Currency", "Reconciliation"],
       ...(revenue.data?.receipts ?? []).map((r) => [
         r.paymentId,
         r.purchasedAt,
@@ -80,6 +80,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         r.providerFeePaise === null ? "" : String(r.providerFeePaise),
         r.providerTaxPaise === null ? "" : String(r.providerTaxPaise),
         r.refundedAmountPaise === null ? "" : String(r.refundedAmountPaise),
+        r.chargebackAmountPaise === null ? "" : String(r.chargebackAmountPaise),
         r.netAfterProviderCostsPaise === null ? "" : String(r.netAfterProviderCostsPaise),
         r.grossProducerSharePaise === null ? "" : String(r.grossProducerSharePaise),
         r.currency ?? "",
@@ -504,7 +505,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     Export receipt statement CSV
                   </button>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1050px] text-left text-sm">
+                    <table className="w-full min-w-[1200px] text-left text-sm">
                       <thead>
                         <tr>
                           <th>Payment</th>
@@ -513,13 +514,14 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           <th>Provider fee</th>
                           <th>Provider tax</th>
                           <th>Refunded</th>
-                          <th>Net after provider costs</th>
+                          <th>Chargeback</th>
+                          <th>Remainder after recorded deductions · not settlement</th>
                           <th>Gross producer share · reconciliation pending</th>
                         </tr>
                       </thead>
                       <tbody>
                         {!revenue.data?.receipts.length ? (
-                          <tr><td colSpan={8} className="py-4 text-muted">No matching captured receipts. This is not proof of payment-system failure.</td></tr>
+                          <tr><td colSpan={9} className="py-4 text-muted">No matching captured receipts. This is not proof of payment-system failure.</td></tr>
                         ) : null}
                         {revenue.data?.receipts.map((r) => (
                           <tr key={r.paymentId}>
@@ -533,6 +535,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             <td>{r.providerFeePaise === null ? "Not available" : `₹${(r.providerFeePaise / 100).toFixed(2)}`}</td>
                             <td>{r.providerTaxPaise === null ? "Not available" : `₹${(r.providerTaxPaise / 100).toFixed(2)}`}</td>
                             <td>{r.refundedAmountPaise === null ? "Not available" : `₹${(r.refundedAmountPaise / 100).toFixed(2)}`}</td>
+                            <td>{r.chargebackAmountPaise === null ? "Not available" : `₹${(r.chargebackAmountPaise / 100).toFixed(2)}`}</td>
                             <td>{r.netAfterProviderCostsPaise === null ? "Reconciliation required" : `₹${(r.netAfterProviderCostsPaise / 100).toFixed(2)}`}</td>
                             <td>
                               {r.grossProducerSharePaise === null
