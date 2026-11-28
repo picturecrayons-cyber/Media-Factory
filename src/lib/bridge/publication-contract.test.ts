@@ -18,6 +18,8 @@ function harness(
     curation_status: "APPROVED",
     delivery_status: "READY",
   },
+  internalRole = "super_admin",
+  qcEvidence = true,
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
@@ -37,7 +39,7 @@ function harness(
         { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
       ];
     if (query.includes("from bridge_rights_grants")) return grants;
-    if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
+    if (query.includes("as qc_ok")) return [{ qc_ok: qcEvidence, legal_ok: true }];
     if (query.includes("from bridge_title_gate_certifications")) return [gates];
     if (query.includes("select id from bridge_titles")) return [title];
     if (query.includes("select id from loop_titles"))
@@ -62,7 +64,7 @@ function harness(
     "@/lib/auth/middleware": { authMiddleware: {} },
     "@/lib/db": { getSql: async () => sql },
     "./rbac": { assertPermission: () => { if (!allowed) throw new Error("Forbidden"); } },
-    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true }) },
+    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true, internalRole }) },
     "./guards": { assertNotDevUser: () => {} },
     "./audit": { writeAudit: async () => {} },
     "./rights-coverage": rights,
@@ -138,6 +140,34 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
   }
 });
 
+
+test("publication blocks a legacy QC PASS without structured technical evidence", async () => {
+  const h = harness([grant], true, false, undefined, "super_admin", false);
+  await assert.rejects(
+    h.authorize({ context, data }),
+    /Recorded QC approval for the current assets is required/,
+  );
+  assert.equal(h.writes.length, 0);
+});
+
+test("only a verified Super Admin may authorize Loop publication", async () => {
+  const h = harness([grant], true, false, undefined, "admin", true);
+  await assert.rejects(
+    h.authorize({ context, data }),
+    /Only the verified Super Admin may authorize Bridge distribution/,
+  );
+  assert.equal(h.writes.length, 0);
+});
+
+test("publication readiness GET contains no write-side expiry mutations", () => {
+  const source = readFileSync(new URL("./loop-publication.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export const listLoopPublicationReadiness");
+  const end = source.indexOf("export const authorizeLoopPublication", start);
+  assert.ok(start >= 0 && end > start);
+  const readiness = source.slice(start, end);
+  assert.doesNotMatch(readiness, /update bridge_loop_publications/i);
+  assert.doesNotMatch(readiness, /update loop_titles/i);
+});
 
 test("publication requires all four release certifications", async () => {
   const incompleteGateSets = [
