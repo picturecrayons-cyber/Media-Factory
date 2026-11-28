@@ -77,6 +77,14 @@ export const Route = createFileRoute("/api/buyer/poster")({
                   and q.status = 'PASSED'
                   and q.reviewer_findings->0->>'masterKey' = t.master_key
                   and q.reviewer_findings->0->>'posterKey' = t.poster_key
+                  and q.reviewer_findings->0->'technicalEvidence'->>'playbackVerified' = 'true'
+                  and nullif(q.reviewer_findings->0->'technicalEvidence'->>'codec', '') is not null
+                  and nullif(q.reviewer_findings->0->'technicalEvidence'->>'resolution', '') is not null
+                  and nullif(q.reviewer_findings->0->'technicalEvidence'->>'frameRate', '') is not null
+                  and q.reviewer_findings->0->'technicalEvidence'->>'audioVerified' = 'true'
+                  and nullif(q.reviewer_findings->0->'technicalEvidence'->>'audioDetails', '') is not null
+                  and nullif(q.reviewer_findings->0->'technicalEvidence'->>'masterLanguage', '') is not null
+                  and q.reviewer_findings->0->'technicalEvidence'->>'posterVerified' = 'true'
               )
             limit 1
           `;
