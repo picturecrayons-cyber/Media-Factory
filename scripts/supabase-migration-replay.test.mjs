@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { PGlite } from "@electric-sql/pglite";
 import { fileURLToPath } from "node:url";
 
 const replayScript = fileURLToPath(
@@ -60,3 +61,88 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
 }
+
+
+const serviceRequestMigration = readFileSync(
+  new URL("../supabase/migrations/20261124212758_bridge_service_request_backend_routing.sql", import.meta.url),
+  "utf8",
+);
+
+test("service-request routing migration safely skips when the table is absent", async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(serviceRequestMigration);
+    const relation = await db.query(
+      "select to_regclass('public.bridge_service_requests') as relation",
+    );
+    const triggerFunction = await db.query(
+      "select to_regprocedure('public.bridge_route_service_request_team()') as function",
+    );
+    assert.equal(relation.rows[0].relation, null);
+    assert.equal(triggerFunction.rows[0].function, null);
+  } finally {
+    await db.close();
+  }
+});
+
+test("service-request routing migration applies when the table exists", async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`
+      create table public.bridge_service_requests (
+        id bigserial primary key,
+        status text not null,
+        created_at timestamptz not null default now()
+      );
+    `);
+    await db.exec(serviceRequestMigration);
+
+    const columns = await db.query(`
+      select column_name
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'bridge_service_requests'
+        and column_name in ('assigned_team', 'decision_required')
+      order by column_name
+    `);
+    assert.deepEqual(columns.rows.map((row) => row.column_name), [
+      "assigned_team",
+      "decision_required",
+    ]);
+
+    const trigger = await db.query(`
+      select 1
+      from pg_trigger
+      where tgrelid = 'public.bridge_service_requests'::regclass
+        and tgname = 'bridge_service_request_team_routing'
+        and not tgisinternal
+    `);
+    assert.equal(trigger.rows.length, 1);
+
+    await db.query(
+      "insert into public.bridge_service_requests (status) values ($1)",
+      ["UNDER_REVIEW"],
+    );
+    let routed = await db.query(
+      "select assigned_team, decision_required from public.bridge_service_requests",
+    );
+    assert.deepEqual(routed.rows[0], {
+      assigned_team: "decision_queue",
+      decision_required: true,
+    });
+
+    await db.query(
+      "update public.bridge_service_requests set status = $1",
+      ["IN_PROGRESS"],
+    );
+    routed = await db.query(
+      "select assigned_team, decision_required from public.bridge_service_requests",
+    );
+    assert.deepEqual(routed.rows[0], {
+      assigned_team: "backend",
+      decision_required: false,
+    });
+  } finally {
+    await db.close();
+  }
+});
