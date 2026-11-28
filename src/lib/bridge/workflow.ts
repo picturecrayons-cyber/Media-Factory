@@ -212,9 +212,10 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
       provider_fee_paise: number | null;
       provider_tax_paise: number | null;
       refunded_amount_paise: number | null;
+      chargeback_amount_paise: number | null;
     }>`
       select provider_payment_id as payment_id, provider_order_id as order_id, created_at as purchased_at,
-        amount_paise, currency, provider_fee_paise, provider_tax_paise, refunded_amount_paise
+        amount_paise, currency, provider_fee_paise, provider_tax_paise, refunded_amount_paise, chargeback_amount_paise
       from bridge_payments
       where title_id = ${data.titleId} and purpose = 'title_license' and provider = 'razorpay'
         and status = 'captured' and provider_payment_id is not null and provider_order_id is not null
@@ -245,7 +246,9 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
         return {
           paymentId: r.payment_id, orderId: r.order_id, purchasedAt: new Date(r.purchased_at).toISOString(),
           amountPaise: r.amount_paise, currency: r.currency, providerFeePaise: validFee,
-          providerTaxPaise: validTax, refundedAmountPaise: validRefund, source: "bridge_payment" as const,
+          providerTaxPaise: validTax, refundedAmountPaise: validRefund,
+          chargebackAmountPaise: r.chargeback_amount_paise !== null && Number.isSafeInteger(r.chargeback_amount_paise) && r.chargeback_amount_paise >= 0 ? r.chargeback_amount_paise : null,
+          source: "bridge_payment" as const,
           providerVerified: true as const,
         };
       } catch { return null; }
@@ -279,6 +282,7 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
       providerFeePaise: null as number | null,
       providerTaxPaise: null as number | null,
       refundedAmountPaise: null as number | null,
+      chargebackAmountPaise: null as number | null,
       source: "loop_tvod" as const,
       providerVerified: false,
     }));
@@ -368,11 +372,11 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
         return {
           ...receipt,
           netAfterProviderCostsPaise:
-            receipt.providerFeePaise !== null && receipt.providerTaxPaise !== null && receipt.refundedAmountPaise !== null && receipt.amountPaise !== null
-              ? Math.max(0, receipt.amountPaise - receipt.providerFeePaise - receipt.providerTaxPaise - receipt.refundedAmountPaise)
+            receipt.providerFeePaise !== null && receipt.providerTaxPaise !== null && receipt.refundedAmountPaise !== null && receipt.chargebackAmountPaise !== null && receipt.amountPaise !== null
+              ? Math.max(0, receipt.amountPaise - receipt.providerFeePaise - receipt.providerTaxPaise - receipt.refundedAmountPaise - receipt.chargebackAmountPaise)
               : null,
           reconciliationStatus:
-            receipt.providerVerified && receipt.providerFeePaise !== null && receipt.providerTaxPaise !== null && receipt.refundedAmountPaise !== null
+            receipt.providerVerified && receipt.providerFeePaise !== null && receipt.providerTaxPaise !== null && receipt.refundedAmountPaise !== null && receipt.chargebackAmountPaise !== null
               ? "PROVIDER_DATA_AVAILABLE_RECONCILIATION_PENDING" as const
               : "RECONCILIATION_REQUIRED" as const,
           grossProducerSharePaise:
