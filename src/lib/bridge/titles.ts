@@ -99,8 +99,8 @@ async function listOwned(sql: Sql, userId: string, accountType: AccountType, org
   if (accountType === "studio" && !orgId) return [];
   if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and record_classification is distinct from 'TEST' and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and record_classification is distinct from 'TEST' order by updated_at desc limit 200`;
+      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and submission_type is distinct from 'story_concept' and record_classification is distinct from 'TEST' and merged_into_title_id is null order by updated_at desc limit 200`
+      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and submission_type is distinct from 'story_concept' and record_classification is distinct from 'TEST' order by updated_at desc limit 200`;
   }
   return mergeColumnAvailable
     ? sql<TitleRow>`
