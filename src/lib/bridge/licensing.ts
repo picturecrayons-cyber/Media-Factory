@@ -239,3 +239,17 @@ export const transitionLicensingDeal = createServerFn({ method: "POST" })
       metadata:{from:deal.status,to:data.status,rightsGrantId,agreementReferenceRecorded:Boolean(data.agreementReference)}});
     return {dealId:data.dealId,status:data.status};
   });
+
+export const listOwnLicensingEnquiries = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({context}) => {
+    const actor=await verifiedActor(context.userId);
+    if(actor.internalRole || actor.accountType!=="buyer") throw new Error("External Buyer account required");
+    const sql=await getSql();
+    const rows=await sql`select d.id,d.title_id,t.name as title_name,d.status,d.territories,d.languages,d.media,
+      d.window_start,d.window_end,d.exclusivity,d.offer_fee_paise,d.agreement_reference,d.created_at,d.updated_at
+      from bridge_distribution_deals d join bridge_titles t on t.id=d.title_id
+      where d.deal_type='EXTERNAL_BUYER' and d.buyer_user_id=${actor.userId}
+      order by d.updated_at desc limit 100`;
+    return JSON.parse(JSON.stringify({enquiries:rows},(_,value)=>value instanceof Date?value.toISOString():typeof value==="bigint"?value.toString():value));
+  });
