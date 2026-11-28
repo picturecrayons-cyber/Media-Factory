@@ -297,7 +297,12 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       throw new Error(decision.reason);
     }
     const { signDownload } = await import("./oci-object-storage.server");
-    const signed = await signDownload({ key: asset.s3_key });
+    // QC reviewers need enough time to complete a feature-length playback. This
+    // remains a short-lived, object-scoped PAR and is only issued after role/title checks.
+    const signed = await signDownload({
+      key: asset.s3_key,
+      expiresIn: actor.internalRole === "qc_reviewer" && asset.kind === "master" ? 3 * 60 * 60 : 300,
+    });
     await writeAudit({
       actorUserId: actor.userId,
       action: "asset.download_signed",
