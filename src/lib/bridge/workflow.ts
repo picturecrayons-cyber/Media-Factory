@@ -111,6 +111,8 @@ const reviewInput = z.object({
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
   data = reviewInput.parse(data);
+  if (data.stage === "QC" && (!actor.emailVerified || actor.internalRole !== "qc_reviewer"))
+    throw new Error("Only a verified QC Reviewer may approve or return a technical QC review");
   if (data.stage === "LEGAL" && (!actor.emailVerified || actor.internalRole !== "legal_reviewer"))
     throw new Error("Only a verified Legal Reviewer may approve Bridge rights and licensing");
   assertPermission(actor, data.stage === "QC" ? "title.qc_review" : "title.rights_review");
