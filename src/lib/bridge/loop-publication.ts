@@ -46,7 +46,6 @@ export type PublicationRow = {
   loop_status: string;
   listed: boolean;
   published: boolean;
-  playback_path: string | null;
 };
 
 const publishInput = z.object({
@@ -74,6 +73,40 @@ const publishInput = z.object({
 function iso(v: string | Date | null) {
   if (!v) return null;
   return v instanceof Date ? v.toISOString() : String(v);
+}
+
+/** Only fully cleared lifecycle states may authorize consumer distribution. */
+const DISTRIBUTION_READY_TITLE_STATUSES = [
+  "LICENSING_READY",
+  "LIVE_FOR_BUYERS",
+  "LICENSED",
+  "DELIVERED",
+] as const;
+
+/**
+ * The Testing and Production databases currently constrain publication status
+ * with different case vocabularies. Resolve the exact allowed value from the
+ * live constraint instead of guessing or changing either database schema.
+ * SUSPENDED is represented as HOLD (Testing) or pending (Production), which
+ * both fail the canonical AUTHORIZED publication check.
+ */
+async function resolvePublicationStatus(sql: Sql, canonical: "AUTHORIZED" | "REVOKED" | "SUSPENDED") {
+  const constraints = await sql<{ definition: string }>`
+    select pg_get_constraintdef(oid) as definition
+    from pg_constraint
+    where conrelid = 'public.bridge_loop_publications'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) like '%authorization_status%'
+    limit 1
+  `;
+  const definition = constraints[0]?.definition || "";
+  const allowed = Array.from(definition.matchAll(/'([^']+)'/g), (match) => match[1]);
+  const accepted = canonical === "SUSPENDED" ? ["HOLD", "PENDING"] : [canonical];
+  const resolved = allowed.find((value) => accepted.includes(value.toUpperCase()));
+  if (!resolved) {
+    throw new Error(`Database publication status constraint does not support ${canonical}; refusing to write.`);
+  }
+  return resolved;
 }
 
 /** Pre-flight verification checking rights, assets, QC and operator authority */
@@ -125,14 +158,7 @@ export async function verifyDistributionPreflight(
   }
 
   // 2. Rights readiness verification
-  const validRightsStatuses = [
-    "LICENSING_READY",
-    "LIVE_FOR_BUYERS",
-    "IN_NEGOTIATION",
-    "LICENSED",
-    "DELIVERED",
-  ];
-  if (!validRightsStatuses.includes(title.status)) {
+  if (!(DISTRIBUTION_READY_TITLE_STATUSES as readonly string[]).includes(title.status)) {
     reasons.push(
       `Underlying rights clearance and lifecycle status (${title.status}) is not distribution-ready. Must reach at least LICENSING_READY.`,
     );
@@ -177,9 +203,7 @@ export async function verifyDistributionPreflight(
     delivery_status: string | null;
   }>`
     select ott_preparation_status, packaging_status, curation_status, delivery_status
-    from bridge_title_gate_certifications
-    where title_id = ${titleId}
-    limit 1
+    from bridge_title_gate_certifications    where title_id = ${titleId}    limit 1
   `;
   const gates = gateRows[0];
   if (gates?.ott_preparation_status !== "READY")
@@ -227,21 +251,9 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
+    // This GET endpoint is strictly read-only. Expiry and suspension are
+    // enforced by a separately authenticated worker; dashboard reads must
+    // never mutate publication or catalogue records.
     const rows = await sql<{
       id: string;
       slug: string;
@@ -263,7 +275,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       loop_status: string | null;
       listed: boolean | null;
       published: boolean | null;
-      playback_path: string | null;
       qc_approved: boolean;
       legal_grant_ids: string[] | null;
       ott_preparation_status: string | null;
@@ -275,7 +286,11 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
              b.synopsis, b.year, b.runtime_minutes,
              p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
-             l.status as loop_status, l.listed, l.published, l.playback_path,
+             to_jsonb(l)->>'status' as loop_status,
+             coalesce(nullif(to_jsonb(l)->>'listed', '')::boolean,
+                      nullif(to_jsonb(l)->>'is_listed', '')::boolean, false) as listed,
+             coalesce(nullif(to_jsonb(l)->>'published', '')::boolean,
+                      nullif(to_jsonb(l)->>'is_published', '')::boolean, false) as published,
              exists(
                select 1 from bridge_qc_cases q
                where q.title_id=b.id and q.status='PASSED'
@@ -328,13 +343,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           legalApproved &&
           Boolean(r.qc_approved) &&
           gatesReady &&
-          [
-            "LICENSING_READY",
-            "LIVE_FOR_BUYERS",
-            "IN_NEGOTIATION",
-            "LICENSED",
-            "DELIVERED",
-          ].includes(r.status) &&
+          (DISTRIBUTION_READY_TITLE_STATUSES as readonly string[]).includes(r.status) &&
           Boolean(r.master_key) &&
           Boolean(r.poster_key);
 
@@ -347,18 +356,9 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         if (r.packaging_status !== "COMPLETE") blockers.push("Consumer packaging is not certified COMPLETE");
         if (r.curation_status !== "APPROVED") blockers.push("Editorial curation is not APPROVED");
         if (r.delivery_status !== "READY") blockers.push("Final delivery is not certified READY");
-        if (
-          ![
-            "LICENSING_READY",
-            "LIVE_FOR_BUYERS",
-            "IN_NEGOTIATION",
-            "LICENSED",
-            "DELIVERED",
-          ].includes(r.status)
-        ) {
+        if (!(DISTRIBUTION_READY_TITLE_STATUSES as readonly string[]).includes(r.status)) {
           blockers.push(`Rights status (${r.status}) is not cleared for distribution`);
-        }
-        if (!r.master_key) blockers.push("QC master video is missing");
+        }        if (!r.master_key) blockers.push("QC master video is missing");
         if (!r.poster_key) blockers.push("Artwork/poster is missing");
 
         return {
@@ -371,8 +371,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           hasPoster: Boolean(r.poster_key),
           ready: isReady,
           blockers,
-          publication: r.loop_title_id
-            ? {
+          publication: r.loop_title_id            ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
                 authorizationStatus: (r.authorization_status?.toUpperCase() ||
@@ -385,7 +384,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                 loopStatus: r.loop_status,
                 listed: Boolean(r.listed),
                 published: Boolean(r.published),
-                playbackPath: r.playback_path,
               }
             : null,
         };
@@ -431,6 +429,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         id: string;
       }>`select id from loop_titles where bridge_title_id = ${title.id} limit 1`;
       const loopTitleId = existing[0]?.id ?? randomUUID();
+      const authorizedStatus = await resolvePublicationStatus(sql, "AUTHORIZED");
 
       // 1. Synchronize master publication record in Crayons Loop
       await sql`
@@ -466,7 +465,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         id, bridge_title_id, loop_title_id, authorization_status, territories, languages,
         exploitation_models, window_start, window_end, approved_by, approved_at, metadata, updated_at
       ) values (
-        ${randomUUID()}, ${title.id}, ${loopTitleId}, ${"authorized"}, ${data.territories}, ${data.languages},
+        ${randomUUID()}, ${title.id}, ${loopTitleId}, ${authorizedStatus}, ${data.territories}, ${data.languages},
         ${data.exploitationModels}, ${data.windowStart ?? null}, ${data.windowEnd ?? null},
         ${actor.userId}, now(),
         ${JSON.stringify({
@@ -478,7 +477,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         now()
       )
       on conflict (bridge_title_id) do update set
-        loop_title_id = excluded.loop_title_id, authorization_status = 'authorized',
+        loop_title_id = excluded.loop_title_id, authorization_status = ${authorizedStatus},
         territories = excluded.territories, languages = excluded.languages,
         exploitation_models = excluded.exploitation_models, window_start = excluded.window_start,
         window_end = excluded.window_end, approved_by = excluded.approved_by, approved_at = now(),
@@ -524,21 +523,17 @@ export const suspendLoopPublication = createServerFn({ method: "POST" })
     `;
       if (!pubs[0]) throw new Error("Distribution record not found");
 
+      const suspendedStatus = await resolvePublicationStatus(sql, "SUSPENDED");
       await sql`
       update bridge_loop_publications
-      set authorization_status = 'suspended', updated_at = now()
+      set authorization_status = ${suspendedStatus},
+          metadata = metadata || ${JSON.stringify({ suspension: { reason: data.reason || "Operational suspension", actor: actor.userId, at: new Date().toISOString() } })}::jsonb,
+          updated_at = now()
       where bridge_title_id = ${data.bridgeTitleId}
     `;
 
-      await sql`
-      update loop_titles
-      set status = 'suspended', listed = false, published = false, updated_at = now()
-      where id = ${pubs[0].loop_title_id}
-    `;
-
       await writeAudit(
-        {
-          actorUserId: actor.userId,
+        {          actorUserId: actor.userId,
           action: "distribution.suspend_loop",
           entityType: "bridge_title",
           entityId: data.bridgeTitleId,
@@ -552,8 +547,7 @@ export const suspendLoopPublication = createServerFn({ method: "POST" })
   });
 
 export const revokeLoopPublication = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(z.object({ bridgeTitleId: z.string().min(1) }))
+  .middleware([authMiddleware])  .validator(z.object({ bridgeTitleId: z.string().min(1) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
@@ -564,16 +558,11 @@ export const revokeLoopPublication = createServerFn({ method: "POST" })
     `;
       if (!pubs[0]) throw new Error("Distribution record not found");
 
+      const revokedStatus = await resolvePublicationStatus(sql, "REVOKED");
       await sql`
       update bridge_loop_publications
-      set authorization_status = 'revoked', revoked_at = now(), updated_at = now()
+      set authorization_status = ${revokedStatus}, revoked_at = now(), updated_at = now()
       where bridge_title_id = ${data.bridgeTitleId}
-    `;
-
-      await sql`
-      update loop_titles
-      set status = 'revoked', listed = false, published = false, updated_at = now()
-      where id = ${pubs[0].loop_title_id}
     `;
 
       await writeAudit(
@@ -633,13 +622,14 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
       }
 
       // Extending a window never restores revoked/suspended visibility or status.
+      const authorizedStatus = await resolvePublicationStatus(sql, "AUTHORIZED");
       const updated = await sql<{ id: string }>`
       update bridge_loop_publications
       set window_end = ${data.newWindowEnd},
           metadata = metadata || ${JSON.stringify({ rightsGrantId: preflight.rightsGrantId })}::jsonb,
           updated_at = now()
       where bridge_title_id = ${data.bridgeTitleId}
-        and authorization_status in ('authorized', 'live')
+        and authorization_status = ${authorizedStatus}
         and revoked_at is null
       returning id
     `;
@@ -671,9 +661,14 @@ export const getLoopPublication = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     const rows = await sql<PublicationRow>`
-      select p.*, l.status as loop_status, l.listed, l.published, l.playback_path
+      select p.*,
+             to_jsonb(l)->>'status' as loop_status,
+             coalesce(nullif(to_jsonb(l)->>'listed', '')::boolean,
+                      nullif(to_jsonb(l)->>'is_listed', '')::boolean, false) as listed,
+             coalesce(nullif(to_jsonb(l)->>'published', '')::boolean,
+                      nullif(to_jsonb(l)->>'is_published', '')::boolean, false) as published
       from bridge_loop_publications p
-      join loop_titles l on l.id = p.loop_title_id
+      left join loop_titles l on l.id::text = p.loop_title_id::text
       where p.bridge_title_id = ${data.bridgeTitleId}
       limit 1
     `;
@@ -697,7 +692,6 @@ export const getLoopPublication = createServerFn({ method: "GET" })
         loopStatus: r.loop_status,
         listed: r.listed,
         published: r.published,
-        playbackPath: r.playback_path,
       },
     };
   });

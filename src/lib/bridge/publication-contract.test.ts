@@ -18,19 +18,25 @@ function harness(
     curation_status: "APPROVED",
     delivery_status: "READY",
   },
+  publicationStatuses = ["HOLD", "AUTHORIZED", "REVOKED", "EXPIRED"],
+  titleStatus = "LICENSED",
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
     slug: "film",
     name: "Film",
-    status: "LICENSED",
+    status: titleStatus,
     language: "Malayalam",
     master_key: "sealed/master",
     poster_key: "sealed/poster",
   };
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
+    if (query.includes("pg_constraint")) {
+      const values = publicationStatuses.map((status) => `'${status}'::text`).join(", ");
+      return [{ definition: `CHECK (authorization_status = ANY (ARRAY[${values}]))` }];
+    }
     if (query.includes("from bridge_titles")) return [title];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
@@ -108,20 +114,36 @@ const data = {
 };
 const context = { userId: "operator" };
 
-test("new and existing publications emit the status accepted by the Loop catalog", async () => {
-  for (const existing of [false, true]) {
-    const h = harness([grant], true, existing);
-    const result = await h.authorize({ context, data });
-    assert.equal((result as { status: string }).status, "AUTHORIZED");
-    const publication = h.writes.find((write) =>
-      write.query.includes("insert into bridge_loop_publications"),
-    );
-    assert.ok(publication);
-    assert.equal(publication.values[3], "authorized");
-    assert.match(publication.query, /authorization_status = 'authorized'/);
-    assert.ok(publication.values.includes(data.territories));
-    assert.ok(publication.values.includes(data.windowEnd));
+test("new and existing publications use the exact status accepted by each database schema", async () => {
+  const vocabularies = [
+    ["HOLD", "AUTHORIZED", "REVOKED", "EXPIRED"],
+    ["pending", "authorized", "revoked", "expired"],
+  ];
+  for (const publicationStatuses of vocabularies) {
+    const expectedAuthorized = publicationStatuses.find((value) => value.toUpperCase() === "AUTHORIZED");
+    for (const existing of [false, true]) {
+      const h = harness([grant], true, existing, undefined, publicationStatuses);
+      const result = await h.authorize({ context, data });
+      assert.equal((result as { status: string }).status, "AUTHORIZED");
+      const publication = h.writes.find((write) =>
+        write.query.includes("insert into bridge_loop_publications"),
+      );
+      assert.ok(publication);
+      assert.equal(publication.values[3], expectedAuthorized);
+      assert.ok(publication.values.includes(expectedAuthorized));
+      assert.ok(publication.values.includes(data.territories));
+      assert.ok(publication.values.includes(data.windowEnd));
+    }
   }
+});
+
+test("IN_NEGOTIATION is never eligible for consumer distribution", async () => {
+  const h = harness([grant], true, false, undefined, undefined, "IN_NEGOTIATION");
+  await assert.rejects(
+    h.authorize({ context, data }),
+    /Distribution Authorization Blocked:.*not distribution-ready/,
+  );
+  assert.equal(h.writes.length, 0);
 });
 
 test("status alignment never bypasses operator, rights or commercial coverage", async () => {
