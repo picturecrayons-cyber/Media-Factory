@@ -235,7 +235,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       }),
                   )
                 : null}
-              {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
+              {title.status === "QC_REVIEW" && actor.emailVerified && actor.internalRole === "qc_reviewer" ? (
                 <div className="space-y-3 rounded-xl border border-line p-3">
                   <h3 className="font-semibold">Technical QC evidence</h3>
                   <p className="text-xs text-muted">Record the reviewer’s actual checks against the current master and artwork. These are reviewer attestations, not automated media-analysis results.</p>
