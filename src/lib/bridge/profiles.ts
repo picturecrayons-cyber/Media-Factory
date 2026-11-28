@@ -195,12 +195,6 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       return { home: workspaceHome(existing), profile: existing };
     }
 
-    // Investor access is granted only after a reviewed access request. Enforce
-    // this at the authenticated server endpoint, not only in the signup UI.
-    if (data.accountType === "investor") {
-      throw new Error("Investor access requires a reviewed access request.");
-    }
-
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
     const verified = true;
@@ -217,6 +211,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     let internalRole: string | null = null;
     let invitedBy: string | null = null;
     let inviteId: string | null = null;
+    let invitedAccountType: string | null = null;
     if (data.inviteToken) {
       const hash = createHash("sha256").update(data.inviteToken).digest("hex");
       const invites = await sql<{
@@ -248,8 +243,15 @@ export const completeOnboarding = createServerFn({ method: "POST" })
         throw new Error("Internal invitation has no authorized role");
       }
       internalRole = inv.internal_role;
+      invitedAccountType = inv.account_type;
       invitedBy = inv.invited_by;
       inviteId = inv.id;
+    }
+
+    // Investor accounts are provisioned only by a Super Admin-approved,
+    // email-bound Investor invitation. Public self-selection is never enough.
+    if (data.accountType === "investor" && (invitedAccountType !== "investor" || internalRole !== null)) {
+      throw new Error("Investor access requires an approved Investor invitation.");
     }
 
     const bridgeUserId = context.userId;
