@@ -7,7 +7,7 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", view = "list" }: { empty: string; query?: string; view?: "list" | "gallery" }) {
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
     queryFn: () => listTitles(),
@@ -27,6 +27,38 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
     );
   }
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
+  if (view === "gallery") {
+    return (
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        {titles.map((t) => (
+          <Link
+            key={t.id}
+            to="/title/$id"
+            params={{ id: t.id }}
+            className="group overflow-hidden rounded-xl border border-line bg-surface transition hover:-translate-y-0.5 hover:border-accent"
+          >
+            <div className="relative flex aspect-[2/3] items-center justify-center overflow-hidden bg-gradient-to-br from-elevated via-surface to-bg p-4">
+              <div className="text-center">
+                <span aria-hidden="true" className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-line text-2xl text-muted">▶</span>
+                <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">Artwork preview unavailable</p>
+              </div>
+              <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-bg/90 to-transparent" />
+              <div className="absolute bottom-3 left-3 right-3">
+                <StatusChip status={t.status} />
+              </div>
+            </div>
+            <div className="space-y-1 p-3">
+              <p className="line-clamp-2 text-sm font-semibold group-hover:text-accent">{t.name}</p>
+              <p className="text-xs text-muted">
+                {t.contentType ? `${t.contentType} · ` : ""}{t.language}{t.year ? ` · ${t.year}` : ""}
+              </p>
+              <p className="pt-1 text-xs font-semibold text-accent">Open title →</p>
+            </div>
+          </Link>
+        ))}
+      </div>
+    );
+  }
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
       {titles.map((t) => (
@@ -45,7 +77,6 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           </Link>
           <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-            
           </div>
         </li>
       ))}
