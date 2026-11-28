@@ -645,6 +645,8 @@ export const revokeLoopPublication = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (!actor.emailVerified || actor.internalRole !== "super_admin")
+      throw new Error("Only the verified Super Admin may suspend or revoke Bridge distribution");
     assertPermission(actor, "loop.revoke");
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{ loop_title_id: string }>`
