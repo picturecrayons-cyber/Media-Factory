@@ -141,6 +141,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const qcEvidence = reviewQ.data?.qc?.reviewer_findings[0]?.technicalEvidence;
   const qcReady =
     reviewQ.data?.qc?.status === "PASSED" &&
+    Boolean(reviewQ.data.qc.reviewed_by) &&
+    Boolean(reviewQ.data.qc.reviewed_at) &&
     reviewQ.data.qc.reviewer_findings[0]?.masterKey === title.masterKey &&
     reviewQ.data.qc.reviewer_findings[0]?.posterKey === title.posterKey &&
     qcEvidence?.playbackVerified === true &&
