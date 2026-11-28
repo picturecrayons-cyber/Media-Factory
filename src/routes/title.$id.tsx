@@ -102,7 +102,17 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     // The same title has a redacted Buyer DTO and a full internal DTO.
     queryKey: ["bridge-title", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitle({ data: { id } }),
+    retry: false,
   });
+  const [titleLoadTimedOut, setTitleLoadTimedOut] = useState(false);
+  useEffect(() => {
+    if (!titleQ.isPending) {
+      setTitleLoadTimedOut(false);
+      return;
+    }
+    const timeout = window.setTimeout(() => setTitleLoadTimedOut(true), 15000);
+    return () => window.clearTimeout(timeout);
+  }, [id, titleQ.isPending]);
   const assetsQ = useQuery({
     queryKey: ["bridge-assets", id, actor.userId],
     queryFn: () => listTitleAssets({ data: { titleId: id } }),
@@ -133,7 +143,19 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     : chosenTab ?? (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Files" : "Overview");
   const visibleTabs = buyerView ? (["Overview"] as const) : WORKSPACE_TABS;
 
-  if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
+  if (titleQ.isPending && !titleLoadTimedOut)
+    return <p className="text-sm text-muted" role="status">Loading title workspace…</p>;
+  if (titleQ.isPending && titleLoadTimedOut)
+    return (
+      <section className="space-y-3 rounded-xl border border-line bg-surface p-5" role="alert">
+        <p className="text-sm font-semibold">Title workspace is taking longer than expected.</p>
+        <p className="text-sm text-muted">The title request has not completed. Your title and rights data have not been changed. Retry the request or return to My Titles.</p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => { setTitleLoadTimedOut(false); void titleQ.refetch(); }} className="rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg">Retry loading</button>
+          <a href="/workspace" className="rounded-full border border-line px-4 py-2 text-sm font-semibold">My Titles</a>
+        </div>
+      </section>
+    );
   if (titleQ.isError)
     return <p role="alert">Title workspace unavailable: {titleQ.error.message}</p>;
   if (!title) return <p className="text-sm text-muted">Title not found.</p>;
