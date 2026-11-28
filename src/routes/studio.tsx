@@ -84,7 +84,7 @@ function Studio() {
             </section>
 
             <section id="studio-insights" className="scroll-mt-20">
-              <LoopTitleAnalytics title="Studio Loop analytics & title-owner report" />
+              <LoopTitleAnalytics title="Studio Loop analytics & title-owner report" scopeKey={`${actor.userId}:${actor.organizationId ?? "no-organization"}`} />
             </section>
 
             <section id="studio-operations" className="space-y-3">
