@@ -456,8 +456,8 @@ test("Legal approval requires signed agreement and chain-of-title evidence refer
 test("a different verified Legal Reviewer can approve a Super Admin-created draft", async () => {
   const f = await fixture();
   try {
-    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as { grantId: string };
     await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as { grantId: string };
     await f.sql.transaction((tx) => f.review(tx, legal, {
       titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
       note: "Independent Legal review completed", grantId: saved.grantId,
