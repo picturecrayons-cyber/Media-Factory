@@ -180,7 +180,7 @@ export const transitionLicensingDeal = createServerFn({ method: "POST" })
       AGREEMENT_RECORDED:["APPROVED","NEGOTIATION","REJECTED","CANCELLED"],
     };
     if(!(allowed[deal.status]||[]).includes(data.status)) throw new Error("Invalid licensing deal transition");
-    let rightsGrantId=data.rightsGrantId||null;
+    const rightsGrantId=data.rightsGrantId||null;
     if(data.status==="AGREEMENT_RECORDED" && !data.agreementReference) throw new Error("Agreement reference is required");
     if(data.status==="APPROVED") {
       if(!data.agreementReference && !rightsGrantId) throw new Error("Recorded agreement and verified rights grant are required");
