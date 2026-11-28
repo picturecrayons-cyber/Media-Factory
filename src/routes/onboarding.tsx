@@ -26,6 +26,7 @@ const ACCOUNT_LABELS: Record<PublicAccountType, string> = {
   independent_creator: "Independent Creator",
   studio: "Studio / Company",
   buyer: "Buyer / Acquisitions",
+  investor: "Approved Investor",
 };
 
 const LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English", "Bengali", "Marathi", "Other"];
@@ -290,7 +291,13 @@ function Onboarding() {
         },
       });
 
-      if (accountType === "investor") {\n        try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }\n        void navigate({ to: "/investor", replace: true });\n        return;\n      }\n\n      if (accountType === "buyer") {
+      if (accountType === "investor") {
+        try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
+        void navigate({ to: "/investor", replace: true });
+        return;
+      }
+
+      if (accountType === "buyer") {
         void navigate({ to: "/buyer", replace: true });
         return;
       }
