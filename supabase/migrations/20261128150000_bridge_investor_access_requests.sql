@@ -46,7 +46,7 @@ create index if not exists bridge_investor_access_status_created_idx
   on public.bridge_investor_access_requests(status, created_at desc);
 create unique index if not exists bridge_investor_access_one_open_email_idx
   on public.bridge_investor_access_requests(lower(email))
-  where status in ('PENDING','APPROVED');
+  where status = 'PENDING';
 
 alter table public.bridge_investor_access_requests enable row level security;
 revoke all on public.bridge_investor_access_requests from anon, authenticated;
