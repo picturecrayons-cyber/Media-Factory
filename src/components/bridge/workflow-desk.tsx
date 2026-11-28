@@ -106,6 +106,21 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   }, {});
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
+  const certification = workflow.data?.gateCertification;
+  const lifecycleReady = ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status);
+  const qcPassed = workflow.data?.qc?.status === "PASSED";
+  const legalApproved = workflow.data?.legal?.status === "APPROVED";
+  const loopAuthorizationActive = Boolean(pub && publicationIsActive(pub.authorizationStatus, pub.windowStart, pub.windowEnd));
+  const distributionGates = [
+    ["Title lifecycle", lifecycleReady, title.status],
+    ["QC review", qcPassed, workflow.data?.qc?.status ?? "Not recorded"],
+    ["Legal review", legalApproved, workflow.data?.legal?.status ?? "Not recorded"],
+    ["Approved, unexpired TVOD license", Boolean(valid), valid ? "VALID · unexpired" : grants.length ? "No valid unexpired grant" : "No license draft recorded"],
+    ["OTT preparation", certification?.ott_preparation_status === "READY", certification?.ott_preparation_status ?? "Not recorded"],
+    ["Packaging", certification?.packaging_status === "COMPLETE", certification?.packaging_status ?? "Not recorded"],
+    ["Curation", certification?.curation_status === "APPROVED", certification?.curation_status ?? "Not recorded"],
+    ["Loop publication authorization", loopAuthorizationActive, pub?.authorizationStatus ?? "Not authorized"],
+  ] as const;
   const button = (label: string, run: () => Promise<unknown>, disabled = false) => (
     <button
       type="button"
@@ -313,6 +328,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           {selectedGrant.window_start} → {selectedGrant.window_end}
                         </p>
                         <p className="break-all text-xs text-muted">Grant record: {selectedGrant.id}</p>
+                        <p className="text-xs text-muted">Draft record created: {new Date(selectedGrant.created_at).toLocaleString("en-IN")}. This is the persisted record timestamp, not a Legal approval timestamp.</p>
                         <div className="space-y-2 rounded-lg border border-line bg-surface p-3">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <h4 className="text-sm font-semibold">Rights review checklist</h4>
@@ -434,6 +450,26 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     : "No active distribution window"}
                 </p>
               )}
+              <section className="space-y-2 rounded-xl border border-line p-3">
+                <h3 className="text-sm font-semibold">Loop publication gate checklist</h3>
+                <p className="text-xs text-muted">Each status is read from its persisted workflow record. Missing evidence remains pending; this checklist never grants approval.</p>
+                <ul className="grid gap-2 sm:grid-cols-2">
+                  {distributionGates.map(([label, passed, status]) => (
+                    <li key={label} className="flex items-start gap-2 text-xs">
+                      <span aria-label={passed ? "Passed" : "Pending"} className={passed ? "text-emerald-600" : "text-amber-600"}>
+                        {passed ? "✓" : "○"}
+                      </span>
+                      <span><strong>{label}</strong> · {status}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs font-medium" role="status">
+                  {distributionGates.every(([, passed]) => passed)
+                    ? "Recorded gates are satisfied. Final publication authorization and audit recording remain required."
+                    : `Blocked: ${distributionGates.filter(([, passed]) => !passed).map(([label]) => label).join(", ")}.`}
+                </p>
+                {certification?.updated_at ? <p className="text-xs text-muted">Preparation / packaging / curation gate record updated: {new Date(certification.updated_at).toLocaleString("en-IN")}</p> : null}
+              </section>
               <p>
                 Publish copies the approved title metadata, artwork and media reference into the
                 shared Loop catalog. Catalog publication alone does not prove consumer playback.
