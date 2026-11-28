@@ -120,7 +120,7 @@ async function listOwned(sql: Sql, userId: string, accountType: AccountType, org
                   and m.status = 'active'
               )
             )
-          )
+          ))
         order by t.updated_at desc limit 200
       `
     : sql<TitleRow>`
