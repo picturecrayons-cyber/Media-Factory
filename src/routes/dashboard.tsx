@@ -163,10 +163,11 @@ function FounderHome() {
                     ))}
                   </div>
                   <div className="mt-3 grid gap-2 text-xs text-muted sm:grid-cols-2">
-                    <p>QC reviewer: {item?.reviewers?.qc ?? "Not recorded"}</p>
-                    <p>Legal reviewer: {item?.reviewers?.legal ?? "Not recorded"}</p>
-                    <p>Last recorded verification: {item?.lastVerifiedAt ? new Date(item.lastVerifiedAt).toLocaleString("en-IN") : "NOT VERIFIED"}</p>
-                    <p>LOOP status: {item?.publication?.authorizationStatus ?? "No publication record"}</p>
+                    <p>Recorded QC reviewer: {item?.reviewers?.qc ?? "Not recorded"}</p>
+                    <p>Recorded Legal reviewer: {item?.reviewers?.legal ?? "Not recorded"}</p>
+                    <p>Rights reviewer: Not exposed by the current readiness record</p>
+                    <p>Last QC/legal review: {item?.lastVerifiedAt ? new Date(item.lastVerifiedAt).toLocaleString("en-IN") : "NOT VERIFIED"}</p>
+                    <p>LOOP authorization: {item?.publication?.authorizationStatus ?? "No publication record"}</p>
                   </div>
                   {item?.blockers.length ? (
                     <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-muted">
