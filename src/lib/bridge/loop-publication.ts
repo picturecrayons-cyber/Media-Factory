@@ -101,8 +101,12 @@ export async function verifyDistributionPreflight(
     year: number | null;
     runtime_minutes: number | null;
     content_type: string | null;
+    original_title: string | null;
+    country_of_origin: string | null;
+    release_date: string | Date | null;
+    credits: Array<{ role: string; name: string }> | null;
   }>`
-    select id, slug, name, status, language, master_key, poster_key, synopsis, year, runtime_minutes, content_type
+    select id, slug, name, status, language, master_key, poster_key, synopsis, year, runtime_minutes, content_type, original_title, country_of_origin, release_date, credits
     from bridge_titles
     where id = ${titleId}
     limit 1
@@ -113,6 +117,22 @@ export async function verifyDistributionPreflight(
   }
 
   const reasons: string[] = [];
+  const titleCredits = Array.isArray(title.credits) ? title.credits : [];
+  const hasCredit = (role: string) => titleCredits.some((credit) => credit.role.toLowerCase() === role && credit.name.trim().length > 0);
+  const missingMetadata = [
+    !(title.original_title?.trim() || title.name?.trim()) && "Original title",
+    !title.content_type?.trim() && "Content type",
+    !title.language?.trim() && "Language",
+    !title.year && "Year",
+    !title.runtime_minutes && "Runtime",
+    !title.country_of_origin?.trim() && "Country",
+    !title.release_date && "Release date",
+    !hasCredit("director") && "Director",
+    !hasCredit("producer") && "Producer",
+    !hasCredit("cast") && "Cast",
+    !title.synopsis?.trim() && "Synopsis",
+  ].filter(Boolean) as string[];
+  if (missingMetadata.length) reasons.push(`Required metadata is missing: ${missingMetadata.join(", ")}.`);
   if (!rightsRequest || !rightsRequest.windowStart || !rightsRequest.windowEnd ||
       rightsRequest.territories.length!==1 || rightsRequest.territories[0]!=="WORLDWIDE" ||
       rightsRequest.exploitationModels.length!==1 || rightsRequest.exploitationModels[0]!=="TVOD")
@@ -248,6 +268,11 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       name: string;
       status: string;
       language: string;
+      content_type: string | null;
+      original_title: string | null;
+      country_of_origin: string | null;
+      release_date: string | Date | null;
+      credits: Array<{ role: string; name: string }> | null;
       master_key: string | null;
       poster_key: string | null;
       synopsis: string;
@@ -271,7 +296,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       curation_status: string | null;
       delivery_status: string | null;
     }>`
-      select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
+      select b.id, b.slug, b.name, b.status, b.language, b.content_type, b.original_title,
+             b.country_of_origin, b.release_date, b.credits, b.master_key, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
              p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
@@ -340,6 +366,22 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                 windowEnd: grantEnd.toISOString(),
               }));
             }) ?? null;
+        const titleCredits = Array.isArray(r.credits) ? r.credits : [];
+        const hasCredit = (role: string) => titleCredits.some((credit) => credit.role.toLowerCase() === role && credit.name.trim().length > 0);
+        const missingMetadata = [
+          !(r.original_title?.trim() || r.name?.trim()) && "Original title",
+          !r.content_type?.trim() && "Content type",
+          !r.language?.trim() && "Language",
+          !r.year && "Year",
+          !r.runtime_minutes && "Runtime",
+          !r.country_of_origin?.trim() && "Country",
+          !r.release_date && "Release date",
+          !hasCredit("director") && "Director",
+          !hasCredit("producer") && "Producer",
+          !hasCredit("cast") && "Cast",
+          !r.synopsis?.trim() && "Synopsis",
+        ].filter(Boolean) as string[];
+        const metadataReady = missingMetadata.length === 0;
         const legalGrantIds = Array.isArray(r.legal_grant_ids) ? r.legal_grant_ids : [];
         const legalApproved = Boolean(coveringGrant && legalGrantIds.includes(coveringGrant.id));
         const gatesReady =
@@ -351,6 +393,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           Boolean(coveringGrant) &&
           legalApproved &&
           Boolean(r.qc_approved) &&
+          metadataReady &&
           gatesReady &&
           [
             "LICENSING_READY",
@@ -365,7 +408,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         const blockers: string[] = [];
         if (!coveringGrant)
           blockers.push("A matching rights grant and explicit publication dimensions are required");
-        if (!r.qc_approved) blockers.push("QC approval for the current master and artwork is required");
+        if (!r.qc_approved) blockers.push("QC approval for the current master and artwork with technical evidence is required");
+        if (!metadataReady) blockers.push(`Required metadata is missing: ${missingMetadata.join(", ")}.`);
         if (!legalApproved) blockers.push("Legal approval must reference the active rights grant");
         if (r.ott_preparation_status !== "READY") blockers.push("OTT preparation is not certified READY");
         if (r.packaging_status !== "COMPLETE") blockers.push("Consumer packaging is not certified COMPLETE");
