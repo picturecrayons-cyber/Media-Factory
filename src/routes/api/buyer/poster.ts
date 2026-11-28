@@ -85,6 +85,14 @@ export const Route = createFileRoute("/api/buyer/poster")({
                   and nullif(q.reviewer_findings->0->'technicalEvidence'->>'audioDetails', '') is not null
                   and nullif(q.reviewer_findings->0->'technicalEvidence'->>'masterLanguage', '') is not null
                   and q.reviewer_findings->0->'technicalEvidence'->>'posterVerified' = 'true'
+                  and q.reviewed_by is not null and q.reviewed_at is not null
+                  and (
+                    q.reviewer_findings->0->'technicalEvidence'->>'subtitleStatus' = 'NOT_APPLICABLE'
+                    or (
+                      q.reviewer_findings->0->'technicalEvidence'->>'subtitleStatus' = 'VERIFIED'
+                      and nullif(q.reviewer_findings->0->'technicalEvidence'->>'subtitleLanguages', '') is not null
+                    )
+                  )
               )
             limit 1
           `;
