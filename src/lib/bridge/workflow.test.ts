@@ -312,7 +312,7 @@ test("QC cannot approve without required metadata or technical evidence", async 
         titleId: "title-123", stage: "QC", decision: "APPROVE",
         note: "Reviewer checked media evidence",
       })),
-      /QC technical evidence is required/,
+      /Recorded playback, media, audio, language, subtitle and poster evidence is required/,
     );
     assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 0);
   } finally {
