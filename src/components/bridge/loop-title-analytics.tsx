@@ -28,9 +28,9 @@ function csvCell(value: unknown) {
   return '"' + (/^[=+@-]/.test(text) ? "'" : "") + text.replaceAll('"', '""') + '"';
 }
 
-export function LoopTitleAnalytics({ title = "Loop performance & owner report" }: { title?: string }) {
+export function LoopTitleAnalytics({ title = "Loop performance & owner report", scopeKey }: { title?: string; scopeKey: string }) {
   const query = useQuery({
-    queryKey: ["bridge-loop-title-analytics"],
+    queryKey: ["bridge-loop-title-analytics", scopeKey],
     queryFn: () => getLoopTitleAnalytics(),
     retry: 1,
   });
