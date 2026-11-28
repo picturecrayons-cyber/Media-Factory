@@ -21,6 +21,8 @@ export async function saveLoopLicense(
   data: z.infer<typeof loopLicenseInput>,
 ) {
   data = loopLicenseInput.parse(data);
+  if (!actor.emailVerified || actor.internalRole !== "super_admin")
+    throw new Error("Only the verified Super Admin may create Bridge license drafts");
   const [title] = await tx<{
     owner_user_id: string;
     owner_account_type: string;
@@ -37,6 +39,7 @@ export async function saveLoopLicense(
     )
   )
     throw new Error("Forbidden");
+  if (title.status !== "RIGHTS_REVIEW") throw new Error("License drafts can only be created after QC has passed and the title enters Rights Review");
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
     (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
@@ -64,22 +67,70 @@ export const submitLoopLicense = createServerFn({ method: "POST" })
     return (await getSql()).transaction((tx) => saveLoopLicense(tx, actor, data));
   });
 
+const qcEvidenceInput = z.object({
+  playbackVerified: z.literal(true),
+  codec: z.string().trim().min(1).max(120),
+  resolution: z.string().trim().min(1).max(80),
+  frameRate: z.string().trim().min(1).max(40),
+  audioVerified: z.literal(true),
+  audioDetails: z.string().trim().min(1).max(500),
+  masterLanguage: z.string().trim().min(2).max(40),
+  subtitleStatus: z.enum(["VERIFIED", "NOT_APPLICABLE"]),
+  subtitleLanguages: z.string().trim().max(300).optional(),
+  posterVerified: z.literal(true),
+}).superRefine((data, ctx) => {
+  if (data.subtitleStatus === "VERIFIED" && !data.subtitleLanguages?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["subtitleLanguages"], message: "Verified subtitle language(s) are required" });
+  }
+});
 const reviewInput = z.object({
   titleId: z.string().min(8),
   stage: z.enum(["QC", "LEGAL"]),
   decision: z.enum(["APPROVE", "REJECT"]),
   note: z.string().trim().min(8).max(2000),
   grantId: z.string().uuid().optional(),
+  qcEvidence: qcEvidenceInput.optional(),
+  agreementReference: z.string().trim().min(1).max(1000).optional(),
+  ownershipReference: z.string().trim().min(1).max(1000).optional(),
+  correction: z.object({
+    affectedItem: z.string().trim().min(2).max(300),
+    requiredAction: z.string().trim().min(8).max(1000),
+  }).optional(),
+}).superRefine((data, ctx) => {
+  if (data.stage === "QC" && data.decision === "REJECT" && !data.correction) {
+    ctx.addIssue({ code: "custom", path: ["correction"], message: "Affected file and required correction are required" });
+  }
+  if (data.stage === "QC" && data.decision === "APPROVE" && !data.qcEvidence) {
+    ctx.addIssue({ code: "custom", path: ["qcEvidence"], message: "Recorded playback, media, audio, language, subtitle and poster evidence is required" });
+  }
+  if (data.stage === "LEGAL" && data.decision === "APPROVE") {
+    if (!data.agreementReference) ctx.addIssue({ code: "custom", path: ["agreementReference"], message: "Signed distribution / OTT agreement reference is required" });
+    if (!data.ownershipReference) ctx.addIssue({ code: "custom", path: ["ownershipReference"], message: "Signed chain-of-title / authority reference is required" });
+  }
 });
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
   data = reviewInput.parse(data);
+  if (data.stage === "QC" && (!actor.emailVerified || actor.internalRole !== "qc_reviewer"))
+    throw new Error("Only a verified QC Reviewer may approve or return a technical QC review");
+  if (data.stage === "LEGAL" && (!actor.emailVerified || actor.internalRole !== "legal_reviewer"))
+    throw new Error("Only a verified Legal Reviewer may approve Bridge rights and licensing");
   assertPermission(actor, data.stage === "QC" ? "title.qc_review" : "title.rights_review");
   const [title] = await tx<{
     status: string;
     master_key: string | null;
     poster_key: string | null;
-  }>`select status,master_key,poster_key from bridge_titles where id=${data.titleId} for update`;
+    name: string;
+    original_title: string | null;
+    content_type: string | null;
+    language: string;
+    year: number | null;
+    runtime_minutes: number | null;
+    country_of_origin: string | null;
+    release_date: string | Date | null;
+    credits: Array<{ role: string; name: string }> | null;
+    synopsis: string | null;
+  }>`select status,master_key,poster_key,name,original_title,content_type,language,year,runtime_minutes,country_of_origin,release_date,credits,synopsis from bridge_titles where id=${data.titleId} for update`;
   if (!title) throw new Error("Not found");
   const expected = data.stage === "QC" ? "QC_REVIEW" : "RIGHTS_REVIEW";
   if (title.status !== expected) throw new Error(`Title must be in ${expected}`);
@@ -89,14 +140,30 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       kind: string;
       s3_key: string;
     }>`select id,kind,s3_key from bridge_assets where title_id=${data.titleId} and byte_size>0`;
-    if (
-      data.decision === "APPROVE" &&
-      !hasVerifiedMasterAndArtwork(assets, title.master_key, title.poster_key)
-    )
-      throw new Error("Verified current master and artwork are required");
+    if (data.decision === "APPROVE") {
+      if (!hasVerifiedMasterAndArtwork(assets, title.master_key, title.poster_key))
+        throw new Error("Verified current master and artwork are required");
+      const credits = Array.isArray(title.credits) ? title.credits : [];
+      const hasCredit = (role: string) => credits.some((credit) => String(credit.role ?? "").toLowerCase() === role && credit.name.trim().length > 0);
+      const missing = [
+        !(title.original_title?.trim() || title.name?.trim()) && "Original title",
+        !title.content_type?.trim() && "Content type",
+        !title.language?.trim() && "Language",
+        !title.year && "Year",
+        !title.runtime_minutes && "Runtime",
+        !title.country_of_origin?.trim() && "Country of origin",
+        !title.release_date && "Release date",
+        !hasCredit("director") && "Director",
+        !hasCredit("producer") && "Producer",
+        !hasCredit("cast") && "Cast",
+        !title.synopsis?.trim() && "Synopsis",
+      ].filter(Boolean);
+      if (missing.length) throw new Error(`QC blocked — missing metadata: ${missing.join(", ")}`);
+      if (!data.qcEvidence) throw new Error("QC technical evidence is required");
+    }
     await tx`insert into bridge_qc_cases(title_id,status,reviewer_findings,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "PASSED" : "ACTION_REQUIRED"},
-      ${JSON.stringify([{ note: data.note, masterKey: title.master_key, posterKey: title.poster_key }])}::jsonb,${actor.userId},now())`;
+      ${JSON.stringify([{ note: data.note, masterKey: title.master_key, posterKey: title.poster_key, technicalEvidence: data.qcEvidence ?? null, correction: data.correction ?? null }])}::jsonb,${actor.userId},now())`;
   } else {
     if (!data.grantId) throw new Error("Select a license draft");
     const [grant] = await tx<{
@@ -105,18 +172,18 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       created_by: string;
     }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
-    if (grant.created_by === actor.userId && actor.internalRole !== "super_admin")
-      throw new Error("Only the verified Super Admin may approve their own license draft");
+    if (grant.created_by === actor.userId)
+      throw new Error("A different verified Legal Reviewer must review this license draft");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
-      ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
+      ${JSON.stringify([{ grantId: data.grantId, note: data.note, agreementReference: data.agreementReference ?? null, ownershipReference: data.ownershipReference ?? null, reviewerConfirmedEvidence: data.decision === "APPROVE" }])}::jsonb,${actor.userId},now())`;
     await tx`update bridge_rights_grants set status=${data.decision === "APPROVE" ? "VALID" : "REVOKED"} where id=${data.grantId}`;
   }
   const next =
     data.decision === "REJECT"
-      ? "PREPARING"
+      ? data.stage === "QC" ? "PREPARING" : "RIGHTS_REVIEW"
       : data.stage === "QC"
         ? "RIGHTS_REVIEW"
         : "LICENSING_READY";
@@ -153,9 +220,11 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     )
       throw new Error("Not found");
     const sql = await getSql();
-    const grants = await sql<{
+    const canViewRights = actor.emailVerified && (actor.internalRole === "super_admin" || actor.internalRole === "legal_reviewer");
+    const grants = canViewRights ? await sql<{
       id: string;
       status: string;
+      created_by: string;
       territories: string[];
       languages: string[];
       window_start: string | Date;
@@ -166,20 +235,25 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
       }>;
-    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    }>`select id,status,created_by,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc` : [];
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
+      reviewed_by: string | null;
       reviewer_findings: Array<{
         note: string;
         masterKey: string | null;
         posterKey: string | null;
+        technicalEvidence?: z.infer<typeof qcEvidenceInput> | null;
+        correction?: { affectedItem: string; requiredAction: string } | null;
       }>;
-    }>`select status,reviewed_at,reviewer_findings from bridge_qc_cases where title_id=${data.titleId} order by created_at desc limit 1`;
-    const legal = await sql<{
+    }>`select status,reviewed_at,reviewed_by,reviewer_findings from bridge_qc_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+    const legal = canViewRights ? await sql<{
       status: string;
       reviewed_at: string | Date;
-    }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+      reviewed_by: string | null;
+      evidence: Array<{ grantId?: string; agreementReference?: string; ownershipReference?: string; reviewerConfirmedEvidence?: boolean }>;
+    }>`select status,reviewed_at,reviewed_by,evidence from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1` : [];
     return {
       grants: grants.map((g) => ({
         ...g,

@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { inviteInternalRole } from "@/lib/bridge/profiles";
+import { InvestorAccessReviewDesk } from "@/components/bridge/investor-access-review-desk";
 import { listAuditLogs, listTitles } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
@@ -33,6 +34,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            canReviewInvestors={actor.internalRole === "super_admin"}
           />
         </BridgeShell>
       )}
@@ -44,10 +46,12 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  canReviewInvestors,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  canReviewInvestors: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -57,6 +61,7 @@ function InternalBody({
 
   return (
     <div className="grid gap-12">
+      <InvestorAccessReviewDesk enabled={canReviewInvestors} />
       {/* 1. Master Distribution Desk */}
       <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
 
@@ -185,7 +190,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
         },
       }),
     onSuccess: () => {
-      toast.success("Title authorized and published to Crayons Loop");
+      toast.success("Distribution authorized. Publication remains pending delivery and release verification.");
       setSelectedTitleId("");
       void qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] });
       void qc.invalidateQueries({ queryKey: ["bridge-audit"] });
@@ -236,12 +241,8 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
   });
 
   const allTitles = q.data?.titles ?? [];
-  if (q.isPending) return <p>Loading distribution readiness…</p>;
-  if (q.isError)
-    return <p role="alert">Distribution readiness is unavailable. Refresh to retry.</p>;
-
-  // Filter based on active tab
-  const filteredTitles = allTitles.filter((t) => {
+  // Keep the hook unconditional; use the same empty collection while data is unavailable.
+  const filteredTitles = useMemo(() => (allTitles ?? []).filter((t) => {
     const pubStatus = t.publication?.authorizationStatus?.toLowerCase();
     switch (activeTab) {
       case "Ready for Distribution":
@@ -251,9 +252,11 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
       case "Authorizations":
         return Boolean(t.publication);
       case "Deliveries":
-        return Boolean(t.publication && t.hasMaster);
+        // Asset presence is not proof of delivery. Until persisted destination acknowledgement
+        // and independent verification evidence are available, fail closed and show no deliveries.
+        return false;
       case "Live":
-        return pubStatus === "live" || pubStatus === "authorized";
+        return pubStatus === "live" && t.publication?.listed === true && t.publication?.published === true;
       case "Suspended":
         return pubStatus === "suspended";
       case "Expired":
@@ -263,7 +266,11 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
       default:
         return true;
     }
-  });
+  }), [activeTab, allTitles]);
+
+  if (q.isPending) return <p>Loading distribution readiness…</p>;
+  if (q.isError)
+    return <p role="alert">Distribution readiness is unavailable. Refresh to retry.</p>;
 
   return (
     <section className="space-y-6">
@@ -326,13 +333,13 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                 Supported Model: <strong className="text-fg">TVOD rental only</strong>
               </div>
               <div>
-                Active Authorized Titles:{" "}
+                Live & Published Titles:{" "}
                 <strong className="text-fg">
                   {
                     allTitles.filter(
                       (t) =>
-                        t.publication?.authorizationStatus?.toLowerCase() === "live" ||
-                        t.publication?.authorizationStatus?.toLowerCase() === "authorized",
+                        t.publication?.authorizationStatus?.toLowerCase() === "live" &&
+                        t.publication?.listed === true && t.publication?.published === true,
                     ).length
                   }
                 </strong>
@@ -510,6 +517,11 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
       ) : null}
 
       {/* Main List */}
+      {activeTab === "Deliveries" ? (
+        <div role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-muted">
+          Delivery completion is not yet certified. A title will appear here only after a persisted destination acknowledgement and independent delivery verification are recorded. Asset presence, authorization, and signed downloads do not count as delivery.
+        </div>
+      ) : null}
       <div className="space-y-4">
         {filteredTitles.map((t) => {
           const pub = t.publication;
@@ -541,7 +553,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                 <div className="flex items-center gap-2">
                   <span
                     className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${
-                      statusDisplay === "LIVE" || statusDisplay === "AUTHORIZED"
+                      statusDisplay === "LIVE"
                         ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                         : statusDisplay === "SUSPENDED"
                           ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"

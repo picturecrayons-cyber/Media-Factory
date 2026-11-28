@@ -4,11 +4,13 @@ import { resendConfirmationEmail, signUpWithEmail } from "@/lib/auth/client";
 import { classifySignupResult } from "@/lib/auth/signup-classification";
 import { publicAccountTypeFrom } from "@/lib/auth/public-account-type";
 import { BrandMark } from "@/components/bridge/shell";
+import { submitInvestorAccessRequest } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/signup")({
-  validateSearch: (search: Record<string, unknown>): { role?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { role?: string; invite?: string } => ({
     role: typeof search.role === "string" ? search.role : undefined,
+    invite: typeof search.invite === "string" ? search.invite : undefined,
   }),
   component: Signup,
 });
@@ -52,11 +54,14 @@ function Signup() {
     setBusy(true);
 
     try {
+      if (search.invite) {
+        try { window.sessionStorage.setItem("bridge-invite", search.invite); } catch { /* session storage may be unavailable */ }
+      }
       const result = await signUpWithEmail({
         email: email.trim(),
         password,
         name: name.trim(),
-        accountType,
+        accountType: search.role === "investor" && search.invite ? "investor" : accountType,
       });
 
       const signupState = classifySignupResult(result);
@@ -198,24 +203,7 @@ function Signup() {
     );
   }
 
-  if (search.role === "investor") {
-    return (
-      <main className="grid min-h-screen place-items-center bg-bg p-6">
-        <div className="w-full max-w-md space-y-5 rounded-2xl border border-line bg-surface p-7 text-center shadow-sm">
-          <BrandMark />
-          <h1 className="font-display text-2xl font-semibold text-fg">Investor access</h1>
-          <p className="text-sm leading-relaxed text-muted">
-            Investor workspaces are provisioned after access review. This public signup form is for
-            Creator, Studio, and Buyer accounts only.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <Link to="/contact" className="text-sm font-semibold text-accent underline-offset-4 hover:underline">Request investor access</Link>
-            <Link to="/" className="text-sm text-muted underline-offset-4 hover:underline">Back to Crayons Bridge</Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  if (search.role === "investor" && !search.invite) return <InvestorRequestForm />;
 
   return (
     <main className="grid min-h-screen place-items-center bg-bg p-6">
@@ -257,7 +245,13 @@ function Signup() {
             />
           </label>
 
-          <fieldset className="space-y-1.5">
+          {search.role === "investor" && search.invite ? (
+            <div className="rounded-xl border border-line bg-elevated p-4 text-sm text-muted">
+              <p className="font-semibold text-fg">Approved Investor invitation</p>
+              <p className="mt-1">Your account type is fixed to Investor for this invitation. Internal administration permissions are not included.</p>
+            </div>
+          ) : (
+            <fieldset className="space-y-1.5">
             <legend className="block text-sm font-medium text-fg">I am a:</legend>
             <p id="account-type-help" className="text-xs text-muted">
               Choose the workspace that matches your role. Access is restricted by permissions after sign-in.
@@ -293,6 +287,7 @@ function Signup() {
               ))}
             </div>
           </fieldset>
+          )}
 
           <label className="block text-sm font-medium text-fg">
             Password
@@ -350,6 +345,87 @@ function Signup() {
           </Link>
         </div>
       </div>
+    </main>
+  );
+}
+
+
+function InvestorRequestForm() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [organization, setOrganization] = useState("");
+  const [investorType, setInvestorType] = useState<"individual" | "firm" | "fund" | "other">("individual");
+  const [website, setWebsite] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [websiteConfirm, setWebsiteConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await submitInvestorAccessRequest({
+        data: { name, email, organization, investorType, website, purpose, websiteConfirm },
+      });
+      setRequestId(result.requestId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request could not be submitted.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="grid min-h-screen place-items-center bg-bg p-6">
+      <section className="w-full max-w-xl space-y-5 rounded-2xl border border-line bg-surface p-7 shadow-sm">
+        <div className="text-center">
+          <BrandMark />
+          <h1 className="mt-4 font-display text-2xl font-semibold text-fg">Request Investor Access</h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Submit your details for review. An Investor workspace is not created unless a verified
+            Crayons Bridge Super Admin approves your request and sends an invitation.
+          </p>
+        </div>
+        {requestId ? (
+          <div role="status" className="rounded-xl border border-line bg-elevated p-5 text-sm">
+            <p className="font-semibold text-fg">Request received</p>
+            <p className="mt-2 text-muted">Reference: {requestId}</p>
+            <p className="mt-2 text-muted">Your access is pending review. No investment records or workspace access are enabled by this request.</p>
+          </div>
+        ) : (
+          <form onSubmit={(event) => void onSubmit(event)} className="space-y-4">
+            <label className="block text-sm font-medium text-fg">Full name
+              <input required maxLength={100} value={name} onChange={e=>setName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line bg-elevated px-3" />
+            </label>
+            <label className="block text-sm font-medium text-fg">Business email
+              <input required type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line bg-elevated px-3" />
+            </label>
+            <label className="block text-sm font-medium text-fg">Organization / firm
+              <input required maxLength={160} value={organization} onChange={e=>setOrganization(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line bg-elevated px-3" />
+            </label>
+            <label className="block text-sm font-medium text-fg">Investor category
+              <select value={investorType} onChange={e=>setInvestorType(e.target.value as typeof investorType)} className="mt-1.5 h-11 w-full rounded-xl border border-line bg-elevated px-3">
+                <option value="individual">Individual investor</option><option value="firm">Investment firm</option><option value="fund">Fund</option><option value="other">Other</option>
+              </select>
+            </label>
+            <label className="block text-sm font-medium text-fg">Website (optional)
+              <input type="url" maxLength={300} value={website} onChange={e=>setWebsite(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line bg-elevated px-3" />
+            </label>
+            <label className="block text-sm font-medium text-fg">Purpose and relevant investment experience
+              <textarea required minLength={30} maxLength={3000} value={purpose} onChange={e=>setPurpose(e.target.value)} rows={4} className="mt-1.5 w-full rounded-xl border border-line bg-elevated p-3" />
+            </label>
+            <label aria-hidden="true" className="absolute -left-[10000px] h-px w-px overflow-hidden">Leave blank
+              <input tabIndex={-1} autoComplete="off" value={websiteConfirm} onChange={e=>setWebsiteConfirm(e.target.value)} />
+            </label>
+            {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
+            <Button type="submit" disabled={busy} className="w-full h-11 rounded-full">{busy ? "Submitting…" : "Submit for review"}</Button>
+          </form>
+        )}
+        <div className="text-center"><Link to="/login" className="text-sm text-accent underline-offset-4 hover:underline">Back to sign in</Link></div>
+      </section>
     </main>
   );
 }

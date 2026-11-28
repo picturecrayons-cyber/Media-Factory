@@ -13,6 +13,7 @@ import {
   listOwnEntitlements,
   verifyLicensePayment,
 } from "@/lib/bridge/payments";
+import { createBuyerLicensingEnquiry, listOwnLicensingEnquiries } from "@/lib/bridge/licensing";
 
 export const Route = createFileRoute("/buyer")({ component: Buyer });
 
@@ -153,7 +154,7 @@ async function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs = 
 
 function BuyerBody({ userId }: { userId: string }) {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
+  const [tab, setTab] = useState<"discover" | "listing" | "licenses" | "enquiries">("discover");
   const [view, setView] = useState<"gallery" | "list">("gallery");
   const [query, setQuery] = useState("");
   const [galleryPage, setGalleryPage] = useState(0);
@@ -179,12 +180,18 @@ function BuyerBody({ userId }: { userId: string }) {
     queryKey: ["bridge-buyer-poster-artwork", userId, posterTitleIds],
     queryFn: ({ signal }) =>
       withTimeout(fetchBuyerPosterArtwork(posterTitleIds, signal), "Buyer artwork", 120_000),
-    enabled: tab !== "licenses" && view === "gallery" && posterTitleIds.length > 0,
+    enabled: (tab === "discover" || tab === "listing") && view === "gallery" && posterTitleIds.length > 0,
     retry: 1,
   });
   const entQ = useQuery({
     queryKey: entitlementsKey,
     queryFn: () => withTimeout(listOwnEntitlements(), "Buyer licenses"),
+    retry: 1,
+  });
+  const enquiriesQ = useQuery({
+    queryKey: ["bridge-buyer-enquiries", userId],
+    queryFn: () => withTimeout(listOwnLicensingEnquiries(), "Buyer enquiries"),
+    enabled: tab === "enquiries",
     retry: 1,
   });
   const entitled = new Set(entQ.data?.entitlements.map((e) => e.titleId));
@@ -251,13 +258,14 @@ function BuyerBody({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
         <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
         <Stat label="Licenses" value={String(licensed.length)} note="Captured entitlements" />
+        <Stat label="Enquiries" value={enquiriesQ.data?.enquiries?.length == null ? "—" : String(enquiriesQ.data.enquiries.length)} note="Your licensing discussions" />
       </div>
       <div className="flex flex-wrap gap-2">
-        {(["discover", "listing", "licenses"] as const).map((id) => (
+        {(["discover", "listing", "licenses", "enquiries"] as const).map((id) => (
           <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-sm border px-3 py-1.5 text-sm capitalize ${tab === id ? "border-accent text-accent" : "border-line text-muted"}`}>
             {id}
           </button>
@@ -276,10 +284,15 @@ function BuyerBody({ userId }: { userId: string }) {
           </div>
         </div>
       )}
-      {!titles.length ? (
+      {!titles.length && tab !== "enquiries" ? (
         <BuyerEmptyState />
+      ) : tab === "enquiries" ? (
+        enquiriesQ.isPending ? <p role="status" className="text-sm text-muted">Loading your licensing enquiries…</p>
+        : enquiriesQ.isError ? <section role="alert" className="rounded-lg border border-line p-4 text-sm">Your enquiries are unavailable. <button type="button" className="underline" onClick={()=>void enquiriesQ.refetch()}>Retry</button></section>
+        : enquiriesQ.data.enquiries.length ? <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b border-line text-xs uppercase text-muted"><tr><th className="p-3">Title</th><th className="p-3">Stage</th><th className="p-3">Requested rights</th><th className="p-3">Offer</th><th className="p-3">Window</th></tr></thead><tbody className="divide-y divide-line">{enquiriesQ.data.enquiries.map((item:any)=><tr key={item.id}><td className="p-3 font-medium">{item.title_name}</td><td className="p-3">{item.status.replaceAll("_"," ")}</td><td className="p-3 text-xs">{(item.territories||[]).join(", ")} · {(item.languages||[]).join(", ")} · {(item.media||[]).join(", ")}</td><td className="p-3">{item.offer_fee_paise==null?"Pending":formatLicensingFeePaise(Number(item.offer_fee_paise))}</td><td className="p-3 text-xs">{item.window_start&&item.window_end?new Date(item.window_start).toLocaleDateString()+" – "+new Date(item.window_end).toLocaleDateString():"Not agreed"}</td></tr>)}</tbody></table></div>
+        : <p className="rounded-md border border-dashed border-line p-5 text-sm text-muted">You have not submitted any licensing enquiries yet.</p>
       ) : tab === "licenses" ? (
-        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
+        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." allowEnquiry={false} />
       ) : view === "gallery" ? (
         <div className="space-y-4">
           <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
@@ -306,7 +319,7 @@ function BuyerBody({ userId }: { userId: string }) {
           ) : null}
         </div>
       ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
+        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." allowEnquiry />
       )}
       {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
         <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>
@@ -415,11 +428,43 @@ function TitleGallery({
                   </Button>
                 )}
               </div>
+              <BuyerEnquiryForm title={title} />
             </div>
           </article>
         );
       })}
     </div>
+  );
+}
+
+function BuyerEnquiryForm({ title }: { title: BuyerTitleCard }) {
+  const qc = useQueryClient();
+  const [territories, setTerritories] = useState("WORLDWIDE");
+  const [languages, setLanguages] = useState(title.language || "Malayalam");
+  const [media, setMedia] = useState("TVOD");
+  const [notes, setNotes] = useState("");
+  const enquiry = useMutation({
+    mutationFn: () => createBuyerLicensingEnquiry({ data: {
+      titleId: title.id,
+      territories: territories.split(",").map((value) => value.trim()).filter(Boolean),
+      languages: languages.split(",").map((value) => value.trim()).filter(Boolean),
+      media: media.split(",").map((value) => value.trim()).filter(Boolean),
+      notes,
+    } }),
+    onSuccess: () => { toast.success("Licensing enquiry sent to Crayons Bridge"); setNotes(""); void qc.invalidateQueries({ queryKey: ["bridge-buyer-enquiries"] }); },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Enquiry could not be sent"),
+  });
+  return (
+    <details className="border-t border-line pt-2">
+      <summary className="cursor-pointer text-xs font-semibold text-accent">Request licensing discussion</summary>
+      <form className="mt-3 grid gap-2" onSubmit={(event) => { event.preventDefault(); enquiry.mutate(); }}>
+        <input required value={territories} onChange={(event) => setTerritories(event.target.value)} placeholder="Territories (comma separated)" className="w-full rounded-sm border border-line bg-bg px-2 py-2 text-xs" />
+        <input required value={languages} onChange={(event) => setLanguages(event.target.value)} placeholder="Languages (comma separated)" className="w-full rounded-sm border border-line bg-bg px-2 py-2 text-xs" />
+        <input required value={media} onChange={(event) => setMedia(event.target.value)} placeholder="Media (TVOD, SVOD, TV...)" className="w-full rounded-sm border border-line bg-bg px-2 py-2 text-xs" />
+        <textarea required minLength={8} maxLength={2000} rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What licensing terms would you like to discuss?" className="w-full rounded-sm border border-line bg-bg px-2 py-2 text-xs" />
+        <Button type="submit" disabled={enquiry.isPending}>{enquiry.isPending ? "Sending..." : "Send enquiry"}</Button>
+      </form>
+    </details>
   );
 }
 
@@ -458,7 +503,7 @@ function BuyerPosterImage({ blob, title }: { blob: Blob | undefined; title: stri
   );
 }
 
-function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
+function TitleList({ titles, entitled, order, empty, allowEnquiry = true }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string; allowEnquiry?: boolean }) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
@@ -472,6 +517,7 @@ function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[
             <StatusChip status={t.status as never} />
             {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
           </div>
+          {allowEnquiry ? <div className="mt-3 w-full"><BuyerEnquiryForm title={t} /></div> : null}
         </li>
       ))}
     </ul>

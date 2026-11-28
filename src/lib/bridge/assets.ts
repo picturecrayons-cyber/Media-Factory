@@ -297,7 +297,12 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       throw new Error(decision.reason);
     }
     const { signDownload } = await import("./oci-object-storage.server");
-    const signed = await signDownload({ key: asset.s3_key });
+    // QC reviewers need enough time to complete a feature-length playback. This
+    // remains a short-lived, object-scoped PAR and is only issued after role/title checks.
+    const signed = await signDownload({
+      key: asset.s3_key,
+      expiresIn: actor.internalRole === "qc_reviewer" && asset.kind === "master" ? 3 * 60 * 60 : 300,
+    });
     await writeAudit({
       actorUserId: actor.userId,
       action: "asset.download_signed",
@@ -367,6 +372,8 @@ export const listProductionAssets = createServerFn({ method: "GET" })
       file_size: number | string;
       content_type: string | null;
       source_kind: string | null;
+      source_asset_id: string | null;
+      verification_state: string | null;
       verified_source: boolean;
     }>`
       select
@@ -376,6 +383,8 @@ export const listProductionAssets = createServerFn({ method: "GET" })
         production_asset.file_size,
         production_asset.content_type,
         production_asset.tags->>'source_kind' as source_kind,
+        nullif(production_asset.tags->>'source_asset_id', '') as source_asset_id,
+        production_asset.tags->>'verification_state' as verification_state,
         case
           when nullif(production_asset.tags->>'source_asset_id', '') is null then false
           else coalesce(
@@ -401,6 +410,8 @@ export const listProductionAssets = createServerFn({ method: "GET" })
         fileSize: Number(row.file_size ?? 0),
         contentType: row.content_type,
         sourceKind: row.source_kind,
+        sourceAssetId: row.verified_source ? row.source_asset_id : null,
+        verificationState: row.verification_state,
         verifiedSource: row.verified_source,
       })),
     };

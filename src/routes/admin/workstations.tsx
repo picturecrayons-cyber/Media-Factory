@@ -79,16 +79,17 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
         <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
-          canAct={hasPermission(actor, "title.qc_review")} actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
+          canAct={actor.emailVerified && actor.internalRole === "qc_reviewer"} />
       ) : activeTab === "Rights" ? (
         <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
-          canAct={hasPermission(actor, "title.rights_review")} actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
+          canAct={actor.emailVerified && actor.internalRole === "legal_reviewer"} />
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
       ) : activeTab === "Buyers" ? (
-        <BuyerRelease titles={data.titles} canApprove={hasPermission(actor, "title.approve")}
-          onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
+        <BuyerRelease titles={data.titles} gateCertifications={data.gateCertifications}
+          canApprove={actor.emailVerified && actor.internalRole === "super_admin"}
+          onGate={(titleId, gateName, notes) => gate.mutate({ data: { titleId, gate: gateName, decision: "PASS", notes } })} />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
           <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
@@ -159,12 +160,87 @@ function SectionHeader({ title, description }: { title: string; description: str
 function ActionButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return <Button size="sm" disabled={disabled} onClick={onClick}>{label}</Button>;
 }
-function ReviewQueue({ title, description, titles, canAct, actions, mutation }: { title: string; description: string; titles: any[]; canAct: boolean; actions: [string, string][]; mutation: any }) {
-  return <section className="space-y-3"><SectionHeader title={title} description={description} />{titles.length ? titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span>{canAct ? <div className="flex gap-2">{actions.map(([decision, label]) => <ActionButton key={decision} label={label} disabled={mutation.isPending} onClick={() => mutation.mutate({ data: { titleId: t.id, decision } })} />)}</div> : <span className="text-xs text-muted">Review reserved to designated {title.startsWith("QC") ? "QC Reviewer" : "Legal Reviewer"} or Super Admin</span>}</div>) : <Empty text="Queue is clear." />}</section>;
+function ReviewQueue({ title, description, titles, canAct }: { title: string; description: string; titles: any[]; canAct: boolean }) {
+  return <section className="space-y-3"><SectionHeader title={title} description={description} />{titles.length ? titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span>{canAct ? <Link to="/title/$id" params={{ id: t.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open evidence-linked review</Link> : <span className="text-xs text-muted">Review reserved to designated {title.startsWith("QC") ? "QC Reviewer" : "Legal Reviewer"} or Super Admin</span>}</div>) : <Empty text="Queue is clear." />}</section>;
 }
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
 }
-function BuyerRelease({ titles, canApprove, onGate }: { titles: any[]; canApprove: boolean; onGate: (titleId: string, gateName: string) => void }) {
-  return <section className="space-y-3"><SectionHeader title="Buyer release" description="Pass a gate only after the required check." />{titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span>{canApprove ? <ActionButton label="Pass gate" onClick={() => onGate(t.id, "buyer")} /> : <span className="text-xs text-muted">Approval reserved to Super Admin</span>}</div>)}</section>;
+type ReleaseGate = "OTT" | "PACKAGING" | "CURATION" | "DELIVERY";
+const RELEASE_GATES: { id: ReleaseGate; label: string; statusKey: string }[] = [
+  { id: "OTT", label: "OTT readiness", statusKey: "ott_preparation_status" },
+  { id: "PACKAGING", label: "Packaging", statusKey: "packaging_status" },
+  { id: "CURATION", label: "Curation", statusKey: "curation_status" },
+  { id: "DELIVERY", label: "Delivery", statusKey: "delivery_status" },
+];
+
+function BuyerRelease({ titles, gateCertifications, canApprove, onGate }: {
+  titles: any[];
+  gateCertifications: any[];
+  canApprove: boolean;
+  onGate: (titleId: string, gateName: ReleaseGate, notes: string) => void;
+}) {
+  return (
+    <section className="space-y-3">
+      <SectionHeader title="Buyer / LOOP release gates" description="Each gate is recorded independently. A PASS requires an evidence note and does not itself publish a title." />
+      {titles.map((title) => (
+        <BuyerReleaseCard key={title.id} title={title}
+          certification={gateCertifications.find((item) => item.title_id === title.id)}
+          canApprove={canApprove} onGate={onGate} />
+      ))}
+      {!titles.length ? <Empty text="No titles in the release-gate queue." /> : null}
+    </section>
+  );
+}
+
+function BuyerReleaseCard({ title, certification, canApprove, onGate }: {
+  title: any;
+  certification: any;
+  canApprove: boolean;
+  onGate: (titleId: string, gateName: ReleaseGate, notes: string) => void;
+}) {
+  const [notes, setNotes] = useState<Record<ReleaseGate, string>>({
+    OTT: "", PACKAGING: "", CURATION: "", DELIVERY: "",
+  });
+  const statusLabel = (value?: string) => value === "READY" || value === "COMPLETE" || value === "APPROVED"
+    ? "PASS" : value === "HOLD" ? "BLOCKED" : value === "REVOKED" || value === "FAILED" || value === "REJECTED" ? "FAIL" : "NOT TESTED";
+  return (
+    <article className="space-y-3 rounded-2xl border border-line bg-surface p-4">
+      <div>
+        <p className="font-medium">{title.name}</p>
+        <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status}</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {RELEASE_GATES.map((gate) => {
+          const value = certification?.[gate.statusKey] as string | undefined;
+          const evidence = certification?.evidence?.[gate.id];
+          return (
+            <div key={gate.id} className="space-y-2 rounded-xl border border-line p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium">{gate.label}</span>
+                <span className="text-xs text-muted">{statusLabel(value)}</span>
+              </div>
+              {evidence ? <p className="text-xs text-muted">Recorded by {evidence.actor ?? "unknown"} · {evidence.at ? new Date(evidence.at).toLocaleString() : "timestamp unavailable"} · {evidence.notes ?? "No evidence note"}</p> : <p className="text-xs text-muted">No persisted evidence recorded.</p>}
+              {canApprove ? (
+                <>
+                  <textarea
+                    value={notes[gate.id]}
+                    onChange={(event) => setNotes((current) => ({ ...current, [gate.id]: event.target.value }))}
+                    placeholder="Record evidence checked (minimum 8 characters)"
+                    className="min-h-16 w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm"
+                  />
+                  <Button size="sm" disabled={notes[gate.id].trim().length < 8}
+                    onClick={() => onGate(title.id, gate.id, notes[gate.id].trim())}>
+                    Record {gate.id} PASS
+                  </Button>
+                </>
+              ) : (
+                <p className="text-xs text-muted">Certification is restricted to the verified Super Admin.</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </article>
+  );
 }

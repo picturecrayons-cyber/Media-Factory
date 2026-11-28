@@ -5,6 +5,7 @@ import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
+import { LoopTitleAnalytics } from "@/components/bridge/loop-title-analytics";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -12,7 +13,6 @@ const comingSoonModules = [
   ["Productions", "Project-level production tracking and milestone management."],
   ["Schedule", "Shared production and delivery calendar."],
   ["Statements", "Studio licensing statements and settlement reporting."],
-  ["Insights", "Verified portfolio and performance analytics."],
 ] as const;
 
 function Studio() {
@@ -81,6 +81,10 @@ function Studio() {
                 <p className="mt-1 text-sm text-muted">Register source-card manifests, compare Primary and Recovery manifest evidence, and record operator sign-off. Server actions are restricted to active Studio owner, admin, producer or DIT memberships.</p>
               </div>
               <DitAgentDesk actor={actor} />
+            </section>
+
+            <section id="studio-insights" className="scroll-mt-20">
+              <LoopTitleAnalytics title="Studio Loop analytics & title-owner report" scopeKey={`${actor.userId}:${actor.organizationId ?? "no-organization"}`} />
             </section>
 
             <section id="studio-operations" className="space-y-3">

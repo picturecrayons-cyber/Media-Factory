@@ -195,12 +195,6 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       return { home: workspaceHome(existing), profile: existing };
     }
 
-    // Investor access is granted only after a reviewed access request. Enforce
-    // this at the authenticated server endpoint, not only in the signup UI.
-    if (data.accountType === "investor") {
-      throw new Error("Investor access requires a reviewed access request.");
-    }
-
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
     const verified = true;
@@ -217,17 +211,19 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     let internalRole: string | null = null;
     let invitedBy: string | null = null;
     let inviteId: string | null = null;
+    let invitedAccountType: string | null = null;
     if (data.inviteToken) {
       const hash = createHash("sha256").update(data.inviteToken).digest("hex");
       const invites = await sql<{
         id: string;
         email: string;
-        internal_role: string;
+        internal_role: string | null;
+        account_type: string | null;
         invited_by: string;
         expires_at: string;
         accepted_at: string | null;
       }>`
-        select id, email, internal_role, invited_by, expires_at, accepted_at
+        select id, email, internal_role, account_type, invited_by, expires_at, accepted_at
         from bridge_invites where token_hash = ${hash} limit 1
       `;
       const inv = invites[0];
@@ -237,9 +233,25 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       if (inv.email.toLowerCase() !== email.toLowerCase()) {
         throw new Error("Invite email does not match this account");
       }
+      if (inv.account_type && inv.account_type !== data.accountType) {
+        throw new Error("Invite account type does not match this signup");
+      }
+      if (inv.account_type === "investor" && (inv.internal_role || data.accountType !== "investor")) {
+        throw new Error("Investor invitation is invalid");
+      }
+      if (!inv.account_type && !inv.internal_role) {
+        throw new Error("Internal invitation has no authorized role");
+      }
       internalRole = inv.internal_role;
+      invitedAccountType = inv.account_type;
       invitedBy = inv.invited_by;
       inviteId = inv.id;
+    }
+
+    // Investor accounts are provisioned only by a Super Admin-approved,
+    // email-bound Investor invitation. Public self-selection is never enough.
+    if (data.accountType === "investor" && (invitedAccountType !== "investor" || internalRole !== null)) {
+      throw new Error("Investor access requires an approved Investor invitation.");
     }
 
     const bridgeUserId = context.userId;
@@ -497,7 +509,7 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
       insert into bridge_invites (id, email, internal_role, invited_by, token_hash, expires_at)
       values (${id}, ${data.email.toLowerCase()}, ${data.role}, ${context.userId}, ${hash}, ${new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()})
     `;
-    const url = bridgeInvitationUrl(token, bridgeEnv.appUrl());
+    const url = `${bridgeInvitationUrl(token, bridgeEnv.appUrl())}&role=investor`;
     await mail({
       to: data.email,
       subject: "Crayons Bridge internal invite",
@@ -511,4 +523,136 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
       metadata: { role: data.role },
     });
     return { sent: true };
+  });
+
+
+const investorRequestInput = z.object({
+  name: z.string().trim().min(2).max(100),
+  email: z.string().trim().email().max(254),
+  organization: z.string().trim().min(2).max(160),
+  investorType: z.enum(["individual", "firm", "fund", "other"]),
+  website: z.string().trim().max(300).optional().or(z.literal("")),
+  purpose: z.string().trim().min(30).max(3000),
+  websiteConfirm: z.string().max(0).optional(),
+});
+
+export const submitInvestorAccessRequest = createServerFn({ method: "POST" })
+  .validator(investorRequestInput)
+  .handler(async ({ data }) => {
+    if (data.websiteConfirm) throw new Error("Request could not be accepted");
+    const sql = await getSql();
+    const email = data.email.toLowerCase();
+    const existing = await sql<{ id: string; status: string }>`
+      select id, status from bridge_investor_access_requests
+      where lower(email) = ${email} and status = 'PENDING'
+      order by created_at desc limit 1
+    `;
+    if (existing[0]) {
+      return { received: true, requestId: existing[0].id, status: existing[0].status };
+    }
+    const rows = await sql<{ id: string }>`
+      insert into bridge_investor_access_requests
+        (name, email, organization_name, investor_type, website, purpose, status)
+      values
+        (${data.name}, ${email}, ${data.organization}, ${data.investorType},
+         ${data.website || null}, ${data.purpose}, 'PENDING')
+      returning id
+    `;
+    const requestId = rows[0]?.id;
+    if (!requestId) throw new Error("Investor access request could not be recorded");
+    try {
+      await mail({
+        to: email,
+        subject: "Crayons Bridge — Investor access request received",
+        text: `Hello ${data.name},\n\nYour Investor access request (${requestId}) has been received. Access is not active unless Crayons Bridge approves it and sends you a separate invitation.\n\nCrayons Bridge\n`,
+      });
+    } catch (error) {
+      console.error("[bridge] Investor request receipt email failed", error);
+    }
+    return { received: true, requestId, status: "PENDING" as const };
+  });
+
+export const listInvestorAccessRequests = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
+    const sql = await getSql();
+    const rows = await sql`
+      select id, name, email, organization_name, investor_type, website, purpose,
+             status, review_notes, reviewed_by, reviewed_at, created_at
+      from bridge_investor_access_requests
+      order by case status when 'PENDING' then 0 else 1 end, created_at desc
+      limit 200
+    `;
+    return { requests: JSON.parse(JSON.stringify(rows)) };
+  });
+
+export const reviewInvestorAccessRequest = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    requestId: z.string().uuid(),
+    decision: z.enum(["APPROVE", "REJECT"]),
+    notes: z.string().trim().min(8).max(2000),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!actor.emailVerified || actor.internalRole !== "super_admin") {
+      throw new Error("Only a verified Super Admin may review Investor access");
+    }
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const rows = await tx<{
+        id: string; name: string; email: string; status: string;
+      }>`
+        select id, name, email, status from bridge_investor_access_requests
+        where id = ${data.requestId}::uuid for update
+      `;
+      const request = rows[0];
+      if (!request) throw new Error("Investor access request not found");
+      if (request.status !== "PENDING") throw new Error("Investor access request has already been reviewed");
+      if (data.decision === "REJECT") {
+        await tx`
+          update bridge_investor_access_requests
+          set status = 'REJECTED', review_notes = ${data.notes},
+              reviewed_by = ${actor.userId}, reviewed_at = now(), updated_at = now()
+          where id = ${request.id}::uuid
+        `;
+        await writeAudit({
+          actorUserId: actor.userId, action: "investor_access.reject",
+          entityType: "investor_access_request", entityId: request.id,
+          metadata: { notes: data.notes },
+        }, tx);
+        return { status: "REJECTED" as const, invitationSent: false };
+      }
+      const { token, hash } = tokenPair();
+      const inviteId = randomBytes(16).toString("hex");
+      await tx`
+        insert into bridge_invites
+          (id, email, internal_role, account_type, invited_by, token_hash, expires_at)
+        values
+          (${inviteId}, ${request.email.toLowerCase()}, null, 'investor', ${actor.userId},
+           ${hash}, ${new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()})
+      `;
+      await tx`
+        update bridge_investor_access_requests
+        set status = 'APPROVED', review_notes = ${data.notes}, reviewed_by = ${actor.userId},
+            reviewed_at = now(), invite_id = ${inviteId}, updated_at = now()
+        where id = ${request.id}::uuid
+      `;
+      await writeAudit({
+        actorUserId: actor.userId, action: "investor_access.approve",
+        entityType: "investor_access_request", entityId: request.id,
+        metadata: { inviteId, notes: data.notes },
+      }, tx);
+      const url = bridgeInvitationUrl(token, bridgeEnv.appUrl());
+      await mail({
+        to: request.email,
+        subject: "Crayons Bridge — Investor access approved",
+        text: `Hello ${request.name},\n\nYour Investor access request has been approved. Complete your verified account setup using this invitation (expires in 7 days):\n\n${url}\n\nThis invitation grants the Investor account type only. It does not grant internal administration permissions.\n\nCrayons Bridge\n`,
+      });
+      return { status: "APPROVED" as const, invitationSent: true };
+    });
   });

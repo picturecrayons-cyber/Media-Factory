@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession } from "@/lib/bridge/session";
+import { getPublicSiteContent } from "@/lib/bridge/site-content";
 
 
 export const Route = createFileRoute("/")({ component: Home });
@@ -44,6 +45,8 @@ const WORKFLOW_STEPS = [
 
 function Home() {
   const { user, isPending } = useCurrentUserState();
+  const siteContentQ = useQuery({ queryKey: ["bridge-public-site-content"], queryFn: () => getPublicSiteContent(), staleTime: 60_000, retry: 1 });
+  const siteContent = siteContentQ.data;
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
     queryFn: () => getBridgeSession(),
@@ -92,10 +95,10 @@ function Home() {
                 <BrandMark className="text-3xl sm:text-4xl lg:text-5xl" />
               </div>
               <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
-                One bridge from content to market.
+                {siteContent?.heroTitle ?? "One bridge from content to market."}
               </h1>
               <p className="bridge-hero-subcopy mx-auto mt-4 max-w-2xl text-base leading-7 text-muted sm:text-lg">
-                Prepare. Protect. License. Deliver.
+                {siteContent?.heroBody ?? "Prepare. Protect. License. Deliver."}
               </p>
 
               <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
@@ -114,7 +117,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                From upload to delivery.
+                {siteContent?.workflowHeading ?? "From upload to delivery."}
               </h2>
             </div>
 
@@ -146,7 +149,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                Built for the media business.
+                {siteContent?.audienceHeading ?? "Built for the media business."}
               </h2>
             </div>
 
@@ -262,7 +265,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                Ready to move your content forward?
+                {siteContent?.finalCtaHeading ?? "Ready to move your content forward?"}
               </h2>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <Link to="/signup">
