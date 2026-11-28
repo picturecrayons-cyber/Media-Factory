@@ -194,7 +194,7 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         join bridge_titles t on t.id = c.title_id
         where t.submission_type = 'story_concept'
           and (
-            t.owner_user_id = ${actor.userId}
+            (t.owner_user_id = ${actor.userId} and t.owner_account_type <> 'studio')
             or (
               t.owner_account_type = 'studio'
               and t.owner_organization_id = ${actor.organizationId ?? null}
