@@ -8,12 +8,12 @@ export const Route = createFileRoute("/submit-concept")({ component: SubmitConce
 
 function SubmitConcept() {
   return (
-    <RequireBridge allow="studio">
+    <RequireBridge allow="creator_or_studio">
       {(actor) => (
         <BridgeShell actor={actor} title="Story / Concept submission">
           <main className="mx-auto max-w-3xl space-y-6">
             <header className="space-y-2">
-              <Link to="/studio" className="text-sm text-accent hover:underline">← Studio Home</Link>
+              <Link to={actor.accountType === "studio" ? "/studio" : "/creator"} className="text-sm text-accent hover:underline">← {actor.accountType === "studio" ? "Studio Home" : "Creator Home"}</Link>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Separate submission workflow</p>
               <h1 className="font-display text-3xl font-semibold">Story / Concept</h1>
               <p className="text-sm text-muted">Submit a concept for internal curation. This workflow is separate from finished-film licensing and does not publish to Loop or buyers automatically.</p>
