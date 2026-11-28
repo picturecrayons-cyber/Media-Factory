@@ -91,7 +91,14 @@ const reviewInput = z.object({
   qcEvidence: qcEvidenceInput.optional(),
   agreementReference: z.string().trim().min(1).max(1000).optional(),
   ownershipReference: z.string().trim().min(1).max(1000).optional(),
+  correction: z.object({
+    affectedItem: z.string().trim().min(2).max(300),
+    requiredAction: z.string().trim().min(8).max(1000),
+  }).optional(),
 }).superRefine((data, ctx) => {
+  if (data.stage === "QC" && data.decision === "REJECT" && !data.correction) {
+    ctx.addIssue({ code: "custom", path: ["correction"], message: "Affected file and required correction are required" });
+  }
   if (data.stage === "QC" && data.decision === "APPROVE" && !data.qcEvidence) {
     ctx.addIssue({ code: "custom", path: ["qcEvidence"], message: "Recorded playback, media, audio, language, subtitle and poster evidence is required" });
   }
@@ -152,7 +159,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     }
     await tx`insert into bridge_qc_cases(title_id,status,reviewer_findings,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "PASSED" : "ACTION_REQUIRED"},
-      ${JSON.stringify([{ note: data.note, masterKey: title.master_key, posterKey: title.poster_key, technicalEvidence: data.qcEvidence ?? null }])}::jsonb,${actor.userId},now())`;
+      ${JSON.stringify([{ note: data.note, masterKey: title.master_key, posterKey: title.poster_key, technicalEvidence: data.qcEvidence ?? null, correction: data.correction ?? null }])}::jsonb,${actor.userId},now())`;
   } else {
     if (!data.grantId) throw new Error("Select a license draft");
     const [grant] = await tx<{
