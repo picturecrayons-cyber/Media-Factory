@@ -54,11 +54,14 @@ function Signup() {
     setBusy(true);
 
     try {
-      if (search.invite) {\n        try { window.sessionStorage.setItem("bridge-invite", search.invite); } catch { /* session storage may be unavailable */ }\n      }\n      const result = await signUpWithEmail({
+      if (search.invite) {
+        try { window.sessionStorage.setItem("bridge-invite", search.invite); } catch { /* session storage may be unavailable */ }
+      }
+      const result = await signUpWithEmail({
         email: email.trim(),
         password,
         name: name.trim(),
-        accountType,
+        accountType: search.role === "investor" && search.invite ? "investor" : accountType,
       });
 
       const signupState = classifySignupResult(result);
