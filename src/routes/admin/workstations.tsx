@@ -79,7 +79,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
         <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
-          canAct={hasPermission(actor, "title.qc_review")} />
+          canAct={actor.emailVerified && actor.internalRole === "qc_reviewer"} />
       ) : activeTab === "Rights" ? (
         <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
           canAct={actor.emailVerified && actor.internalRole === "legal_reviewer"} />
