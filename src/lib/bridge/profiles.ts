@@ -542,7 +542,7 @@ export const submitInvestorAccessRequest = createServerFn({ method: "POST" })
     const email = data.email.toLowerCase();
     const existing = await sql<{ id: string; status: string }>`
       select id, status from bridge_investor_access_requests
-      where lower(email) = ${email} and status in ('PENDING', 'APPROVED')
+      where lower(email) = ${email} and status = 'PENDING'
       order by created_at desc limit 1
     `;
     if (existing[0]) {
