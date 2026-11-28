@@ -159,7 +159,7 @@ function CreatorDashboard({
           </a>
         </div>
         <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
-          <TitleList empty="No titles are available for this account yet. Start a submission to add your first title." />
+          <TitleList view="gallery" empty="No titles are available for this account yet. Start a submission to add your first title." />
         </div>
       </section>
 
