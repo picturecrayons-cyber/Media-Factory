@@ -207,7 +207,7 @@ function DashboardBody() {
         </p>
       </section>
 
-      <LoopTitleAnalytics title="Super Admin · Loop portfolio analytics & report" />
+      <LoopTitleAnalytics title="Super Admin · Loop portfolio analytics & report" scopeKey="super-admin-portfolio" />
 
       <section aria-labelledby="portfolio-title" className="space-y-3">
         <div>
