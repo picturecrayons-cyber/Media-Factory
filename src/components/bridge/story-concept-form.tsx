@@ -87,7 +87,7 @@ export function StoryConceptForm() {
       }
 
       const order = await createStoryConceptOrder({
-        data: { titleId, idempotencyKey: `concept-${titleId}` },
+        data: { titleId, idempotencyKey: `concept-${titleId}-${feeQ.data?.rateVersion ?? "rate"}-${feeQ.data?.taxRateId ?? "tax"}` },
       });
       const Razorpay = await loadRazorpay();
       await new Promise<void>((resolve, reject) => {
@@ -235,6 +235,7 @@ export function StoryConceptForm() {
         ) : feeAvailable ? (
           <>
             <p className="font-semibold text-fg">Submission fee: {formatRupees(feeQ.data!.amountPaise!)}</p>
+            <p className="mt-1">Base fee {formatRupees(feeQ.data!.subtotalPaise!)} + tax {formatRupees(feeQ.data!.taxPaise!)} ({feeQ.data!.taxRatePercent}%).</p>
             <p className="mt-1">Payment is processed by Razorpay. Only a server-verified capture moves this concept into the admin curation queue. This fee is not a licence, investment or guarantee of approval, buyer interest or distribution.</p>
           </>
         ) : (
