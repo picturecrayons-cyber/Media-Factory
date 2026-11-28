@@ -315,19 +315,31 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
 
     return {
       titles: rows.map((r) => {
+        const titleGrants = grants.filter((grant) => grant.title_id === r.id);
         const coveringGrant = r.loop_title_id
-          ? findCoveringRightsGrant(
-              grants.filter((grant) => grant.title_id === r.id),
-              {
+          ? findCoveringRightsGrant(titleGrants, {
+              destination: "CRAYONS_LOOP",
+              territories: r.territories || [],
+              languages: r.languages || [],
+              exploitationModels: r.exploitation_models || [],
+              windowStart: iso(r.window_start),
+              windowEnd: iso(r.window_end),
+            })
+          : titleGrants.find((grant) => {
+              const now = new Date();
+              const grantEnd = grant.window_end ? new Date(grant.window_end) : null;
+              const grantStart = grant.window_start ? new Date(grant.window_start) : now;
+              if (!grantEnd || !Number.isFinite(grantEnd.getTime()) || grantEnd <= now) return false;
+              const effectiveStart = grantStart > now ? grantStart : now;
+              return Boolean(findCoveringRightsGrant([grant], {
                 destination: "CRAYONS_LOOP",
-                territories: r.territories || [],
-                languages: r.languages || [],
-                exploitationModels: r.exploitation_models || [],
-                windowStart: iso(r.window_start),
-                windowEnd: iso(r.window_end),
-              },
-            )
-          : null;
+                territories: ["WORLDWIDE"],
+                languages: [r.language],
+                exploitationModels: ["TVOD"],
+                windowStart: effectiveStart.toISOString(),
+                windowEnd: grantEnd.toISOString(),
+              }));
+            }) ?? null;
         const legalGrantIds = Array.isArray(r.legal_grant_ids) ? r.legal_grant_ids : [];
         const legalApproved = Boolean(coveringGrant && legalGrantIds.includes(coveringGrant.id));
         const gatesReady =
