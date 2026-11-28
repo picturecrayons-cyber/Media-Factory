@@ -205,7 +205,8 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     )
       throw new Error("Not found");
     const sql = await getSql();
-    const grants = await sql<{
+    const canViewRights = actor.emailVerified && (actor.internalRole === "super_admin" || actor.internalRole === "legal_reviewer");
+    const grants = canViewRights ? await sql<{
       id: string;
       status: string;
       territories: string[];
@@ -218,7 +219,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
       }>;
-    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc` : [];
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
@@ -228,10 +229,10 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         posterKey: string | null;
       }>;
     }>`select status,reviewed_at,reviewer_findings from bridge_qc_cases where title_id=${data.titleId} order by created_at desc limit 1`;
-    const legal = await sql<{
+    const legal = canViewRights ? await sql<{
       status: string;
       reviewed_at: string | Date;
-    }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+    }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1` : [];
     return {
       grants: grants.map((g) => ({
         ...g,
