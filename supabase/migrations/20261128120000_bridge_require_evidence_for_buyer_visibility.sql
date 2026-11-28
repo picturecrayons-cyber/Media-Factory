@@ -13,7 +13,7 @@ as $$
     join public.bridge_title_gate_certifications g on g.title_id = t.id
     where t.id = p_title_id
       and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-      and nullif(btrim(t.name), '') is not null
+      and nullif(btrim(coalesce(t.original_title, t.name)), '') is not null
       and nullif(btrim(t.content_type), '') is not null
       and nullif(btrim(t.language), '') is not null
       and t.year is not null
