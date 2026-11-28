@@ -103,7 +103,7 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
     if (!canManage && (!canReadTitle(actor, title) || actor.internalRole)) {
       throw new Error("You can request delivery services only for titles you are authorized to access");
     }
-    if (!canManage && !["independent_creator", "studio"].includes(actor.accountType)) {
+    if (!canManage && actor.accountType !== "studio") {
       throw new Error("Delivery requests are not enabled for this account type");
     }
     const id = randomUUID();
