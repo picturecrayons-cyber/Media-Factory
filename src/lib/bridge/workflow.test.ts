@@ -276,6 +276,57 @@ test("a stale artwork pointer cannot clear QC even when a verified vertical post
   }
 });
 
+test("QC cannot approve without required metadata or technical evidence", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query("update bridge_titles set name=null");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, qc, {
+        titleId: "title-123", stage: "QC", decision: "APPROVE",
+        note: "Reviewer checked media evidence", qcEvidence,
+      })),
+      /missing metadata: Original title/,
+    );
+    await f.sql.query("update bridge_titles set name='Original Film'");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, qc, {
+        titleId: "title-123", stage: "QC", decision: "APPROVE",
+        note: "Reviewer checked media evidence",
+      })),
+      /QC technical evidence is required/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("QC correction return requires an affected item and actionable replacement instruction", async () => {
+  const f = await fixture();
+  try {
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, qc, {
+        titleId: "title-123", stage: "QC", decision: "REJECT",
+        note: "Return to Studio with a specific correction",
+      })),
+      /Affected file and required correction are required/,
+    );
+    await f.sql.transaction((tx) => f.review(tx, qc, {
+      titleId: "title-123", stage: "QC", decision: "REJECT",
+      note: "Return to Studio with a specific correction",
+      correction: {
+        affectedItem: "Main Malayalam master",
+        requiredAction: "Replace with the verified final master and resubmit for QC review",
+      },
+    }));
+    assert.equal((await f.sql.query<{ status: string }>("select status from bridge_titles"))[0].status, "PREPARING");
+    const rows = await f.sql.query<{ reviewer_findings: Array<{ correction?: { affectedItem: string } }> }>("select reviewer_findings from bridge_qc_cases");
+    assert.equal(rows[0].reviewer_findings[0].correction?.affectedItem, "Main Malayalam master");
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("an audit failure rolls back review records and lifecycle", async () => {
   const f = await fixture();
   try {
