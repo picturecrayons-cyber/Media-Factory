@@ -117,7 +117,10 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     }
 
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Creator or Studio account required");
+    }
+    assertPermission(actor, "title.create");
 
     const titleId = randomBytes(16).toString("hex");
     const slug = slugify(data.titleName, titleId);
