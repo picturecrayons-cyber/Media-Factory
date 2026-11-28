@@ -320,6 +320,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   </label>
                   {subtitleStatus === "VERIFIED" ? input("Verified subtitle languages", subtitleLanguages, setSubtitleLanguages) : null}
                   <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={posterVerified} onChange={(e) => setPosterVerified(e.target.checked)} /> Current poster / artwork visually checked</label>
+                  <p className="text-xs text-muted">Record only findings you personally verified. Suggested structure: Master playback completed or failed; video codec, resolution and frame rate; audio track layout and playback result; subtitle languages or not applicable; current poster/artwork check. Replace each item with measured facts. Do not guess. If playback or any required check is incomplete, do not approve QC.</p>
                   {input("Reviewer findings and technical notes (minimum 8 characters)", note, setNote)}
                   <div className="flex flex-wrap gap-2">
                     {button("Approve QC", () =>
@@ -421,7 +422,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               </details> : null}
               {canReviewRights ? (
                 <>
-                  <p className="text-xs text-muted">Open and inspect both signed documents in the authorized evidence store before approving. A typed document reference alone is not proof of ownership or distribution authority.</p>
+                  <p className="text-xs text-muted">Open and inspect both signed documents in the authorized evidence store before approving. Record the exact document IDs, signatories, rights owner, territories, languages, media and validity dates actually verified. A typed reference alone is not proof of ownership or distribution authority.</p>
                   {input("Independent Legal review note", note, setNote)}
                   {input("Verified signed distribution / OTT agreement reference", agreement, setAgreement)}
                   {input("Verified signed chain-of-title / authority reference", ownership, setOwnership)}
