@@ -200,6 +200,10 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit for QC. QC is not reviewed yet."
                     : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
+              <div className="rounded-lg border border-line p-3 text-xs" role="status">
+                <span className="font-semibold">Required metadata · </span>
+                {missingMetadata.length ? <span className="text-amber-600">BLOCKED — {missingMetadata.join(", ")}</span> : <span className="text-emerald-600">PASS — all required fields recorded</span>}
+              </div>
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
               ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
                 ? button(
