@@ -15,7 +15,7 @@ import {
   suspendLoopPublication,
 } from "@/lib/bridge/loop-publication";
 import { hasPermission, canOperateOnTitle } from "@/lib/bridge/rbac";
-import { publicationIsActive } from "@/lib/bridge/workflow-policy";
+import { loopLicenseReviewBlockers, publicationIsActive } from "@/lib/bridge/workflow-policy";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { BridgeTitle } from "@/lib/bridge/types";
 
@@ -270,6 +270,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               {Object.entries(grantsByAgreement).map(([reference, agreementGrants]) => {
                 const selectedId = selectedGrantByAgreement[reference] ?? agreementGrants[0]?.id ?? "";
                 const selectedGrant = agreementGrants.find((grant) => grant.id === selectedId) ?? agreementGrants[0];
+                const reviewBlockers = selectedGrant ? loopLicenseReviewBlockers(selectedGrant) : ["Select a license record."];
                 return (
                   <section key={reference} className="space-y-3 rounded-xl border border-line p-3">
                     <div>
@@ -338,6 +339,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                               ["Ownership evidence reference recorded", Boolean(evidence?.ownershipReference?.trim())],
                               ["Agreement reference recorded", Boolean(evidence?.agreementReference?.trim())],
                               ["NON-EXCLUSIVE terms recorded", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
+                              ["Crayons LOOP TVOD media scope recorded", selectedGrant.media.includes("CRAYONS_LOOP") && selectedGrant.media.includes("TVOD")],
                               ["Revenue-share split recorded and totals 100%", validSplit],
                               ["Territory, language and validity window recorded", selectedGrant.territories.length > 0 && selectedGrant.languages.length > 0 && validWindow],
                               ["Super Admin legal approval recorded", selectedGrant.status === "VALID"],
@@ -361,9 +363,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                   <p>Distributor share: {typeof distributorShare === "number" && Number.isInteger(distributorShare) ? `${distributorShare}%` : "Not recorded"}</p>
                                 </div>
                                 <p className="text-xs font-medium" role="status">
-                                  {checks.every(([, passed]) => passed)
+                                  {reviewBlockers.length === 0
                                     ? "All required fields are recorded. Documentary verification and Legal approval remain separate gates."
-                                    : "PENDING — do not mark READY until every required item is verified and the verified Super Admin approves."}
+                                    : `PENDING — ${reviewBlockers.join(" ")}`}
                                 </p>
                               </>
                             );
@@ -385,7 +387,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                     grantId: selectedGrant.id,
                                   },
                                 }),
-                              note.trim().length < 8,
+                              note.trim().length < 8 || reviewBlockers.length > 0,
                             )}
                             {button(
                               "Reject",
