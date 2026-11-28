@@ -203,7 +203,7 @@ function BuyerReleaseCard({ title, certification, canApprove, onGate }: {
     OTT: "", PACKAGING: "", CURATION: "", DELIVERY: "",
   });
   const statusLabel = (value?: string) => value === "READY" || value === "COMPLETE" || value === "APPROVED"
-    ? "PASS" : value === "HOLD" ? "BLOCKED" : value === "REVOKED" ? "FAIL" : "NOT TESTED";
+    ? "PASS" : value === "HOLD" ? "BLOCKED" : value === "REVOKED" || value === "FAILED" || value === "REJECTED" ? "FAIL" : "NOT TESTED";
   return (
     <article className="space-y-3 rounded-2xl border border-line bg-surface p-4">
       <div>
@@ -213,12 +213,14 @@ function BuyerReleaseCard({ title, certification, canApprove, onGate }: {
       <div className="grid gap-3 md:grid-cols-2">
         {RELEASE_GATES.map((gate) => {
           const value = certification?.[gate.statusKey] as string | undefined;
+          const evidence = certification?.evidence?.[gate.id];
           return (
             <div key={gate.id} className="space-y-2 rounded-xl border border-line p-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-medium">{gate.label}</span>
                 <span className="text-xs text-muted">{statusLabel(value)}</span>
               </div>
+              {evidence ? <p className="text-xs text-muted">Recorded by {evidence.actor ?? "unknown"} · {evidence.at ? new Date(evidence.at).toLocaleString() : "timestamp unavailable"} · {evidence.notes ?? "No evidence note"}</p> : <p className="text-xs text-muted">No persisted evidence recorded.</p>}
               {canApprove ? (
                 <>
                   <textarea
