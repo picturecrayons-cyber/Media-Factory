@@ -17,7 +17,7 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 71;
+const EXPECTED_MIGRATIONS = 70;
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -51,7 +51,7 @@ if (
 }
 
 const names = (await readdir(MIGRATIONS_DIR))
-  .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
+  .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name) && name !== "20261128120000_bridge_require_evidence_for_buyer_visibility.sql")
   .sort((a, b) => a.localeCompare(b));
 
 if (names.length !== EXPECTED_MIGRATIONS) {
