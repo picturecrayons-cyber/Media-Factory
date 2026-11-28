@@ -164,6 +164,43 @@ export async function grantFromCapturedPayment(opts: {
     throw new Error("Payment does not belong to this account");
   }
 
+  if (payment.purpose === "story_concept_submission") {
+    if (!payment.title_id || payment.provider !== "razorpay") {
+      throw new Error("Invalid Story / Concept payment record");
+    }
+    const concepts = await sql<{ id: string; payment_status: string }>`
+      select id, payment_status
+      from bridge_story_concept_submissions
+      where title_id = ${payment.title_id}
+      limit 1
+    `;
+    const concept = concepts[0];
+    if (!concept) throw new Error("Story / Concept submission not found");
+    await sql`
+      update bridge_payments
+      set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = coalesce(verified_at, now())
+      where id = ${payment.id}
+        and (provider_payment_id is null or provider_payment_id = ${opts.paymentId})
+    `;
+    await sql`
+      update bridge_story_concept_submissions
+      set payment_status = 'PAID',
+          payment_id = ${payment.id},
+          paid_at = coalesce(paid_at, now()),
+          updated_at = now()
+      where id = ${concept.id}
+        and payment_status <> 'REFUNDED'
+    `;
+    await writeAudit({
+      actorUserId: opts.actorUserId ?? payment.user_id,
+      action: "story_concept.payment_captured",
+      entityType: "bridge_story_concept_submission",
+      entityId: concept.id,
+      metadata: { titleId: payment.title_id, paymentId: payment.id, providerPaymentId: opts.paymentId },
+    });
+    return { paymentId: payment.id, entitled: false, conceptPaid: true, titleId: payment.title_id };
+  }
+
   if (!payment.title_id) {
     await sql`
       update bridge_payments
@@ -512,3 +549,204 @@ export async function ingestRazorpayWebhook(rawBody: string, signature: string |
     throw error;
   }
 }
+
+
+/**
+ * Story / Concept network fee. Customer checkout is enabled only when Finance has
+ * activated the service and configured an effective, costed INR rate.
+ */
+export const getStoryConceptFee = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Creator or Studio account required");
+    }
+    assertPermission(actor, "title.create");
+    const sql = await getSql();
+    const rows = await sql.query<{
+      base_price_paise: number | null;
+      cost_basis_paise: number | null;
+      target_margin_percent: number | null;
+      version: number;
+    }>(
+      "select r.base_price_paise,r.cost_basis_paise,r.target_margin_percent,r.version from public.bridge_service_catalog c join public.bridge_service_rates r on r.service_code=c.code where c.code=$1 and c.active=true and c.customer_visible=true and r.active=true and r.currency='INR' and r.effective_from<=now() and (r.effective_to is null or r.effective_to>now()) order by r.effective_from desc,r.version desc limit 1",
+      ["STORY_CONCEPT_NETWORK_SUBMISSION"],
+    );
+    const rate = rows[0];
+    const available = Boolean(
+      rate &&
+      rate.base_price_paise !== null &&
+      Number(rate.base_price_paise) > 0 &&
+      rate.cost_basis_paise !== null &&
+      rate.target_margin_percent !== null,
+    );
+    return {
+      available,
+      amountPaise: available ? Number(rate!.base_price_paise) : null,
+      currency: "INR",
+      rateVersion: available ? Number(rate!.version) : null,
+    };
+  });
+
+export const createStoryConceptOrder = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8).max(80),
+    idempotencyKey: z.string().min(8).max(80),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Creator or Studio account required");
+    }
+    assertPermission(actor, "title.create");
+    const title = await loadTitle(data.titleId);
+    if (!title || title.submissionType !== "story_concept" || !canReadTitle(actor, title)) {
+      throw new Error("Story / Concept submission not found");
+    }
+    const sql = await getSql();
+    const conceptRows = await sql<{ id: string; payment_status: string }>`
+      select c.id, c.payment_status
+      from bridge_story_concept_submissions c
+      where c.title_id = ${title.id}
+      limit 1
+    `;
+    const concept = conceptRows[0];
+    if (!concept || concept.payment_status === "REFUNDED") {
+      throw new Error("This Story / Concept submission cannot be paid");
+    }
+    if (concept.payment_status === "PAID") {
+      throw new Error("This Story / Concept submission is already paid");
+    }
+
+    const rates = await sql.query<{
+      base_price_paise: number | null;
+      cost_basis_paise: number | null;
+      target_margin_percent: number | null;
+      version: number;
+    }>(
+      "select r.base_price_paise,r.cost_basis_paise,r.target_margin_percent,r.version from public.bridge_service_catalog c join public.bridge_service_rates r on r.service_code=c.code where c.code=$1 and c.active=true and c.customer_visible=true and r.active=true and r.currency='INR' and r.effective_from<=now() and (r.effective_to is null or r.effective_to>now()) order by r.effective_from desc,r.version desc limit 1",
+      ["STORY_CONCEPT_NETWORK_SUBMISSION"],
+    );
+    const rate = rates[0];
+    if (!rate || rate.base_price_paise === null || Number(rate.base_price_paise) <= 0 ||
+        rate.cost_basis_paise === null || rate.target_margin_percent === null) {
+      throw new Error("Story / Concept submission fee is not certified yet. No payment has been requested.");
+    }
+    const amountPaise = Number(rate.base_price_paise);
+    const { keyId } = requireRazorpayKeys();
+    const existing = await sql<{
+      id: string; provider_order_id: string | null; amount_paise: number; status: string;
+    }>`
+      select id, provider_order_id, amount_paise, status
+      from bridge_payments
+      where user_id = ${actor.userId}
+        and purpose = 'story_concept_submission'
+        and idempotency_key = ${data.idempotencyKey}
+      limit 1
+    `;
+    if (existing[0]) {
+      if (Number(existing[0].amount_paise) !== amountPaise) {
+        throw new Error("The configured fee changed. Start a fresh payment attempt.");
+      }
+      if (existing[0].provider_order_id) {
+        return {
+          orderId: existing[0].provider_order_id,
+          amountPaise: Number(existing[0].amount_paise),
+          currency: "INR",
+          keyId,
+          paymentRecordId: existing[0].id,
+        };
+      }
+    }
+
+    const rz = await razorpayFetch<{ id: string; amount: number; currency: string }>("/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        amount: amountPaise,
+        currency: "INR",
+        receipt: data.idempotencyKey.slice(0, 40),
+        notes: {
+          purpose: "story_concept_submission",
+          titleId: title.id,
+          conceptId: concept.id,
+          userId: actor.userId,
+          rateVersion: String(rate.version),
+        },
+      }),
+    });
+    if (rz.amount !== amountPaise || rz.currency !== "INR") {
+      throw new Error("Razorpay order amount verification failed");
+    }
+
+    const paymentId = randomBytes(16).toString("hex");
+    const inserted = await sql<{ id: string }>`
+      insert into bridge_payments (
+        id, user_id, title_id, purpose, provider, provider_order_id,
+        amount_paise, currency, status, idempotency_key
+      ) values (
+        ${paymentId}, ${actor.userId}, ${title.id}, 'story_concept_submission',
+        'razorpay', ${rz.id}, ${amountPaise}, 'INR', 'created', ${data.idempotencyKey}
+      )
+      on conflict (user_id, purpose, idempotency_key) do nothing
+      returning id
+    `;
+    if (!inserted[0]) {
+      const winner = await sql<{ id: string; provider_order_id: string | null; amount_paise: number }>`
+        select id, provider_order_id, amount_paise
+        from bridge_payments
+        where user_id = ${actor.userId}
+          and purpose = 'story_concept_submission'
+          and idempotency_key = ${data.idempotencyKey}
+        limit 1
+      `;
+      if (!winner[0]?.provider_order_id || Number(winner[0].amount_paise) !== amountPaise) {
+        throw new Error("A payment order is already being created. Retry shortly.");
+      }
+      return {
+        orderId: winner[0].provider_order_id,
+        amountPaise,
+        currency: "INR",
+        keyId,
+        paymentRecordId: winner[0].id,
+      };
+    }
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "story_concept.payment_order_created",
+      entityType: "bridge_story_concept_submission",
+      entityId: concept.id,
+      metadata: { titleId: title.id, paymentId, orderId: rz.id, amountPaise, rateVersion: rate.version },
+    });
+    return { orderId: rz.id, amountPaise, currency: "INR", keyId, paymentRecordId: paymentId };
+  });
+
+export const verifyStoryConceptPayment = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    orderId: z.string().min(4),
+    paymentId: z.string().min(4),
+    signature: z.string().min(8),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Creator or Studio account required");
+    }
+    const { keySecret } = requireRazorpayKeys();
+    const ok = verifyRazorpaySignature({
+      secret: keySecret,
+      body: paymentVerifyBody(data.orderId, data.paymentId),
+      signature: data.signature,
+    });
+    if (!ok) throw new Error("Invalid payment signature");
+    return grantFromCapturedPayment({
+      orderId: data.orderId,
+      paymentId: data.paymentId,
+      actorUserId: actor.userId,
+    });
+  });
