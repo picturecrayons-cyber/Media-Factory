@@ -167,6 +167,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       g.id === legalEvidence?.grantId &&
       new Date(g.window_end) > new Date(),
     );
+  const licensingReady = rightsReady && [
+    "LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED",
+  ].includes(title.status);
   const distributionReady = Boolean(
     pub && pub.listed && pub.published &&
     publicationIsActive(pub.authorizationStatus, pub.windowStart, pub.windowEnd),
@@ -280,7 +283,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
                 <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
-                <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
+                <Metric label="Licensing" value={licensingReady ? "READY" : "PENDING"} />
                 <Metric label="Loop publication" value={distributionReady ? "PUBLISHED" : pub?.authorizationStatus === "authorized" ? "AUTHORIZED · NOT PUBLISHED" : "NOT PUBLISHED"} />
               </div>
             </>
