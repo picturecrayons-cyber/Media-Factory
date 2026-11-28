@@ -278,6 +278,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           }
           titleId={id}
           assets={assets}
+          assetsLoading={assetsQ.isPending}
+          assetsError={assetsQ.isError ? (assetsQ.error instanceof Error ? assetsQ.error.message : "Asset register unavailable") : null}
           onAssetsChanged={() => assetsQ.refetch()}
         />
       ) : activeTab === "Production" && !buyerView ? (
@@ -461,10 +463,14 @@ function notifyUpload(message: string) {
 function FilesPanel({
   titleId,
   assets,
+  assetsLoading,
+  assetsError,
   onAssetsChanged,
   canUpload,
 }: {
   canUpload: boolean;
+  assetsLoading: boolean;
+  assetsError: string | null;
   titleId: string;
   assets: Array<{
     id: string;
@@ -844,7 +850,9 @@ function FilesPanel({
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Upload</p>
           <h2 className="mt-1 font-display text-xl font-semibold">Package in three steps</h2>
-          <p className="mt-1 text-sm text-muted">{readyCount} of 7 files ready. A file is Ready only after storage verification.</p>
+          <p className="mt-1 text-sm text-muted" aria-live="polite">
+            {assetsLoading ? "Loading verified asset register…" : assetsError ? "Asset readiness unavailable; retry the register before interpreting counts." : readyCount + " of 7 files ready. A file is Ready only after storage verification."}
+          </p>
         </div>
       </div>
 

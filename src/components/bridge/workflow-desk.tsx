@@ -408,7 +408,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   </section>
                 );
               })}
-              {!grants.length ? <p>No license draft recorded.</p> : null}
+              {!grants.length ? (
+                <p className="rounded-lg border border-dashed border-line p-3 text-sm text-muted" role="status">
+                  No persisted license draft is recorded for this title. Saving a draft records proposed terms only; Legal review and approval remain separate gates.
+                </p>
+              ) : null}
             </div>
           ) : null}
           {stage === "Distribution" ? (
@@ -489,8 +493,10 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   </p>
                   <button
                     type="button"
-                    className="rounded-lg border border-line p-2"
+                    className="rounded-lg border border-line p-2 disabled:opacity-50"
                     onClick={downloadStatement}
+                    disabled={!revenue.data?.receipts.length}
+                    title={!revenue.data?.receipts.length ? "No title-linked captured receipts to export" : "Export title-linked receipt records"}
                   >
                     Export receipt statement CSV
                   </button>
@@ -505,6 +511,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         </tr>
                       </thead>
                       <tbody>
+                        {!revenue.data?.receipts.length ? (
+                          <tr><td colSpan={4} className="py-4 text-muted">No matching captured receipts. This is not proof of payment-system failure.</td></tr>
+                        ) : null}
                         {revenue.data?.receipts.map((r) => (
                           <tr key={r.paymentId}>
                             <td>{r.paymentId}</td>
