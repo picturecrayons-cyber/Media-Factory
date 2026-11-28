@@ -66,7 +66,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     ? stages
     : canReviewRights
       ? stages.filter((s) => s === "Prepare" || s === "Business")
-      : stages.filter((s) => s === "Prepare" || (s === "Revenue" && canFinance));
+      : actor.accountType === "independent_creator" || actor.accountType === "studio"
+        ? stages.filter((s) => s === "Prepare")
+        : stages.filter((s) => s === "Prepare" || (s === "Revenue" && canFinance));
   const qcEvidenceReady = Boolean(
     playbackVerified && codec.trim() && resolution.trim() && frameRate.trim() &&
     audioVerified && audioDetails.trim() && masterLanguage.trim() &&
