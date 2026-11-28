@@ -38,7 +38,7 @@ test("public signup role selector is accessible and limited to supported public 
   assert.match(signup, /role="radiogroup"/);
   assert.match(signup, /type="radio"/);
   assert.match(signup, /publicAccountTypeFrom\(search\.role\)/);
-  assert.match(signup, /Investor access/);
+  assert.match(signup, /Request Investor Access/);
 });
 
 test("onboarding preserves the signup-selected role and fails closed for unsupported roles", () => {
@@ -51,7 +51,7 @@ test("onboarding preserves the signup-selected role and fails closed for unsuppo
 
 test("the server rejects direct Investor onboarding without a reviewed access path", () => {
   const profiles = read("./profiles.ts");
-  assert.match(profiles, /data\.accountType === "investor"[\s\S]{0,120}Investor access requires a reviewed access request/);
+  assert.match(profiles, /data\.accountType === "investor"[\s\S]{0,160}Investor access requires an approved Investor invitation/);
 });
 
 test("investor CTA requests reviewed access instead of silently signing up as Creator", () => {
