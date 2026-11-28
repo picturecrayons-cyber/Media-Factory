@@ -175,14 +175,18 @@ export async function grantFromCapturedPayment(opts: {
       limit 1
     `;
     const concept = concepts[0];
-    if (!concept) throw new Error("Story / Concept submission not found");
-    await sql`
+    if (!concept || concept.payment_status === "REFUNDED") {
+      throw new Error("Story / Concept submission is not eligible for payment");
+    }
+    const capturedRows = await sql<{ id: string }>`
       update bridge_payments
       set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = coalesce(verified_at, now())
       where id = ${payment.id}
         and (provider_payment_id is null or provider_payment_id = ${opts.paymentId})
+      returning id
     `;
-    await sql`
+    if (!capturedRows[0]) throw new Error("Payment was already linked to another provider payment");
+    const paidRows = await sql<{ id: string }>`
       update bridge_story_concept_submissions
       set payment_status = 'PAID',
           payment_id = ${payment.id},
@@ -190,7 +194,9 @@ export async function grantFromCapturedPayment(opts: {
           updated_at = now()
       where id = ${concept.id}
         and payment_status <> 'REFUNDED'
+      returning id
     `;
+    if (!paidRows[0]) throw new Error("Story / Concept submission could not be marked paid");
     await writeAudit({
       actorUserId: opts.actorUserId ?? payment.user_id,
       action: "story_concept.payment_captured",
@@ -645,9 +651,9 @@ export const createStoryConceptOrder = createServerFn({ method: "POST" })
     const amountPaise = Number(rate.base_price_paise);
     const { keyId } = requireRazorpayKeys();
     const existing = await sql<{
-      id: string; provider_order_id: string | null; amount_paise: number; status: string;
+      id: string; title_id: string | null; provider_order_id: string | null; amount_paise: number; status: string;
     }>`
-      select id, provider_order_id, amount_paise, status
+      select id, title_id, provider_order_id, amount_paise, status
       from bridge_payments
       where user_id = ${actor.userId}
         and purpose = 'story_concept_submission'
@@ -655,6 +661,9 @@ export const createStoryConceptOrder = createServerFn({ method: "POST" })
       limit 1
     `;
     if (existing[0]) {
+      if (existing[0].title_id !== title.id) {
+        throw new Error("Idempotency key belongs to another Story / Concept submission");
+      }
       if (Number(existing[0].amount_paise) !== amountPaise) {
         throw new Error("The configured fee changed. Start a fresh payment attempt.");
       }
@@ -701,15 +710,15 @@ export const createStoryConceptOrder = createServerFn({ method: "POST" })
       returning id
     `;
     if (!inserted[0]) {
-      const winner = await sql<{ id: string; provider_order_id: string | null; amount_paise: number }>`
-        select id, provider_order_id, amount_paise
+      const winner = await sql<{ id: string; title_id: string | null; provider_order_id: string | null; amount_paise: number }>`
+        select id, title_id, provider_order_id, amount_paise
         from bridge_payments
         where user_id = ${actor.userId}
           and purpose = 'story_concept_submission'
           and idempotency_key = ${data.idempotencyKey}
         limit 1
       `;
-      if (!winner[0]?.provider_order_id || Number(winner[0].amount_paise) !== amountPaise) {
+      if (!winner[0]?.provider_order_id || winner[0].title_id !== title.id || Number(winner[0].amount_paise) !== amountPaise) {
         throw new Error("A payment order is already being created. Retry shortly.");
       }
       return {
