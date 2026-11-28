@@ -18,7 +18,7 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
     const actor = await actorFor(context.userId);
     if (!canAccessAdminWorkstations(actor)) throw new Error("Forbidden");
     const sql = await getSql();
-    const [titles, assets, assetVersions, qc, legal, rights, packages, publications, audit] = await Promise.all([
+    const [titles, assets, assetVersions, qc, legal, rights, packages, publications, gateCertifications, audit] = await Promise.all([
       sql`select id, name, owner_user_id, owner_account_type, status, language, updated_at from bridge_titles order by updated_at desc limit 200`,
       sql`select id, title_id, kind, s3_key, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
       sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`,
@@ -27,15 +27,20 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
       sql`select id, title_id, grant_type, territories, languages, media, window_start, window_end, exclusivity, status, created_by, created_at from bridge_rights_grants order by created_at desc limit 200`,
       sql`select id, title_id, destination, package_version, rights_grant_id, qc_case_id, legal_case_id, readiness_state, authorized_by, authorized_at, created_at, commercial_model, distributor_exclusivity, revenue_share_percent from bridge_destination_packages order by created_at desc limit 200`,
       sql`select id, bridge_title_id, loop_title_id, authorization_status, territories, languages, exploitation_models, window_start, window_end, approved_by, approved_at, revoked_at, updated_at from bridge_loop_publications order by updated_at desc limit 200`,
+      sql`select title_id, ott_preparation_status, packaging_status, curation_status, delivery_status, updated_by, evidence, updated_at from bridge_title_gate_certifications order by updated_at desc limit 200`,
       sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs order by created_at desc limit 200`,
     ]);
-    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
+    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, gateCertifications, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
   });
 
 const reviewInput = z.object({
   titleId: z.string().min(1),
   decision: z.literal("ACCEPT"),
-  notes: z.string().max(4000).optional(),
+  notes: z.string().trim().min(8).max(4000).optional(),
+}).superRefine((data, ctx) => {
+  if (data.decision === "PASS" && !data.notes) {
+    ctx.addIssue({ code: "custom", path: ["notes"], message: "Evidence note is required before passing a release gate" });
+  }
 });
 
 export const reviewAdminTitle = createServerFn({ method: "POST" })
