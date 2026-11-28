@@ -203,7 +203,7 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
         where t.submission_type = 'story_concept'
-          and t.record_classification is distinct from 'TEST'
+          and (to_jsonb(t)->>'record_classification') is distinct from 'TEST'
           and (
             (t.owner_user_id = ${actor.userId} and t.owner_account_type <> 'studio')
             or (
