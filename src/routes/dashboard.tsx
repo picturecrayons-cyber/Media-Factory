@@ -162,10 +162,11 @@ function DashboardBody() {
                   </p>
                 </div>
                 <Link
-                  to="/workspace"
+                  to="/title/$id"
+                  params={{ id: title.id }}
                   className="shrink-0 text-sm font-semibold text-accent hover:underline"
                 >
-                  Review in workspace →
+                  Open title →
                 </Link>
               </li>
             ))}
@@ -274,7 +275,13 @@ function DashboardBody() {
             {titles.slice(0, 6).map((title) => (
               <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
                 <div className="min-w-0">
-                  <p className="font-medium">{title.name}</p>
+                  <Link
+                    to="/title/$id"
+                    params={{ id: title.id }}
+                    className="font-medium hover:text-accent"
+                  >
+                    {title.name}
+                  </Link>
                   <p className="break-all font-mono text-[10px] text-muted">ID: {title.id}</p>
                 </div>
                 <span className="shrink-0 rounded-sm border border-line px-2 py-1 text-xs text-muted">
