@@ -6,7 +6,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import {
   getPublicSiteContent, getHomepageDraft, updateHomepageContent,
-  approveHomepageDraft, publishHomepageDraft,
+  approveHomepageDraft, publishHomepageDraft, getHomepageVersions, restoreHomepageVersion,
 } from "@/lib/bridge/site-content";
 
 export const Route = createFileRoute("/admin-cms")({ component: BridgeCms });
@@ -34,6 +34,7 @@ function BridgeCms() {
 function CmsEditor({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const contentQ = useQuery({ queryKey: ["bridge-site-content"], queryFn: () => getPublicSiteContent() });
   const draftQ = useQuery({ queryKey: ["bridge-site-content-draft"], queryFn: () => getHomepageDraft() });
+  const historyQ = useQuery({ queryKey: ["bridge-site-content-history"], queryFn: () => getHomepageVersions() });
   const [form, setForm] = useState({
     heroTitle: "", heroBody: "", workflowHeading: "", audienceHeading: "", finalCtaHeading: "",
   });
@@ -83,12 +84,26 @@ function CmsEditor({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     }
   }
 
+  async function restore(version: number) {
+    setWorkflowBusy(true);
+    setStatus(null);
+    try {
+      await restoreHomepageVersion({ data: { version } });
+      await Promise.all([draftQ.refetch(), historyQ.refetch()]);
+      setStatus("Selected version restored as a new draft. Review and approve it before publishing.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Version restore failed.");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
   async function publish() {
     setWorkflowBusy(true);
     setStatus(null);
     try {
       await publishHomepageDraft();
-      await Promise.all([draftQ.refetch(), contentQ.refetch()]);
+      await Promise.all([draftQ.refetch(), contentQ.refetch(), historyQ.refetch()]);
       setStatus("Approved homepage version published.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Publishing failed.");
@@ -163,6 +178,20 @@ function CmsEditor({ isSuperAdmin }: { isSuperAdmin: boolean }) {
             <li><strong className="text-fg">3. Approval</strong><br />Super Admin records the approval decision.</li>
             <li><strong className="text-fg">4. Publish</strong><br />Only an approved version can be published.</li>
           </ol>
+        </section>
+        <section className="rounded-2xl border border-line bg-surface p-5">
+          <h3 className="font-semibold">Publish history</h3>
+          <p className="mt-2 text-sm text-muted">Recent saved versions. Restore creates a new draft; it never rolls back the public site directly.</p>
+          <ul className="mt-3 divide-y divide-line">
+            {(historyQ.data ?? []).map((item) => (
+              <li key={item.version_number} className="flex items-center justify-between gap-2 py-2 text-xs">
+                <span>v{item.version_number} · {item.status}</span>
+                {isSuperAdmin ? <Button type="button" size="sm" variant="outline" disabled={workflowBusy} onClick={() => void restore(item.version_number)}>Restore as draft</Button> : null}
+              </li>
+            ))}
+            {!historyQ.isPending && !historyQ.isError && !(historyQ.data ?? []).length ? <li className="py-3 text-xs text-muted">No saved versions yet.</li> : null}
+            {historyQ.isError ? <li className="py-3 text-xs text-muted">Version history unavailable until the CMS migration is applied.</li> : null}
+          </ul>
         </section>
         <section className="rounded-2xl border border-line bg-surface p-5">
           <h3 className="font-semibold">Other CMS modules</h3>
