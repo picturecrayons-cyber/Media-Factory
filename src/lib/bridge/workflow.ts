@@ -160,13 +160,14 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
       languages: string[];
       window_start: string | Date;
       window_end: string | Date;
+      created_at: string | Date;
       exclusivity: string;
       evidence: Array<{
         agreementReference?: string;
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
       }>;
-    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    }>`select id,status,territories,languages,window_start,window_end,created_at,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
@@ -180,15 +181,27 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
       status: string;
       reviewed_at: string | Date;
     }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+    const gate = await sql<{
+      ott_preparation_status: string;
+      packaging_status: string;
+      curation_status: string;
+      delivery_status: string;
+      updated_at: string | Date;
+    }>`select ott_preparation_status,packaging_status,curation_status,delivery_status,updated_at
+      from bridge_title_gate_certifications where title_id=${data.titleId} limit 1`;
     return {
       grants: grants.map((g) => ({
         ...g,
         window_start: g.window_start ? new Date(g.window_start).toISOString() : "",
         window_end: g.window_end ? new Date(g.window_end).toISOString() : "",
+        created_at: new Date(g.created_at).toISOString(),
       })),
       qc: qc[0] ? { ...qc[0], reviewed_at: new Date(qc[0].reviewed_at).toISOString() } : null,
       legal: legal[0]
         ? { ...legal[0], reviewed_at: new Date(legal[0].reviewed_at).toISOString() }
+        : null,
+      gateCertification: gate[0]
+        ? { ...gate[0], updated_at: new Date(gate[0].updated_at).toISOString() }
         : null,
     };
   });
