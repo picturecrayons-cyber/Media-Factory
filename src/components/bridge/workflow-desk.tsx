@@ -27,6 +27,16 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [statementRef, setStatementRef] = useState("");
   const [settlementAmount, setSettlementAmount] = useState("");
   const [note, setNote] = useState("");
+  const [playbackVerified, setPlaybackVerified] = useState(false);
+  const [codec, setCodec] = useState("");
+  const [resolution, setResolution] = useState("");
+  const [frameRate, setFrameRate] = useState("");
+  const [audioVerified, setAudioVerified] = useState(false);
+  const [audioDetails, setAudioDetails] = useState("");
+  const [masterLanguage, setMasterLanguage] = useState(title.masterLanguage || title.language || "");
+  const [subtitleStatus, setSubtitleStatus] = useState<"VERIFIED" | "NOT_APPLICABLE">("NOT_APPLICABLE");
+  const [subtitleLanguages, setSubtitleLanguages] = useState("");
+  const [posterVerified, setPosterVerified] = useState(false);
   const [error, setError] = useState("");
   const qc = useQueryClient();
   const workflow = useQuery({
@@ -40,6 +50,16 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
+  const canManageRights = actor.emailVerified && actor.internalRole === "super_admin";
+  const canReviewRights = actor.emailVerified && actor.internalRole === "legal_reviewer";
+  const visibleStages = canManageRights
+    ? stages
+    : canReviewRights
+      ? stages.filter((s) => s === "Prepare" || s === "Business")
+      : stages.filter((s) => s === "Prepare" || (s === "Revenue" && canFinance));
+  const qcEvidenceReady = playbackVerified && codec.trim() && resolution.trim() && frameRate.trim() &&
+    audioVerified && audioDetails.trim() && masterLanguage.trim() &&
+    (subtitleStatus === "NOT_APPLICABLE" || subtitleLanguages.trim()) && posterVerified;
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
     queryFn: () => getTitleRevenue({ data: { titleId: title.id } }),
@@ -129,7 +149,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl">Title operations</h2>
       <nav className="flex flex-wrap gap-2" aria-label="Operational workflow">
-        {stages.map((s) => (
+        {visibleStages.map((s) => (
           <button
             type="button"
             key={s}
@@ -186,23 +206,49 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   )
                 : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
-                <>
-                  {input(
-                    "Technical review findings (include playback/codec checks)",
-                    note,
-                    setNote,
-                  )}
-                  {button("Approve QC", () =>
-                    reviewTitleWorkflow({
-                      data: { titleId: title.id, stage: "QC", decision: "APPROVE", note },
-                    }),
-                  )}
-                  {button("Return for correction", () =>
-                    reviewTitleWorkflow({
-                      data: { titleId: title.id, stage: "QC", decision: "REJECT", note },
-                    }),
-                  )}
-                </>
+                <div className="space-y-3 rounded-xl border border-line p-3">
+                  <h3 className="font-semibold">Technical QC evidence</h3>
+                  <p className="text-xs text-muted">Record the reviewer’s actual checks against the current master and artwork. These are reviewer attestations, not automated media-analysis results.</p>
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={playbackVerified} onChange={(e) => setPlaybackVerified(e.target.checked)} /> Full video playback checked</label>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {input("Video codec", codec, setCodec)}
+                    {input("Resolution", resolution, setResolution)}
+                    {input("Frame rate", frameRate, setFrameRate)}
+                    {input("Master language", masterLanguage, setMasterLanguage)}
+                    {input("Audio track details / channel layout", audioDetails, setAudioDetails)}
+                  </div>
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={audioVerified} onChange={(e) => setAudioVerified(e.target.checked)} /> Audio playback and track checked</label>
+                  <label className="grid gap-1 text-sm">Subtitle check
+                    <select value={subtitleStatus} onChange={(e) => setSubtitleStatus(e.target.value as "VERIFIED" | "NOT_APPLICABLE")} className="rounded-lg border border-line bg-elevated p-2">
+                      <option value="VERIFIED">Subtitles verified</option>
+                      <option value="NOT_APPLICABLE">Not applicable</option>
+                    </select>
+                  </label>
+                  {subtitleStatus === "VERIFIED" ? input("Verified subtitle languages", subtitleLanguages, setSubtitleLanguages) : null}
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={posterVerified} onChange={(e) => setPosterVerified(e.target.checked)} /> Current poster / artwork visually checked</label>
+                  {input("Reviewer findings and technical notes (minimum 8 characters)", note, setNote)}
+                  <div className="flex flex-wrap gap-2">
+                    {button("Approve QC", () =>
+                      reviewTitleWorkflow({
+                        data: {
+                          titleId: title.id, stage: "QC", decision: "APPROVE", note,
+                          qcEvidence: {
+                            playbackVerified: true, codec, resolution, frameRate, audioVerified: true,
+                            audioDetails, masterLanguage, subtitleStatus, subtitleLanguages, posterVerified: true,
+                          },
+                        },
+                      }),
+                      !qcEvidenceReady || note.trim().length < 8,
+                    )}
+                    {button("Return for correction", () =>
+                      reviewTitleWorkflow({
+                        data: { titleId: title.id, stage: "QC", decision: "REJECT", note },
+                      }),
+                      note.trim().length < 8,
+                    )}
+                  </div>
+                  {!qcEvidenceReady ? <p className="text-xs text-amber-600">QC approval BLOCKED — complete every technical evidence field and reviewer check.</p> : null}
+                </div>
               ) : null}
               {workflow.data?.qc?.reviewer_findings.map((f, i) => (
                 <p key={i} className="text-sm">
