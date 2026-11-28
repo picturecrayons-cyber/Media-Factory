@@ -99,14 +99,14 @@ async function listOwned(sql: Sql, userId: string, accountType: AccountType, org
   if (accountType === "studio" && !orgId) return [];
   if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and submission_type is distinct from 'story_concept' and record_classification is distinct from 'TEST' and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and submission_type is distinct from 'story_concept' and record_classification is distinct from 'TEST' order by updated_at desc limit 200`;
+      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and submission_type is distinct from 'story_concept' and (to_jsonb(bridge_titles)->>'record_classification') is distinct from 'TEST' and merged_into_title_id is null order by updated_at desc limit 200`
+      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and submission_type is distinct from 'story_concept' and (to_jsonb(bridge_titles)->>'record_classification') is distinct from 'TEST' order by updated_at desc limit 200`;
   }
   return mergeColumnAvailable
     ? sql<TitleRow>`
         select t.* from bridge_titles t
         where t.merged_into_title_id is null
-          and t.record_classification is distinct from 'TEST'
+          and (to_jsonb(t)->>'record_classification') is distinct from 'TEST'
           and (t.owner_account_type <> 'studio' or t.submission_type = 'finished_film')
           and (
             (t.owner_user_id = ${userId} and t.owner_account_type <> 'studio')
@@ -125,7 +125,7 @@ async function listOwned(sql: Sql, userId: string, accountType: AccountType, org
       `
     : sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.record_classification is distinct from 'TEST'
+        where (to_jsonb(t)->>'record_classification') is distinct from 'TEST'
           and (t.owner_account_type <> 'studio' or t.submission_type = 'finished_film')
           and (
             (t.owner_user_id = ${userId} and t.owner_account_type <> 'studio')
