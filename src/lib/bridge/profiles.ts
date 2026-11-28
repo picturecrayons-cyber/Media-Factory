@@ -507,7 +507,7 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
       insert into bridge_invites (id, email, internal_role, invited_by, token_hash, expires_at)
       values (${id}, ${data.email.toLowerCase()}, ${data.role}, ${context.userId}, ${hash}, ${new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()})
     `;
-    const url = bridgeInvitationUrl(token, bridgeEnv.appUrl());
+    const url = `${bridgeInvitationUrl(token, bridgeEnv.appUrl())}&role=investor`;
     await mail({
       to: data.email,
       subject: "Crayons Bridge internal invite",
