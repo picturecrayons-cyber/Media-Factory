@@ -31,7 +31,7 @@ function AdminControlPlane() {
                   <h2 className="mt-2 font-display text-3xl font-semibold">Choose one task to work on.</h2>
                   <p className="mt-2 max-w-2xl text-sm text-muted">The Admin Centre is a directory, not a place to perform every operation. Open the dedicated workspace for the task you need.</p>
                   <div className="mt-5 flex flex-wrap gap-3">
-                    <Link to="/dashboard"><Button>Founder Centre</Button></Link>
+                    {actor.internalRole === "super_admin" ? <Link to="/dashboard"><Button>Founder Centre</Button></Link> : null}
                     <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Crayons Loop ↗</Button></a>
                   </div>
                 </section>
