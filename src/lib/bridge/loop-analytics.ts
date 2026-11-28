@@ -8,6 +8,9 @@ type LoopTitleAnalyticsRow = {
   bridge_title_id: string;
   title_name: string;
   lifecycle_status: string;
+  owner_display_name: string | null;
+  owner_email: string | null;
+  owner_organization_name: string | null;
   publication_status: string | null;
   loop_title_status: string | null;
   listed: boolean | null;
@@ -35,7 +38,7 @@ export const getLoopTitleAnalytics = createServerFn({ method: "GET" })
     const sql = await getSql();
     const rows = await sql<LoopTitleAnalyticsRow>`
       with owned_titles as (
-        select t.id, t.name, t.status
+        select t.id, t.name, t.status, t.owner_user_id, t.owner_organization_id
         from bridge_titles t
         where
           ${isSuperAdmin}
@@ -65,7 +68,8 @@ export const getLoopTitleAnalytics = createServerFn({ method: "GET" })
       ),
       entitlements as (
         select title_id,
-          count(*) filter (where access_type = 'RENTAL' and status = 'ACTIVE')::int as active_rentals,
+          count(*) filter (where access_type = 'RENTAL' and status = 'ACTIVE'
+            and (expires_at is null or expires_at > now()))::int as active_rentals,
           count(*) filter (where access_type = 'PURCHASE' and status = 'ACTIVE')::int as active_purchases
         from loop_user_tvod_entitlements
         group by title_id
@@ -83,6 +87,9 @@ export const getLoopTitleAnalytics = createServerFn({ method: "GET" })
         t.id as bridge_title_id,
         t.name as title_name,
         t.status as lifecycle_status,
+        owner.display_name as owner_display_name,
+        owner.email as owner_email,
+        owner.organization_name as owner_organization_name,
         p.authorization_status as publication_status,
         lt.status as loop_title_status,
         lt.listed,
@@ -96,6 +103,7 @@ export const getLoopTitleAnalytics = createServerFn({ method: "GET" })
         coalesce(pe.fulfilled_payment_events, 0)::int as fulfilled_payment_events,
         coalesce(pe.refunded_payment_events, 0)::int as refunded_payment_events
       from owned_titles t
+      left join bridge_profiles owner on owner.user_id = t.owner_user_id
       left join bridge_loop_publications p on p.bridge_title_id = t.id
       left join loop_titles lt on lt.id = p.loop_title_id
       left join watch w on w.title_id = lt.id
