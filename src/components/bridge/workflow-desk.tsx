@@ -453,7 +453,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       >
                         {agreementGrants.map((grant, index) => (
                           <option key={grant.id} value={grant.id}>
-                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · {new Date(grant.window_start).toLocaleDateString()}
+                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · {grant.window_start ? new Date(grant.window_start).toLocaleDateString() : "Start not recorded"} – {grant.window_end ? new Date(grant.window_end).toLocaleDateString() : "End not recorded"}
                           </option>
                         ))}
                       </select>
