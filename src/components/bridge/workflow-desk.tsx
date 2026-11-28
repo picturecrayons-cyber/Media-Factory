@@ -571,7 +571,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   )
                 : null}
               {!valid ? <p>Blocked: approved, unexpired Loop license required.</p> : null}
-              {pub && hasPermission(actor, "loop.revoke") ? (
+              {pub && canManageRights && hasPermission(actor, "loop.revoke") ? (
                 <div className="flex gap-2">
                   {button("Suspend", () =>
                     suspendLoopPublication({
