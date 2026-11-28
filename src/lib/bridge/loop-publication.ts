@@ -162,7 +162,15 @@ export async function verifyDistributionPreflight(
   const reviews = await sql<{ qc_ok: boolean; legal_ok: boolean }>`
     select exists(select 1 from bridge_qc_cases q where q.title_id=${titleId} and q.status='PASSED'
       and q.reviewer_findings->0->>'masterKey'=${title.master_key}
-      and q.reviewer_findings->0->>'posterKey'=${title.poster_key}) as qc_ok,
+      and q.reviewer_findings->0->>'posterKey'=${title.poster_key}
+      and q.reviewer_findings->0->'technicalEvidence'->>'playbackVerified'='true'
+      and nullif(q.reviewer_findings->0->'technicalEvidence'->>'codec','') is not null
+      and nullif(q.reviewer_findings->0->'technicalEvidence'->>'resolution','') is not null
+      and nullif(q.reviewer_findings->0->'technicalEvidence'->>'frameRate','') is not null
+      and q.reviewer_findings->0->'technicalEvidence'->>'audioVerified'='true'
+      and nullif(q.reviewer_findings->0->'technicalEvidence'->>'audioDetails','') is not null
+      and nullif(q.reviewer_findings->0->'technicalEvidence'->>'masterLanguage','') is not null
+      and q.reviewer_findings->0->'technicalEvidence'->>'posterVerified'='true') as qc_ok,
     exists(select 1 from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED'
       and l.evidence->0->>'grantId'=${rightsGrantId}) as legal_ok
   `;
@@ -269,6 +277,14 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                where q.title_id=b.id and q.status='PASSED'
                  and q.reviewer_findings->0->>'masterKey'=b.master_key
                  and q.reviewer_findings->0->>'posterKey'=b.poster_key
+                 and q.reviewer_findings->0->'technicalEvidence'->>'playbackVerified'='true'
+                 and nullif(q.reviewer_findings->0->'technicalEvidence'->>'codec','') is not null
+                 and nullif(q.reviewer_findings->0->'technicalEvidence'->>'resolution','') is not null
+                 and nullif(q.reviewer_findings->0->'technicalEvidence'->>'frameRate','') is not null
+                 and q.reviewer_findings->0->'technicalEvidence'->>'audioVerified'='true'
+                 and nullif(q.reviewer_findings->0->'technicalEvidence'->>'audioDetails','') is not null
+                 and nullif(q.reviewer_findings->0->'technicalEvidence'->>'masterLanguage','') is not null
+                 and q.reviewer_findings->0->'technicalEvidence'->>'posterVerified'='true'
              ) as qc_approved,
              coalesce((
                select jsonb_agg(lc.evidence->0->>'grantId')
