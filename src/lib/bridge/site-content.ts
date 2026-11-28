@@ -177,5 +177,56 @@ export const publishHomepageDraft = createServerFn({ method: "POST" })
     return { workflowState: "PUBLISHED" as const, publishedVersion: rows[0].draft_version };
   });
 
+
+export const getHomepageVersions = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    if (!isCmsAdmin(actor.internalRole)) throw new Error("Admin access required");
+    const sql = await getSql();
+    return await sql<{ version_number: number; status: string; created_at: string | Date; approved_at: string | Date | null; published_at: string | Date | null }>`
+      select version_number, status, created_at, approved_at, published_at
+      from bridge_site_content_versions
+      where content_key = 'homepage'
+      order by version_number desc
+      limit 25
+    `;
+  });
+
+export const restoreHomepageVersion = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ version: z.number().int().positive() }))
+  .handler(async ({ context, data }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin rollback authorization required");
+    const sql = await getSql();
+    const snapshots = await sql<{ payload: SitePayload }>`
+      select payload from bridge_site_content_versions
+      where content_key = 'homepage' and version_number = ${data.version}
+      limit 1
+    `;
+    if (!snapshots[0]) throw new Error("Requested homepage version was not found.");
+    const payload = JSON.stringify(snapshots[0].payload);
+    const rows = await sql<{ draft_version: number }>`
+      update bridge_site_content
+      set draft_payload = ${payload}::jsonb,
+          draft_version = draft_version + 1,
+          workflow_state = 'DRAFT',
+          approved_by = null,
+          approved_at = null,
+          updated_by = ${context.userId}::uuid,
+          updated_at = now()
+      where content_key = 'homepage'
+      returning draft_version
+    `;
+    if (!rows[0]) throw new Error("Homepage CMS record is unavailable.");
+    await sql`
+      insert into bridge_site_content_versions (content_key, version_number, payload, status, created_by)
+      values ('homepage', ${rows[0].draft_version}, ${payload}::jsonb, 'DRAFT', ${context.userId}::uuid)
+    `;
+    await writeAudit({ actorUserId: context.userId, action: "cms.homepage_version_restored_as_draft", entityType: "bridge_site_content", entityId: String(data.version) });
+    return { restoredFromVersion: data.version, draftVersion: rows[0].draft_version, workflowState: "DRAFT" as const };
+  });
+
 // Backward-compatible export: saving now creates a draft and never publishes immediately.
 export const updateHomepageContent = saveHomepageDraft;
