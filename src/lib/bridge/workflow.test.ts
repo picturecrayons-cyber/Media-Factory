@@ -406,6 +406,13 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
 test("Super Admin cannot self-approve rights; independent Legal Reviewer is required", async () => {
   const f = await fixture();
   try {
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, superAdmin, {
+        titleId: "title-123", stage: "QC", decision: "APPROVE",
+        note: "Super Admin cannot substitute for QC reviewer", qcEvidence,
+      })),
+      /Only a verified QC Reviewer may approve or return a technical QC review/,
+    );
     await f.sql.transaction((tx) => f.review(tx, qc, {
       titleId: "title-123", stage: "QC", decision: "APPROVE",
       note: "Independent QC reviewer attestation", qcEvidence,
