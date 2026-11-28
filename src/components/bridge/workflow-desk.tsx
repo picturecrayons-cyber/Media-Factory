@@ -352,6 +352,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               </details> : null}
               {canReviewRights ? (
                 <>
+                  <p className="text-xs text-muted">Open and inspect both signed documents in the authorized evidence store before approving. A typed document reference alone is not proof of ownership or distribution authority.</p>
                   {input("Independent Legal review note", note, setNote)}
                   {input("Verified signed distribution / OTT agreement reference", agreement, setAgreement)}
                   {input("Verified signed chain-of-title / authority reference", ownership, setOwnership)}
