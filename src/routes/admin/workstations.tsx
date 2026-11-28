@@ -82,7 +82,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
           canAct={hasPermission(actor, "title.qc_review")} />
       ) : activeTab === "Rights" ? (
         <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
-          canAct={hasPermission(actor, "title.rights_review")} />
+          canAct={actor.emailVerified && actor.internalRole === "legal_reviewer"} />
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
