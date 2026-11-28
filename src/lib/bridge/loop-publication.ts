@@ -172,7 +172,11 @@ export async function verifyDistributionPreflight(
       and nullif(q.reviewer_findings->0->'technicalEvidence'->>'masterLanguage','') is not null
       and q.reviewer_findings->0->'technicalEvidence'->>'posterVerified'='true') as qc_ok,
     exists(select 1 from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED'
-      and l.evidence->0->>'grantId'=${rightsGrantId}) as legal_ok
+      and l.evidence->0->>'grantId'=${rightsGrantId}
+      and l.reviewed_by is not null and l.reviewed_at is not null
+      and nullif(l.evidence->0->>'agreementReference','') is not null
+      and nullif(l.evidence->0->>'ownershipReference','') is not null
+      and l.evidence->0->>'reviewerConfirmedEvidence'='true') as legal_ok
   `;
   if (!reviews[0]?.qc_ok) reasons.push("Recorded QC approval for the current assets is required.");
   if (!reviews[0]?.legal_ok) reasons.push("Recorded legal approval for this license is required.");
@@ -290,6 +294,10 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                select jsonb_agg(lc.evidence->0->>'grantId')
                from bridge_legal_cases lc
                where lc.title_id=b.id and lc.status='APPROVED'
+                 and lc.reviewed_by is not null and lc.reviewed_at is not null
+                 and nullif(lc.evidence->0->>'agreementReference','') is not null
+                 and nullif(lc.evidence->0->>'ownershipReference','') is not null
+                 and lc.evidence->0->>'reviewerConfirmedEvidence'='true'
              ), '[]'::jsonb) as legal_grant_ids,
              g.ott_preparation_status, g.packaging_status, g.curation_status, g.delivery_status
       from bridge_titles b
