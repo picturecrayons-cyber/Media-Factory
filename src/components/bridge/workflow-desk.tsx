@@ -70,7 +70,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const qcEvidenceReady = playbackVerified && codec.trim() && resolution.trim() && frameRate.trim() &&
     audioVerified && audioDetails.trim() && masterLanguage.trim() &&
     (subtitleStatus === "NOT_APPLICABLE" || subtitleLanguages.trim()) && posterVerified;
-  const creditExists = (role: string) => title.credits?.some((credit) => credit.role.toLowerCase() === role && credit.name.trim().length > 0) ?? false;
+  const creditExists = (role: string) => title.credits?.some((credit) => String(credit.role ?? "").toLowerCase() === role && credit.name.trim().length > 0) ?? false;
   const missingMetadata = [
     !title.name?.trim() && "Original title",
     !title.contentType?.trim() && "Content type",
