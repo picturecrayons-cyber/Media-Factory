@@ -59,7 +59,7 @@ export const updateHomepageContent = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(contentSchema)
   .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") {
       throw new Error("Admin access required");
     }

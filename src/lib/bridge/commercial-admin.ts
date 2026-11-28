@@ -23,7 +23,7 @@ export const configureServiceRate = createServerFn({ method: "POST" })
   .validator(rateInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "finance.configure");
 
     const sql = await getSql();
@@ -92,7 +92,7 @@ export const configureTaxRate = createServerFn({ method: "POST" })
   .validator(taxInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "finance.configure");
 
     const sql = await getSql();
@@ -135,7 +135,7 @@ export const configureSettlementRule = createServerFn({ method: "POST" })
   .validator(settlementInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "finance.configure");
 
     if (data.percentageBps == null && data.fixedAmountPaise == null) {

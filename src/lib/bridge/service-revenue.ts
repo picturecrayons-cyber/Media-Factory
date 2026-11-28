@@ -240,7 +240,7 @@ export const createServiceQuote = createServerFn({ method: "POST" })
   .validator(quoteInputSchema)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "service.quote_create");
 
     const title = await loadTitle(data.titleId);
@@ -407,7 +407,7 @@ export const acceptServiceQuote = createServerFn({ method: "POST" })
   .validator(z.object({ quoteId: z.string().uuid() }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "service.order_create");
 
     const sql = await getSql();
@@ -982,7 +982,7 @@ export const createServicePaymentOrderFn = createServerFn({ method: "POST" })
   .validator(z.object({ orderId: z.string().uuid(), idempotencyKey: z.string().min(8).max(80) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "service.order_create");
     return createServicePaymentOrder({
       orderId: data.orderId,
@@ -996,7 +996,7 @@ export const verifyServicePayment = createServerFn({ method: "POST" })
   .validator(z.object({ orderId: z.string().min(4), paymentId: z.string().min(4), signature: z.string().min(8) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     const secret = bridgeEnv.razorpayKeySecret();
     if (!secret) throw new Error("Razorpay is not configured");
     if (
@@ -1030,7 +1030,7 @@ export const recordServiceActualCost = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "finance.configure");
 
     const sql = await getSql();
@@ -1089,7 +1089,7 @@ export const getCommercialFinancialSummary = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "finance.read");
 
     const sql = await getSql();

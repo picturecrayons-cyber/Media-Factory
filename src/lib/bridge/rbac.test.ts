@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, assertSuperAdminMfa, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 import { PERMISSIONS } from "./types.ts";
 
@@ -15,7 +15,7 @@ const studio = () => actor("studio-a", "studio");
 const buyer = () => actor("buyer-a", "buyer");
 const investor = () => actor("investor-a", "investor");
 const admin = () => actor("admin-a", "independent_creator", "admin");
-const superAdmin = () => actor("super-a", "independent_creator", "super_admin");
+const superAdmin = () => actor("super-a", "platform_admin", "super_admin");
 const viewer = () => actor("viewer-a", "independent_creator", "viewer");
 const qc = actor("qc1", "independent_creator", "qc_reviewer");
 const legal = actor("legal1", "independent_creator", "legal_reviewer");
@@ -94,12 +94,24 @@ describe("PRD authorization matrix", () => {
     assert.equal(canMutateTitle(viewer(), foreign, "title.update_own", "title.qc_review"), false);
   });
 
+  it("requires AAL2 for Super Admin server actions", () => {
+    assert.throws(() => assertSuperAdminMfa(superAdmin(), "aal1"), /MFA_REQUIRED/);
+    assert.doesNotThrow(() => assertSuperAdminMfa(superAdmin(), "aal2"));
+    assert.doesNotThrow(() => assertSuperAdminMfa(admin(), "aal1"));
+  });
+
+  it("platform_admin account type alone grants no privileged permission", () => {
+    const unprivileged = actor("platform-no-role", "platform_admin", null);
+    assert.equal(canAccessDashboard(unprivileged), false);
+    for (const permission of PERMISSIONS) assert.equal(hasPermission(unprivileged, permission), false);
+  });
+
   it("Super Admin receives every registered permission while remaining email-verified", () => {
     const privileged = superAdmin();
     for (const permission of PERMISSIONS) {
       assert.equal(hasPermission(privileged, permission), true, `missing ${permission}`);
     }
-    const unverified = actor("unverified-super", "independent_creator", "super_admin", false);
+    const unverified = actor("unverified-super", "platform_admin", "super_admin", false);
     for (const permission of PERMISSIONS) {
       assert.equal(hasPermission(unverified, permission), false, `unverified received ${permission}`);
     }

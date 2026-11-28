@@ -19,7 +19,7 @@ export const listInvestorInvestments = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<{ investments: InvestorInvestment[] }> => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     if (actor.internalRole || actor.accountType !== "investor") {
       throw new Error("Investor account required");
     }

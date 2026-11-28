@@ -25,7 +25,7 @@ export const Route = createFileRoute("/api/buyer/poster")({
 
           const user = await requireUser(bearerToken);
           assertNotDevUser(user.id);
-          const actor = await requireVerifiedActor(user.id);
+          const actor = await requireVerifiedActor(user.id, user.aal);
           if (actor.accountType !== "buyer" || actor.internalRole) {
             return new Response(null, { status: 404 });
           }

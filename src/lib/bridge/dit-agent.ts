@@ -76,8 +76,8 @@ type SessionRow = {
   signed_off_at: string | Date | null;
 };
 
-async function requireDitOperator(userId: string) {
-  const actor = await requireVerifiedActor(userId);
+async function requireDitOperator(userId: string, aal?: string | null) {
+  const actor = await requireVerifiedActor(userId, aal);
   if (actor.accountType !== "studio" || actor.internalRole || !actor.organizationId) {
     throw new Error("Verified Studio organization access is required for DIT operations");
   }
@@ -146,7 +146,7 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireDitOperator(context.userId);
+    const actor = await requireDitOperator(context.userId, context.aal);
     const sql = await getSql();
     const titles = await sql<{ id: string; name: string; status: string; year: number | null }>`
       select id, name, status, year
@@ -221,7 +221,7 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
   .validator(createInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireDitOperator(context.userId);
+    const actor = await requireDitOperator(context.userId, context.aal);
     const sql = await getSql();
     const title = await requireStudioTitle(sql, data.titleId, actor.organizationId!);
     const files = normalizeDitFiles(data.manifest.files);
@@ -261,7 +261,7 @@ export const requestDitFileUpload = createServerFn({ method: "POST" })
   .validator(uploadFileInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireDitOperator(context.userId);
+    const actor = await requireDitOperator(context.userId, context.aal);
     const sql = await getSql();
     const session = await requireSession(sql, data.sessionId, actor.organizationId!);
     if (session.status === "SIGNED_OFF") throw new Error("A signed-off DIT session is locked");
@@ -332,7 +332,7 @@ export const verifyDitFileUpload = createServerFn({ method: "POST" })
   .validator(verifyFileInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireDitOperator(context.userId);
+    const actor = await requireDitOperator(context.userId, context.aal);
     const sql = await getSql();
     const session = await requireSession(sql, data.sessionId, actor.organizationId!);
     if (session.status === "SIGNED_OFF") throw new Error("A signed-off DIT session is locked");
@@ -440,7 +440,7 @@ export const recordDitCopyVerification = createServerFn({ method: "POST" })
   .validator(copyInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireDitOperator(context.userId);
+    const actor = await requireDitOperator(context.userId, context.aal);
     const sql = await getSql();
     const session = await requireSession(sql, data.sessionId, actor.organizationId!);
     if (session.status === "SIGNED_OFF") throw new Error("A signed-off DIT session is locked");
@@ -509,7 +509,7 @@ export const signOffDitIngestSession = createServerFn({ method: "POST" })
   .validator(signoffInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireDitOperator(context.userId);
+    const actor = await requireDitOperator(context.userId, context.aal);
     const sql = await getSql();
     await sql.transaction(async (tx) => {
       const rows = await tx<SessionRow>`

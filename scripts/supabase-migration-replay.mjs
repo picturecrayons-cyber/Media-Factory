@@ -18,6 +18,14 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
 const EXPECTED_MIGRATIONS = 70;
+// Explicit unmerged migrations added by this Platform Super Admin PR. The
+// recovered Production-ledger set remains independently pinned by its manifest.
+const PENDING_MIGRATIONS = new Set([
+  "20261124212758_bridge_service_request_backend_routing.sql",
+  "20261125093000_platform_super_admin_account_type.sql",
+  "20261125094500_loop_admin_featured_audit.sql",
+  "20261125101500_public_loop_catalog_publishable_rpc.sql",
+]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -54,9 +62,15 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
+const recoveredNames = names.filter((name) => !PENDING_MIGRATIONS.has(name));
+const pendingNames = names.filter((name) => PENDING_MIGRATIONS.has(name));
+if (
+  names.length !== EXPECTED_MIGRATIONS + PENDING_MIGRATIONS.size ||
+  recoveredNames.length !== EXPECTED_MIGRATIONS ||
+  pendingNames.length !== PENDING_MIGRATIONS.size
+) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
+    `Expected ${EXPECTED_MIGRATIONS} recovered migrations plus ${PENDING_MIGRATIONS.size} explicit pending migrations; found ${names.length}`,
   );
 }
 if (new Set(names).size !== names.length) {
@@ -93,9 +107,10 @@ if (manifestRows.size !== EXPECTED_MIGRATIONS) {
 }
 
 for (const name of names) {
+  if (PENDING_MIGRATIONS.has(name)) continue;
   const contents = await readFile(join(MIGRATIONS_DIR, name));
   const expected = manifestRows.get(name);
-  if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
+  if (!expected) throw new Error(`Recovered migration missing from manifest: ${name}`);
   const actualBytes = contents.byteLength;
   const actualSha256 = createHash("sha256").update(contents).digest("hex");
   if (actualBytes !== expected.bytes || actualSha256 !== expected.sha256) {
@@ -413,6 +428,94 @@ try {
         console.log("[migration-replay] restored empty Delivery Desk pre-ledger schema and internal-only RLS baseline locally; no Production rows copied");
       }
 
+      // Production has this read-only LOOP catalogue RPC, but it is absent
+      // from the recovered migration ledger. Recreate the verified pre-ledger
+      // function only in the disposable replay database before its hardening
+      // migration. Preserve SECURITY INVOKER; never elevate a public RPC.
+      if (name === "20261125101500_public_loop_catalog_publishable_rpc.sql") {
+        const existingCatalog = await client.query(
+          "select to_regprocedure('public.public_loop_catalog()') is not null as exists",
+        );
+        if (!existingCatalog.rows[0].exists) {
+          await client.query(`
+            create function public.public_loop_catalog()
+            returns table(
+              id text,
+              bridge_title_id text,
+              slug text,
+              title text,
+              synopsis text,
+              description text,
+              content_type text,
+              language text,
+              year integer,
+              duration_minutes integer,
+              maturity_rating text,
+              director text,
+              is_original boolean,
+              original_badge text,
+              status text,
+              listed boolean,
+              published boolean,
+              featured boolean,
+              access_tier text,
+              tvod_rental_price numeric,
+              poster_available boolean,
+              backdrop_available boolean,
+              trailer_available boolean
+            )
+            language sql
+            stable
+            set search_path to ''
+            as $function$
+              select
+                l.id::text,
+                l.bridge_title_id,
+                l.slug,
+                l.title,
+                l.synopsis,
+                l.description,
+                coalesce(l.content_type, 'Film'),
+                l.language,
+                l.year,
+                l.duration_minutes,
+                l.maturity_rating,
+                null::text as director,
+                false as is_original,
+                null::text as original_badge,
+                lower(l.status),
+                l.listed,
+                l.published,
+                l.featured,
+                l.access_tier,
+                l.tvod_rental_price,
+                nullif(l.poster_path, '') is not null,
+                nullif(l.backdrop_path, '') is not null,
+                nullif(l.trailer_path, '') is not null
+              from public.loop_titles as l
+              inner join public.bridge_loop_publications as p
+                on p.loop_title_id = l.id
+               and p.bridge_title_id = l.bridge_title_id
+              where lower(p.authorization_status) = 'authorized'
+                and p.approved_at is not null
+                and p.revoked_at is null
+                and p.window_start is not null
+                and p.window_end is not null
+                and p.window_start <= now()
+                and p.window_end > now()
+                and p.territories @> array['WORLDWIDE']::text[]
+                and p.languages @> array[l.language]::text[]
+                and p.exploitation_models @> array[l.access_tier]::text[]
+                and lower(l.status) in ('approved', 'published')
+                and l.listed is true
+                and l.published is true
+              order by l.created_at desc;
+            $function$
+          `);
+          console.log("[migration-replay] restored verified pre-ledger public LOOP catalogue RPC locally as SECURITY INVOKER");
+        }
+      }
+
       if (name === FIXTURE_MIGRATION) {
         const current = await client.query(`
           select count(*)::int as count
@@ -439,6 +542,24 @@ try {
       }
 
       await client.query(sql);
+      if (name === "20261125101500_public_loop_catalog_publishable_rpc.sql") {
+        const catalogSecurity = await client.query(`
+          select
+            p.prosecdef as security_definer,
+            coalesce(p.proconfig, array[]::text[]) @> array['search_path=""']::text[] as empty_search_path
+          from pg_proc p
+          where p.oid = 'public.public_loop_catalog()'::regprocedure
+        `);
+        if (
+          catalogSecurity.rows.length !== 1 ||
+          catalogSecurity.rows[0].security_definer !== true ||
+          catalogSecurity.rows[0].empty_search_path !== true
+        ) {
+          throw new Error(
+            "Public LOOP catalogue RPC must be SECURITY DEFINER with an empty search_path",
+          );
+        }
+      }
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");

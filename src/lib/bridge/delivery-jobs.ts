@@ -23,15 +23,15 @@ const uiType: Record<string, z.infer<typeof jobType>> = {
   dcp: "dcp_request", human_qc: "human_qc", localization: "localization",
 };
 
-async function actorFor(userId: string) {
+async function actorFor(userId: string, aal?: string | null) {
   assertNotDevUser(userId);
-  return requireVerifiedActor(userId);
+  return requireVerifiedActor(userId, aal);
 }
 
 export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const actor = await actorFor(context.userId);
+    const actor = await actorFor(context.userId, context.aal);
     const sql = await getSql();
     const internal = Boolean(actor.internalRole && (actor.internalRole === "admin" || actor.internalRole === "super_admin"));
     if (!internal && !actor.organizationId && !["independent_creator", "studio"].includes(actor.accountType)) {
@@ -96,7 +96,7 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
     note: z.string().max(2000).optional(),
   }))
   .handler(async ({ context, data }) => {
-    const actor = await actorFor(context.userId);
+    const actor = await actorFor(context.userId, context.aal);
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Title not found");
     const canManage = Boolean(actor.internalRole && hasDeliveryPermission(actor));
@@ -127,7 +127,7 @@ export const assignBridgeDeliveryJob = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ jobId: z.string().uuid(), vendor: z.string().trim().min(2).max(160) }))
   .handler(async ({ context, data }) => {
-    const actor = await actorFor(context.userId);
+    const actor = await actorFor(context.userId, context.aal);
     assertPermission(actor, "title.deliver");
     const sql = await getSql();
     const rows = await sql<{ id: string }>`
@@ -143,7 +143,7 @@ export const completeBridgeDeliveryJob = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ jobId: z.string().uuid(), receiptUrl: z.string().url().max(2048) }))
   .handler(async ({ context, data }) => {
-    const actor = await actorFor(context.userId);
+    const actor = await actorFor(context.userId, context.aal);
     assertPermission(actor, "title.deliver");
     const url = new URL(data.receiptUrl);
     if (url.protocol !== "https:") throw new Error("Delivery receipt must use HTTPS");
@@ -161,7 +161,7 @@ export const approveBridgeDeliveryJob = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ jobId: z.string().uuid(), note: z.string().trim().min(8).max(1000) }))
   .handler(async ({ context, data }) => {
-    const actor = await actorFor(context.userId);
+    const actor = await actorFor(context.userId, context.aal);
     assertPermission(actor, "loop.publish");
     const sql = await getSql();
     const rows = await sql<{ id: string; title_id: string }>`

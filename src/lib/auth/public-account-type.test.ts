@@ -12,5 +12,6 @@ test("maps supported public roles and creator CTA alias", () => {
 test("does not silently map investor or unknown roles to creator", () => {
   assert.equal(publicAccountTypeFrom("investor"), null);
   assert.equal(publicAccountTypeFrom("super_admin"), null);
+  assert.equal(publicAccountTypeFrom("platform_admin"), null);
   assert.equal(publicAccountTypeFrom(undefined), null);
 });

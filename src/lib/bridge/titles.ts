@@ -212,7 +212,7 @@ export const createTitle = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
@@ -336,7 +336,7 @@ export const listTitles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     const sql = await getSql();
     let rows: TitleRow[] = [];
     if (actor.internalRole && hasPermission(actor, "title.read_catalog")) {
@@ -378,7 +378,7 @@ export const getTitle = createServerFn({ method: "GET" })
   .validator(z.object({ id: z.string().min(8) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
     const sql = await getSql();
@@ -438,7 +438,7 @@ export const updateTitle = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
     const owns = !actor.internalRole && canMutateTitle(actor, title, "title.update_own", "title.license");
@@ -592,7 +592,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     const title = await loadTitle(data.id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     if (data.to === "LICENSED") {
@@ -650,7 +650,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
 export const listAuditLogs = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, "audit.read");
     const sql = await getSql();
     const rows = await sql<{

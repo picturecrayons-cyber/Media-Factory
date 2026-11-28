@@ -7,15 +7,15 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 
-async function actorFor(userId: string) {
+async function actorFor(userId: string, aal?: string | null) {
   assertNotDevUser(userId);
-  return requireVerifiedActor(userId);
+  return requireVerifiedActor(userId, aal);
 }
 
 export const listAdminWorkstations = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const actor = await actorFor(context.userId);
+    const actor = await actorFor(context.userId, context.aal);
     if (!canAccessAdminWorkstations(actor)) throw new Error("Forbidden");
     const sql = await getSql();
     const [titles, assets, assetVersions, qc, legal, rights, packages, publications, audit] = await Promise.all([
@@ -42,7 +42,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(reviewInput)
   .handler(async ({ context, data }) => {
-    const actor = await actorFor(context.userId);
+    const actor = await actorFor(context.userId, context.aal);
     if (!actor.internalRole) throw new Error("Forbidden");
     const sql = await getSql();
     const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
@@ -94,7 +94,7 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(gateInput)
   .handler(async ({ context, data }) => {
-    const actor = await actorFor(context.userId);
+    const actor = await actorFor(context.userId, context.aal);
     if (!actor.internalRole) throw new Error("Forbidden");
     assertPermission(actor, "title.approve");
     const sql = await getSql();

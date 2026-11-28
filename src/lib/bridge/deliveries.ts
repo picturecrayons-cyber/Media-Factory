@@ -11,6 +11,6 @@ export const listDeliveryTraces = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     return readDeliveryTraces(actor, getSql);
   });

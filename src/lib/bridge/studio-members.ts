@@ -19,7 +19,7 @@ export const listStudioMembers = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<{ members: StudioMember[] }> => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     if (actor.internalRole || actor.accountType !== "studio") {
       throw new Error("Studio account required");
     }
@@ -54,6 +54,12 @@ export const listStudioMembers = createServerFn({ method: "GET" })
       where m.organization_id = ${actor.organizationId}::uuid
         and m.status in ('active', 'suspended')
         and o.status = 'active'
+        -- A platform Super Admin may retain a historical organization link,
+        -- but must never be represented as a Studio member or Studio admin.
+        -- The roster contains only verified, non-staff Studio identities.
+        and p.account_type = 'studio'
+        and p.internal_role is null
+        and p.email_verified = true
       order by case m.membership_role
         when 'owner' then 0 when 'admin' then 1 when 'producer' then 2
         when 'dit' then 3 else 4 end, p.display_name, p.email

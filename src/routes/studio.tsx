@@ -72,7 +72,7 @@ function Studio() {
                 </div>
                 <p className="mt-1 text-sm text-muted">The verified member roster is read-only. Invitations, access changes and owner transfers are not enabled from this workspace.</p>
               </div>
-              <StudioMemberDesk />
+              <StudioMemberDesk actor={actor} />
             </section>
 
             <section id="studio-dit" className="space-y-3">

@@ -110,7 +110,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
       throw new Error("Story / Concept submissions are not enabled yet.");
     }
 
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
 
     const titleId = randomBytes(16).toString("hex");
@@ -184,7 +184,7 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     const sql = await getSql();
 
     try {
@@ -221,7 +221,7 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     requireCurationStaff(actor);
 
     const sql = await getSql();
@@ -258,7 +258,7 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId, context.aal);
     requireCurationStaff(actor);
 
     const sql = await getSql();
