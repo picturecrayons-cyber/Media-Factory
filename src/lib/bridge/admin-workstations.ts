@@ -69,11 +69,7 @@ const gateInput = z.object({
   titleId: z.string().min(1),
   gate: z.enum(["OTT","PACKAGING","CURATION","DELIVERY"]),
   decision: z.enum(["PASS","HOLD","FAIL","REVOKE"]),
-  notes: z.string().trim().min(8).max(4000).optional(),
-}).superRefine((data, ctx) => {
-  if (data.decision === "PASS" && !data.notes) {
-    ctx.addIssue({ code: "custom", path: ["notes"], message: "Evidence note is required before passing a release gate" });
-  }
+  notes: z.string().trim().min(8).max(4000),
 });
 
 export const setBuyerPublicationGate = createServerFn({ method: "POST" })
