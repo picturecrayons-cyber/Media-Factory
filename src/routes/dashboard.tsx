@@ -29,7 +29,6 @@ const WORKSPACES = [
   { title: "Loop Gateway", description: "Check publication eligibility and controlled Loop delivery.", to: "/cms", action: "Open Loop Gateway" },
   { title: "People & access", description: "Internal team, invitations and account access.", to: "/internal", action: "Manage access" },
   { title: "Website CMS", description: "Public homepage, website content and preview.", to: "/admin-cms", action: "Edit website" },
-  { title: "Finance & reports", description: "Payment reconciliation, settlement evidence and title-owner reports.", to: "/dashboard/reports", action: "Open reports" },
 ] as const;
 
 function FounderHome() {
@@ -41,7 +40,7 @@ function FounderHome() {
 
   const titles = titlesQ.data?.titles ?? [];
   const pending = titles.filter((title) => ["PREPARING", "QC_REVIEW", "RIGHTS_REVIEW"].includes(title.status));
-  const live = titles.filter((title) => ["LIVE", "PUBLISHED", "DELIVERED"].includes(title.status));
+  const live = titles.filter((title) => title.status === "LIVE_FOR_BUYERS");
   const value = (n: number) => titlesQ.isPending || titlesQ.isError ? "—" : String(n);
 
   return (
