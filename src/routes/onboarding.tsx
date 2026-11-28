@@ -388,7 +388,7 @@ function Onboarding() {
             </label>
           </div>
           {accountType === "studio" || accountType === "investor" ? (
-            <label className="block text-sm font-medium">Studio / company name *
+            <label className="block text-sm font-medium">Organization / firm name *
               <input required value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
             </label>
           ) : null}
