@@ -275,7 +275,7 @@ function CreatorDashboard({
           are not treated as creator earnings.
         </p>
         <p className="mt-4 inline-flex rounded-full border border-line px-3 py-1 text-xs font-semibold text-muted">
-          NOT VERIFIED · No statement feed connected
+          NOT VERIFIED · No verified creator-payable entries
         </p>
       </section>
 

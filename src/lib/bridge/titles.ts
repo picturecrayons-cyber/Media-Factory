@@ -97,15 +97,36 @@ async function listOwned(sql: Sql, userId: string, accountType: AccountType, org
   // Studio-owned titles are organization-scoped. Without an organization context,
   // fail closed rather than falling back to owner_user_id and bypassing membership.
   if (accountType === "studio" && !orgId) return [];
+
   if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' order by updated_at desc limit 200`;
+      ? sql<TitleRow>`select * from bridge_titles
+          where owner_user_id = ${userId}
+            and owner_account_type <> 'studio'
+            and upper(coalesce(record_classification, '')) <> 'TEST'
+            and lower(id::text) not like 'test-fixture-%'
+            and lower(coalesce(slug, '')) not like 'test-fixture-%'
+            and lower(coalesce(name, '')) not like '[test only]%'
+            and merged_into_title_id is null
+          order by updated_at desc limit 200`
+      : sql<TitleRow>`select * from bridge_titles
+          where owner_user_id = ${userId}
+            and owner_account_type <> 'studio'
+            and upper(coalesce(record_classification, '')) <> 'TEST'
+            and lower(id::text) not like 'test-fixture-%'
+            and lower(coalesce(slug, '')) not like 'test-fixture-%'
+            and lower(coalesce(name, '')) not like '[test only]%'
+          order by updated_at desc limit 200`;
   }
+
   return mergeColumnAvailable
     ? sql<TitleRow>`
         select t.* from bridge_titles t
         where t.merged_into_title_id is null
+          and upper(coalesce(t.record_classification, '')) <> 'TEST'
+          and lower(t.id::text) not like 'test-fixture-%'
+          and lower(coalesce(t.slug, '')) not like 'test-fixture-%'
+          and lower(coalesce(t.name, '')) not like '[test only]%'
           and (t.owner_account_type <> 'studio' or t.submission_type = 'finished_film')
           and (
             (t.owner_user_id = ${userId} and t.owner_account_type <> 'studio')
@@ -124,23 +145,27 @@ async function listOwned(sql: Sql, userId: string, accountType: AccountType, org
       `
     : sql<TitleRow>`
         select t.* from bridge_titles t
-        where (t.owner_account_type <> 'studio' or t.submission_type = 'finished_film')
+        where upper(coalesce(t.record_classification, '')) <> 'TEST'
+          and lower(t.id::text) not like 'test-fixture-%'
+          and lower(coalesce(t.slug, '')) not like 'test-fixture-%'
+          and lower(coalesce(t.name, '')) not like '[test only]%'
+          and (t.owner_account_type <> 'studio' or t.submission_type = 'finished_film')
           and (
             (t.owner_user_id = ${userId} and t.owner_account_type <> 'studio')
             or (
-            t.owner_account_type = 'studio'
-            and t.owner_organization_id = ${orgId}
-            and exists (
-              select 1 from bridge_organization_memberships m
-              where m.organization_id = ${orgId}
-                and m.user_id = ${userId}
-                and m.status = 'active'
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id = ${orgId}
+              and exists (
+                select 1 from bridge_organization_memberships m
+                where m.organization_id = ${orgId}
+                  and m.user_id = ${userId}
+                  and m.status = 'active'
+              )
             )
           )
         order by t.updated_at desc limit 200
       `;
 }
-
 function slugify(name: string, id: string): string {
   const base = name
     .toLowerCase()

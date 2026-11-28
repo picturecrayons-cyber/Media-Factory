@@ -115,6 +115,10 @@ async function requireStudioTitle(sql: Awaited<ReturnType<typeof getSql>>, title
         )
       )
       and submission_type = 'finished_film'
+      and upper(coalesce(record_classification, '')) <> 'TEST'
+      and lower(id::text) not like 'test-fixture-%'
+      and lower(coalesce(slug, '')) not like 'test-fixture-%'
+      and lower(coalesce(name, '')) not like '[test only]%'
       and merged_into_title_id is null
     limit 1
   `;
@@ -165,6 +169,10 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
         )
       )
         and submission_type = 'finished_film'
+        and upper(coalesce(record_classification, '')) <> 'TEST'
+      and lower(id::text) not like 'test-fixture-%'
+      and lower(coalesce(slug, '')) not like 'test-fixture-%'
+      and lower(coalesce(name, '')) not like '[test only]%'
         and merged_into_title_id is null
       order by updated_at desc
       limit 200
