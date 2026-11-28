@@ -203,6 +203,53 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
     if (!title || !canOperateOnTitle(actor, title, "title.read_own", "finance.read"))
       throw new Error("Forbidden");
     const sql = await getSql();
+    const bridgeRows = await sql<{
+      payment_id: string;
+      order_id: string;
+      purchased_at: string | Date;
+      amount_paise: number;
+      currency: string;
+      provider_fee_paise: number | null;
+      provider_tax_paise: number | null;
+      refunded_amount_paise: number | null;
+    }>`
+      select provider_payment_id as payment_id, provider_order_id as order_id, created_at as purchased_at,
+        amount_paise, currency, provider_fee_paise, provider_tax_paise, refunded_amount_paise
+      from bridge_payments
+      where title_id = ${data.titleId} and purpose = 'title_license' and provider = 'razorpay'
+        and status = 'captured' and provider_payment_id is not null and provider_order_id is not null
+      order by created_at desc limit 100
+    `;
+    const keyId = bridgeEnv.razorpayKeyId(), keySecret = bridgeEnv.razorpayKeySecret();
+    const bridgeReceipts = keyId && keySecret ? await Promise.all(bridgeRows.map(async (r) => {
+      try {
+        const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(r.payment_id)}`, {
+          headers: { Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}` },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!response.ok) return null;
+        const payment = await response.json() as {
+          id?: string; order_id?: string; status?: string; captured?: boolean;
+          amount?: number; currency?: string; amount_refunded?: number; fee?: number | null; tax?: number | null;
+        };
+        if (payment.id !== r.payment_id || payment.order_id !== r.order_id || payment.status !== "captured" ||
+            payment.captured !== true || payment.currency !== "INR" || payment.currency !== r.currency ||
+            !Number.isSafeInteger(payment.amount) || payment.amount !== r.amount_paise) return null;
+        const fee = Number.isSafeInteger(payment.fee) && Number(payment.fee) >= 0 ? Number(payment.fee) : r.provider_fee_paise;
+        const tax = Number.isSafeInteger(payment.tax) && Number(payment.tax) >= 0 ? Number(payment.tax) : r.provider_tax_paise;
+        const refunded = Number.isSafeInteger(payment.amount_refunded) && Number(payment.amount_refunded) >= 0
+          ? Number(payment.amount_refunded) : r.refunded_amount_paise;
+        const validRefund = refunded !== null && refunded <= r.amount_paise ? refunded : null;
+        const validFee = fee !== null && fee !== undefined && Number.isSafeInteger(Number(fee)) && Number(fee) >= 0 ? Number(fee) : null;
+        const validTax = tax !== null && tax !== undefined && Number.isSafeInteger(Number(tax)) && Number(tax) >= 0 ? Number(tax) : null;
+        return {
+          paymentId: r.payment_id, orderId: r.order_id, purchasedAt: new Date(r.purchased_at).toISOString(),
+          amountPaise: r.amount_paise, currency: r.currency, providerFeePaise: validFee,
+          providerTaxPaise: validTax, refundedAmountPaise: validRefund, source: "bridge_payment" as const,
+          providerVerified: true as const,
+        };
+      } catch { return null; }
+    })) : [];
     const rows = await sql<{
       payment_id: string;
       purchased_at: string | Date;
@@ -218,18 +265,28 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
       join loop_titles l on l.id::text=coalesce(e.payload->>'title_id',t.title_id::text)
       where l.bridge_title_id=${data.titleId} and e.status in ('captured','processed') and e.razorpay_payment_id is not null
       order by e.razorpay_payment_id,e.received_at desc limit 200`;
-    const receipts = rows.map((r) => ({
+    const loopReceipts = rows.map((r) => ({
       paymentId: r.payment_id,
       orderId: r.order_id,
       purchasedAt: new Date(r.purchased_at).toISOString(),
       amountPaise:
         r.currency === "INR" &&
-        /^\d+$/.test(r.amount_text ?? "") &&
+        /^\\d+$/.test(r.amount_text ?? "") &&
         Number.isSafeInteger(Number(r.amount_text))
           ? Number(r.amount_text)
           : null,
       currency: r.currency,
+      providerFeePaise: null as number | null,
+      providerTaxPaise: null as number | null,
+      refundedAmountPaise: null as number | null,
+      source: "loop_tvod" as const,
+      providerVerified: false,
     }));
+    const bridgePaymentIds = new Set(bridgeReceipts.map((r) => r?.paymentId).filter(Boolean));
+    const receipts = [
+      ...bridgeReceipts.filter((r): r is NonNullable<typeof r> => Boolean(r)),
+      ...loopReceipts.filter((r) => !bridgePaymentIds.has(r.paymentId)),
+    ];
     const settlementEvidence = await sql<{
       id: number;
       metadata: string;
@@ -310,6 +367,14 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
             : null;
         return {
           ...receipt,
+          netAfterProviderCostsPaise:
+            receipt.providerFeePaise !== null && receipt.providerTaxPaise !== null && receipt.refundedAmountPaise !== null && receipt.amountPaise !== null
+              ? Math.max(0, receipt.amountPaise - receipt.providerFeePaise - receipt.providerTaxPaise - receipt.refundedAmountPaise)
+              : null,
+          reconciliationStatus:
+            receipt.providerVerified && receipt.providerFeePaise !== null && receipt.providerTaxPaise !== null && receipt.refundedAmountPaise !== null
+              ? "PROVIDER_DATA_AVAILABLE_RECONCILIATION_PENDING" as const
+              : "RECONCILIATION_REQUIRED" as const,
           grossProducerSharePaise:
             receipt.amountPaise !== null &&
             typeof share === "number" &&
