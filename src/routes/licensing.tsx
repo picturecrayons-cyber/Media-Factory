@@ -1,10 +1,13 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import type { BridgeActor } from "@/lib/bridge/session";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { listTitles } from "@/lib/bridge/titles";
+
+const MARKET_STATUSES = ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"] as const;
 
 export const Route = createFileRoute("/licensing")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -33,7 +36,7 @@ function LicensingDesk() {
   );
 }
 
-function LicensingDeskBody({ actor }: { actor: any }) {
+function LicensingDeskBody({ actor }: { actor: BridgeActor }) {
   const [tab, setTab] = useState<DeskTab>("market");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
@@ -43,8 +46,7 @@ function LicensingDeskBody({ actor }: { actor: any }) {
     retry: 1,
   });
   const titles = titlesQ.data?.titles ?? [];
-  const marketStatuses = ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"];
-  const market = useMemo(() => titles.filter((title) => marketStatuses.includes(title.status)), [titles]);
+  const market = useMemo(() => titles.filter((title) => MARKET_STATUSES.includes(title.status as (typeof MARKET_STATUSES)[number])), [titles]);
   const filtered = useMemo(() => market.filter((title) => {
     const matchesQuery = !query.trim() || `${title.name} ${title.language}`.toLowerCase().includes(query.trim().toLowerCase());
     const matchesStatus = status === "all" || title.status === status;
@@ -85,7 +87,7 @@ function LicensingDeskBody({ actor }: { actor: any }) {
               <input aria-label="Search title" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search title or language" className="w-full rounded-md border border-line bg-bg px-3 py-2 text-sm sm:max-w-md" />
               <select aria-label="Filter licensing status" value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-md border border-line bg-bg px-3 py-2 text-sm">
                 <option value="all">All licensing stages</option>
-                {marketStatuses.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}
+                {MARKET_STATUSES.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}
               </select>
             </div>
             {titlesQ.isPending ? <p role="status" className="py-8 text-sm text-muted">Loading title records…</p> : null}
@@ -145,6 +147,6 @@ function Metric({ label, value, note }: { label: string; value: string; note: st
   return <div className="rounded-xl border border-line bg-surface p-4"><p className="text-xs text-muted">{label}</p><p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p><p className="mt-1 text-xs text-muted">{note}</p></div>;
 }
 
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return <button type="button" role="tab" aria-selected={active} onClick={onClick} className={`rounded-md border px-3 py-2 text-sm ${active ? "border-accent text-accent" : "border-line text-muted"}`}>{children}</button>;
 }
