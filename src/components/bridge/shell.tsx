@@ -30,7 +30,7 @@ function navigationFor(actor: BridgeActor): NavItem[] {
 
   const accountNavigation: Record<BridgeActor["accountType"], NavItem[]> = {
     independent_creator: [
-      { to: "/creator", label: "Creator Home" },
+      { to: "/creator", label: "Creator Desk" },
       { to: "/workspace", label: "My Titles" },
       { to: "/deliveries", label: "Delivery Tracking" },
     ],
@@ -98,7 +98,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">Crayons Bridge</p>
             <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
           </div>
-          <p className="text-xs text-muted">{actor.organizationName || actor.displayName}</p>
+          <p className="text-xs text-muted">{actor.accountType === "independent_creator" && !actor.internalRole ? (actor.displayName || "Creator account") : (actor.organizationName || actor.displayName)}</p>
         </div>
         {children}
       </main>
