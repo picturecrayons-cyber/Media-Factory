@@ -77,6 +77,10 @@ const qcEvidenceInput = z.object({
   subtitleStatus: z.enum(["VERIFIED", "NOT_APPLICABLE"]),
   subtitleLanguages: z.string().trim().max(300).optional(),
   posterVerified: z.literal(true),
+}).superRefine((data, ctx) => {
+  if (data.subtitleStatus === "VERIFIED" && !data.subtitleLanguages?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["subtitleLanguages"], message: "Verified subtitle language(s) are required" });
+  }
 });
 const reviewInput = z.object({
   titleId: z.string().min(8),
@@ -168,7 +172,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
   }
   const next =
     data.decision === "REJECT"
-      ? "PREPARING"
+      ? data.stage === "QC" ? "PREPARING" : "RIGHTS_REVIEW"
       : data.stage === "QC"
         ? "RIGHTS_REVIEW"
         : "LICENSING_READY";
