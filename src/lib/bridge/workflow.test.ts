@@ -261,7 +261,7 @@ test("unauthorized review and unverified current assets cannot clear QC", async 
     };
     await assert.rejects(
       f.sql.transaction((tx) => f.review(tx, owner, data)),
-      /Forbidden/,
+      /Only a verified QC Reviewer may approve or return a technical QC review/,
     );
     await f.sql.query("update bridge_assets set byte_size=null where kind='master'");
     await assert.rejects(
@@ -406,9 +406,9 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
 test("Super Admin cannot self-approve rights; independent Legal Reviewer is required", async () => {
   const f = await fixture();
   try {
-    await f.sql.transaction((tx) => f.review(tx, superAdmin, {
+    await f.sql.transaction((tx) => f.review(tx, qc, {
       titleId: "title-123", stage: "QC", decision: "APPROVE",
-      note: "Super Admin QC reviewer attestation", qcEvidence,
+      note: "Independent QC reviewer attestation", qcEvidence,
     }));
     const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as { grantId: string };
     await assert.rejects(
