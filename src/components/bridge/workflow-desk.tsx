@@ -293,7 +293,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               ) : null}
               {workflow.data?.qc ? (
                 <p className="text-xs text-muted" role="status">
-                  QC {workflow.data.qc.status} · Reviewer {workflow.data.qc.reviewed_by ?? "not recorded"} · {new Date(workflow.data.qc.reviewed_at).toLocaleString()}
+                  QC {workflow.data.qc.status} · Reviewer {workflow.data.qc.reviewed_by ?? "not recorded"} · {workflow.data.qc.reviewed_at ? new Date(workflow.data.qc.reviewed_at).toLocaleString() : "Decision timestamp not recorded"}
                 </p>
               ) : null}
               {workflow.data?.qc?.reviewer_findings.map((f, i) => (
@@ -310,7 +310,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-4">
               {workflow.data?.legal ? (
                 <p className="text-xs text-muted" role="status">
-                  Legal {workflow.data.legal.status} · Reviewer {workflow.data.legal.reviewed_by ?? "not recorded"} · {new Date(workflow.data.legal.reviewed_at).toLocaleString()}
+                  Legal {workflow.data.legal.status} · Reviewer {workflow.data.legal.reviewed_by ?? "not recorded"} · {workflow.data.legal.reviewed_at ? new Date(workflow.data.legal.reviewed_at).toLocaleString() : "Decision timestamp not recorded"}
                 </p>
               ) : null}
               {canManageRights ? <details className="rounded-xl border border-line p-3">
