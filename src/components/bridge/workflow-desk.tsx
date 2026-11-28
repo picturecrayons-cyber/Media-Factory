@@ -72,15 +72,18 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     const safe = (v: string) =>
       '"' + (/^[=+@-]/.test(v) ? "'" : "") + v.replaceAll('"', '""') + '"';
     const lines = [
-      ["Payment", "Purchased at", "Captured paise", "Currency", "Reconciliation"],
+      ["Payment", "Purchased at", "Captured paise", "Provider fee paise", "Provider tax paise", "Refunded paise", "Net after provider costs paise", "Producer share paise", "Currency", "Reconciliation"],
       ...(revenue.data?.receipts ?? []).map((r) => [
         r.paymentId,
         r.purchasedAt,
         r.amountPaise === null ? "" : String(r.amountPaise),
+        r.providerFeePaise === null ? "" : String(r.providerFeePaise),
+        r.providerTaxPaise === null ? "" : String(r.providerTaxPaise),
+        r.refundedAmountPaise === null ? "" : String(r.refundedAmountPaise),
+        r.netAfterProviderCostsPaise === null ? "" : String(r.netAfterProviderCostsPaise),
+        r.grossProducerSharePaise === null ? "" : String(r.grossProducerSharePaise),
         r.currency ?? "",
-        r.amountPaise === null
-          ? "Amount evidence missing"
-          : "Gross captured; fees/tax/refunds require reconciliation",
+        r.providerVerified ? "Provider capture verified; settlement reconciliation pending" : "Legacy Loop record; provider fee/refund evidence unavailable",
       ]),
     ];
     const url = URL.createObjectURL(
@@ -501,18 +504,22 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     Export receipt statement CSV
                   </button>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[600px] text-left text-sm">
+                    <table className="w-full min-w-[1050px] text-left text-sm">
                       <thead>
                         <tr>
                           <th>Payment</th>
                           <th>Date</th>
                           <th>Captured amount</th>
+                          <th>Provider fee</th>
+                          <th>Provider tax</th>
+                          <th>Refunded</th>
+                          <th>Net after provider costs</th>
                           <th>Gross producer share · reconciliation pending</th>
                         </tr>
                       </thead>
                       <tbody>
                         {!revenue.data?.receipts.length ? (
-                          <tr><td colSpan={4} className="py-4 text-muted">No matching captured receipts. This is not proof of payment-system failure.</td></tr>
+                          <tr><td colSpan={8} className="py-4 text-muted">No matching captured receipts. This is not proof of payment-system failure.</td></tr>
                         ) : null}
                         {revenue.data?.receipts.map((r) => (
                           <tr key={r.paymentId}>
@@ -523,10 +530,15 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 ? "Amount evidence unavailable"
                                 : `₹${(r.amountPaise / 100).toFixed(2)}`}
                             </td>
+                            <td>{r.providerFeePaise === null ? "Not available" : `₹${(r.providerFeePaise / 100).toFixed(2)}`}</td>
+                            <td>{r.providerTaxPaise === null ? "Not available" : `₹${(r.providerTaxPaise / 100).toFixed(2)}`}</td>
+                            <td>{r.refundedAmountPaise === null ? "Not available" : `₹${(r.refundedAmountPaise / 100).toFixed(2)}`}</td>
+                            <td>{r.netAfterProviderCostsPaise === null ? "Reconciliation required" : `₹${(r.netAfterProviderCostsPaise / 100).toFixed(2)}`}</td>
                             <td>
                               {r.grossProducerSharePaise === null
                                 ? "Amount/agreement evidence missing"
                                 : `₹${(r.grossProducerSharePaise / 100).toFixed(2)}`}
+                              <span className="block text-xs text-muted">{r.reconciliationStatus === "PROVIDER_DATA_AVAILABLE_RECONCILIATION_PENDING" ? "Provider data available · settlement pending" : "Reconciliation pending"}</span>
                             </td>
                           </tr>
                         ))}
