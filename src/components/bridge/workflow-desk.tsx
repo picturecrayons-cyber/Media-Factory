@@ -52,6 +52,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   const canManageRights = actor.emailVerified && actor.internalRole === "super_admin";
   const canReviewRights = actor.emailVerified && actor.internalRole === "legal_reviewer";
+  const canViewRights = canManageRights || canReviewRights;
   const visibleStages = canManageRights
     ? stages
     : canReviewRights
@@ -259,7 +260,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           ) : null}
           {stage === "Business" ? (
             <div className="space-y-4">
-              <details className="rounded-xl border border-line p-3">
+              {canManageRights ? <details className="rounded-xl border border-line p-3">
                 <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
                 <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
                 {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
@@ -306,14 +307,15 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     </button>
                   </form>
                 ) : null}
-              </details>
-              {input("Legal review note", note, setNote)}
-              <p className="text-xs text-muted" aria-live="polite">
-                {note.trim().length < 8
-                  ? `Enter at least 8 characters (${note.trim().length}/8).`
-                  : "Review note meets the minimum length."}
-              </p>
-              {Object.entries(grantsByAgreement).map(([reference, agreementGrants]) => {
+              </details> : null}
+              {canReviewRights ? (
+                <>
+                  {input("Independent Legal review note", note, setNote)}
+                  {input("Verified signed distribution / OTT agreement reference", agreement, setAgreement)}
+                  {input("Verified signed chain-of-title / authority reference", ownership, setOwnership)}
+                </>
+              ) : null}
+              {canViewRights ? Object.entries(grantsByAgreement).map(([reference, agreementGrants]) => {
                 const selectedId = selectedGrantByAgreement[reference] ?? agreementGrants[0]?.id ?? "";
                 const selectedGrant = agreementGrants.find((grant) => grant.id === selectedId) ?? agreementGrants[0];
                 return (
@@ -386,7 +388,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                               ["NON-EXCLUSIVE terms recorded", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
                               ["Revenue-share split recorded and totals 100%", validSplit],
                               ["Territory, language and validity window recorded", selectedGrant.territories.length > 0 && selectedGrant.languages.length > 0 && validWindow],
-                              ["Super Admin legal approval recorded", selectedGrant.status === "VALID"],
+                              ["Independent Legal approval recorded", selectedGrant.status === "VALID"],
                             ] as const;
                             return (
                               <>
@@ -409,7 +411,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 <p className="text-xs font-medium" role="status">
                                   {checks.every(([, passed]) => passed)
                                     ? "All required fields are recorded. Documentary verification and Legal approval remain separate gates."
-                                    : "PENDING — do not mark READY until every required item is verified and the verified Super Admin approves."}
+                                    : "PENDING — do not mark READY until every required item is verified and an independent Legal Reviewer approves."}
                                 </p>
                               </>
                             );
@@ -417,7 +419,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         </div>
                         {selectedGrant.status === "DRAFT" &&
                         title.status === "RIGHTS_REVIEW" &&
-                        hasPermission(actor, "title.rights_review") ? (
+                        canReviewRights && selectedGrant.created_by !== actor.userId ? (
                           <div className="flex flex-wrap gap-2 border-t border-line pt-3">
                             {button(
                               "Approve rights / license",
@@ -429,9 +431,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                     decision: "APPROVE",
                                     note,
                                     grantId: selectedGrant.id,
+                                    agreementReference: agreement.trim(),
+                                    ownershipReference: ownership.trim(),
                                   },
                                 }),
-                              note.trim().length < 8,
+                              note.trim().length < 8 || agreement.trim().length === 0 || ownership.trim().length === 0,
                             )}
                             {button(
                               "Reject",
@@ -453,8 +457,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     ) : null}
                   </section>
                 );
-              })}
-              {!grants.length ? (
+              }) : null}
+              {!grants.length && canManageRights ? (
                 <p role="status" className="rounded-lg border border-dashed border-line p-3 text-sm text-muted">
                   No license draft has been saved. Enter the actual agreement and ownership evidence references, validity dates and revenue share above, then save. Saving creates a draft only; it does not approve Legal rights or publish the title.
                 </p>
