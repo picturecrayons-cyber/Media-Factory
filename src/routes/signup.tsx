@@ -8,8 +8,9 @@ import { submitInvestorAccessRequest } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/signup")({
-  validateSearch: (search: Record<string, unknown>): { role?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { role?: string; invite?: string } => ({
     role: typeof search.role === "string" ? search.role : undefined,
+    invite: typeof search.invite === "string" ? search.invite : undefined,
   }),
   component: Signup,
 });
@@ -53,7 +54,7 @@ function Signup() {
     setBusy(true);
 
     try {
-      const result = await signUpWithEmail({
+      if (search.invite) {\n        try { window.sessionStorage.setItem("bridge-invite", search.invite); } catch { /* session storage may be unavailable */ }\n      }\n      const result = await signUpWithEmail({
         email: email.trim(),
         password,
         name: name.trim(),
