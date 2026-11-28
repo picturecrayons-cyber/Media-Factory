@@ -5,6 +5,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { getDashboardSession } from "@/lib/bridge/session";
+import { LoopTitleAnalytics } from "@/components/bridge/loop-title-analytics";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -205,6 +206,8 @@ function DashboardBody() {
           *Sum of recorded licensing fees for licensed or delivered titles; not cash received.
         </p>
       </section>
+
+      <LoopTitleAnalytics title="Super Admin · Loop portfolio analytics & report" />
 
       <section aria-labelledby="portfolio-title" className="space-y-3">
         <div>
