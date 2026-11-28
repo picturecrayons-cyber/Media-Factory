@@ -30,7 +30,7 @@ function Deliveries() {
     <RequireBridge>
       {(actor) => (
         <BridgeShell actor={actor} title="Deliveries">
-          <VendorJobs actor={actor} />
+          {actor.accountType !== "independent_creator" || Boolean(actor.internalRole) ? <VendorJobs actor={actor} /> : null}
           <DeliveryList />
         </BridgeShell>
       )}
