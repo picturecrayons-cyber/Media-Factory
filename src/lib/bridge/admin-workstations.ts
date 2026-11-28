@@ -127,29 +127,3 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
       return { ok: true, gate: data.gate, decision: data.decision, publishable: result[0]?.ok === true };
     });
   });
-
-    if (data.gate === "OTT") {
-      await sql`update bridge_title_gate_certifications
-        set ott_preparation_status=${value}, updated_by=${actor.userId},
-            evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
-        where title_id=${data.titleId}`;
-    } else if (data.gate === "PACKAGING") {
-      await sql`update bridge_title_gate_certifications
-        set packaging_status=${value}, updated_by=${actor.userId},
-            evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
-        where title_id=${data.titleId}`;
-    } else if (data.gate === "CURATION") {
-      await sql`update bridge_title_gate_certifications
-        set curation_status=${value}, updated_by=${actor.userId},
-            evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
-        where title_id=${data.titleId}`;
-    } else {
-      await sql`update bridge_title_gate_certifications
-        set delivery_status=${value}, updated_by=${actor.userId},
-            evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
-        where title_id=${data.titleId}`;
-    }
-    await writeAudit({actorUserId:actor.userId,action:`buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,entityType:"bridge_title",entityId:data.titleId,metadata:{gate:data.gate,decision:data.decision,notes:data.notes??null}});
-    const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
-    return {ok:true,gate:data.gate,decision:data.decision,publishable:result[0]?.ok===true};
-  });
