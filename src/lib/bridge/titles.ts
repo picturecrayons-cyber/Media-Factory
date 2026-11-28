@@ -99,14 +99,23 @@ async function listOwned(sql: Sql, userId: string, accountType: AccountType, org
   if (accountType === "studio" && !orgId) return [];
   if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and record_classification is distinct from 'TEST' and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and record_classification is distinct from 'TEST' order by updated_at desc limit 200`;
+      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and upper(coalesce(record_classification, '')) <> 'TEST'
+        and lower(id::text) not like 'test-fixture-%'
+        and lower(coalesce(slug, '')) not like 'test-fixture-%'
+        and lower(coalesce(name, '')) not like '[test only]%' and merged_into_title_id is null order by updated_at desc limit 200`
+      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and owner_account_type <> 'studio' and upper(coalesce(record_classification, '')) <> 'TEST'
+        and lower(id::text) not like 'test-fixture-%'
+        and lower(coalesce(slug, '')) not like 'test-fixture-%'
+        and lower(coalesce(name, '')) not like '[test only]%' order by updated_at desc limit 200`;
   }
   return mergeColumnAvailable
     ? sql<TitleRow>`
         select t.* from bridge_titles t
         where t.merged_into_title_id is null
-          and t.record_classification is distinct from 'TEST'
+                    and upper(coalesce(t.record_classification, '')) <> 'TEST'
+          and lower(t.id::text) not like 'test-fixture-%'
+          and lower(coalesce(t.slug, '')) not like 'test-fixture-%'
+          and lower(coalesce(t.name, '')) not like '[test only]%'
           and (t.owner_account_type <> 'studio' or t.submission_type = 'finished_film')
           and (
             (t.owner_user_id = ${userId} and t.owner_account_type <> 'studio')
