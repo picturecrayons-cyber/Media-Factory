@@ -115,7 +115,7 @@ async function requireStudioTitle(sql: Awaited<ReturnType<typeof getSql>>, title
         )
       )
       and submission_type = 'finished_film'
-      and record_classification is distinct from 'TEST'
+      and (to_jsonb(bridge_titles)->>'record_classification') is distinct from 'TEST'
       and merged_into_title_id is null
     limit 1
   `;
@@ -166,7 +166,7 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
         )
       )
         and submission_type = 'finished_film'
-        and record_classification is distinct from 'TEST'
+        and (to_jsonb(bridge_titles)->>'record_classification') is distinct from 'TEST'
         and merged_into_title_id is null
       order by updated_at desc
       limit 200
