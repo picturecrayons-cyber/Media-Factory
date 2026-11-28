@@ -16,6 +16,7 @@ function navigationFor(actor: BridgeActor): NavItem[] {
     if (actor.internalRole === "admin" || actor.internalRole === "super_admin") {
       items.push(
         { to: "/admin", label: "Admin" },
+        { to: "/licensing", label: "Licensing Desk" },
         { to: "/admin-cms", label: "Website CMS" },
       );
     }
