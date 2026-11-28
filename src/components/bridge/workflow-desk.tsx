@@ -273,6 +273,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   {!qcEvidenceReady ? <p className="text-xs text-amber-600">QC approval BLOCKED — complete every technical evidence field and reviewer check.</p> : null}
                 </div>
               ) : null}
+              {workflow.data?.qc ? (
+                <p className="text-xs text-muted" role="status">
+                  QC {workflow.data.qc.status} · Reviewer {workflow.data.qc.reviewed_by ?? "not recorded"} · {new Date(workflow.data.qc.reviewed_at).toLocaleString()}
+                </p>
+              ) : null}
               {workflow.data?.qc?.reviewer_findings.map((f, i) => (
                 <p key={i} className="text-sm">
                   {f.note}
@@ -282,6 +287,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           ) : null}
           {stage === "Business" ? (
             <div className="space-y-4">
+              {workflow.data?.legal ? (
+                <p className="text-xs text-muted" role="status">
+                  Legal {workflow.data.legal.status} · Reviewer {workflow.data.legal.reviewed_by ?? "not recorded"} · {new Date(workflow.data.legal.reviewed_at).toLocaleString()}
+                </p>
+              ) : null}
               {canManageRights ? <details className="rounded-xl border border-line p-3">
                 <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
                 <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
