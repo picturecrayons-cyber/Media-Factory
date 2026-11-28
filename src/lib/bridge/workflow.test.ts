@@ -428,6 +428,24 @@ test("Super Admin cannot self-approve rights; independent Legal Reviewer is requ
   }
 });
 
+test("Legal approval requires signed agreement and chain-of-title evidence references", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as { grantId: string };
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
+        note: "Legal review attempted without documentary references", grantId: saved.grantId,
+      })),
+    );
+    assert.equal((await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status, "DRAFT");
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("a different verified Legal Reviewer can approve a Super Admin-created draft", async () => {
   const f = await fixture();
   try {
