@@ -118,6 +118,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     master_key: string | null;
     poster_key: string | null;
     name: string;
+    original_title: string | null;
     content_type: string | null;
     language: string;
     year: number | null;
@@ -126,7 +127,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     release_date: string | Date | null;
     credits: Array<{ role: string; name: string }> | null;
     synopsis: string | null;
-  }>`select status,master_key,poster_key,name,content_type,language,year,runtime_minutes,country_of_origin,release_date,credits,synopsis from bridge_titles where id=${data.titleId} for update`;
+  }>`select status,master_key,poster_key,name,original_title,content_type,language,year,runtime_minutes,country_of_origin,release_date,credits,synopsis from bridge_titles where id=${data.titleId} for update`;
   if (!title) throw new Error("Not found");
   const expected = data.stage === "QC" ? "QC_REVIEW" : "RIGHTS_REVIEW";
   if (title.status !== expected) throw new Error(`Title must be in ${expected}`);
@@ -140,9 +141,9 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       if (!hasVerifiedMasterAndArtwork(assets, title.master_key, title.poster_key))
         throw new Error("Verified current master and artwork are required");
       const credits = Array.isArray(title.credits) ? title.credits : [];
-      const hasCredit = (role: string) => credits.some((credit) => credit.role.toLowerCase() === role && credit.name.trim().length > 0);
+      const hasCredit = (role: string) => credits.some((credit) => String(credit.role ?? "").toLowerCase() === role && credit.name.trim().length > 0);
       const missing = [
-        !title.name?.trim() && "Original title",
+        !(title.original_title?.trim() || title.name?.trim()) && "Original title",
         !title.content_type?.trim() && "Content type",
         !title.language?.trim() && "Language",
         !title.year && "Year",
