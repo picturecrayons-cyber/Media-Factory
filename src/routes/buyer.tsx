@@ -9,11 +9,11 @@ import { Button } from "@/components/ui/button";
 import { getBearerToken } from "@/lib/auth/client";
 import { listTitles } from "@/lib/bridge/titles";
 import {
-  createBuyerLicensingEnquiry,
   createLicenseOrder,
   listOwnEntitlements,
   verifyLicensePayment,
 } from "@/lib/bridge/payments";
+import { createBuyerLicensingEnquiry } from "@/lib/bridge/licensing";
 
 export const Route = createFileRoute("/buyer")({ component: Buyer });
 
