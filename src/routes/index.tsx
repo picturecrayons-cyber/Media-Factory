@@ -110,38 +110,6 @@ function Home() {
           </div>
         </section>
 
-        <section id="how-it-works" className="border-b border-line bg-surface/50 py-10 sm:py-12">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6">
-            <div className="max-w-2xl">
-              <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                From upload to delivery.
-              </h2>
-            </div>
-
-            <div className="mt-8 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-              {WORKFLOW_STEPS.map((step, idx) => (
-                <div
-                  key={step.step}
-                  className="bridge-workflow-card flex min-h-40 flex-col justify-between bg-surface p-5"
-                >
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold text-accent">{step.step}</span>
-                      {idx < WORKFLOW_STEPS.length - 1 ? (
-                        <span className="hidden lg:inline text-faint text-xs">→</span>
-                      ) : null}
-                    </div>
-                    <h3 className="mt-3 font-display text-lg font-semibold text-fg">
-                      {step.title}
-                    </h3>
-                    <p className="mt-1.5 text-xs leading-relaxed text-muted">{step.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         <section id="creators" className="border-b border-line bg-surface py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
@@ -236,24 +204,6 @@ function Home() {
                   </Link>
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="border-b border-line bg-surface/50 py-12 sm:py-16">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
-              <div>
-                <h3 className="font-display text-xl font-semibold text-fg">
-                  From rights to audience.
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted max-w-2xl">
-                  Crayons Bridge manages rights, licensing and distribution authorization. Crayons
-                  Loop is the consumer streaming experience.
-                </p>
-              </div>
-
-
             </div>
           </div>
         </section>
