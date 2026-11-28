@@ -31,7 +31,7 @@ function Deliveries() {
       {(actor) => (
         <BridgeShell actor={actor} title="Deliveries">
           {actor.accountType !== "independent_creator" || Boolean(actor.internalRole) ? <VendorJobs actor={actor} /> : null}
-          <DeliveryList />
+          <DeliveryList actor={actor} />
         </BridgeShell>
       )}
     </RequireBridge>
@@ -202,16 +202,21 @@ function DeliveryJobActions({
   );
 }
 
-function DeliveryList() {
+function DeliveryList({ actor }: { actor: Actor }) {
   const q = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const titles = q.data?.titles ?? [];
+  const allTitles = q.data?.titles ?? [];
+  const titles = actor.accountType === "independent_creator" && !actor.internalRole
+    ? allTitles.filter((title) => title.status === "DELIVERED")
+    : allTitles;
   if (q.isError) return <p role="alert">Delivery data is unavailable. Refresh to retry.</p>;
   if (q.isPending) return <p className="text-sm text-muted">Loading deliveries…</p>;
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <h2 className="font-display text-xl font-semibold">Delivery desk</h2>
+      <h2 className="font-display text-xl font-semibold">{actor.accountType === "independent_creator" && !actor.internalRole ? "My authorized deliveries" : "Delivery desk"}</h2>
       <p className="mt-1 text-sm text-muted">
-        Open a title to review its canonical Delivery workspace. No rights or fulfilment rules are changed here.
+        {actor.accountType === "independent_creator" && !actor.internalRole
+          ? "Only titles marked DELIVERED after Bridge authorization appear here. Pending submissions remain in My Titles."
+          : "Open a title to review its canonical Delivery workspace. No rights or fulfilment rules are changed here."}
       </p>
       <div className="mt-5 divide-y divide-line rounded-xl border border-line">
         {titles.map((t) => (
@@ -234,7 +239,7 @@ function DeliveryList() {
           </Link>
         ))}
       </div>
-      {!titles.length ? <p className="mt-5 text-sm text-muted">No titles available.</p> : null}
+      {!titles.length ? <p className="mt-5 text-sm text-muted">{actor.accountType === "independent_creator" && !actor.internalRole ? "No authorized deliveries yet. Your delivery records will appear here after Bridge approval." : "No titles available."}</p> : null}
     </section>
   );
 }
