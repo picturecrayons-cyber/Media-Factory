@@ -20,7 +20,7 @@ export const Route = createFileRoute("/onboarding")({
   component: Onboarding,
 });
 
-type PublicAccountType = "independent_creator" | "studio" | "buyer";
+type PublicAccountType = "independent_creator" | "studio" | "buyer" | "investor";
 
 const ACCOUNT_LABELS: Record<PublicAccountType, string> = {
   independent_creator: "Independent Creator",
@@ -100,7 +100,7 @@ function Onboarding() {
   });
 
   const [displayName, setDisplayName] = useState("");
-  const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
+  const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");\n  const [investorInvite, setInvestorInvite] = useState(false);
   const [organizationName, setOrganizationName] = useState("");
 
   const [titleName, setTitleName] = useState("");
@@ -139,7 +139,17 @@ function Onboarding() {
   // Preserve the role chosen during signup instead of silently defaulting
   // every new account to Creator when onboarding opens.
   const signupAccountTypeHint = user?.signupAccountTypeHint;
-  const signupAccountType = publicAccountTypeFrom(signupAccountTypeHint);
+  useEffect(() => {
+    try {
+      const token = sessionStorage.getItem("bridge-invite");
+      setInvestorInvite(Boolean(token && signupAccountTypeHint === "investor"));
+    } catch {
+      setInvestorInvite(false);
+    }
+  }, [signupAccountTypeHint]);
+  const signupAccountType = signupAccountTypeHint === "investor" && investorInvite
+    ? "investor"
+    : publicAccountTypeFrom(signupAccountTypeHint);
   const unsupportedSignupRole = Boolean(signupAccountTypeHint && !signupAccountType);
 
   useEffect(() => {
@@ -247,7 +257,7 @@ function Onboarding() {
         },
       });
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
-      void navigate({ to: accountType === "buyer" ? "/buyer" : "/creator", replace: true });
+      void navigate({ to: accountType === "buyer" ? "/buyer" : accountType === "investor" ? "/investor" : "/creator", replace: true });
     } catch (err) {
       setError(publicOnboardingError(err));
     } finally {
@@ -280,7 +290,7 @@ function Onboarding() {
         },
       });
 
-      if (accountType === "buyer") {
+      if (accountType === "investor") {\n        try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }\n        void navigate({ to: "/investor", replace: true });\n        return;\n      }\n\n      if (accountType === "buyer") {
         void navigate({ to: "/buyer", replace: true });
         return;
       }
@@ -366,11 +376,11 @@ function Onboarding() {
             </label>
             <label className="text-sm font-medium">Account type *
               <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
+                {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).filter((type) => type !== "investor" || investorInvite).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
               </select>
             </label>
           </div>
-          {accountType === "studio" ? (
+          {accountType === "studio" || accountType === "investor" ? (
             <label className="block text-sm font-medium">Studio / company name *
               <input required value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
             </label>
