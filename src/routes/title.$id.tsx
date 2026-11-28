@@ -153,9 +153,18 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     qcEvidence.posterVerified === true &&
     (qcEvidence.subtitleStatus === "NOT_APPLICABLE" ||
       (qcEvidence.subtitleStatus === "VERIFIED" && Boolean(qcEvidence.subtitleLanguages?.trim())));
+  const legalEvidence = reviewQ.data?.legal?.evidence?.[0];
   const rightsReady =
     reviewQ.data?.legal?.status === "APPROVED" &&
-    reviewQ.data.grants.some((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
+    Boolean(reviewQ.data.legal.reviewed_by) &&
+    Boolean(legalEvidence?.reviewerConfirmedEvidence) &&
+    Boolean(legalEvidence?.agreementReference?.trim()) &&
+    Boolean(legalEvidence?.ownershipReference?.trim()) &&
+    reviewQ.data.grants.some((g) =>
+      g.status === "VALID" &&
+      g.id === legalEvidence?.grantId &&
+      new Date(g.window_end) > new Date(),
+    );
   const distributionReady = Boolean(
     pub && pub.listed && pub.published &&
     publicationIsActive(pub.authorizationStatus, pub.windowStart, pub.windowEnd),
