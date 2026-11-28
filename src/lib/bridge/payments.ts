@@ -604,10 +604,16 @@ export const createStoryConceptOrder = createServerFn({ method: "POST" })
     }
     assertPermission(actor, "title.create");
     const title = await loadTitle(data.titleId);
-    if (!title || title.submissionType !== "story_concept" || !canReadTitle(actor, title)) {
+    if (!title || !canReadTitle(actor, title)) {
       throw new Error("Story / Concept submission not found");
     }
     const sql = await getSql();
+    const typeRows = await sql<{ submission_type: string | null }>`
+      select submission_type from bridge_titles where id = ${title.id} limit 1
+    `;
+    if (typeRows[0]?.submission_type !== "story_concept") {
+      throw new Error("Story / Concept submission not found");
+    }
     const conceptRows = await sql<{ id: string; payment_status: string }>`
       select c.id, c.payment_status
       from bridge_story_concept_submissions c
