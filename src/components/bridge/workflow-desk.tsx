@@ -11,6 +11,7 @@ import { advanceTitle } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
   getLoopPublication,
+  listLoopPublicationReadiness,
   revokeLoopPublication,
   suspendLoopPublication,
 } from "@/lib/bridge/loop-publication";
@@ -51,6 +52,12 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: title.id } }),
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
+  const readiness = useQuery({
+    queryKey: ["loop-publication-readiness", title.id],
+    queryFn: () => listLoopPublicationReadiness(),
+    enabled: stage === "Distribution" && actor.emailVerified && actor.internalRole === "super_admin",
+  });
+  const readinessTitle = readiness.data?.titles.find((item) => item.id === title.id);
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   const canManageRights = actor.emailVerified && actor.internalRole === "super_admin";
   const canReviewRights = actor.emailVerified && actor.internalRole === "legal_reviewer";
@@ -528,9 +535,20 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 </p>
               )}
               <p>
-                Publish copies the approved title metadata, artwork and media reference into the
-                shared Loop catalog. Catalog publication alone does not prove consumer playback.
+                Bridge authorization publishes the approved catalogue entry to Loop only after all six release gates pass. Catalogue visibility is not proof of consumer playback.
               </p>
+              {readiness.isError ? <p role="alert">Release readiness unavailable: {readiness.error.message}</p> : null}
+              {readiness.isPending ? <p className="text-xs text-muted">Checking all release gates…</p> : null}
+              {readinessTitle ? (
+                <div className="rounded-xl border border-line p-3">
+                  <p className="text-sm font-semibold">Bridge → LOOP preflight · {readinessTitle.ready ? "PASS" : "BLOCKED"}</p>
+                  {readinessTitle.blockers.length ? (
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-600">
+                      {readinessTitle.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+                    </ul>
+                  ) : <p className="mt-1 text-xs text-emerald-600">QC, Legal, OTT, Packaging, Curation and Delivery are ready.</p>}
+                </div>
+              ) : null}
               {canManageRights && valid && hasPermission(actor, "loop.publish")
                 ? button("Publish approved license to Loop", () =>
                     authorizeLoopPublication({
@@ -546,6 +564,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         commercialTerms: valid.evidence[0]?.commercialTerms,
                       },
                     }),
+                    readiness.isPending || readiness.isError || !readinessTitle?.ready,
                   )
                 : null}
               {!valid ? <p>Blocked: approved, unexpired Loop license required.</p> : null}
