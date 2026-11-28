@@ -276,6 +276,7 @@ test("license constraints reject unsupported territory, bad window and invalid s
   for (const data of [
     { ...license, territories: ["IN"] },
     { ...license, windowEnd: license.windowStart },
+    { ...license, exclusivity: "EXCLUSIVE" },
     { ...license, distributorSharePct: 30 },
   ])
     assert.equal(policy.loopLicenseInput.safeParse(data).success, false);
