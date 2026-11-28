@@ -47,7 +47,10 @@ export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
             j.admin_sign_off, j.request_note, j.requested_by, j.created_at, j.updated_at
           from bridge_delivery_jobs j
           join bridge_titles t on t.id = j.title_id
-          where t.record_classification is distinct from 'TEST'
+          where upper(coalesce(t.record_classification, '')) <> 'TEST'
+            and lower(t.id::text) not like 'test-fixture-%'
+            and lower(coalesce(t.slug, '')) not like 'test-fixture-%'
+            and lower(coalesce(t.name, '')) not like '[test only]%'
           order by j.created_at desc limit 200
         `
       : await sql<{
@@ -59,7 +62,10 @@ export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
             j.admin_sign_off, j.request_note, j.requested_by, j.created_at, j.updated_at
           from bridge_delivery_jobs j
           join bridge_titles t on t.id = j.title_id
-          where t.record_classification is distinct from 'TEST'
+          where upper(coalesce(t.record_classification, '')) <> 'TEST'
+            and lower(t.id::text) not like 'test-fixture-%'
+            and lower(coalesce(t.slug, '')) not like 'test-fixture-%'
+            and lower(coalesce(t.name, '')) not like '[test only]%'
             and (j.requested_by = ${actor.userId}
             or t.owner_user_id = ${actor.userId}
             or (
