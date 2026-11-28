@@ -180,6 +180,15 @@ function CreatorDashboard({
             Keep story concepts separate from finished-film title records. A concept submission is not a
             finished film or a license-ready asset.
           </p>
+          <Link
+            to="/submit-concept"
+            className="inline-flex min-h-10 items-center justify-center rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg transition hover:opacity-90"
+          >
+            Submit a Story / Concept
+          </Link>
+          <p className="text-xs text-muted">
+            Separate internal-curation workflow. Payment remains locked until Finance certifies the fee and tax configuration.
+          </p>
           <MyStoryConcepts />
         </div>
       </section>
@@ -275,7 +284,7 @@ function CreatorDashboard({
           are not treated as creator earnings.
         </p>
         <p className="mt-4 inline-flex rounded-full border border-line px-3 py-1 text-xs font-semibold text-muted">
-          NOT VERIFIED · No statement feed connected
+          NOT VERIFIED · No verified creator-payable entries
         </p>
       </section>
 

@@ -27,7 +27,7 @@ export function RequireBridge({
   allow,
 }: {
   children: (actor: BridgeActor) => ReactNode;
-  allow?: "creator" | "studio" | "buyer" | "investor" | "internal" | "super_admin" | "workspace";
+  allow?: "creator" | "studio" | "creator_or_studio" | "buyer" | "investor" | "internal" | "super_admin" | "workspace";
 }) {
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
@@ -112,7 +112,12 @@ export function RequireBridge({
   // Internal surfaces remain protected by the explicit "internal"/"super_admin" checks.
   if (allow === "super_admin" && profile.internalRole !== "super_admin") return <Navigate to={sessionQ.data?.home ?? "/"} />;
   if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;
-  if (allow && allow !== "internal" && allow !== "super_admin" && allow !== "workspace" && (profile.internalRole || profile.accountType !== (
+  if (allow === "creator_or_studio" && (
+    profile.internalRole || !["independent_creator", "studio"].includes(profile.accountType)
+  )) {
+    return <Navigate to={sessionQ.data?.home ?? "/"} />;
+  }
+  if (allow && allow !== "internal" && allow !== "super_admin" && allow !== "workspace" && allow !== "creator_or_studio" && (profile.internalRole || profile.accountType !== (
     allow === "creator" ? "independent_creator" : allow
   ))) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;

@@ -34,6 +34,9 @@ type ConceptRow = {
   introduced_to_buyers_at: string | Date | null;
   created_at: string | Date;
   updated_at: string | Date;
+  payment_status: "PENDING" | "PAID" | "REFUNDED";
+  payment_id: string | null;
+  paid_at: string | Date | null;
 };
 
 function asIso(v: string | Date | null | undefined): string | null {
@@ -57,6 +60,9 @@ function mapConcept(r: ConceptRow): StoryConceptSubmission {
     introduced_to_buyers_at: asIso(r.introduced_to_buyers_at),
     created_at: asIso(r.created_at) ?? "",
     updated_at: asIso(r.updated_at) ?? "",
+    payment_status: r.payment_status,
+    payment_id: r.payment_id,
+    paid_at: asIso(r.paid_at),
   };
 }
 
@@ -111,7 +117,10 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     }
 
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Creator or Studio account required");
+    }
+    assertPermission(actor, "title.create");
 
     const titleId = randomBytes(16).toString("hex");
     const slug = slugify(data.titleName, titleId);
@@ -145,7 +154,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
       const conceptRows = await sql<ConceptRow>`
         insert into bridge_story_concept_submissions (
           title_id, logline, synopsis, treatment_url, screenplay_url,
-          genre, estimated_budget_range, target_platforms, curation_status
+          genre, estimated_budget_range, target_platforms, curation_status, payment_status
         ) values (
           ${titleId},
           ${data.logline},
@@ -155,6 +164,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
           ${data.genre},
           ${data.estimatedBudgetRange ?? null},
           ${data.targetPlatforms},
+          ${"PENDING"},
           ${"PENDING"}
         )
         returning *
@@ -192,12 +202,22 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
-           or (
-             t.owner_account_type = 'studio'
-             and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
-           )
+        where t.submission_type = 'story_concept'
+          and (to_jsonb(t)->>'record_classification') is distinct from 'TEST'
+          and (
+            (t.owner_user_id = ${actor.userId} and t.owner_account_type <> 'studio')
+            or (
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id = ${actor.organizationId ?? null}
+              and exists (
+                select 1
+                from bridge_organization_memberships m
+                where m.organization_id = t.owner_organization_id
+                  and m.user_id = ${actor.userId}
+                  and m.status = 'active'
+              )
+            )
+          )
         order by c.created_at desc
         limit 100
       `;
@@ -230,7 +250,8 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name, t.owner_user_id
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
+        where c.payment_status = 'PAID'
+          and c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
         order by c.created_at asc
         limit 200
       `;

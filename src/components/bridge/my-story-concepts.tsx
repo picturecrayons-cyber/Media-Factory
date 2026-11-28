@@ -47,7 +47,7 @@ export function MyStoryConcepts() {
                 <div>
                   <p className="font-medium">{(c as { titleName?: string }).titleName ?? "Concept"}</p>
                   <p className="text-sm text-muted">
-                    {STATUS_LABEL[c.curation_status] ?? c.curation_status}
+                    {c.payment_status !== "PAID" ? "Payment pending" : (STATUS_LABEL[c.curation_status] ?? c.curation_status)}
                     {logline ? ` · ${logline}` : ""}
                   </p>
                 </div>

@@ -43,9 +43,12 @@ export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
           delivery_receipt_url: string | null; admin_sign_off: boolean; request_note: string | null;
           requested_by: string | null; created_at: string | Date; updated_at: string | Date;
         }>`
-          select id, title_id, job_type, status, assigned_vendor, delivery_receipt_url,
-            admin_sign_off, request_note, requested_by, created_at, updated_at
-          from bridge_delivery_jobs order by created_at desc limit 200
+          select j.id, j.title_id, j.job_type, j.status, j.assigned_vendor, j.delivery_receipt_url,
+            j.admin_sign_off, j.request_note, j.requested_by, j.created_at, j.updated_at
+          from bridge_delivery_jobs j
+          join bridge_titles t on t.id = j.title_id
+          where (to_jsonb(t)->>'record_classification') is distinct from 'TEST'
+          order by j.created_at desc limit 200
         `
       : await sql<{
           id: string; title_id: string; job_type: string; status: string; assigned_vendor: string | null;
@@ -56,7 +59,8 @@ export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
             j.admin_sign_off, j.request_note, j.requested_by, j.created_at, j.updated_at
           from bridge_delivery_jobs j
           join bridge_titles t on t.id = j.title_id
-          where j.requested_by = ${actor.userId}
+          where (to_jsonb(t)->>'record_classification') is distinct from 'TEST'
+            and (j.requested_by = ${actor.userId}
             or t.owner_user_id = ${actor.userId}
             or (
               ${actor.accountType === "studio" && Boolean(actor.organizationId)}
@@ -68,7 +72,7 @@ export const listBridgeDeliveryJobs = createServerFn({ method: "GET" })
                   and m.user_id = ${actor.userId}
                   and m.status = 'active'
               )
-            )
+            ))
           order by j.created_at desc limit 200
         `;
     return {
