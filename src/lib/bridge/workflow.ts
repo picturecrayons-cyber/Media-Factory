@@ -240,6 +240,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         masterKey: string | null;
         posterKey: string | null;
         technicalEvidence?: z.infer<typeof qcEvidenceInput> | null;
+        correction?: { affectedItem: string; requiredAction: string } | null;
       }>;
     }>`select status,reviewed_at,reviewed_by,reviewer_findings from bridge_qc_cases where title_id=${data.titleId} order by created_at desc limit 1`;
     const legal = canViewRights ? await sql<{
